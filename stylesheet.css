@@ -767,3 +767,54 @@ height:28vmin;
   z-index:9999;
   pointer-events:none;
 }
+
+/*========================================*
+ *  13) FORM ELEMENTS (LOGIN/REGISTER)
+ *========================================*/
+form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+label {
+  font-size: 5vmin;
+  color: var(--BASE_COLOR);
+  margin-top: 2vmin;
+}
+
+input {
+  -webkit-appearance: none;
+  appearance: none;
+  
+  display: block;
+  margin: 1vmin auto 3vmin;
+  padding: 0.5em 1em;
+  width: 60vw;
+  max-width: 400px;
+  
+  /* Match the button pill aesthetic */
+  background: transparent;
+  border: 3px solid var(--BASE_COLOR);
+  border-radius: 9999px;
+  
+  /* Match typography */
+  color: var(--BASE_COLOR);
+  font-family: 'New Rocker', sans-serif;
+  font-size: 5vmin;
+  text-align: center;
+  
+  transition: 
+    box-shadow var(--SLOW_SHADOW), 
+    border-color var(--SLOW_BORDER), 
+    color var(--SLOW_COLOR);
+}
+
+/* Red glow when typing, mirroring button:hover */
+input:focus {
+  outline: none;
+  border-color: var(--LINK_LIGHT);
+  box-shadow: var(--SHADOW);
+  color: var(--LINK_LIGHT);
+}
