@@ -71,7 +71,12 @@
    * =============================== */
   const html = document.documentElement;
   html.classList.remove("noJs");
-  html.classList.add("hasJs");
+
+  if (PAGE === "home") {
+    html.classList.add("homeJs");
+  } else {
+    html.classList.add("otherJs");
+  }
 
   /* ===============================
    *  4) Inject versioned CSS
