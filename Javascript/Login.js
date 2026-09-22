@@ -1,5 +1,5 @@
 // Replace with your actual Cloudflare Worker URL
-const API_BASE_URL = 'https://prismal-budget-api.YOUR-SUBDOMAIN.workers.dev';
+const API_BASE_URL = 'https://prismal-budget-api.prismalbudget.workers.dev';
 
 const authForm = document.getElementById('auth-form');
 const verifyGroup = document.getElementById('verify-password-group');
@@ -13,14 +13,16 @@ let isLoginMode = true;
 // 1. Toggle between Login and Register modes
 toggleBtn.addEventListener('click', () => {
   isLoginMode = !isLoginMode;
-  statusMessage.textContent = ''; // Clear errors on toggle
+  statusMessage.textContent = ''; // Clear errors
   
   if (isLoginMode) {
+    // Switch to Login Mode
     verifyGroup.style.display = 'none';
     verifyInput.removeAttribute('required');
     primaryBtn.textContent = 'Login';
     toggleBtn.textContent = 'New Account?';
   } else {
+    // Switch to Register Mode
     verifyGroup.style.display = 'block';
     verifyInput.setAttribute('required', 'true');
     primaryBtn.textContent = 'Create Account';
@@ -28,10 +30,11 @@ toggleBtn.addEventListener('click', () => {
   }
 });
 
-// 2. Handle form submission (Login or Register)
+// 2. Handle API Submission
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   statusMessage.textContent = '';
+  statusMessage.style.color = 'var(--LINK_LIGHT)'; // Default to red for errors
   
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
@@ -49,9 +52,8 @@ authForm.addEventListener('submit', async (e) => {
     }
   }
 
-  // Set the endpoint based on the current mode
   const endpoint = isLoginMode ? '/api/login' : '/api/register';
-  primaryBtn.disabled = true; // Prevent double-clicks
+  primaryBtn.disabled = true;
 
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -64,23 +66,21 @@ authForm.addEventListener('submit', async (e) => {
 
     if (response.ok && data.success) {
       if (isLoginMode) {
-        // Save session and redirect to the main app
+        // Save session and redirect to home
         localStorage.setItem('prismal_user_id', data.userId);
         localStorage.setItem('prismal_username', data.username);
-        window.location.replace("/index.html"); // Redirect to home/dashboard
+        window.location.replace("/index.html"); 
       } else {
-        // Successfully registered! Flip back to login mode automatically
-        statusMessage.style.color = '#55ff55'; // Success color
+        // Successful registration
+        statusMessage.style.color = 'var(--BASE_COLOR)'; // Use neutral gray for success
         statusMessage.textContent = "Account created! Please log in.";
-        toggleBtn.click(); // Programmatically switch back to login mode
+        toggleBtn.click(); // Flip UI back to login mode
       }
     } else {
-      statusMessage.style.color = '#ff5555';
       statusMessage.textContent = data.error || "An error occurred.";
     }
   } catch (err) {
     console.error(err);
-    statusMessage.style.color = '#ff5555';
     statusMessage.textContent = "Failed to connect to the server.";
   } finally {
     primaryBtn.disabled = false;
