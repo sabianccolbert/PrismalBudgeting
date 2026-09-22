@@ -13,14 +13,9 @@
   const storedVersion = localStorage.getItem("LOCAL_SITE_VERSION");
 
   if (storedVersion !== SITE_VERSION) {
-    // 1. Update local storage so we don't get stuck in an infinite reload loop
     localStorage.setItem("LOCAL_SITE_VERSION", SITE_VERSION);
-
-    // 2. Force the browser to fetch a fresh HTML file by appending the version to the URL
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set('v', SITE_VERSION);
-    
-    // 3. Replace the current URL and stop executing the rest of this script
     window.location.replace(currentUrl.toString());
     return; 
   }
@@ -29,6 +24,7 @@
     const joiner = url.includes("?") ? "&" : "?";
     return `${url}${joiner}v=${encodeURIComponent(SITE_VERSION)}`;
   }
+
   /* ===============================
    *  1) PAGE DETECTION
    * =============================== */
@@ -41,6 +37,7 @@
 
     if (p === "/" || p === "/index") return "home";
     if (p === "/404") return "notfound";
+    if (p === "/login") return "login"; // <-- Added login page detection
 
     return "generic";
   }
@@ -48,21 +45,29 @@
   const PAGE = getPageKey();
 
   /* ===============================
+   *  1.5) AUTHENTICATION REDIRECT
+   * =============================== */
+  const isLoggedIn = !!localStorage.getItem("prismal_user_id");
+  
+  // If they are not logged in, and not already on the login page, redirect them.
+  if (!isLoggedIn && PAGE !== "login") {
+    window.location.replace("/login.html");
+    return; // Stop boot.js execution entirely
+  }
+
+  /* ===============================
    *  2) CSP-safe GA init (no inline)
    * =============================== */
-  // Dynamically insert the Google Tag script element
   const gtagScript = document.createElement('script');
   gtagScript.async = true;
   gtagScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-KD7WLLVTWC';
   document.head.appendChild(gtagScript);
   
-  // Initialize dataLayer and the gtag function globally
   window.dataLayer = window.dataLayer || [];
   function gtag() {
     window.dataLayer.push(arguments);
   }
   
-  // Configure tracking
   gtag('js', new Date());
   gtag('config', 'G-KD7WLLVTWC');
 
@@ -96,7 +101,7 @@
   function appendScript(src){
     const s = document.createElement("script");
     s.src = v(src);
-    s.async = false; // preserve order
+    s.async = false;
     document.body.appendChild(s);
   }
 
@@ -108,21 +113,19 @@
     }
   }
   
-    /* ===============================
+  /* ===============================
    *  6) Add version badge
    * =============================== */
-
   const badgeHTML = `<div id="versionBadge">v${SITE_VERSION}</div>`;
 
   function addVersionBadge(){
-    if (document.getElementById("versionBadge")) return; // prevent duplicates
+    if (document.getElementById("versionBadge")) return;
     document.body.insertAdjacentHTML("beforeend", badgeHTML);
   }
 
-    /* ===============================
+  /* ===============================
    *  7) Init
    * =============================== */
-  
   function onDOMReady(fn) {
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", fn, { once: true });
