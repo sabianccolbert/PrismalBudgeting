@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <!-- Preload background to reduce flicker when navigating between pages -->
+    <link rel="preload" as="image" href="/Resources/Background.webp">
+    <!-- Check for updates and load scripts/css -->
+    <script src="/Javascript/Boot.js"></script>
+    <!-- No JS fallback -->
+    <noscript>
+      <link rel="stylesheet" href="/stylesheet.css">
+    </noscript>
+    
+    <title>404 Page Not Found</title>
+    <meta name="description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="The I Collection - 404 Page Not Found">
+    <meta property="og:description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
+    <meta property="og:image" content="https://stayingoutsidethebox.com/Favicons/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stayingoutsidethebox.com">
+    
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png?v=20260922" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg?v=20260922" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico?v=20260922" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png?v=20260922" />
+    <link rel="manifest" href="/Favicon/site.webmanifest?v=20260922" />
+    <meta name="msapplication-TileColor" content="#000000">
+    <meta name="msapplication-TileImage" content="/Favicons/mstile-144x144.png">
+    <link rel="stylesheet" href="/debug.css">
+  </head>
+
+  <body>
+    <canvas id="constellations"></canvas>
+
+    <div id="transitionContainer">
+      <header>
+        <h1>404 Page Not Found</h1>
+        <h2>Link Doesn't Exist</h2>
+        <hr>
+
+        <nav class="navButtons">
+          <a href="/">
+            <img src="/Resources/Home.png" alt="Home">
+          </a>
+        </nav>
+
+        <hr>
+      </header>
+<footer>
+    <p>I Can’t Stop Dying™ and The I Collection™ are trademarks of Staying Outside The Box™ LLC</p>
+    <p>
+      Contact: 
+      <a href="mailto:admin@stayingoutsidethebox.com">
+        Admin@&#8203;StayingOutsideTheBox&#8203;.com
+      </a>
+    </p>
+<a href="/privacy and terms.html">
+      Privacy Policy &amp; Terms of Use
+    </a>
+    <div id="debugBox">
+                  <!-- Star controller -->
+          <input type="text" id="controller" placeholder="Controller">
+            <hr>
+        <!-- Debug readouts (populated by JS elsewhere) -->
+        <label>Misc: <span id="dbgMisc">NAN</span></label>
+        <label>User Speed: <span id="dbgSpeed">0.000</span></label>
+        <label>Circle Timer: <span id="dbgCircle">0.000</span></label>
+        <label>Poke Timer: <span id="dbgPoke">0.000</span></label>
+        <hr>
+        <div class="gravityGrid">
+          <!-- =========================
+               ATTRACT CONTROLS
+          ========================= -->
+          <section>
+            <h3>Attract</h3>
+            <!-- ATTRACT STRENGTH -->
+            <div class="controlBlock">
+              <label>Strength</label>
+              <input id="ATTRACT_STRENGTH" type="range" min="0" max="100" step="1" value="50">
+              <input id="ATTRACT_STRENGTH_num" type="number" min="0" max="100" step="1" value="50">
+              <div class="stepper" role="group" aria-label="ATTRACT_STRENGTH stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease ATTRACT_STRENGTH">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase ATTRACT_STRENGTH">+</button>
+              </div>
+            </div>
+            <!-- ATTRACT RADIUS -->
+            <div class="controlBlock">
+              <label>Radius</label>
+              <input id="ATTRACT_RADIUS" type="range" min="0" max="100" step="1" value="50">
+              <input id="ATTRACT_RADIUS_num" type="number" min="0" max="100" step="1" value="50">
+              <div class="stepper" role="group" aria-label="ATTRACT_RADIUS stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease ATTRACT_RADIUS">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase ATTRACT_RADIUS">+</button>
+              </div>
+            </div>
+            <!-- ATTRACT SCALE -->
+            <div class="controlBlock">
+              <label>Scale</label>
+              <input id="ATTRACT_SCALE" type="range" min="0" max="10" step="0.1" value="5">
+              <input id="ATTRACT_SCALE_num" type="number" min="0" max="10" step="0.1" value="5">
+              <div class="stepper" role="group" aria-label="ATTRACT_SCALE stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease ATTRACT_SCALE">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase ATTRACT_SCALE">+</button>
+              </div>
+            </div>
+            <!-- CLAMP -->
+            <div class="controlBlock">
+              <label>Clamp</label>
+              <input id="CLAMP" type="range" min="0" max="10" step="0.1" value="5">
+              <input id="CLAMP_num" type="number" min="0" max="10" step="0.1" value="5">
+              <div class="stepper" role="group" aria-label="CLAMP stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease CLAMP">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase CLAMP">+</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- =========================
+               REPEL CONTROLS
+          ========================= -->
+          <section>
+            <h3>Repel</h3>
+            <!-- REPEL STRENGTH -->
+            <div class="controlBlock">
+              <label>Strength</label>
+              <input id="REPEL_STRENGTH" type="range" min="0" max="100" step="1" value="50">
+              <input id="REPEL_STRENGTH_num" type="number" min="0" max="100" step="1" value="50">
+              <div class="stepper" role="group" aria-label="REPEL_STRENGTH stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease REPEL_STRENGTH">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase REPEL_STRENGTH">+</button>
+              </div>
+            </div>
+            <!-- REPEL RADIUS -->
+            <div class="controlBlock">
+              <label>Radius</label>
+              <input id="REPEL_RADIUS" type="range" min="0" max="100" step="1" value="50">
+              <input id="REPEL_RADIUS_num" type="number" min="0" max="100" step="1" value="50">
+              <div class="stepper" role="group" aria-label="REPEL_RADIUS stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease REPEL_RADIUS">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase REPEL_RADIUS">+</button>
+              </div>
+            </div>
+            <!-- REPEL SCALE -->
+            <div class="controlBlock">
+              <label>Scale</label>
+              <input id="REPEL_SCALE" type="range" min="0" max="10" step="0.1" value="5">
+              <input id="REPEL_SCALE_num" type="number" min="0" max="10" step="0.1" value="5">
+              <div class="stepper" role="group" aria-label="REPEL_SCALE stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease REPEL_SCALE">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase REPEL_SCALE">+</button>
+              </div>
+            </div>
+            <!-- POKE STRENGTH -->
+            <div class="controlBlock">
+              <label>Poke</label>
+              <input id="POKE_STRENGTH" type="range" min="0" max="10" step="0.1" value="5">
+              <input id="POKE_STRENGTH_num" type="number" min="0" max="10" step="0.1" value="5">
+              <div class="stepper" role="group" aria-label="POKE_STRENGTH stepper">
+                <button class="stepBtn" type="button" data-step="-1" aria-label="Decrease POKE_STRENGTH">-</button>
+                <button class="stepBtn" type="button" data-step="1" aria-label="Increase POKE_STRENGTH">+</button>
+              </div>
+            </div>
+          </section>
+        </div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

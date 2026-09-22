@@ -1,0 +1,823 @@
+/*==============================================================*
+ *                           CSS MAP
+ *==============================================================*
+ *
+ *  1) DESIGN TOKENS (ROOT VARIABLES)
+ *     - global variables used everywhere
+ *     - JS can overwrite some of these at runtime
+ *
+ *  2) DOCUMENT BASE + BACKGROUND
+ *     - html/body scroll ownership (JS swaps this)
+ *     - base typography + background color safety
+ *
+ *  3) CANVAS LAYER
+ *     - #constellations fixed full-screen
+ *     - background image lives here
+ *
+ *  4) PAGE STRUCTURE + TYPOGRAPHY
+ *     - spacing and text sizing rules
+ *     - divider styling (hr + .divider)
+ *
+ *  5) CONTENT CONTAINERS
+ *     - article layout + [hidden] behavior
+ *
+ *  6) LINKS
+ *     - base link style + hover effects
+ *     - utility variants (.clean, .dead, .premium)
+ *
+ *  7) IMAGES + IMAGE WRAPPERS
+ *     - circular avatars
+ *     - .imgBorder ring frame
+ *     - .imgButton (homepage badge-style images)
+ *     - .navButtons icons
+ *
+ *  8) BUTTONS
+ *     - base button typography + hover behavior
+ *     - note: shares visuals with .imgButton on purpose
+ *
+ *  9) GROUP INTERACTIONS
+ *     - .hoverTogether “hover whole card” behavior
+ *     - nav icon hover/active behavior
+ *
+ * 10) SCRIPT CHARACTER NAME COLORS
+ *     - character classes for script pages
+ *
+ * 11) SLIDE-IN PAGE TRANSITION SYSTEM
+ *     - #transitionContainer and JS-driven states
+ *     - .homeJs / .otherJs / .noJs
+ *
+ * 12) REDUCED-MOTION ACCESSIBILITY
+ *     - disables animated canvas + transitions when requested
+ *
+ *  NOTE: Sections use /* #region ... *\/ for editor folding.
+ *==============================================================*/
+
+
+/* #region 1) DESIGN TOKENS (ROOT VARIABLES) */
+/*========================================*
+ *  1) DESIGN TOKENS (ROOT VARIABLES)
+ *========================================*
+ *  These are your “global knobs”.
+ *  Step-by-step:
+ *   1) Define default values here.
+ *   2) Reference them everywhere else with var(--NAME).
+ *   3) JS can overwrite specific ones (slide distance/duration).
+ */
+
+:root {
+  /* Step 1: Slide system defaults (JS overwrites per page/transition) */
+  --SLIDE_DISTANCE: 100vh;
+  --SLIDE_DURATION: 0.6s;
+
+  /* Step 2: Shared glow recipe (used for text-shadow + box-shadow) */
+  --SHADOW: 0 0 20px rgba(200, 0, 0, 1);
+
+  /* Step 3: Brand colors (links and neutral UI color) */
+  --LINK_LIGHT: #ee0000;
+  --LINK_DARK:  #550000;
+  --BASE_COLOR: #bdbdbd;
+
+  /* Step 4: Transition speeds (grouped so everything “feels” consistent) */
+  --SLOW_TRANSFORM: 0.3s ease-out;
+  --SLOW_BORDER:    0.3s ease-out;
+  --SLOW_SHADOW:    0.7s ease-out;
+  --SLOW_COLOR:     0.5s ease-out;
+  
+  /* Placeholders */
+  --PLACEHOLDER_COLOR: rgba(90, 90, 90, 0.5);
+}
+
+/* #endregion 1) DESIGN TOKENS (ROOT VARIABLES) */
+
+
+
+/* #region 2) DOCUMENT BASE + BACKGROUND */
+/*========================================*
+ *  2) DOCUMENT BASE + BACKGROUND
+ *========================================*
+ *  Important: scroll ownership is intentionally unusual.
+ *  JS swaps between html/body/container as the scroller.
+ *
+ *  This section is the foundation:
+ *   1) Remove default browser margins/padding.
+ *   2) Set a safe black background behind everything.
+ *   3) Set base font + default text color.
+ *
+ *  The "DONT TOUCH" notes are real:
+ *   - changing overflow/height here can break the transition system
+ *   - and can also break iOS scroll behavior
+ */
+
+/*---------- Root document ----------*/
+@font-face {
+  font-family: "New Rocker";
+  src: url("/New Rocker.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+html {
+  /* Step 1: eliminate default spacing */
+  margin: 0;
+  padding: 0;
+  inset: 0;
+
+  width: 100vw;
+  overflow-x: hidden;
+  overflow-y: auto;
+    
+  /* Step 3: edge color visible during transitions */
+  background-color: black;
+}
+
+/*---------- Body (content wrapper) ----------*/
+body {
+  /* Step 1: establish a vertical flex layout so footer/page structure behaves */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+
+  /* Step 2: ensure body covers the screen height */
+  min-height: 100vh;
+
+  /* Step 3: default is “no body scroll” (JS may change this) */
+  height: auto;
+  width: 100vw;
+  overflow-x: hidden;
+  overflow-y: visible;
+
+  /* Step 4: remove default spacing */
+  margin: 0;
+  padding: 0;
+  inset: 0;
+
+  /* Step 5: keep body visually transparent so canvas/background shows */
+  background: transparent;
+
+  /* Step 6: base typography */
+  text-align: center;
+  font-family: 'New Rocker';
+  font-size: 7vmin;
+  color: var(--BASE_COLOR);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Main content wrapper (JS toggles who scrolls) */
+#transitionContainer {
+  flex: 1;
+  min-height: 96vh;
+  height: auto;
+  width: 96vw;
+  padding:2vh 2vw;
+  inset: 0;
+
+  /* DONT TOUCH: JS swaps scroll responsibility */
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+/* #endregion 2) DOCUMENT BASE + BACKGROUND */
+
+
+
+/* #region 3) CANVAS LAYER */
+/*========================================*
+ *  3) CANVAS LAYER
+ *========================================*
+ *  The canvas is both:
+ *   - the starfield drawing surface
+ *   - and the background image layer
+ *
+ *  Step-by-step:
+ *   1) Fix it to the viewport so it never scrolls.
+ *   2) Stretch it to full size.
+ *   3) Put the background image here.
+ *   4) Send it behind content (z-index:-1).
+ *   5) Disable pointer events so it never steals taps.
+ */
+
+/* Full-screen starfield canvas (above bg, below content) */
+#constellations {
+  position: fixed;
+  inset: 0;
+
+  /* Step 1: full-screen sizing */
+  width: 100lvw;
+  height: 100lvh;
+
+  /* Step 2: background image settings */
+  background-image: url("/Resources/Background.webp");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  /* Step 3: keep it behind everything */
+  z-index: -1;
+
+  /* Step 4: let clicks/taps pass through to real UI */
+  pointer-events: none;
+}
+
+/* #endregion 3) CANVAS LAYER */
+
+
+
+/* #region 4) PAGE STRUCTURE + TYPOGRAPHY */
+/*========================================*
+ *  4) PAGE STRUCTURE + TYPOGRAPHY
+ *========================================*
+ *  This section controls content spacing + text sizes.
+ *
+ *  Step-by-step:
+ *   1) main gets padding so text doesn't touch edges.
+ *   2) headings and paragraphs get consistent sizing.
+ *   3) footer uses smaller text.
+ *   4) hr is decorative (image-based divider).
+ *   5) .divider is a narrower hr variant.
+ */
+
+h2 {
+  /* Step 2: stylized “pulled up” heading positioning */
+  margin-top: -7vmin;
+  font-size: 4vmin;
+}
+
+h3 {
+  font-size: 12vmin;
+}
+
+.aboveName {
+  /* To remove space in scripts bewteen h3 and name lines */
+  margin-bottom:0em;
+}
+
+h4 {
+  font-size: 7vmin;
+}
+
+p {
+  /* Step 3: tight paragraph layout (no extra margin) */
+  margin: 0;
+  font-size: 6vmin;
+}
+
+
+footer p, footer a{
+  /* Step 4: footer text is smaller and padded */
+  font-size: 3vmin;
+  padding: 2vmin;
+}
+
+/* Divider art */
+hr {
+  /* Step 5: divider sizing */
+  width: 75vw;
+  height: 4px;
+  border: none;
+
+  /* Step 6: hr is image-driven instead of a plain line */
+  background-image: url("/Resources/Hr.webp");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* Smaller divider variant */
+.divider {
+  width: 45vw;
+}
+
+/* #endregion 4) PAGE STRUCTURE + TYPOGRAPHY */
+
+
+
+/* #region 5) CONTENT CONTAINERS */
+/*========================================*
+ *  5) CONTENT CONTAINERS
+ *========================================*
+ *  Articles are your “content cards”.
+ *
+ *  Step-by-step:
+ *   1) stack content vertically
+ *   2) center it
+ *   3) shrink-wrap to its contents
+ *   4) allow hiding with [hidden]
+ */
+
+article {
+  /* Step 1: vertical stacking */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  /* Step 2: shrink to content and center on page */
+  width: fit-content;
+  margin: 0 auto 3vmin;
+}
+
+/* Hide blocks via [hidden] (chapters, etc.) */
+article[hidden] {
+  /* Step 3: hard-hide for safety */
+  display: none !important;
+}
+
+/* #endregion 5) CONTENT CONTAINERS */
+
+
+
+/* #region 6) LINKS */
+/*========================================*
+ *  6) LINKS
+ *========================================*
+ *  Links are styled like “interactive text buttons”.
+ *
+ *  Step-by-step:
+ *   1) inline-block so transform works nicely
+ *   2) default neutral color
+ *   3) hover grows slightly + glows + turns red
+ *   4) utility variants override specific behavior
+ */
+
+a {
+  /* Step 1: give the link a box so scaling doesn't break layout */
+  display: inline-block;
+  margin: 0 auto;
+  padding-bottom: 1vmin;
+
+  /* Step 2: default color */
+  color: var(--BASE_COLOR);
+
+  /* Step 3: smooth transitions */
+  transition:
+    transform var(--SLOW_TRANSFORM),
+    color var(--SLOW_COLOR),
+    text-shadow var(--SLOW_SHADOW);
+}
+
+a:hover {
+  /* Step 4: hover treatment */
+  transform: scale(1.05);
+  text-shadow: var(--SHADOW);
+  color: var(--LINK_LIGHT);
+}
+
+/* Utility variants */
+.clean { color: var(--BASE_COLOR); }
+.clean:hover { transform: scale(1.1); }
+
+/* “Dead” links: locked down, dim, no scaling */
+.dead,
+.dead:hover {
+  transform: scale(1);
+  color: var(--LINK_DARK);
+}
+
+/* “Premium” links: purple glow accent */
+.premium {
+  text-shadow: 0 0 20px rgba(100, 0, 100, 1);
+}
+
+/* #endregion 6) LINKS */
+
+
+
+/* #region 7) IMAGES + IMAGE WRAPPERS */
+/*========================================*
+ *  7) IMAGES + IMAGE WRAPPERS
+ *========================================*
+ *  This section defines:
+ *   - base circular image rules
+ *   - decorative ring frame (.imgBorder)
+ *   - badge-style image buttons (.imgButton)
+ *   - nav icon strip (.navButtons)
+ *
+ *  Important note:
+ *   .imgButton and button share a block on purpose
+ *   so they feel like they belong to the same UI “family”.
+ */
+
+/*---------- Base circular images ----------*/
+img {
+  /* Step 1: default avatar sizing */
+  width: 40vmin;
+  height: 40vmin;
+
+  /* Step 2: circular crop */
+  border-radius: 50%;
+  object-fit: cover;
+  overflow: hidden;
+}
+
+/*---------- Decorative border wrapper (.imgBorder) ----------*/
+.imgBorder {
+  /* Step 1: shrink-wrap around the image */
+  display: inline-block;
+  position: relative;
+
+  /* Step 2: keep it circular */
+  border-radius: 50%;
+
+  /* Step 3: remove inline baseline gap */
+  line-height: 0;
+  
+  margin:4vmin;
+}
+
+/* The ring frame lives on a pseudo-element behind the image */
+.imgBorder::before {
+  content: "";
+  position: absolute;
+
+  /* Step 4: inset controls ring thickness */
+  inset: -2vmin;
+
+  /* Step 5: image-based frame */
+  background-image: url("/Resources/Image Border.webp");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+
+  /* Step 6: match circle and sit behind */
+  border-radius: 50%;
+  z-index: -1;
+}
+
+/* Ensure the image behaves as a block (no baseline gap) */
+.imgBorder img {
+  display: block;
+}
+
+/*---------- Homepage badge-style image buttons ----------*/
+/* Note: .imgButton shares a block with button here on purpose */
+.imgButton {
+  /* Step 1: make it a block so it centers cleanly */
+  display: block;
+
+  /* Step 2: let width fit content, set consistent height */
+  width: auto;
+  height: 20vmin;
+
+  /* Step 3: spacing + padding */
+  margin-top: 3vmin;
+  padding: 5vmin;
+
+  /* Step 4: black backing */
+  background-color: black;
+
+  /* Step 5: fallback font if images fail */
+  font: 1vmin Arial;
+
+  /* Step 6: for replaced elements (img), harmless for buttons */
+  object-fit: contain;
+
+  /* Step 7: pill shape + border */
+  border-radius: 10vmin;
+  border: 3px solid var(--BASE_COLOR);
+
+  /* Step 8: smooth transitions */
+  transition:
+    transform var(--SLOW_TRANSFORM),
+    box-shadow var(--SLOW_SHADOW),
+    border-color var(--SLOW_BORDER),
+    color var(--SLOW_COLOR);
+}
+
+/*---------- Nav icon strip ----------*/
+.navButtons {
+  /* Step 1: horizontal row */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+
+  /* Step 2: shrink-wrap and center */
+  width: fit-content;
+  margin: 0 auto;
+}
+
+/* Step 3: spacing between nav links */
+.navButtons a {
+  margin: 0 10vw;
+}
+
+/* Step 4: icon sizing and hover-ready styling */
+.navButtons img {
+  width: 12vmin;
+  height: 12vmin;
+  padding: 1vmin;
+
+  /* fallback font (rarely used, but safe) */
+  font: 1vmin Arial;
+
+  /* circular icon style */
+  border-radius: 50%;
+  border: 3px solid var(--BASE_COLOR);
+  object-fit: cover;
+
+  /* smooth hover transitions */
+  transition:
+    transform var(--SLOW_TRANSFORM),
+    box-shadow var(--SLOW_SHADOW),
+    border-color var(--SLOW_BORDER);
+}
+
+/* #endregion 7) IMAGES + IMAGE WRAPPERS */
+
+
+
+/* #region 8) BUTTONS */
+/*========================================*
+ *  8) BUTTONS
+ *========================================*
+ *  Reminder:
+ *   - button already gets some shared visuals above (with .imgButton)
+ *   - THIS section is where button typography and hover “personality” lives
+ */
+
+button {
+
+  -webkit-appearance: none;
+  appearance: none;
+
+  display: block;
+  margin: 3vmin auto 1vmin;
+  padding: 0.5em 1.5em;
+  height: auto;
+  
+  object-fit: contain;
+
+  /* Step 3: pill */
+  border: 3px solid var(--BASE_COLOR);
+  border-radius: 9999px;
+  background: transparent;
+
+  /* Step 4: typography */
+  color: var(--BASE_COLOR);
+  font-family: 'New Rocker';
+  font-size: 5vmin;
+
+  /* Step 8: smooth transitions */
+  transition:
+    transform var(--SLOW_TRANSFORM),
+    box-shadow var(--SLOW_SHADOW),
+    border-color var(--SLOW_BORDER),
+    color var(--SLOW_COLOR);
+}
+
+button:hover {
+  /* Step 6: scale + glow + brand color */
+  transform: scale(1.05);
+
+  text-shadow: var(--SHADOW);
+  color: var(--LINK_LIGHT);
+
+  box-shadow: var(--SHADOW);
+  border-color: var(--LINK_LIGHT);
+}
+
+/* #endregion 8) BUTTONS */
+
+
+
+/* #region 9) GROUP INTERACTIONS */
+/*========================================*
+ *  9) GROUP INTERACTIONS
+ *========================================*
+ *  This makes a whole “card” react together.
+ *
+ *  Step-by-step:
+ *   1) hovering the group boosts the badge
+ *   2) hovering the group boosts the links
+ *   3) nav icons get their own hover/active behavior
+ */
+
+/* Hover/focus within a group boosts its badge + links */
+.hoverTogether:hover .imgButton,
+.hoverTogether:focus-within .imgButton {
+  box-shadow: var(--SHADOW);
+  border-color: var(--LINK_LIGHT);
+}
+
+.hoverTogether:hover a,
+.hoverTogether:focus-within a {
+  text-shadow: var(--SHADOW);
+  color: var(--LINK_LIGHT);
+}
+
+/* Nav icon glow & scale (targets icon image inside the link) */
+.navButtons a img:hover,
+.navButtons a img:active {
+  transform: scale(1.05);
+  border-color: var(--LINK_LIGHT);
+  box-shadow: var(--SHADOW);
+}
+
+/* #endregion 9) GROUP INTERACTIONS */
+
+
+
+/* #region 10) SCRIPT CHARACTER NAME COLORS */
+/*========================================*
+ *  10) CHARACTER NAME COLORS (SCRIPT PAGES)
+ *========================================*
+ *  These classes mark speaker names in scripts.
+ *
+ *  Step-by-step:
+ *   1) shared formatting for all names (margin + bold)
+ *   2) individual colors per character
+ */
+
+/* In-script name labels */
+p:is(
+  .roman,
+  .sage,
+  .elena,
+  .iris,
+  .darian,
+  .walter,
+  .trent,
+  .dave,
+  .fireRider,
+  .sidecharacter 
+) {
+  margin-top: 2em;
+  font-weight: bold;
+}
+
+/* Per-character colors */
+.roman,
+.sage { color: red; }
+
+.elena { color: yellow; }
+
+.iris,
+.darian { color: blue; }
+
+.walter { color: brown; }
+
+.trent { color: orange; }
+
+.dave { color: pink; }
+
+.fireRider { color: firebrick; }
+
+.sidecharacter { color: gray; }
+
+/* #endregion 10) SCRIPT CHARACTER NAME COLORS */
+
+
+
+/* #region 11) SLIDE-IN PAGE TRANSITION SYSTEM */
+/*========================================*
+ *  11) SLIDE-IN PAGE TRANSITION SYSTEM
+ *========================================*
+ *  This is the animation shell.
+ *
+ *  Step-by-step:
+ *   1) #transitionContainer holds the entire page content
+ *   2) JS toggles classes on it:
+ *        .ready     -> resting position (translateY(0))
+ *        .slide-out -> leaving position (translateY(var(--SLIDE_DISTANCE)))
+ *   3) html has either .homeJs or .otherJs depending on page type
+ *   4) .noJs disables all transforms for graceful fallback
+ */
+
+/* Homepage: slides DOWN into view, OUT up */
+.homeJs #transitionContainer {
+  transform: translateY(-100%);
+  transition: transform 1s ease-in-out;
+}
+
+.homeJs #transitionContainer.ready {
+  transform: translateY(0);
+}
+
+.homeJs #transitionContainer.slide-out {
+  transform: translateY(-100%);
+}
+
+/* Other pages: slides UP into view, OUT down */
+.otherJs #transitionContainer {
+  transform: translateY(100vh);
+  transition: transform 0.6s ease-in-out;
+}
+
+.otherJs #transitionContainer.ready {
+  transform: translateY(0);
+}
+
+.otherJs #transitionContainer.slide-out {
+  transition: transform var(--SLIDE_DURATION) ease-in-out;
+  transform: translateY(var(--SLIDE_DISTANCE));
+}
+
+/* No javascript fallback */
+.noJs #transitionContainer {
+  transform: translateY(0) !important;
+  transition: none !important;
+}
+
+/* #endregion 11) SLIDE-IN PAGE TRANSITION SYSTEM */
+
+
+
+/* #region 12) REDUCED-MOTION ACCESSIBILITY */
+/*========================================*
+ *  12) REDUCED-MOTION ACCESSIBILITY
+ *========================================*
+ *  When users request reduced motion:
+ *   1) remove the animated canvas layer
+ *   2) disable page slide transitions
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  #constellations {
+    display: none; /* disable animated starfield */
+  }
+
+  #transitionContainer {
+    transform: translateY(0);
+    transition: none;
+  }
+}
+
+/* #endregion 12) REDUCED-MOTION ACCESSIBILITY */
+
+#homepageBack {
+display:none;
+}
+
+#policyBack{
+  display:none;
+  }
+
+#YouTube {
+padding:1vmin;
+height:28vmin;
+}
+
+#versionBadge {
+  position:fixed;
+  bottom:4px;
+  left:6px;
+  font:10px monospace;
+  opacity:.45;
+  z-index:9999;
+  pointer-events:none;
+}
+
+/*========================================*
+ *  13) FORM ELEMENTS (LOGIN/REGISTER)
+ *========================================*/
+form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+label {
+  font-size: 5vmin;
+  color: var(--BASE_COLOR);
+  margin-top: 2vmin;
+}
+
+input {
+  -webkit-appearance: none;
+  appearance: none;
+  
+  display: block;
+  margin: 1vmin auto 3vmin;
+  padding: 0.5em 1em;
+  width: 60vw;
+  max-width: 400px;
+  
+  /* Match the button pill aesthetic */
+  background: transparent;
+  border: 3px solid var(--BASE_COLOR);
+  border-radius: 9999px;
+  
+  /* Match typography */
+  color: var(--BASE_COLOR);
+  font-family: 'New Rocker', sans-serif;
+  font-size: 5vmin;
+  text-align: center;
+  
+  transition: 
+    box-shadow var(--SLOW_SHADOW), 
+    border-color var(--SLOW_BORDER), 
+    color var(--SLOW_COLOR);
+}
+
+/* Red glow when typing, mirroring button:hover */
+input:focus {
+  outline: none;
+  border-color: var(--LINK_LIGHT);
+  box-shadow: var(--SHADOW);
+  color: var(--LINK_LIGHT);
+}
+.hidden {
+  display: none !important;
+}
