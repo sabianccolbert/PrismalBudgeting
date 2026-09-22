@@ -1,1 +1,69 @@
-login
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <link rel="preload" as="image" href="/Resources/Background.webp">
+    <script src="/Javascript/Boot.js"></script>
+    <noscript>
+      <link rel="stylesheet" href="/stylesheet.css">
+    </noscript>
+    <title>The I Collection - Psychological Horror Audiobook Experience</title>
+    <meta name="description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="The I Collection - Home">
+    <meta property="og:description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
+    <meta property="og:image" content="https://stayingoutsidethebox.com/Favicons/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stayingoutsidethebox.com">
+
+    <link rel="icon" href="/Favicons/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/Favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/Favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/Favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/Favicons/android-chrome-192x192.png">
+    <meta name="msapplication-TileColor" content="#000000">
+    <meta name="msapplication-TileImage" content="/Favicons/mstile-144x144.png">
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+    <div id="transitionContainer">
+  <div class="auth-wrapper">
+    <h2>Prismal Budget</h2>
+    
+    <form id="auth-form">
+      <div class="input-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" required autocomplete="username">
+      </div>
+
+      <div class="input-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" required autocomplete="current-password">
+      </div>
+
+      <!-- Hidden by default, expands when creating an account -->
+      <div class="input-group" id="verify-password-group" style="display: none;">
+        <label for="verify-password">Verify Password</label>
+        <input type="password" id="verify-password" autocomplete="new-password">
+      </div>
+
+      <div id="status-message" style="color: #ff5555; margin-bottom: 10px;"></div>
+
+      <div class="actions">
+        <button type="submit" id="primary-action-btn">Login</button>
+        <button type="button" id="toggle-mode-btn">New Account?</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Make sure to include your auth script below the HTML, or load it via boot.js -->
+<script src="/Javascript/Auth.js"></script>
+  </body>
+</html>
