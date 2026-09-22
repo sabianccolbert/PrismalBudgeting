@@ -32,47 +32,31 @@
   <body>
     <canvas id="constellations"></canvas>
     <div id="transitionContainer">
-    <header>
-      <h1>Menu</h1>
-      <h2>The I Collection</h2>
-      <hr>
-      <nav class="navButtons">
-        <a  href="/">
-          <img src="/Resources/Home.png" alt="Home">
-        </a>
-      </nav>
-      <hr>
-  <div class="auth-wrapper">
+  <article>
     <h2>Prismal Budget</h2>
     
     <form id="auth-form">
-      <div class="input-group">
-        <label for="username">Username</label>
-        <input type="text" id="username" required autocomplete="username">
-      </div>
+      <label for="username">Username</label>
+      <input type="text" id="username" required autocomplete="username">
 
-      <div class="input-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" required autocomplete="current-password">
-      </div>
+      <label for="password">Password</label>
+      <input type="password" id="password" required autocomplete="current-password">
 
       <!-- Hidden by default, expands when creating an account -->
-      <div class="input-group" id="verify-password-group" style="display: none;">
+      <div id="verify-password-group" style="display: none; width: 100%;">
         <label for="verify-password">Verify Password</label>
         <input type="password" id="verify-password" autocomplete="new-password">
       </div>
 
-      <div id="status-message" style="color: #ff5555; margin-bottom: 10px;"></div>
+      <p id="status-message" style="color: var(--LINK_LIGHT); font-size: 4vmin; min-height: 5vmin; margin: 2vmin 0;"></p>
 
-      <div class="actions">
-        <button type="submit" id="primary-action-btn">Login</button>
-        <button type="button" id="toggle-mode-btn">New Account?</button>
-      </div>
+      <!-- These automatically pick up your beautiful pill/glow button CSS -->
+      <button type="submit" id="primary-action-btn">Login</button>
+      <button type="button" id="toggle-mode-btn">New Account?</button>
     </form>
-  </div>
+  </article>
 </div>
 
-<!-- Make sure to include your auth script below the HTML, or load it via boot.js -->
 <script src="/Javascript/Auth.js"></script>
   </body>
 </html>
