@@ -13,17 +13,17 @@ let isLoginMode = true;
 // 1. Toggle between Login and Register modes
 toggleBtn.addEventListener('click', () => {
   isLoginMode = !isLoginMode;
-  statusMessage.textContent = ''; // Clear errors
+  statusMessage.textContent = '';
   
   if (isLoginMode) {
-    // Switch to Login Mode
-    verifyGroup.style.display = 'none';
+    // Hide verify password field
+    verifyGroup.classList.add('hidden');
     verifyInput.removeAttribute('required');
     primaryBtn.textContent = 'Login';
     toggleBtn.textContent = 'New Account?';
   } else {
-    // Switch to Register Mode
-    verifyGroup.style.display = 'block';
+    // Show verify password field
+    verifyGroup.classList.remove('hidden');
     verifyInput.setAttribute('required', 'true');
     primaryBtn.textContent = 'Create Account';
     toggleBtn.textContent = 'Back to Login';
