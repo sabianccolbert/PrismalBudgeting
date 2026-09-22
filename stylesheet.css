@@ -818,3 +818,6 @@ input:focus {
   box-shadow: var(--SHADOW);
   color: var(--LINK_LIGHT);
 }
+.hidden {
+  display: none !important;
+}
