@@ -202,15 +202,17 @@ body {
 #constellations {
   position: fixed;
   inset: 0;
-  /* Background image handled in HTML */
-  /* Step 1: full-screen sizing */
+  
   width: 100lvw;
   height: 100lvh;
+  
+  background-image: url("/Resources/Background.webp");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 
-  /* Step 2: keep it behind everything */
   z-index: -1;
 
-  /* Step 3: let clicks/taps pass through to real UI */
   pointer-events: none;
 }
 
