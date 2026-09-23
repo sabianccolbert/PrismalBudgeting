@@ -1,0 +1,57 @@
+/* Table Layout */
+.elastic-table {
+  /* Give the table a physical size so it doesn't collapse inside the article */
+  width: 90vw;   
+  height: 60vh;  
+  
+  table-layout: fixed;
+  border-collapse: collapse;
+  touch-action: none; 
+  transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform-origin: center;
+}
+
+/* Static hit area (keeps the original bounds) */
+.elastic-table td {
+  position: relative;
+  padding: 0;
+  vertical-align: middle;
+  text-align: center;
+}
+
+/* The actual element that scales, zooms, and tilts */
+.cell-content {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* GPU acceleration for smooth mobile framerates */
+  will-change: transform;
+  
+  /* The "snap back" animation when touch/click is released */
+  transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 
+ * Mouse Interaction (Magnifying Glass Effect)
+ * Pure CSS handles the click-down and cursor-move logic 
+ */
+
+/* 1. When hovering over a cell's original bounds, bring it to the front */
+.elastic-table td:hover {
+  z-index: 10;
+}
+
+/* 2. When clicking/holding down on a cell's original bounds, zoom it in */
+.elastic-table td:active .cell-content {
+  /* Scales the visual size without altering the <td> hit area bounds */
+  transform: scale(2); 
+  
+  /* Instantly track the cursor on press, but rely on the transition above for the release snap */
+  transition: transform 0.1s ease-out; 
+}

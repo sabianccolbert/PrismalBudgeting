@@ -234,6 +234,10 @@ body {
  *   5) .divider is a narrower hr variant.
  */
 
+ .logo{
+  text-shadow: 0 0 10px rgb(0, 0, 0);
+ }
+
 h2 {
   /* Step 2: stylized “pulled up” heading positioning */
   margin-top: -7vmin;
@@ -502,13 +506,13 @@ img {
 .navButtons img {
   width: 12vmin;
   height: 12vmin;
-  padding: 1vmin;
+  padding: 0;
 
   /* fallback font (rarely used, but safe) */
   font: 1vmin Arial;
 
   /* circular icon style */
-  border-radius: 50%;
+  border-radius: 30%;
   border: 3px solid var(--BASE_COLOR);
   object-fit: cover;
 
@@ -801,15 +805,21 @@ input {
   font-size: 5vmin;
   text-align: center;
   
+  /* FIXED: Explicitly define transform transition parameters */
   transition: 
+    transform 0.3s ease-out,
     box-shadow var(--SLOW_SHADOW), 
     border-color var(--SLOW_BORDER), 
-    color var(--SLOW_COLOR);
+    color var(--SLOW_COLOR),
+    text-shadow var(--SLOW_SHADOW);
 }
 
-/* Red glow when typing, mirroring button:hover */
+/* Hover and focus states */
+input:hover,
 input:focus {
   outline: none;
+  transform: scale(1.05);
+  text-shadow: var(--SHADOW);
   border-color: var(--LINK_LIGHT);
   box-shadow: var(--SHADOW);
   color: var(--LINK_LIGHT);

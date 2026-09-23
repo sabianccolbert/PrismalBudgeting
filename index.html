@@ -1,28 +1,21 @@
 <!DOCTYPE html>
 <html lang="en" class="noJs">
   <head>
-    <link rel="preload" as="image" href="/Resources/Background.webp">
     <script src="/Javascript/Boot.js"></script>
     <noscript>
       <link rel="stylesheet" href="/stylesheet.css">
     </noscript>
+    <link rel="stylesheet" href="/budgetStyle.css">
     <title>Prismal Budget - Home</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
-    
-    <style>
-      #constellations {
-        background-image: url("/Resources/Background.webp");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-      }
-    </style>
+    <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
     <meta property="og:title" content="Prismal Budget - Home">
@@ -30,28 +23,84 @@
     <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://prismalbudget.org">
-
     <!-- Modern Favicons -->
-    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png?v=20260922" sizes="96x96" />
-    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg?v=20260922" />
-    <link rel="shortcut icon" href="/Favicon/favicon.ico?v=20260922" />
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
 
     <!-- Apple Touch Icon (iOS Home Screen) -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png?v=20260922" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
 
     <!-- Web App Manifest (Android Home Screen / PWA) -->
-    <link rel="manifest" href="/Favicon/site.webmanifest?v=20260922" />
-    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
   </head>
   <body>
     <canvas id="constellations"></canvas>
-    <div id="transitionContainer"><header>
-        <h1>Home</h1>
-        <h2>Prismal Budget</h2>
-        <hr>
-      </header>
+    <div id="transitionContainer">
+      
+    <header>
+      <img src="/Resources/Prismal.png" alt="Prismal Logo">
+      <h2 class="logo">Prismal Budget</h2>
+      <hr>
+      <nav class="navButtons">
+        <a href="/menu">
+          <img src="/Resources/Menu.png" alt="Menu">
+        </a>
+        <a href="/settings.html">
+          <img src="/Resources/Settings.png" alt="Settings">
+        </a>
+        <a id="logoutButton" href="logout">
+          <img src="/Resources/Logout.png" alt="Logout">
+        </a>
+      </nav>
+      <hr>
+    </header>
       <main>
-        <button type="button" id="logout-btn">Logout</button>
+        <article>
+          <table class="elastic-table">
+            <tbody>
+              <!-- 4 Rows -->
+              <tr>
+                <!-- 7 Columns per row (wrapped content for hit-box isolation) -->
+                <td><div class="cell-content">1,1</div></td>
+                <td><div class="cell-content">1,2</div></td>
+                <td><div class="cell-content">1,3</div></td>
+                <td><div class="cell-content">1,4</div></td>
+                <td><div class="cell-content">1,5</div></td>
+                <td><div class="cell-content">1,6</div></td>
+                <td><div class="cell-content">1,7</div></td>
+              </tr>
+              <tr>
+                <td><div class="cell-content">2,1</div></td>
+                <td><div class="cell-content">2,2</div></td>
+                <td><div class="cell-content">2,3</div></td>
+                <td><div class="cell-content">2,4</div></td>
+                <td><div class="cell-content">2,5</div></td>
+                <td><div class="cell-content">2,6</div></td>
+                <td><div class="cell-content">2,7</div></td>
+              </tr>
+              <tr>
+                <td><div class="cell-content">3,1</div></td>
+                <td><div class="cell-content">3,2</div></td>
+                <td><div class="cell-content">3,3</div></td>
+                <td><div class="cell-content">3,4</div></td>
+                <td><div class="cell-content">3,5</div></td>
+                <td><div class="cell-content">3,6</div></td>
+                <td><div class="cell-content">3,7</div></td>
+              </tr>
+              <tr>
+                <td><div class="cell-content">4,1</div></td>
+                <td><div class="cell-content">4,2</div></td>
+                <td><div class="cell-content">4,3</div></td>
+                <td><div class="cell-content">4,4</div></td>
+                <td><div class="cell-content">4,5</div></td>
+                <td><div class="cell-content">4,6</div></td>
+                <td><div class="cell-content">4,7</div></td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
       </main>
     </div>
   </body>
