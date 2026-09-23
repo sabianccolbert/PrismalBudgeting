@@ -56,22 +56,6 @@
   }
 
   /* ===============================
-   *  2) CSP-safe GA init (no inline)
-   * =============================== */
-  const gtagScript = document.createElement('script');
-  gtagScript.async = true;
-  gtagScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-KD7WLLVTWC';
-  document.head.appendChild(gtagScript);
-  
-  window.dataLayer = window.dataLayer || [];
-  function gtag() {
-    window.dataLayer.push(arguments);
-  }
-  
-  gtag('js', new Date());
-  gtag('config', 'G-KD7WLLVTWC');
-
-  /* ===============================
    *  3) CSS mode flip
    * =============================== */
   const html = document.documentElement;
@@ -95,7 +79,8 @@
     "/Javascript/Starfield Setup.js",
     "/Javascript/Active Starfield.js",
     "/Javascript/Layout.js",
-    "/Javascript/Keyboard Starfield.js"
+    "/Javascript/Keyboard Starfield.js",
+    "/Javascript/Analytics.js"
   ];
 
   function appendScript(src){
@@ -104,6 +89,7 @@
     s.async = false;
     document.body.appendChild(s);
   }
+  
 
   function loadPageScripts(){
     GLOBAL_SCRIPTS.forEach(appendScript);
