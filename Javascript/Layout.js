@@ -647,3 +647,47 @@ const endTransform = (e) => {
 
 table.addEventListener('touchend', endTransform);
 table.addEventListener('touchcancel', endTransform);
+
+// --- PC MOUSE MAGNIFYING GLASS ---
+let isMouseMagnifying = false;
+
+table.addEventListener('pointerdown', (e) => {
+  // ONLY react to physical PC mouse left-clicks. Leave touch entirely to the script above!
+  if (e.pointerType !== 'mouse' || e.button !== 0) return;
+  
+  const cell = e.target.closest('td');
+  if (!cell) return;
+
+  e.preventDefault(); // Stops native text highlighting/dragging
+  isMouseMagnifying = true;
+  cell.classList.add('is-magnified');
+});
+
+table.addEventListener('pointerover', (e) => {
+  if (!isMouseMagnifying || e.pointerType !== 'mouse') return;
+  
+  const cell = e.target.closest('td');
+  if (cell) cell.classList.add('is-magnified');
+});
+
+table.addEventListener('pointerout', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  
+  const cell = e.target.closest('td');
+  if (!cell) return;
+  
+  // Ensure the cursor actually left the <td> (prevents flickering)
+  if (!cell.contains(e.relatedTarget)) {
+    cell.classList.remove('is-magnified');
+  }
+});
+
+// Global release in case the user glides the mouse completely outside the table bounds
+window.addEventListener('pointerup', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  
+  isMouseMagnifying = false;
+  document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
+    cell.classList.remove('is-magnified');
+  });
+});

@@ -88,3 +88,52 @@ async function saveChanges() {
 
   // Repeat for other tables...
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  let isMouseDown = false;
+
+  // 1. Release: Listen globally so we catch mouse up even if it happens outside the table
+  window.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'mouse') return; // Ignore touch/mobile
+    
+    isMouseDown = false;
+    document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
+      cell.classList.remove('is-magnified');
+    });
+  });
+
+  // 2. Click Down: Check if the click happened on a dynamically generated <td>
+  document.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.pointerType !== 'mouse') return; // Left-click PC mouse only
+
+    const cell = e.target.closest('.elastic-table td');
+    if (!cell) return;
+
+    e.preventDefault(); // Prevents native browser drag-and-drop
+    isMouseDown = true;
+    cell.classList.add('is-magnified');
+  });
+
+  // 3. Glide Enter: Handle moving into new cells while holding the click
+  document.addEventListener('pointerover', (e) => {
+    if (!isMouseDown || e.pointerType !== 'mouse') return;
+
+    const cell = e.target.closest('.elastic-table td');
+    if (!cell) return;
+
+    cell.classList.add('is-magnified');
+  });
+
+  // 4. Glide Leave: Handle leaving a cell
+  document.addEventListener('pointerout', (e) => {
+    if (e.pointerType !== 'mouse') return;
+
+    const cell = e.target.closest('.elastic-table td');
+    if (!cell) return;
+
+    // Ensure the cursor actually left the cell (prevents flickering over text nodes)
+    if (!cell.contains(e.relatedTarget)) {
+      cell.classList.remove('is-magnified');
+    }
+  });
+});
