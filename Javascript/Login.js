@@ -71,6 +71,10 @@ authForm.addEventListener('submit', async (e) => {
         // Save session and redirect to home
         localStorage.setItem('prismal_user_id', data.userId);
         localStorage.setItem('prismal_username', data.username);
+        
+        // Set initial activity timestamp on login
+        localStorage.setItem('prismal_last_activity', Date.now().toString());
+        
         window.location.replace("/index.html"); 
       } else {
         // Successful registration

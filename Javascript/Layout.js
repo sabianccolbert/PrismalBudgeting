@@ -504,7 +504,7 @@ onDOMReady(() => {
  *====================================================================*/
 
 function injectGlobalFooter() {
-  if (is404page() || isPolicypage() || isHomepage()) return;
+  //if (is404page() || isPolicypage() || isHomepage()) return;
 
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
@@ -517,16 +517,15 @@ function injectGlobalFooter() {
 
   FOOTER.innerHTML = `
     <hr>
-    <p>I Can’t Stop Dying™ and The I Collection™ are trademarks of Staying Outside The Box™ LLC</p>
-    <p>
-      Contact: 
-      <a href="mailto:admin@stayingoutsidethebox.com">
-        Admin@&#8203;StayingOutsideTheBox&#8203;.com
-      </a>
-    </p>
-<a href="/privacy and terms.html">
-      Privacy Policy &amp; Terms of Use
-    </a>
+        <p>Prismal Budget™ and its logo are trademarked</p>
+        <p>Contact: 
+        <a href="mailto:sabian.c.colbert@gmail.com">
+          Sabian.C.Colbert@&#8203;Gmail&#8203;.com
+        </a>
+        </p>
+        <a href="/privacy and terms.html">
+          Privacy Policy & Terms of Use
+        </a>
   `;
 
   CONTAINER.appendChild(FOOTER);

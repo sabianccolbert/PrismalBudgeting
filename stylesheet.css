@@ -110,8 +110,8 @@
 
 /*---------- Root document ----------*/
 @font-face {
-  font-family: "New Rocker";
-  src: url("/New Rocker.woff2") format("woff2");
+  font-family: "Main Font";
+  src: url("BpmfHuninn-Regular.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -157,7 +157,7 @@ body {
 
   /* Step 6: base typography */
   text-align: center;
-  font-family: 'New Rocker';
+  font-family: 'Main Font';
   font-size: 7vmin;
   color: var(--BASE_COLOR);
   user-select: none;
@@ -202,21 +202,15 @@ body {
 #constellations {
   position: fixed;
   inset: 0;
-
+  /* Background image handled in HTML */
   /* Step 1: full-screen sizing */
   width: 100lvw;
   height: 100lvh;
 
-  /* Step 2: background image settings */
-  background-image: url("/Resources/Background.webp");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-
-  /* Step 3: keep it behind everything */
+  /* Step 2: keep it behind everything */
   z-index: -1;
 
-  /* Step 4: let clicks/taps pass through to real UI */
+  /* Step 3: let clicks/taps pass through to real UI */
   pointer-events: none;
 }
 
@@ -555,7 +549,7 @@ button {
 
   /* Step 4: typography */
   color: var(--BASE_COLOR);
-  font-family: 'New Rocker';
+  font-family: 'Main Font';
   font-size: 5vmin;
 
   /* Step 8: smooth transitions */
@@ -801,7 +795,7 @@ input {
   
   /* Match typography */
   color: var(--BASE_COLOR);
-  font-family: 'New Rocker', sans-serif;
+  font-family: 'Main Font', sans-serif;
   font-size: 5vmin;
   text-align: center;
   

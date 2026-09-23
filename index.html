@@ -6,130 +6,51 @@
     <noscript>
       <link rel="stylesheet" href="/stylesheet.css">
     </noscript>
-    <title>The I Collection - Psychological Horror Audiobook Experience</title>
-    <meta name="description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
+    <title>Prismal Budget - Home</title>
+    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
+    
+    <style>
+      #constellations {
+        background-image: url("/Resources/Background.webp");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+      }
+    </style>
 
-    <meta property="og:title" content="The I Collection - Home">
-    <meta property="og:description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
-    <meta property="og:image" content="https://stayingoutsidethebox.com/Favicons/og-image.jpg">
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Budget - Home">
+    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://stayingoutsidethebox.com">
-      
+    <meta property="og:url" content="https://prismalbudget.org">
+
+    <!-- Modern Favicons -->
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png?v=20260922" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg?v=20260922" />
     <link rel="shortcut icon" href="/Favicon/favicon.ico?v=20260922" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
     <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png?v=20260922" />
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
     <link rel="manifest" href="/Favicon/site.webmanifest?v=20260922" />
-    <meta name="msapplication-TileColor" content="#000000">
-    <meta name="msapplication-TileImage" content="/Favicons/mstile-144x144.png">
+    <meta name="theme-color" content="#000000">
   </head>
   <body>
     <canvas id="constellations"></canvas>
-    <div id="transitionContainer">
-    <header>
-      <h1>The I Collection</h1>
-      <h2>By Staying Outside The Box, LLC</h2>
-      <hr>
-      <nav class="navButtons">
-        <a id="homepageBack" href="back">
-          <img src="/Resources/Back.png" alt="Back">
-        </a>
-        <a href="./Menu">
-          <img src="/Resources/Menu.png" alt="Menu" id="menuButton">
-        </a>
-      </nav>
-      <hr>
-      <p>After years of world building, character creation, and tedious attention to detail, Staying Outside The Box Productions is proud to present The I Collection, a collection of series including existential terror, intense gore scenes, and never ending mystery.</p>
-      <hr>
-    </header>
-    <main>
-      <!-- Apple has to be first to legally use the image -->
-      <article class="hoverTogether" href="https://podcasts.apple.com/us/podcast/the-i-collection™/id1865789728" target="_blank" rel="noopener noreferrer">
-      <a href="https://podcasts.apple.com/us/podcast/the-i-collection™/id1865789728" target="_blank" rel="noopener noreferrer">
-        <img class="imgButton" alt="Apple Podcasts" src="./Resources/ApplePodcasts.svg">
-      </a>
-      <a href="https://podcasts.apple.com/us/podcast/staying-outside-the-box/id1696482273" target="_blank" rel="noopener noreferrer" class="clean">
-        Apple Podcasts</a>
-      </article>
-      
-      <!-- Spotify -->
-      
-      <article class="hoverTogether" href="https://open.spotify.com/show/5ZJClZ25OJ5TS9NNz9boQD" target="_blank" rel="noopener noreferrer">
-      <a href="https://open.spotify.com/show/5ZJClZ25OJ5TS9NNz9boQD" target="_blank" rel="noopener noreferrer">
-        <img class="imgButton" alt="Spotify" src="./Resources/Spotify.png">
-      </a>
-      <a href="https://open.spotify.com/show/5ZJClZ25OJ5TS9NNz9boQD" target="_blank" rel="noopener noreferrer" class="clean">
-        Spotify</a>
-      </article>
-      
-      <!-- YouTube -->
-      
-      <article class="hoverTogether" href="https://youtube.com/@stayingoutsidethebox?si=-tS2uQcSPxHNKIuS" target="_blank" rel="noopener noreferrer">
-      <a href="https://youtube.com/@stayingoutsidethebox?si=-tS2uQcSPxHNKIuS" target="_blank" rel="noopener noreferrer">
-        <img id="YouTube" class="imgButton" alt="YouTube" src="./Resources/Youtube.png"><!-- Legal YouTube image comes with padding -->
-      </a>
-      <a href="https://youtube.com/@stayingoutsidethebox?si=-tS2uQcSPxHNKIuS" target="_blank" rel="noopener noreferrer" class="clean">
-        YouTube</a>
-      </article>
-      
-      <!-- Audible -->
-      
-      <article class="hoverTogether" href="https://www.audible.com/pd/B0CBGWFNFL?source_code=ASSORAP0511160006&share_location=podcast_show_detail" target="_blank" rel="noopener noreferrer">
-      <a href="https://music.amazon.com/podcasts/619ce407-48f4-4a24-8c07-637dca0e4f8c/the-i-collection" target="_blank" rel="noopener noreferrer">
-        <img class="imgButton" alt="Amazon Music" src="./Resources/Amazon Music.png">
-      </a>
-      <a href="https://music.amazon.com/podcasts/619ce407-48f4-4a24-8c07-637dca0e4f8c/the-i-collection" target="_blank" rel="noopener noreferrer" class="clean">
-        Amazon Music</a>
-      </article>
-      
-      <!-- Facebook -->
-      
-      <article class="hoverTogether" href="https://www.facebook.com/share/g/1BrbFJ5PwF/?mibextid=wwXIfr" target="_blank" rel="noopener noreferrer">
-      <a href="https://www.facebook.com/share/g/1BrbFJ5PwF/?mibextid=wwXIfr" target="_blank" rel="noopener noreferrer">
-        <img class="imgButton" alt="Facebook" src="./Resources/Facebook.png">
-      </a>
-      <a href="https://www.facebook.com/share/g/1BrbFJ5PwF/?mibextid=wwXIfr" target="_blank" rel="noopener noreferrer" class="clean">
-        Facebook</a>
-      </article>
-      
-      <!-- Instagram -->
-      
-      <article class="hoverTogether" href="https://www.instagram.com/stayingoutsidethebox?igsh=aG1jNTR1eThyYmk2&utm_source=qr" target="_blank" rel="noopener noreferrer">
-      <a href="https://www.instagram.com/stayingoutsidethebox?igsh=aG1jNTR1eThyYmk2&utm_source=qr" target="_blank" rel="noopener noreferrer">
-        <img class="imgButton" alt="Instagram" src="./Resources/Instagram.png">
-      </a>
-      <a href="https://www.instagram.com/stayingoutsidethebox?igsh=aG1jNTR1eThyYmk2&utm_source=qr" target="_blank" rel="noopener noreferrer" class="clean">
-        Instagram</a>
-      </article>
-      
-      <!-- TikTok -->
-      
-      <article>
-        <br>
-      <a href="https://www.tiktok.com/@stayingoutsidethebox" target="_blank" rel="noopener noreferrer" class="clean">
-        TikTok</a>
-      </article>
-      <br>
-      <p>And other platforms</p>
-    </main>
-    <footer>
-      <hr>
-      <p>I Can’t Stop Dying™ and The I Collection™ are trademarks of Staying Outside The Box™ LLC</p>
-      <p>All trademarks, logos, and brands are property of their respective owners.<br>This site uses these logos only to link to official profiles.<br>No endorsement is implied.</p>
-      <p>Contact: 
-      <a href="mailto:admin@stayingoutsidethebox.com">
-        Admin@&#8203;StayingOutsideTheBox&#8203;.com
-      </a>
-      </p>
-      <a href="/privacy and terms.html">
-        Privacy Policy & Terms of Use
-      </a>
-    </footer>
+    <div id="transitionContainer"><header>
+        <h1>Home</h1>
+        <h2>Prismal Budget</h2>
+        <hr>
+      </header>
+      <main></main>
     </div>
   </body>
 </html>
