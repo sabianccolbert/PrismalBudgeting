@@ -1,6 +1,8 @@
 // Replace with your actual Cloudflare Worker URL
-const API_BASE_URL = 'https://prismal-budget-api.prismalbudget.workers.dev';
-
+const API_BASE_URL = window.location.hostname === '127.0.0.1' 
+  ? 'http://127.0.0.1:8787' 
+  : 'https://prismal-budget-api.prismalbudget.workers.dev';
+  
 const authForm = document.getElementById('auth-form');
 const verifyGroup = document.getElementById('verify-password-group');
 const verifyInput = document.getElementById('verify-password');
