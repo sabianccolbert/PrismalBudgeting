@@ -1,9 +1,12 @@
-// Replace with your actual Cloudflare Worker URL
-const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://127.0.0.1:8787' // Local Wrangler dev server
-  : 'https://prismal-budget-api.prismalbudget.workers.dev'; // Production Cloudflare Worker
+const hostname = window.location.hostname;
 
-const authForm = document.getElementById('auth-form');
+// 1. Detect all local/dev environments
+// Simplest mobile setup:
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://127.0.0.1:8787'
+  : 'https://prismal-budget-api.prismalbudget.workers.dev'; // Production API handles both live & tunnel requests // Production Cloudflare Worker
+
+  const authForm = document.getElementById('auth-form');
 const verifyGroup = document.getElementById('verify-password-group');
 const verifyInput = document.getElementById('verify-password');
 const primaryBtn = document.getElementById('primary-action-btn');
