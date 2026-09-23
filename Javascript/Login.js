@@ -2,7 +2,7 @@
 const API_BASE_URL = window.location.hostname === '127.0.0.1' 
   ? 'http://127.0.0.1:8787' 
   : 'https://prismal-budget-api.prismalbudget.workers.dev';
-  
+
 const authForm = document.getElementById('auth-form');
 const verifyGroup = document.getElementById('verify-password-group');
 const verifyInput = document.getElementById('verify-password');
@@ -71,6 +71,10 @@ authForm.addEventListener('submit', async (e) => {
         // Save session and redirect to home
         localStorage.setItem('prismal_user_id', data.userId);
         localStorage.setItem('prismal_username', data.username);
+        
+        // Set initial activity timestamp on login
+        localStorage.setItem('prismal_last_activity', Date.now().toString());
+        
         window.location.replace("/index.html"); 
       } else {
         // Successful registration

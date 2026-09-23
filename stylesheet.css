@@ -157,7 +157,7 @@ body {
 
   /* Step 6: base typography */
   text-align: center;
-  font-family: 'New Rocker';
+  font-family: 'Main Font';
   font-size: 7vmin;
   color: var(--BASE_COLOR);
   user-select: none;
@@ -549,7 +549,7 @@ button {
 
   /* Step 4: typography */
   color: var(--BASE_COLOR);
-  font-family: 'New Rocker';
+  font-family: 'Main Font';
   font-size: 5vmin;
 
   /* Step 8: smooth transitions */
@@ -795,7 +795,7 @@ input {
   
   /* Match typography */
   color: var(--BASE_COLOR);
-  font-family: 'New Rocker', sans-serif;
+  font-family: 'Main Font', sans-serif;
   font-size: 5vmin;
   text-align: center;
   

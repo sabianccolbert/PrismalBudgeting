@@ -46,28 +46,33 @@
   <body>
     <canvas id="constellations"></canvas>
     <div id="transitionContainer">
-      <article>
+      <header>
+        <h1>Login</h1>
         <h2>Prismal Budget</h2>
-        
-        <form id="auth-form">
-          <label for="username">Username</label>
-          <input type="text" id="username" required autocomplete="username">
-    
-          <label for="password">Password</label>
-          <input type="password" id="password" required autocomplete="current-password">
-    
-          <!-- Starts hidden with the .hidden class -->
-          <div id="verify-password-group" class="hidden" style="width: 100%;">
-            <label for="verify-password">Verify Password</label>
-            <input type="password" id="verify-password" autocomplete="new-password">
-          </div>
-    
-          <p id="status-message" style="color: var(--LINK_LIGHT); font-size: 4vmin; min-height: 5vmin; margin: 2vmin 0;"></p>
-    
-          <button type="submit" id="primary-action-btn">Login</button>
-          <button type="button" id="toggle-mode-btn">New Account?</button>
-        </form>
-      </article>
+        <hr>
+      </header>
+      <main>
+        <article>
+          <form id="auth-form">
+            <label for="username">Username</label>
+            <input type="text" id="username" required autocomplete="username">
+      
+            <label for="password">Password</label>
+            <input type="password" id="password" required autocomplete="current-password">
+      
+            <!-- Starts hidden with the .hidden class -->
+            <div id="verify-password-group" class="hidden" style="width: 100%;">
+              <label for="verify-password">Verify Password</label>
+              <input type="password" id="verify-password" autocomplete="new-password">
+            </div>
+      
+            <p id="status-message" style="color: var(--LINK_LIGHT); font-size: 4vmin; min-height: 5vmin; margin: 2vmin 0;"></p>
+      
+            <button type="submit" id="primary-action-btn">Login</button>
+            <button type="button" id="toggle-mode-btn">New Account?</button>
+          </form>
+        </article>
+      </main>
     </div>
     <script src="/Javascript/Login.js"></script>
   </body>
