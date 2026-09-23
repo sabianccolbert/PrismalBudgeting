@@ -111,6 +111,9 @@
     if (PAGE === "notfound") {
       appendScript("/Javascript/Debug.js");
     }
+    if (PAGE === "login") {
+      appendScript("/Javascript/Login.js");
+    }
   }
   
   /* ===============================
