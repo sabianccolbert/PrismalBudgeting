@@ -75,7 +75,14 @@ authForm.addEventListener('submit', async (e) => {
         // Set initial activity timestamp on login
         localStorage.setItem('prismal_last_activity', Date.now().toString());
         
-        window.location.replace("/index.html"); 
+        // --- SMOOTH LOGIN TRANSITION ---
+        if (typeof window.transitionTo === 'function') {
+          window.transitionTo("/index.html", true);
+        } else {
+          window.location.replace("/index.html"); // Fallback if layout hasn't loaded
+        }
+        // -------------------------------
+        
       } else {
         // Successful registration
         statusMessage.style.color = 'var(--BASE_COLOR)'; // Use neutral gray for success

@@ -268,6 +268,15 @@ window.addEventListener("load", () => {
 window.addEventListener("pageshow", (EVENT) => {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
+  
+  const isLoggedIn = !!localStorage.getItem("prismal_user_id");
+  const isPublicPage = location.pathname.toLowerCase().includes("login") || 
+                       location.pathname.toLowerCase().includes("privacy");
+
+  if (!isLoggedIn && !isPublicPage) {
+    window.location.replace("/login.html");
+    return;
+  }
 
   clearPendingTransitionTimers();
 
@@ -294,7 +303,8 @@ window.addEventListener("pageshow", (EVENT) => {
 /* GROUP: Transition navigation entry point */
 // Animate slide-out, then navigate after the animation duration.
 // URL may be a real href or the special keyword "back".
-function transitionTo(URL) {
+function transitionTo(URL, useReplace = false) {
+  window.transitionTo = transitionTo;
   if (IS_TRANSITION_ACTIVE) return;
   if (!URL) return;
 
@@ -344,7 +354,11 @@ function transitionTo(URL) {
     CONTAINER.removeEventListener("transitionend", onDone);
     clearPendingTransitionTimers();
     IS_TRANSITION_ACTIVE = false;
-    location.href = URL;
+    if (useReplace) {
+        window.location.replace(URL);
+    } else {
+        window.location.href = URL;
+    }
   };
 
   CONTAINER.addEventListener("transitionend", onDone);
@@ -520,7 +534,7 @@ function injectGlobalFooter() {
         <p>Prismal Budget™ and its logo are trademarked</p>
         <p>Contact: 
         <a href="mailto:sabian.c.colbert@gmail.com">
-          Sabian.C.Colbert@&#8203;Gmail&#8203;.com
+          Sabian.C.Colbert&#8203;@Gmail.com
         </a>
         </p>
         <a href="/privacy and terms.html">
@@ -529,4 +543,20 @@ function injectGlobalFooter() {
   `;
 
   CONTAINER.appendChild(FOOTER);
+}
+
+const logoutBtn = document.getElementById('logout-btn');
+
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', (EVENT) => {
+    EVENT.preventDefault();
+    
+    // 1. Clear session data from localStorage
+    localStorage.removeItem('prismal_user_id');
+    localStorage.removeItem('prismal_username');
+    localStorage.removeItem('prismal_last_activity');
+    
+    // 2. Animate out smoothly, then REPLACE the url
+    transitionTo("/login.html", true); 
+  });
 }
