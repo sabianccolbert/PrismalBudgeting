@@ -146,8 +146,9 @@ function getReferrerInfo() {
   let IS_INTERNAL_REFERRER = false; // True if referrer is same-origin
   let CAME_FROM_MENU_PAGE = false;  // True if referrer path matches /menu
   let CAME_FROM_HOME_PAGE = false;  // True if referrer path matches homepage (/ or /index.html)
+  let CAME_FROM_LOGIN_PAGE = false;  // True if referrer path matches login page (/ or /login.html)
 
-  if (!REFERRER) return { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE };
+  if (!REFERRER) return { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE, CAME_FROM_LOGIN_PAGE };
 
   try {
     const REFERRER_URL = new URL(REFERRER);
@@ -165,9 +166,17 @@ function getReferrerInfo() {
       REFERRER_PATH === "" ||
       REFERRER_PATH === "/index.html" ||
       REFERRER_PATH === "/index.htm";
+
+      
+    CAME_FROM_LOGIN_PAGE =
+      REFERRER_PATH === "/login" ||
+      REFERRER_PATH === "/login/" ||
+      REFERRER_PATH.endsWith("/login/index.html") ||
+      REFERRER_PATH === "/login.html" ||
+      REFERRER_PATH === "/login.htm";
   } catch {}
 
-  return { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE };
+  return { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE, CAME_FROM_LOGIN_PAGE };
 }
 
 /* #endregion 1) GLOBAL STATE + HELPERS */
@@ -227,17 +236,17 @@ window.addEventListener("load", () => {
   });
 
   /* GROUP: Back button logic (supports multiple pages) */
-  const { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE } = getReferrerInfo();
+  const { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE, CAME_FROM_LOGIN_PAGE } = getReferrerInfo();
 
   // Some pages may have different back buttons; use whichever exists.
-  const HOME_BACK = document.getElementById("homepageBack");
-  const POLICY_BACK = document.getElementById("policyBack");
-  const BACK_LINK = HOME_BACK || POLICY_BACK;
+  const HOME_BACK = document.getElementById("homeBack");
+  const NORMAL_BACK = document.getElementById("normalBack");
+  const BACK_LINK = HOME_BACK || NORMAL_BACK;
 
   if (!BACK_LINK) return;
 
   // If we came from Menu or directly from Homepage, hide "back" (avoid weird loops).
-  if (CAME_FROM_MENU_PAGE && HOME_BACK || CAME_FROM_HOME_PAGE && POLICY_BACK) {
+  if (CAME_FROM_MENU_PAGE && HOME_BACK || CAME_FROM_HOME_PAGE && NORMAL_BACK || CAME_FROM_LOGIN_PAGE && BACK_LINK) {
     BACK_LINK.style.display = "none";
     return;
   }
@@ -454,6 +463,13 @@ DID_MOVE = false;
     return;
   }
 
+  if (HREF === "logout") {
+    EVENT.preventDefault();
+    localStorage.clear();
+    transitionTo("/login.html", true);
+    return;
+  }
+
   // System handlers (don't animate these)
   if (
     HREF.startsWith("mailto:") ||
@@ -545,18 +561,89 @@ function injectGlobalFooter() {
   CONTAINER.appendChild(FOOTER);
 }
 
-const logoutBtn = document.getElementById('logout-btn');
+// Budget table javascript
 
-if (logoutBtn) {
-  logoutBtn.addEventListener('click', (EVENT) => {
-    EVENT.preventDefault();
+const table = document.querySelector('.elastic-table');
+
+let isTransforming = false;
+let targetEl = null;
+let startDist = 0, startAngle = 0;
+let startCenterX = 0, startCenterY = 0;
+
+// Math Helpers
+const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
+const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
+
+table.addEventListener('touchstart', (e) => {
+  // Only activate on exactly two fingers
+  if (e.touches.length === 2) {
+    isTransforming = true;
     
-    // 1. Clear session data from localStorage
-    localStorage.removeItem('prismal_user_id');
-    localStorage.removeItem('prismal_username');
-    localStorage.removeItem('prismal_last_activity');
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
     
-    // 2. Animate out smoothly, then REPLACE the url
-    transitionTo("/login.html", true); 
-  });
-}
+    const cell1 = t1.target.closest('td');
+    const cell2 = t2.target.closest('td');
+    
+    // Logic: If both fingers are in the same cell, stretch the cell. Otherwise, stretch the table.
+    if (cell1 && cell1 === cell2) {
+      targetEl = cell1.querySelector('.cell-content');
+      cell1.style.zIndex = '20'; // Bring to the very front so it overlaps adjacent cells
+    } else {
+      targetEl = table;
+    }
+
+    // Record the starting positions
+    startDist = getDistance(t1, t2);
+    startAngle = getAngle(t1, t2);
+    const center = getCenter(t1, t2);
+    startCenterX = center.x;
+    startCenterY = center.y;
+
+    // Remove CSS transition temporarily so the element tracks 1:1 with your fingers instantly
+    targetEl.style.transition = 'none'; 
+  }
+}, { passive: false });
+
+table.addEventListener('touchmove', (e) => {
+  if (isTransforming && e.touches.length === 2) {
+    // Prevent accidental screen scrolling while you are manipulating the table/cell
+    e.preventDefault(); 
+    
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    
+    // Calculate how much the fingers have moved/pinched/rotated since starting
+    const scale = getDistance(t1, t2) / startDist;
+    const rotate = getAngle(t1, t2) - startAngle;
+    const center = getCenter(t1, t2);
+    const translateX = center.x - startCenterX;
+    const translateY = center.y - startCenterY;
+    
+    // Apply the math directly to the element
+    targetEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`;
+  }
+}, { passive: false });
+
+// Handle release (or if the system interrupts the touch)
+const endTransform = (e) => {
+  if (isTransforming && e.touches.length < 2) {
+    isTransforming = false;
+    
+    // 1. Restore the CSS transition we provided in the CSS file
+    targetEl.style.transition = ''; 
+    
+    // 2. Clear the inline math. The CSS transition will instantly take over and "snap" it back to normal
+    targetEl.style.transform = ''; 
+    
+    // 3. Reset the z-index if a single cell was targeted
+    const parentTd = targetEl.closest('td');
+    if (parentTd) parentTd.style.zIndex = '';
+    
+    targetEl = null;
+  }
+};
+
+table.addEventListener('touchend', endTransform);
+table.addEventListener('touchcancel', endTransform);
