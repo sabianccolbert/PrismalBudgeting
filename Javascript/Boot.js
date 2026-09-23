@@ -37,7 +37,8 @@
 
     if (p === "/" || p === "/index") return "home";
     if (p === "/404") return "notfound";
-    if (p === "/login") return "login"; // <-- Added login page detection
+    if (p === "/login") return "login";
+    if (p === "/privacy%20and%20terms") return "privacy";
 
     return "generic";
   }
@@ -50,9 +51,13 @@
   const isLoggedIn = !!localStorage.getItem("prismal_user_id");
   
   // If they are not logged in, and not already on the login page, redirect them.
-  if (!isLoggedIn && PAGE !== "login") {
+  if (!isLoggedIn && PAGE !== "login" && PAGE !== "privacy") {
     window.location.replace("/login.html");
-    return; // Stop boot.js execution entirely
+    return;
+  }
+  if (isLoggedIn && PAGE === "login") {
+    window.location.replace("/index.html");
+    return;
   }
 
   /* ===============================
@@ -66,7 +71,7 @@
   } else {
     html.classList.add("otherJs");
   }
-
+  
   /* ===============================
    *  4) Inject versioned CSS
    * =============================== */
