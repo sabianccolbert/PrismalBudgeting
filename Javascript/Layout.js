@@ -589,7 +589,8 @@ table.addEventListener('touchstart', (e) => {
     // Logic: If both fingers are in the same cell, stretch the cell. Otherwise, stretch the table.
     if (cell1 && cell1 === cell2) {
       targetEl = cell1.querySelector('.cell-content');
-      cell1.style.zIndex = '20'; // Bring to the very front so it overlaps adjacent cells
+      cell1.style.zIndex = '20';
+      targetEl.style.overflow = 'visible';
     } else {
       targetEl = table;
     }
@@ -636,6 +637,8 @@ const endTransform = (e) => {
     
     // 2. Clear the inline math. The CSS transition will instantly take over and "snap" it back to normal
     targetEl.style.transform = ''; 
+    
+    targetEl.style.overflow = '';
     
     // 3. Reset the z-index if a single cell was targeted
     const parentTd = targetEl.closest('td');

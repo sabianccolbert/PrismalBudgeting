@@ -1,10 +1,12 @@
-
 /* Static hit area (keeps the original bounds) */
 .elastic-table td {
   position: relative;
   padding: 0;
-  vertical-align: middle;
-  text-align: center;
+  vertical-align: top;
+  text-align: left;
+  font-size: 1vmin;
+  
+  /* REMOVED the background from here */
 }
 
 /* Table Layout */
@@ -12,9 +14,12 @@
   width: 90vw;   
   height: 60vh;  
   table-layout: fixed;
-  border-collapse: collapse;
   
-  /* DELETE touch-action: none; so mobile can scroll natively */
+  /* CHANGE THIS: switch from collapse to separate */
+  border-collapse: separate; 
+  
+  /* ADD THIS: sets the 1% gap between all cells */
+  border-spacing: 1%; 
   
   /* Prevent text highlighting while drag-zooming on PC */
   user-select: none; 
@@ -23,8 +28,13 @@
 
 /* The actual element that scales, zooms, and tilts */
 .cell-content {
-  /* CRITICAL FIX: Stops the zoomed cell from stealing the mouse cursor from the neighboring cells */
   pointer-events: none; 
+  background: linear-gradient(to bottom, black, transparent); 
+  padding: 4px;
+  box-sizing: border-box; 
+  
+  /* NEW: Cuts off excess text normally */
+  overflow: hidden; 
   
   width: 100%;
   height: 100%;
@@ -32,10 +42,19 @@
   top: 0;
   left: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   will-change: transform;
   transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* PC Magnification triggered by JS */
+.elastic-table td.is-magnified .cell-content {
+  transform: scale(2); 
+  transition: transform 0.1s ease-out; 
+  
+  /* NEW: Reveals the text when zoomed on PC */
+  overflow: visible; 
 }
 
 /* 
