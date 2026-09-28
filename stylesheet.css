@@ -238,12 +238,6 @@ body {
   text-shadow: 0 0 10px rgb(0, 0, 0);
  }
 
-h2 {
-  /* Step 2: stylized “pulled up” heading positioning */
-  margin-top: -7vmin;
-  font-size: 4vmin;
-}
-
 h3 {
   font-size: 12vmin;
 }
@@ -484,47 +478,6 @@ img {
     color var(--SLOW_COLOR);
 }
 
-/*---------- Nav icon strip ----------*/
-.navButtons {
-  /* Step 1: horizontal row */
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-
-  /* Step 2: shrink-wrap and center */
-  width: fit-content;
-  margin: 0 auto;
-}
-
-/* Step 3: spacing between nav links */
-.navButtons a {
-  margin: 0 10vw;
-}
-
-/* Step 4: icon sizing and hover-ready styling */
-.navButtons img {
-  width: 12vmin;
-  height: 12vmin;
-  padding: 0;
-
-  /* fallback font (rarely used, but safe) */
-  font: 1vmin Arial;
-
-  /* circular icon style */
-  border-radius: 30%;
-  border: 3px solid var(--BASE_COLOR);
-  object-fit: cover;
-
-  /* smooth hover transitions */
-  transition:
-    transform var(--SLOW_TRANSFORM),
-    box-shadow var(--SLOW_SHADOW),
-    border-color var(--SLOW_BORDER);
-}
-
-/* #endregion 7) IMAGES + IMAGE WRAPPERS */
-
 
 
 /* #region 8) BUTTONS */
@@ -616,58 +569,91 @@ button:hover {
 
 /* #endregion 9) GROUP INTERACTIONS */
 
-
-
-/* #region 10) SCRIPT CHARACTER NAME COLORS */
+/* #region 10) HEADER */
 /*========================================*
- *  10) CHARACTER NAME COLORS (SCRIPT PAGES)
- *========================================*
- *  These classes mark speaker names in scripts.
- *
- *  Step-by-step:
- *   1) shared formatting for all names (margin + bold)
- *   2) individual colors per character
- */
-
-/* In-script name labels */
-p:is(
-  .roman,
-  .sage,
-  .elena,
-  .iris,
-  .darian,
-  .walter,
-  .trent,
-  .dave,
-  .fireRider,
-  .sidecharacter 
-) {
-  margin-top: 2em;
-  font-weight: bold;
+ *  HEADER & NAVIGATION BAR
+ *========================================*/
+header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 1vmin 2vw;
+  box-sizing: border-box;
 }
 
-/* Per-character colors */
-.roman,
-.sage { color: red; }
+/* Left Side: Logo and Title grouping */
+header .brand {
+  display: flex;
+  align-items: center;
+  gap: 3vw;
+}
 
-.elena { color: yellow; }
+/* Shrink the main logo image */
+header .brand-icon {
+  width: 12vmin; 
+  height: 12vmin;
+  border-radius: 50%;
+  object-fit: cover;
+}
 
-.iris,
-.darian { color: blue; }
+/* Override the old global h2 styling to fit the header */
+header .logo {
+  margin: 0; 
+  font-size: 4.5vmin;
+  text-align: left;
+}
 
-.walter { color: brown; }
+/* Modifier for when the brand section is just stacked text (H1 + H2 without logo) */
+header .stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1vmin; /* Tight spacing between title and subtitle */
+}
 
-.trent { color: orange; }
+/* Header Title (H1) */
+header .stacked h1 {
+  margin: 0;
+  font-size: 4vmin;
+  text-align: left;
+  line-height: 1.2;
+}
 
-.dave { color: pink; }
+/* Header Subtitle (H2 overridden for the stacked variant) */
+header .stacked h2 {
+  margin: 0;
+  font-size: 3vmin;
+  text-align: left;
+  font-weight: normal;
+  opacity: 0.7; /* Dims the subtitle slightly for visual hierarchy */
+}
 
-.fireRider { color: firebrick; }
+/* Right Side: Nav Buttons */
+.navButtons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 0; /* Overrides the old 'margin: 0 auto' so it stays right-aligned */
+}
 
-.sidecharacter { color: gray; }
+/* Shrink the spacing between nav links so they fit side-by-side */
+.navButtons a {
+  margin: 0 2vw;
+}
 
-/* #endregion 10) SCRIPT CHARACTER NAME COLORS */
-
-
+/* Keep nav icons slightly prominent */
+.navButtons img {
+  width: 12vmin;
+  height: 12vmin;
+  padding: 0;
+  border-radius: 30%;
+  border: 3px solid var(--BASE_COLOR);
+  object-fit: cover;
+  transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER);
+}
+/* #endregion 9) GROUP INTERACTIONS */
 
 /* #region 11) SLIDE-IN PAGE TRANSITION SYSTEM */
 /*========================================*

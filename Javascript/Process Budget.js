@@ -67,6 +67,7 @@ async function loadWorkspace() {
 }
 async function saveChanges() {
   const userId = localStorage.getItem('prismal_user_id');
+  if (!userId) return; // Failsafe to prevent updating if user session is lost
 
   if (futureEdited) {
     await fetch(`${API_BASE_URL}/api/data/update-future`, {
@@ -74,7 +75,7 @@ async function saveChanges() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, data: futureData })
     });
-    futureEdited = false; // Reset flag after successful save
+    futureEdited = false;
   }
 
   if (calendarEdited) {
@@ -86,7 +87,50 @@ async function saveChanges() {
     calendarEdited = false;
   }
 
-  // Repeat for other tables...
+  if (recurringEdited) {
+    await fetch(`${API_BASE_URL}/api/data/update-recurring`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, data: recurringData })
+    });
+    recurringEdited = false;
+  }
+
+  if (trackerEdited) {
+    await fetch(`${API_BASE_URL}/api/data/update-tracker`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, data: trackerData })
+    });
+    trackerEdited = false;
+  }
+
+  if (historyEdited) {
+    await fetch(`${API_BASE_URL}/api/data/update-history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, data: historyData })
+    });
+    historyEdited = false;
+  }
+
+  if (searchEdited) {
+    await fetch(`${API_BASE_URL}/api/data/update-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, data: searchData })
+    });
+    searchEdited = false;
+  }
+
+  if (calculatorEdited) {
+    await fetch(`${API_BASE_URL}/api/data/update-calculator`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, data: calculatorData })
+    });
+    calculatorEdited = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
