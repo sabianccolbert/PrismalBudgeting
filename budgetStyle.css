@@ -5,8 +5,8 @@
   vertical-align: top;
   text-align: left;
   font-size: 1vmin;
-  
-  /* REMOVED the background from here */
+  transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out, z-index 0.25s ease-in-out;
+  z-index: 1;
 }
 
 /* Table Layout */
@@ -81,4 +81,25 @@
 .elastic-table td.is-magnified .cell-content {
   transform: scale(2); 
   transition: transform 0.1s ease-out; 
+}
+
+/* Edit mode: Stays zoomed until clicked outside */
+.elastic-table td.is-editing {
+  transform: scale(2); /* Zoom level */
+  z-index: 50; /* Bring above other cells */
+  position: relative;
+  transition: transform 0.2s ease-in-out;
+  
+  /* Optional: Add a shadow or border so it pops out */
+  box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+  background-color: rgba(0,0,0,0.5);
+}
+
+/* Ensure child contents overflow properly if needed */
+.elastic-table td.is-editing .cell-content {
+  overflow: visible;
+}
+
+.elastic-table td:not(.is-editing) {
+  z-index: 1;
 }
