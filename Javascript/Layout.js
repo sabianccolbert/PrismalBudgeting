@@ -694,3 +694,45 @@ window.addEventListener('pointerup', (e) => {
     cell.classList.remove('is-magnified');
   });
 });
+
+// --- CLICK TO EDIT (PERSISTENT ZOOM) ---
+
+// 1. Create the window-wide variable so other scripts can access it
+window.editingCell = false;
+let activeEditCell = null; // Internal tracker for which cell is currently open
+
+// 2. Listen for clicks on the table to enter edit mode
+table.addEventListener('click', (e) => {
+  const cell = e.target.closest('td');
+  if (!cell) return;
+
+  // If the user clicks the cell that is already open, don't close it
+  if (activeEditCell === cell) return;
+
+  // If another cell was open, remove its state first
+  if (activeEditCell) {
+    activeEditCell.classList.remove('is-editing');
+  }
+
+  // Activate new cell
+  window.editingCell = true;
+  activeEditCell = cell;
+  cell.classList.add('is-editing');
+  
+  // Prevent this click from bubbling up to the document and instantly closing it
+  e.stopPropagation(); 
+});
+
+// 3. Listen for clicks anywhere on the page to exit edit mode
+document.addEventListener('click', (e) => {
+  // If we aren't currently editing, do nothing
+  if (!window.editingCell || !activeEditCell) return;
+
+  // If the user clicked INSIDE the currently zoomed cell, ignore it (let them type/edit)
+  if (activeEditCell.contains(e.target)) return;
+
+  // The user deliberately clicked OUTSIDE the cell. Close it.
+  window.editingCell = false;
+  activeEditCell.classList.remove('is-editing');
+  activeEditCell = null;
+});
