@@ -57,7 +57,10 @@
   transition: transform 0.1s ease-out; 
   
   /* NEW: Reveals the text when zoomed on PC */
-  overflow: visible; 
+  overflow: visible;
+  
+  user-select: none; /* Prevents text highlighting while dragging */
+  -webkit-user-select: none; /* For Safari */
 }
 
 /* 

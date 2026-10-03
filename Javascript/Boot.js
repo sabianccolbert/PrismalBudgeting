@@ -4,7 +4,7 @@
   /* ===============================
    * 0) SITE VERSION (bump per deploy)
    * =============================== */
-  const SITE_VERSION = "09.28.2026.A";
+  const SITE_VERSION = "10.03.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   /* ===============================
@@ -43,12 +43,20 @@
     return "generic";
   }
 
-  const PAGE = getPageKey();
+  window.PAGE = getPageKey();
 
   /* ===============================
    *  1.5) AUTHENTICATION REDIRECT
    * =============================== */
-  const isLoggedIn = !!localStorage.getItem("prismal_user_id");
+  const hostname = window.location.hostname;
+
+  // 1. Detect all local/dev environments
+  // Simplest mobile setup:
+  window.API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://127.0.0.1:8787'
+    : 'https://prismal-budget-api.prismalbudget.workers.dev'; // Production API handles both live & tunnel requests // Production Cloudflare Worker
+
+  const isLoggedIn = !!localStorage.getItem("prismal_jwt");
   
   // If they are not logged in, and not already on the login page, redirect them.
   if (!isLoggedIn && PAGE !== "login" && PAGE !== "privacy") {
@@ -85,8 +93,7 @@
     "/Javascript/Active Starfield.js",
     "/Javascript/Layout.js",
     "/Javascript/Keyboard Starfield.js",
-    "/Javascript/Analytics.js",
-    "/Javascript/Session.js"
+    "/Javascript/Analytics.js"
   ];
 
   function appendScript(src){

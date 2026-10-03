@@ -278,7 +278,7 @@ window.addEventListener("pageshow", (EVENT) => {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
   
-  const isLoggedIn = !!localStorage.getItem("prismal_user_id");
+  const isLoggedIn = !!localStorage.getItem("prismal_jwt");
   const isPublicPage = location.pathname.toLowerCase().includes("login") || 
                        location.pathname.toLowerCase().includes("privacy");
 

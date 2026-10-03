@@ -12,6 +12,22 @@ let historyData = null;
 let searchData = null;
 let calculatorData = null;
 
+// Data Sizes
+let calendarRows = 4;
+let calendarCols = 7;
+let recurringRows = 1;
+let recurringCols = 1;
+let trackerRows = 1;
+let trackerCols = 1;
+let futureRows = 1;
+let futureCols = 1;
+let historyRows = 1;
+let historyCols = 1;
+let searchRows = 1;
+let searchCols = 1;
+let calcRows = 1;
+let calcCols = 1;
+
 // Edit Trackers
 let calendarEdited = false;
 let recurringEdited = false;
@@ -83,70 +99,84 @@ let cancellingTutorial = false;
 let consultDave = true;
 
 // =====================================================================
-// META FUNCTIONS
+// #region META FUNCTIONS
 // =====================================================================
 
-// Fetch everything on page load
 async function loadWorkspace() {
   isDailyUpdate = true;
-  const userId = localStorage.getItem('prismal_user_id');
+  // 1. Grab the token once
+  const token = localStorage.getItem('prismal_jwt');
   
-  if (!userId) {
-    console.error("No user ID found. Redirecting to login...");
+  if (!token) {
+    console.error("No active session found. Redirecting to login...");
+    if (typeof window.transitionTo === 'function') {
+      window.transitionTo("/login.html", true);
+    } else {
+      window.location.replace("/login.html");
+    }
     return;
   }
 
-  // Load from your Cloudflare API
-  const response = await fetch(`${API_BASE_URL}/api/data/load?userId=${userId}`);
-  const data = await response.json();
+  // Load from Cloudflare API using Authorization Header
+  try {
+    // (Removed the duplicate 'const token' declaration that was here)
 
-  calendarData = data.calendar;
-  recurringData = data.recurring;
-  trackerData = data.tracker;
-  futureData = data.future;
-  historyData = data.history;
-  searchData = data.search;
-  calculatorData = data.calculator;
-
-  // Use the date from the database, fallback to yesterday if new account
-  lastDailyUpdate = createSafeMidnight(data.last_processed_date || yesterday);
-  
-  // Perform routine maintenance (Note: added 'await' since performDailyUpdate makes API calls)
-  if (isDailyUpdate || lastDailyUpdate.getTime() < today.getTime()) {
-    await performDailyUpdate();
-  }
-
-  // Remove all entries except Unique Entries
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 7; c++) {
-      let cellText = String(calendarData[r][c]).trim();
-      let lines = cellText.split("\n").filter(l => l.trim() !== "");
-      let targetMMDD = formatToMMDD(gridDates[r][c]);
-      
-      if (lines.length === 0 || !lines[0].includes(targetMMDD)) {
-        lines.unshift(targetMMDD);
+    const response = await fetch(`${window.API_BASE_URL}/api/data/load`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
+    });
+
+    // 2. CRITICAL FIX: Handle invalid/expired tokens specifically
+    if (response.status === 401) {
+      console.error("Token expired or invalid. Clearing session...");
+      // You MUST remove the token, otherwise the login page will redirect you right back here
+      localStorage.removeItem('prismal_jwt');
+      localStorage.removeItem('prismal_username'); // Good practice to clear this too
       
-      let cleanedLines = [lines[0]];
-      for (let l = 1; l < lines.length; l++) {
-        let line = lines[l].trim();
-        // Filter loop: preserve explicit manual entries
-        if (line.startsWith("❗️") || line.startsWith("✖️️") || line.startsWith("⭕️")) {
-          cleanedLines.push(line);
-        }
-      }
-      calendarData[r][c] = cleanedLines.join("\n");
+      window.location.replace("/login.html");
+      return; 
     }
+
+    if (!response.ok) {
+       throw new Error(`Server responded with status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+
+    // Use the new normalizer to guarantee a perfect 2D array structure
+    calendarData   = normalizeApiGrid(data.calendar, calendarRows, calendarCols);
+    recurringData  = normalizeApiGrid(data.recurring, recurringRows, recurringCols);
+    trackerData    = normalizeApiGrid(data.tracker, trackerRows, trackerCols); 
+    futureData     = normalizeApiGrid(data.future, futureRows, futureCols);
+    historyData    = normalizeApiGrid(data.history, historyRows, historyCols);
+    searchData     = normalizeApiGrid(data.search, searchRows, searchCols);
+    calculatorData = normalizeApiGrid(data.calculator, calcRows, calcCols);
+    
+    // Use the date from the database, fallback to yesterday if new account
+    lastDailyUpdate = createSafeMidnight(data.last_processed_date || yesterday);
+    
+    // Perform routine maintenance
+    if (isDailyUpdate || lastDailyUpdate.getTime() < today.getTime()) {
+      await performDailyUpdate();
+    }
+
+    calendarEdited = true;
+    saveChanges();
+    isDailyUpdate = false;
+    
+  } catch (err) {
+    console.error("Failed to load workspace:", err);
   }
-  isDailyUpdate = false;
 }
-
+//#endregion
 
 // =====================================================================
-// WORKER FUNCTIONS
+// #region WORKER FUNCTIONS
 // =====================================================================
 
-// Ensure this is an async function so we can use 'await' when saving to the database
 async function performDailyUpdate() {
   console.log("Performing daily update...");
   formEntryRow[2] = "🕛 Daily Update";
@@ -159,7 +189,7 @@ async function performDailyUpdate() {
     outerLoop:
     for (let r = 0; r < 4; r++) {
       for (let c = 0; c < 7; c++) {
-        // Skip any dates that are older than the previous day
+        // Skip any dates that are older than the previous update
         if (gridDates[r][c].getTime() < lastDailyUpdate.getTime()) continue;
         
         // Completely exits both loops once the current day is reached
@@ -179,7 +209,7 @@ async function performDailyUpdate() {
             let lineAmt = parseAmount(parts[1]);
             let lineType = parts[0];
             let lineDate = gridDates[r][c];
-            processEquity(add, originalTitle, lineDate, lineAmt, lineType);
+            // processEquity(add, originalTitle, lineDate, lineAmt, lineType);
           }
           
           if (parts[0].includes("✔️")) {
@@ -195,8 +225,6 @@ async function performDailyUpdate() {
 
     nextDay = new Date(lastDailyUpdate);
     nextDay.setDate(lastDailyUpdate.getDate() + 1);
-    
-    // REPLACED Utilities.formatDate WITH PURE JS HELPER
     newDailyString = formatToMMDDYYYY(nextDay);
     lastDailyUpdate = nextDay; 
   }
@@ -221,7 +249,6 @@ async function performDailyUpdate() {
         let historyLines = historyInsert[h].split("\n");
         let dateObj = createSafeMidnight(historyLines[0]);
         
-        // REPLACED Utilities.formatDate WITH PURE JS HELPER
         historyLines[0] = formatToMMDDYYYY(dateObj);
         
         historyLines = historyLines.filter(line => {
@@ -263,18 +290,20 @@ async function performDailyUpdate() {
   formEntryRow[3] = "Uniques Created: " + uniquesCreated;
   formEntryRow[5] = "Weeks Scrolled: " + weeksScrolled;
 
-  // Now properly save the new date back to the database!
+  // UPDATED: Save the new date back to the database using JWT
   if (newDailyString) {
-    const userId = localStorage.getItem('prismal_user_id');
-    if (!userId) return;
+    const token = localStorage.getItem('prismal_jwt');
+    if (!token) return;
 
     try {
-      await fetch(`${API_BASE_URL}/api/data/save_date`, {
+      await fetch(`${window.API_BASE_URL}/api/data/save_date`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({ 
-          userId: userId, 
-          last_processed_date: newDailyString // fixed from dateString
+          last_processed_date: newDailyString
         })
       });
       console.log("Successfully saved new processing date:", newDailyString);
@@ -284,78 +313,154 @@ async function performDailyUpdate() {
   }
 }
 
-
-
-// =====================================================================
-// OTHER HELPERS
-// =====================================================================
-
 async function saveChanges() {
-  const userId = localStorage.getItem('prismal_user_id');
-  if (!userId) return; // Failsafe to prevent updating if user session is lost
-
-  if (futureEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-future`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: futureData })
-    });
-    futureEdited = false;
+  console.log("Saving data changes...");
+  // Grab the JWT token instead of the user ID
+  const token = localStorage.getItem('prismal_jwt');
+  if (!token) {
+    console.error("No active session found. Changes not saved.");
+    return; // Stop execution if logged out
   }
 
-  if (calendarEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-calendar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: calendarData })
-    });
-    calendarEdited = false;
+  // Reusable request helper with Authorization JWT headers
+  async function sendUpdate(endpoint, payload) {
+    try {
+      const res = await fetch(`${window.API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // Standard JWT Bearer token format
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.status === 401) {
+          // Token is likely expired or invalid, handle auto-logout here if desired
+          console.error("Session expired.");
+      }
+      
+      return res.ok;
+    } catch (err) {
+      console.error(`Failed to sync endpoint ${endpoint}:`, err);
+      return false;
+    }
   }
 
-  if (recurringEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-recurring`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: recurringData })
-    });
-    recurringEdited = false;
+  // 1. Future
+  if (typeof futureEdited !== 'undefined' && futureEdited) {
+    const success = await sendUpdate('/api/data/update-future', { data: futureData });
+    if (success) futureEdited = false;
   }
 
-  if (trackerEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-tracker`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: trackerData })
-    });
-    trackerEdited = false;
+  // 2. Calendar
+  if (typeof calendarEdited !== 'undefined' && calendarEdited) {
+    const success = await sendUpdate('/api/data/update-calendar', { data: calendarData });
+    if (success) {
+      calendarEdited = false;
+
+      if (window.PAGE === "home") {
+        const cells = document.querySelectorAll('.elastic-table .cell-content');
+        cells.forEach((cell, index) => {
+          // Convert the flat 0-27 cell index into a 4x7 grid coordinate (Row & Column)
+          const r = Math.floor(index / 7);
+          const c = index % 7;
+
+          // Safely grab the text from the 2D array
+          const content = (calendarData && calendarData[r] && calendarData[r][c]) 
+                          ? calendarData[r][c] 
+                          : "";
+          
+          // Use innerText instead of textContent so your \n line breaks format correctly!
+          cell.innerText = content; 
+        });
+      }
+    }
   }
 
-  if (historyEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-history`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: historyData })
-    });
-    historyEdited = false;
+  // 3. Recurring
+  if (typeof recurringEdited !== 'undefined' && recurringEdited) {
+    const success = await sendUpdate('/api/data/update-recurring', { data: recurringData });
+    if (success) recurringEdited = false;
   }
 
-  if (searchEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: searchData })
-    });
-    searchEdited = false;
+  // 4. Tracker
+  if (typeof trackerEdited !== 'undefined' && trackerEdited) {
+    const success = await sendUpdate('/api/data/update-tracker', { data: trackerData });
+    if (success) trackerEdited = false;
   }
 
-  if (calculatorEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-calculator`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: calculatorData })
-    });
-    calculatorEdited = false;
+  // 5. History
+  if (typeof historyEdited !== 'undefined' && historyEdited) {
+    const success = await sendUpdate('/api/data/update-history', { data: historyData });
+    if (success) historyEdited = false;
   }
+
+  // 6. Search
+  if (typeof searchEdited !== 'undefined' && searchEdited) {
+    const success = await sendUpdate('/api/data/update-search', { data: searchData });
+    if (success) searchEdited = false;
+  }
+
+  // 7. Calculator
+  if (typeof calculatorEdited !== 'undefined' && calculatorEdited) {
+    const success = await sendUpdate('/api/data/update-calculator', { data: calculatorData });
+    if (success) calculatorEdited = false;
+  }
+}
+
+//#endregion
+
+// =====================================================================
+// #region OTHER HELPERS
+// =====================================================================
+
+function formatGrid(dbArray, rows, cols) {
+  const grid = [];
+  let index = 0;
+  
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) {
+      // Safely grab the content if it exists in the DB, otherwise default to ""
+      if (dbArray && dbArray[index]) {
+        row.push(dbArray[index].content || "");
+      } else {
+        row.push("");
+      }
+      index++;
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+function normalizeApiGrid(rawData, rows, cols) {
+  let parsed = rawData;
+  
+  // 1. If the DB returned stringified JSON, parse it
+  if (typeof rawData === 'string') {
+    try { parsed = JSON.parse(rawData); } catch(e) { parsed = []; }
+  }
+  
+  // 2. Ensure it is an array
+  if (!Array.isArray(parsed)) parsed = [];
+  
+  // 3. Flatten whatever shape the DB returned (1D or 2D) so we can safely reconstruct it
+  let flatData = parsed.flat(Infinity);
+  
+  // 4. Rebuild into a perfect RxC 2D grid
+  let grid = [];
+  let index = 0;
+  for (let r = 0; r < rows; r++) {
+    let row = [];
+    for (let c = 0; c < cols; c++) {
+      // Grab data, convert to string, default to empty string if missing
+      row.push(flatData[index] !== undefined ? String(flatData[index]) : "");
+      index++;
+    }
+    grid.push(row);
+  }
+  return grid;
 }
 
 function createSafeMidnight(input, failable = false) {
@@ -567,58 +672,65 @@ function combineSprites(existingSprite, incomingSprite) {
 	return specialType + check;
 }
 
-// =====================================================================
-// LAYOUT FUNCTIONS
-// =====================================================================
-
-document.addEventListener("DOMContentLoaded", () => {
-  let isMouseDown = false;
-
-  // 1. Release: Listen globally so we catch mouse up even if it happens outside the table
-  window.addEventListener('pointerup', (e) => {
-    if (e.pointerType !== 'mouse') return; // Ignore touch/mobile
-    
-    isMouseDown = false;
-    document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
-      cell.classList.remove('is-magnified');
-    });
-  });
-
-  // 2. Click Down: Check if the click happened on a dynamically generated <td>
-  document.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || e.pointerType !== 'mouse') return; // Left-click PC mouse only
-
-    const cell = e.target.closest('.elastic-table td');
-    if (!cell) return;
-
-    e.preventDefault(); // Prevents native browser drag-and-drop
-    isMouseDown = true;
-    cell.classList.add('is-magnified');
-  });
-
-  // 3. Glide Enter: Handle moving into new cells while holding the click
-  document.addEventListener('pointerover', (e) => {
-    if (!isMouseDown || e.pointerType !== 'mouse') return;
-
-    const cell = e.target.closest('.elastic-table td');
-    if (!cell) return;
-
-    cell.classList.add('is-magnified');
-  });
-
-  // 4. Glide Leave: Handle leaving a cell
-  document.addEventListener('pointerout', (e) => {
-    if (e.pointerType !== 'mouse') return;
-
-    const cell = e.target.closest('.elastic-table td');
-    if (!cell) return;
-
-    // Ensure the cursor actually left the cell (prevents flickering over text nodes)
-    if (!cell.contains(e.relatedTarget)) {
-      cell.classList.remove('is-magnified');
+function parseGridData(raw) {
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("Failed to parse grid string:", e);
+      return raw;
     }
-  });
-});
+  }
+  return raw;
+}
+
+window.updateGridCell = async function(gridName, row, col, textValue) {
+  // Map the string name to your actual global arrays and edit flags
+  const gridMap = {
+    'calendar':   { data: calendarData,   setFlag: () => calendarEdited = true },
+    'recurring':  { data: recurringData,  setFlag: () => recurringEdited = true },
+    'tracker':    { data: trackerData,    setFlag: () => trackerEdited = true },
+    'future':     { data: futureData,     setFlag: () => futureEdited = true },
+    'history':    { data: historyData,    setFlag: () => historyEdited = true },
+    'search':     { data: searchData,     setFlag: () => searchEdited = true },
+    'calculator': { data: calculatorData, setFlag: () => calculatorEdited = true }
+  };
+
+  const target = gridMap[gridName];
+
+  if (!target) {
+    console.error(`❌ Grid "${gridName}" not found. Valid options are: ${Object.keys(gridMap).join(", ")}`);
+    return;
+  }
+
+  // 1. Update the 2D array safely
+  if (!target.data[row]) target.data[row] = [];
+  target.data[row][col] = textValue;
+
+  // 2. Set the correct "Edited" flag to true so saveChanges() picks it up
+  target.setFlag();
+
+  // 3. Optional UI Sync: If it's the calendar, try to update the DOM immediately
+  if (gridName === 'calendar') {
+    const index = (row * 7) + col;
+    const cell = document.querySelectorAll('.elastic-table .cell-content')[index];
+    if (cell) cell.innerText = textValue;
+  } else {
+    // For other tables, it will save in the background, but you might need to refresh to see it visually
+    console.log(`ℹ️ Background data for '${gridName}' updated. Refresh to see visual changes if it's currently on screen.`);
+  }
+
+  // 4. Trigger the backend save
+  console.log(`⏳ Saving "${gridName}" cell [${row}][${col}]...`);
+  await saveChanges();
+  console.log(`✅ Update complete! Changed to: "${textValue}"`);
+};
+
+//#endregion
+
+// =====================================================================
+// #region LAYOUT FUNCTIONS
+// =====================================================================
 
 const table = document.querySelector('.elastic-table');
 
@@ -793,3 +905,53 @@ document.addEventListener('click', (e) => {
   activeEditCell.classList.remove('is-editing');
   activeEditCell = null;
 });
+
+let isMouseDown = false;
+
+// 1. Release: Listen globally so we catch mouse up even if it happens outside the table
+window.addEventListener('pointerup', (e) => {
+  if (e.pointerType !== 'mouse') return; // Ignore touch/mobile
+  
+  isMouseDown = false;
+  document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
+    cell.classList.remove('is-magnified');
+  });
+});
+
+// 2. Click Down: Check if the click happened on a dynamically generated <td>
+document.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || e.pointerType !== 'mouse') return; // Left-click PC mouse only
+
+  const cell = e.target.closest('.elastic-table td');
+  if (!cell) return;
+
+  e.preventDefault(); // Prevents native browser drag-and-drop
+  isMouseDown = true;
+  cell.classList.add('is-magnified');
+});
+
+// 3. Glide Enter: Handle moving into new cells while holding the click
+document.addEventListener('pointerover', (e) => {
+  if (!isMouseDown || e.pointerType !== 'mouse') return;
+
+  const cell = e.target.closest('.elastic-table td');
+  if (!cell) return;
+
+  cell.classList.add('is-magnified');
+});
+
+// 4. Glide Leave: Handle leaving a cell
+document.addEventListener('pointerout', (e) => {
+  if (e.pointerType !== 'mouse') return;
+
+  const cell = e.target.closest('.elastic-table td');
+  if (!cell) return;
+
+  // Ensure the cursor actually left the cell (prevents flickering over text nodes)
+  if (!cell.contains(e.relatedTarget)) {
+    cell.classList.remove('is-magnified');
+  }
+});
+
+// #endregion
+loadWorkspace();
