@@ -85,7 +85,8 @@
     "/Javascript/Active Starfield.js",
     "/Javascript/Layout.js",
     "/Javascript/Keyboard Starfield.js",
-    "/Javascript/Analytics.js"
+    "/Javascript/Analytics.js",
+    "/Javascript/Session.js"
   ];
 
   function appendScript(src){
@@ -104,6 +105,9 @@
     }
     if (PAGE === "login") {
       appendScript("/Javascript/Login.js");
+    }
+    if (PAGE === "home") {
+      appendScript("/Javascript/Process Budget.js");
     }
   }
   

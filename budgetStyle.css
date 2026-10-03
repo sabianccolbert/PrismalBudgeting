@@ -24,6 +24,9 @@
   /* Prevent text highlighting while drag-zooming on PC */
   user-select: none; 
   -webkit-user-select: none; 
+
+  /* Smoothly animates the table's transform when released */
+  transition: transform 0.25s ease-in-out;
 }
 
 /* The actual element that scales, zooms, and tilts */
