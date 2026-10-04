@@ -24,6 +24,9 @@
   /* Prevent text highlighting while drag-zooming on PC */
   user-select: none; 
   -webkit-user-select: none; 
+
+  /* Smoothly animates the table's transform when released */
+  transition: transform 0.25s ease-in-out;
 }
 
 /* The actual element that scales, zooms, and tilts */
@@ -54,7 +57,10 @@
   transition: transform 0.1s ease-out; 
   
   /* NEW: Reveals the text when zoomed on PC */
-  overflow: visible; 
+  overflow: visible;
+  
+  user-select: none; /* Prevents text highlighting while dragging */
+  -webkit-user-select: none; /* For Safari */
 }
 
 /* 
@@ -102,4 +108,36 @@
 
 .elastic-table td:not(.is-editing) {
   z-index: 1;
+}
+
+.cell-action-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: auto; 
+  background: transparent;
+  border: none;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.9rem;
+  font-family: sans-serif;
+  cursor: pointer;
+  z-index: 5;
+  
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.elastic-table td.is-magnified .cell-action-btn,
+.elastic-table td.is-editing .cell-action-btn {
+  opacity: 1;
+  visibility: visible;
 }

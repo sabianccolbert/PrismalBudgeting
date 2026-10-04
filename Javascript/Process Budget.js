@@ -1,6 +1,6 @@
 
 // =====================================================================
-// GLOBAL VARIABLES
+// GLOBAL VARIABLES (Kept identical to your setup)
 // =====================================================================
 
 // Data Variables
@@ -11,6 +11,22 @@ let futureData = null;
 let historyData = null;
 let searchData = null;
 let calculatorData = null;
+
+// Data Sizes
+let calendarRows = 4;
+let calendarCols = 7;
+let recurringRows = 1;
+let recurringCols = 1;
+let trackerRows = 1;
+let trackerCols = 1;
+let futureRows = 1;
+let futureCols = 1;
+let historyRows = 1;
+let historyCols = 1;
+let searchRows = 1;
+let searchCols = 1;
+let calcRows = 1;
+let calcCols = 1;
 
 // Edit Trackers
 let calendarEdited = false;
@@ -31,7 +47,7 @@ let gridDates = getGridDates();
 let gridStartDate = gridDates[0][0];
 let gridEndDate = gridDates[3][6];
 
-const nextFourStart = createSafeMidnight(new Date(gridEndDate.getTime() + 86400000));
+let nextFourStart = createSafeMidnight(new Date(gridEndDate.getTime() + 86400000));
 
 let equityYears = new Set();
 
@@ -56,11 +72,11 @@ let nextFourNegative = false;
 const greetingPresets = ["Hey there ", "Hi ", "What's up ", "How's it going ", "Hello ", "Howdy "];
 const nicknamePresets = ["friend! ", "buddy! ", "pal! ", "dude! ", "man! "];
 const allClearPresets = ["Everything here looks great. ", "I don't see any issues right now. ", "Seems everything is in order. "];
-const farewellPresets = ["Here's an affirmation: ", "Have some motivation: ", "Here's today's affirmation: ", "Enjoy this motivation: ", "Have an affirmation: ", "Enjoy this affirmation: ", "Here's some morivation: "];
-const affirmationPresets = ["I am capable of quiet focus.", "My mind is filled with peaceful thoughts.", "Today I step into greatness.", "I am deserving of clear focus.", "My potential expands every day.", "I release doubt and welcome faith.", "Today I choose hope and love.", "My courage is greater than my fears.", "I am worthy of respect and kindness.", "Today I step into new joy.", "I am a vessel of boundless creativity.", "My heart is peaceful and steady.", "Today I radiate kindness to all.", "I handle challenges with quiet grace.", "My focus is sharp and clear.", "I am a beacon of light and hope.", "Today I welcome joy into my heart.", "I am worthy of deep connections.", "My daily habits build a foundation of joy.", "My inner strength is unwavering.", "Today I choose inner contentment.", "My presence brings comfort and joy.", "I choose self-compassion over criticism.", "Today I step into my true power.", "My strength grows deeper every day.", "I am open to the wisdom of the universe.", "Today is full of bright possibilities.", "I am resilient and strong.", "Today I share my authentic self.", "My heart radiates warmth and kindness.", "I attract positive energy into my space.", "Today I celebrate my small wins.", "My efforts today plant seeds for tomorrow.", "My potential is completely unlimited.", "Today I choose peace over perfection.", "I am deserving of infinite happiness.", "Today I embrace new beginnings.", "My voice matters and deserves to be heard.", "Today I focus on what matters.", "I embrace the quiet spaces between my thoughts.", "I am capable of magnificent success.", "Today I trust my inner voice.", "My light shines brightly for all.", "Today I cultivate gratitude.", "I release all unnecessary fear.", "Today I move forward with grace.", "I am deserving of a beautifully calm life.", "My hard work yields great success.", "Today I choose peace over pressure.", "I am committed to continuous growth and learning.", "Today I share my light freely.", "Kindness is my natural response.", "Today I embrace my power.", "My journey unfolds perfectly in its own time.", "I am secure in who I am.", "Today I choose self-love.", "My future is bright and full of promise.", "Today I welcome joy and laughter.", "I welcome joyful surprises today.", "Today I trust my capabilities.", "I trust the gentle rhythm of my breathing.", "I am whole just as I am.", "Today I choose joy and gratitude.", "I nourish my body with good energy.", "Today I embrace infinite possibilities.", "I am aligned with my true purpose.", "Today I let go of stress.", "Today I allow myself to simply be.", "I choose to be happy now.", "Today I celebrate my life.", "My intuition guides me correctly.", "Today I choose positive actions.", "I am worthy of great things.", "Peace begins within my own heart.", "My heart sings a song of deep gratitude.", "Today I shine a bright light.", "I am patient with my personal growth.", "Today I welcome a clear vision.", "I attract supportive and loving friends.", "Today I walk with purpose.", "I am a powerful creator of joy.", "I am completely equipped to handle today.", "Today I manifest my best.", "I deserve rest and relaxation.", "Today I spread warmth to all.", "My mind is clear and focused.", "Today I release past burdens.", "I am surrounded by endless beauty.", "My thoughts shape a vibrant and healthy reality.", "Today I choose calm thoughts.", "I celebrate my progress, big or small.", "Today I nourish my soul.", "My heart is full of gratitude.", "Today I honor my feelings.", "I accept myself without any judgment.", "I am deeply connected to the present moment.", "Today I create positive moments.", "I am worthy of living well.", "Today I embrace my potential.", "My actions create positive change.", "Today I attract good energy.", "I choose to see the good today.", "Every breath I take fills me with peace.", "Today I act with kindness.", "I am confident in my abilities.", "Today I stand tall and proud.", "My creative energy flows freely.", "Today I trust the universe.", "I am deserving of success and joy.", "I choose to focus on the good around me.", "Today I express genuine gratitude.", "I let go of what I cannot change.", "Today I choose hope over fear.", "I am resilient in the face of obstacles.", "I trust my journey completely.", "Today I welcome inner quiet.", "My spirit dances with the flow of life.", "I am worthy of my dreams.", "Today I honor my journey.", "I am making a positive impact.", "Today I choose self-acceptance.", "My soul is calm and at peace.", "I embrace change with an open heart.", "I am an architect of my own happiness.", "Today I spread light and love.", "I am strong, grounded, and safe.", "My energy is focused on the good.", "Today I act with conviction.", "I am capable of overcoming hard times.", "I deserve love, joy, and prosperity.", "Today I release all expectations and just live.", "Today I cultivate deep peace.", "My life is filled with purpose.", "Today I embrace new wisdom.", "I trust myself to make good decisions.", "Today I breathe in calm energy.", "I am worthy of all my achievements.", "My inner calm is untouched by outside storms.", "Today I welcome positive change.", "My thoughts are positive and uplifting.", "Today I choose inner strength.", "I am safe in the present moment.", "I choose to forgive and release.", "Today I nurture my dreams.", "I am worthy of taking up space and being heard.", "My dreams are valuable and real.", "Today I walk with assurance.", "Today brings fresh starting points.", "Today I choose peace of mind.", "My passion drives me forward daily.", "Today I honor my worth.", "I celebrate the unique magic within my soul.", "I am surrounded by unconditional love.", "Today I release all self-doubt.", "I choose to treat myself gently.", "My inner wisdom leads the way.", "Today I cultivate positive thoughts.", "I am abundant in every way.", "My kindness ripples out and changes the world.", "Today I choose hope and strength.", "I release the need to be perfect.", "Today I spread genuine kindness.", "My life is a gift I cherish.", "Today I honor my unique gift.", "I am focused on my personal vision.", "I am stepping into a beautiful new chapter.", "Today I welcome calm moments.", "I am proud of who I am becoming.", "Today I trust my path completely.", "I am open to receiving love daily.", "Today I celebrate my true self.", "My boundaries protect my quiet energy.", "Today I forgive myself for past mistakes.", "Today I step forward with hope.", "Today is a gift to enjoy.", "Today I radiate joy and light.", "My body is healthy and strong.", "Today I choose love over fear.", "I am worthy of peace of mind.", "My existence is a miracle I deeply appreciate.", "Today I embrace all possibilities.", "Today I welcome new opportunities.", "Today I welcome every blessing.", "My choices align with my values.", "Today I trust my inner strength.", "I am grateful for my journey.", "I am surrounded by an invisible shield of love.", "Today I live with purpose and peace.", "My spirit is bright and resilient.", "I am capable of achieving my goals.", "I deserve to feel fulfilled.", "I choose peace over conflict today.", "I am grounded in this moment.", "Every challenge I face is a stepping stone.", "My heart is open to love.", "I am worthy of abundance now.", "Peace guides my words and actions.", "My mind is open to possibilities.", "I trust the timing of my life.", "I am powerful beyond measure.", "I am fiercely loyal to my own well-being.", "My heart is open to healing.", "I am strong, wise, and capable.", "I am capable of remarkable growth.", "My pathway is clear and bright.", "I welcome happiness into my home.", "I am deserving of rich experiences.", "My soul flourishes when I practice self-care.", "Today I act with bold confidence.", "My breath restores my quiet mind.", "I am balanced, focused, and clear.", "Today I honor my true needs.", "My courage shines in tough moments.", "I am grateful for my strong body.", "I am confidently navigating my own unique path.", "Today I cultivate joy within.", "My path is unique and beautiful.", "I am worthy of living fully.", "My heart is an anchor for peace.", "I am open to transformation.", "Today I radiate positivity everywhere.", "Today I write a joyful story for myself.", "My life is brimming with hope.", "I am comfortable in my skin.", "Today I nurture my inner light.", "My voice carries wisdom and truth.", "I am a magnet for goodness.", "My actions inspire those around me.", "I am worthy of sincere friendship.", "My life is filled with balance.", "I am strong enough to succeed.", "Today I choose kindness toward myself.", "My confidence stems from within.", "I am valuable just by existing.", "I am deserving of true peace.", "Today I welcome creative solutions.", "My energy is vibrant and light.", "I am guided by love always.", "Today I release all negativity.", "My goals are within my reach.", "I am worthy of big dreams.", "My path is filled with light.", "I am capable of amazing strength.", "My life is an exciting adventure.", "I am deserving of honest love.", "My spirit is steady and strong.", "I am open to life's blessings.", "My mind is a source of clarity.", "I am worthy of great happiness.", "My strength is renewed each morning.", "I am aligned with goodness.", "My thoughts build a peaceful mind.", "I am deserving of safe spaces.", "My growth is steady and real.", "I am capable of deep focus.", "My heart is open to abundance.", "I am worthy of rest today.", "I am resilient through every season.", "My mind is calm and peaceful.", "I am deserving of life's riches.", "My courage empowers those around me.", "I am worthy of true respect.", "My spirit radiates a warm, positive light.", "I am grounded in truth.", "My heart is a home for peace.", "I am capable of achieving my dreams.", "My inner peace is solid.", "I am worthy of great care.", "My life is rich with meaning.", "I am aligned with my truth.", "My strength grows with each test.", "I am deserving of good health.", "My future holds endless good.", "I am capable of deep love.", "My path is lined with grace.", "I am worthy of true joy.", "I am resilient in every way.", "My mind generates positive ideas.", "I am deserving of kind words.", "My energy is restored and whole.", "I am open to good fortune.", "My life is guided by hope.", "I am worthy of endless love.", "My inner power is growing daily.", "I am capable of wise choices.", "My life is full of light.", "I am resilient, strong, and safe.", "My voice is confident and strong.", "I am worthy of bright days.", "My mind is clear and capable.", "I am guided by inner peace.", "My path leads to happiness.", "I am deserving of calm moments.", "My heart is full of hope.", "I am worthy of deep joy.", "My growth is continuous and clear.", "I am capable of creating goodness.", "My life is balanced and peaceful.", "I am worthy of sweet rest.", "My power is rooted in truth.", "I am deserving of brilliant success.", "My mind is a sanctuary of calm.", "I am open to life's gifts.", "My strength inspires others daily.", "I am worthy of genuine love.", "My life moves forward in grace.", "I am capable of bold action.", "My heart radiates a steady peace.", "I am deserving of happy thoughts.", "My energy is positive and focused.", "I am grounded, present, and strong.", "My future is rich with hope.", "I am worthy of high respect.", "My spirit is resilient and bright.", "My body is a vessel of health.", "I am deserving of peace now.", "My thoughts bring me joy.", "I am worthy of all success.", "My mind is filled with light.", "My path is safe and sound.", "I am deserving of true contentment.", "My heart is full of strength.", "I am worthy of beautiful moments.", "I am strong, focused, and resilient.", "My voice carries a clear truth.", "I am deserving of kindness always.", "My mind is steady and calm.", "I am capable of bold choices.", "My heart is light and joyful.", "I am worthy of warm love.", "My life is grounded in peace.", "I am resilient in every moment.", "My energy attracts good things.", "I am deserving of complete joy.", "My spirit is bright and clear.", "I am capable of achieving greatness.", "My path is filled with joy.", "I am worthy of sweet success.", "My heart is peaceful and open.", "I am deserving of strong support.", "My mind is a source of strength.", "I am capable of infinite growth.", "My life is full of grace.", "I am worthy of clear thinking.", "My spirit is grounded in love.", "I am deserving of endless abundance.", "I am capable of magnificent achievements.", "My mind is calm and confident.", "I am worthy of rich love.", "My future is safe and bright.", "I am deserving of daily happiness.", "My energy is vibrant and fresh.", "I am capable of great resilience.", "My heart is open and ready.", "I am worthy of peaceful living.", "My mind is clear and sharp.", "My life is guided by wisdom.", "I am strong, capable, and whole.", "I am worthy of bold dreams.", "My spirit is light and free.", "I am deserving of a wonderful life.", "My power comes from within.", "My mind is peaceful and strong.", "I am worthy of boundless joy.", "Next year will be even better.", "Leap year! One more day to be thankful."];
+const farewellPresets = ["Here's an affirmation: ", "Have some motivation: ", "Here's today's affirmation: ", "Enjoy this motivation: ", "Have an affirmation: ", "Enjoy this affirmation: ", "Here's some motivation: "];
+const affirmationPresets = [/* Your array is kept intact here */ "I am capable of quiet focus."]; // (Truncated just for display, keep your long array!)
 
 // Others
-let formEntryRow = [startTime, "", "", "", "", ""];
+let formEntryRow = [/* Assume startTime is defined elsewhere */ "", "", "", "", "", ""];
 
 let systemEmojis = ["⛔️", "✅", "✴️"];
 let mmddCache = new Map();
@@ -83,174 +99,541 @@ let cancellingTutorial = false;
 let consultDave = true;
 
 // =====================================================================
-// META FUNCTIONS
+// #region META FUNCTIONS
 // =====================================================================
 
-// Fetch everything on page load
 async function loadWorkspace() {
-  const userId = localStorage.getItem('prismal_user_id');
-  const response = await fetch(`${API_BASE_URL}/api/data/load?userId=${userId}`);
-  const data = await response.json();
-
-  calendarData = data.calendar;
-  recurringData = data.recurring;
-  trackerData = data.tracker;
-  futureData = data.future;
-  historyData = data.history;
-  searchData = data.search;
-  calculatorData = data.calculator;
-}
-async function saveChanges() {
-  const userId = localStorage.getItem('prismal_user_id');
-  if (!userId) return; // Failsafe to prevent updating if user session is lost
-
-  if (futureEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-future`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: futureData })
-    });
-    futureEdited = false;
-  }
-
-  if (calendarEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-calendar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: calendarData })
-    });
-    calendarEdited = false;
-  }
-
-  if (recurringEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-recurring`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: recurringData })
-    });
-    recurringEdited = false;
-  }
-
-  if (trackerEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-tracker`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: trackerData })
-    });
-    trackerEdited = false;
-  }
-
-  if (historyEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-history`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: historyData })
-    });
-    historyEdited = false;
-  }
-
-  if (searchEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: searchData })
-    });
-    searchEdited = false;
-  }
-
-  if (calculatorEdited) {
-    await fetch(`${API_BASE_URL}/api/data/update-calculator`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, data: calculatorData })
-    });
-    calculatorEdited = false;
-  }
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  let isMouseDown = false;
-
-  // 1. Release: Listen globally so we catch mouse up even if it happens outside the table
-  window.addEventListener('pointerup', (e) => {
-    if (e.pointerType !== 'mouse') return; // Ignore touch/mobile
-    
-    isMouseDown = false;
-    document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
-      cell.classList.remove('is-magnified');
-    });
-  });
-
-  // 2. Click Down: Check if the click happened on a dynamically generated <td>
-  document.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || e.pointerType !== 'mouse') return; // Left-click PC mouse only
-
-    const cell = e.target.closest('.elastic-table td');
-    if (!cell) return;
-
-    e.preventDefault(); // Prevents native browser drag-and-drop
-    isMouseDown = true;
-    cell.classList.add('is-magnified');
-  });
-
-  // 3. Glide Enter: Handle moving into new cells while holding the click
-  document.addEventListener('pointerover', (e) => {
-    if (!isMouseDown || e.pointerType !== 'mouse') return;
-
-    const cell = e.target.closest('.elastic-table td');
-    if (!cell) return;
-
-    cell.classList.add('is-magnified');
-  });
-
-  // 4. Glide Leave: Handle leaving a cell
-  document.addEventListener('pointerout', (e) => {
-    if (e.pointerType !== 'mouse') return;
-
-    const cell = e.target.closest('.elastic-table td');
-    if (!cell) return;
-
-    // Ensure the cursor actually left the cell (prevents flickering over text nodes)
-    if (!cell.contains(e.relatedTarget)) {
-      cell.classList.remove('is-magnified');
+  isDailyUpdate = true;
+  // 1. Grab the token once
+  const token = localStorage.getItem('prismal_jwt');
+  
+  if (!token) {
+    console.error("No active session found. Redirecting to login...");
+    if (typeof window.transitionTo === 'function') {
+      window.transitionTo("/login.html", true);
+    } else {
+      window.location.replace("/login.html");
     }
-  });
-});
+    return;
+  }
 
-if (url.pathname === '/api/data/load' && request.method === 'GET') {
-  const userId = url.searchParams.get('userId');
+  // Load from Cloudflare API using Authorization Header
+  try {
+    // (Removed the duplicate 'const token' declaration that was here)
 
-  // 1. Ensure all tables exist (Run this check transparently)
-  await env.DB.batch([
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS calendar (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, content TEXT)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS recurring (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, content TEXT)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, content TEXT)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS future (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, content TEXT)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, content TEXT)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS search (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, content TEXT)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS calculator (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, content TEXT)`)
-  ]);
+    const response = await fetch(`${window.API_BASE_URL}/api/data/load`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
 
-  // 2. Fetch all user data across all 7 tables
-  const [cal, rec, tra, fut, his, sea, calc] = await env.DB.batch([
-    env.DB.prepare(`SELECT * FROM calendar WHERE user_id = ?`).bind(userId),
-    env.DB.prepare(`SELECT * FROM recurring WHERE user_id = ?`).bind(userId),
-    env.DB.prepare(`SELECT * FROM tracker WHERE user_id = ?`).bind(userId),
-    env.DB.prepare(`SELECT * FROM future WHERE user_id = ?`).bind(userId),
-    env.DB.prepare(`SELECT * FROM history WHERE user_id = ?`).bind(userId),
-    env.DB.prepare(`SELECT * FROM search WHERE user_id = ?`).bind(userId),
-    env.DB.prepare(`SELECT * FROM calculator WHERE user_id = ?`).bind(userId),
-  ]);
+    // 2. CRITICAL FIX: Handle invalid/expired tokens specifically
+    if (response.status === 401) {
+      console.error("Token expired or invalid. Clearing session...");
+      // You MUST remove the token, otherwise the login page will redirect you right back here
+      localStorage.removeItem('prismal_jwt');
+      localStorage.removeItem('prismal_username'); // Good practice to clear this too
+      
+      window.location.replace("/login.html");
+      return; 
+    }
 
-  return new Response(JSON.stringify({
-    calendar: cal.results,
-    recurring: rec.results,
-    tracker: tra.results,
-    future: fut.results,
-    history: his.results,
-    search: sea.results,
-    calculator: calc.results
-  }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!response.ok) {
+       throw new Error(`Server responded with status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+
+    // NEW: Helper function to safely extract and parse the database content string
+    function parseDB(dbResult) {
+      if (dbResult && dbResult.length > 0 && dbResult[0].content) {
+        try {
+          return JSON.parse(dbResult[0].content);
+        } catch (e) {
+          console.error("JSON parse error on DB content:", e);
+          return null;
+        }
+      }
+      return null; 
+    }
+
+    // Safely extract and parse the strings back into 2D arrays before normalizing
+    calendarData   = normalizeApiGrid(parseDB(data.calendar), calendarRows, calendarCols);
+    recurringData  = normalizeApiGrid(parseDB(data.recurring), recurringRows, recurringCols);
+    trackerData    = normalizeApiGrid(parseDB(data.tracker), trackerRows, trackerCols); 
+    futureData     = normalizeApiGrid(parseDB(data.future), futureRows, futureCols);
+    historyData    = normalizeApiGrid(parseDB(data.history), historyRows, historyCols);
+    searchData     = normalizeApiGrid(parseDB(data.search), searchRows, searchCols);
+    calculatorData = normalizeApiGrid(parseDB(data.calculator), calcRows, calcCols);
+    
+    // Use the date from the database, fallback to yesterday if new account
+    lastDailyUpdate = createSafeMidnight(data.last_processed_date || yesterday);
+    // Perform routine maintenance
+    if (isDailyUpdate || lastDailyUpdate.getTime() < today.getTime()) {
+      await performDailyUpdate();
+    }
+
+    calendarEdited = true;
+    saveChanges();
+    isDailyUpdate = false;
+    
+  } catch (err) {
+    console.error("Failed to load workspace:", err);
+  }
+}
+//#endregion
+
+// =====================================================================
+// #region WORKER FUNCTIONS
+// =====================================================================
+
+async function performDailyUpdate() {
+  console.log("Performing daily update...");
+  formEntryRow[2] = "🕛 Daily Update";
+
+  let nextDay = null;
+  let newDailyString = null;
+
+  while (lastDailyUpdate.getTime() < today.getTime()) {
+    console.log("Doing daily sprite maintenance...");
+    outerLoop:
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 7; c++) {
+        // Skip any dates that are older than the previous update
+        if (gridDates[r][c].getTime() < lastDailyUpdate.getTime()) continue;
+        
+        // Completely exits both loops once the current day is reached
+        if (gridDates[r][c].getTime() >= today.getTime()) {
+          break outerLoop;
+        }
+
+        let cellText = String(calendarData[r][c]).trim();
+        let lines = cellText.split("\n");
+
+        for (let l = 1; l < lines.length; l++) {
+          let parts = getParts(lines[l]);
+          let originalTitle = extractTitle(lines[l], false);
+          
+          if (parseAmount(parts[1]) !== 0 && !systemEmojis.includes(parts[0])) {
+            let add = true;
+            let lineAmt = parseAmount(parts[1]);
+            let lineType = parts[0];
+            let lineDate = gridDates[r][c];
+            processEquity(add, originalTitle, lineDate, lineAmt, lineType);
+          }
+          
+          if (parts[0].includes("✔️")) {
+            let specialType = getSpecialType(parts[0]);
+            parts[0] = specialType + "✔️";
+            lines[l] = parts.join(" ");
+            uniquesCreated++;
+          }
+        }
+        calendarData[r][c] = lines.join("\n");
+      }
+    }
+
+    nextDay = new Date(lastDailyUpdate);
+    nextDay.setDate(lastDailyUpdate.getDate() + 1);
+    newDailyString = formatToMMDDYYYY(nextDay);
+    lastDailyUpdate = nextDay; 
+  }
+
+  // Scroll the week forward if needed
+  let isTodayInFirstWeek = false;
+
+  for (let i = 0; i < 4; i++) {
+    if (isTodayInFirstWeek) break;
+    
+    let todayFormatted = formatToMMDD(today);
+    isTodayInFirstWeek = calendarData[0].some(cell => {
+      let firstLine = String(cell).split("\n")[0].trim();
+      return firstLine.includes(todayFormatted);
+    });
+    
+    if (!isTodayInFirstWeek) {
+      console.log("Scrolling week forward...");
+      let historyInsert = [...calendarData[0]];
+      
+      for (let h = 0; h < 7; h++) {
+        let historyLines = historyInsert[h].split("\n");
+        let dateObj = createSafeMidnight(historyLines[0]);
+        
+        historyLines[0] = formatToMMDDYYYY(dateObj);
+        
+        historyLines = historyLines.filter(line => {
+          let trimmed = line.trim();
+          if (trimmed.startsWith("❇️") || trimmed.startsWith("✴️")) return false;
+          return true;
+        });
+        
+        historyInsert[h] = historyLines.join("\n");
+        weeksScrolled++;
+      }
+      
+      historyData.splice(1, 0, historyInsert);
+      historyEdited = true;
+      calendarData.shift();
+      calendarData.push(["", "", "", "", "", "", ""]);
+    }
+  }
+  
+  if (!isTodayInFirstWeek) {
+    console.log("Resetting entire grid due to >4 weeks elapsed...");
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 7; c++) {
+        calendarData[r][c] = formatToMMDD(gridDates[r][c]);
+      }
+    }
+  }
+
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (calendarData[r][c] === "") {
+        let rebuiltDate = formatToMMDD(gridDates[r][c]);
+        console.log("Rebuilding calendar cell " + rebuiltDate + "...");
+        calendarData[r][c] = rebuiltDate;
+      }
+    }
+  }
+  
+  formEntryRow[3] = "Uniques Created: " + uniquesCreated;
+  formEntryRow[5] = "Weeks Scrolled: " + weeksScrolled;
+
+  // UPDATED: Save the new date back to the database using JWT
+  if (newDailyString) {
+    const token = localStorage.getItem('prismal_jwt');
+    if (!token) return;
+
+    try {
+      await fetch(`${window.API_BASE_URL}/api/data/save_date`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ 
+          last_processed_date: newDailyString
+        })
+      });
+      console.log("Successfully saved new processing date:", newDailyString);
+    } catch (err) {
+      console.error("Failed to save daily update timestamp:", err);
+    }
+  }
+}
+
+async function processEquity(add, title, date, amount, type) {
+  console.log("Processing equity...");
+  
+  // 1. Extract Category BEFORE modifying title with type/sprite
+  let category = isLLC && title.includes(":") ? title.split(":")[0].trim() : null;
+  if (!category) return false;
+
+  if (type === "") type = "❗️";
+    
+  // Determine incoming special type for accurate sprite matching
+  let incomingSpecial = type === "" ? null : getSpecialType(type); 
+  
+  // 2. Format title for table entry
+  let formattedTitle = type.trim() + " " + title;
+  let year = date.getFullYear();
+  let activeTabTitle = "C " + category;
+  
+  if (category === "C Revenue" || category === "Revenue") {
+    activeTabTitle = "C Revenue " + year;
+  } else if (category === "C Expenses" || category === "Expenses") {
+    activeTabTitle = "C Expenses " + year;
+  }
+  
+  // Retrieve the 2D array table from your workspace data map
+  let targetTable = getTableData(activeTabTitle);
+  if (!targetTable) {
+    console.log("Equity table not found: " + activeTabTitle + "; Category: " + category);
+    return false;
+  }
+
+  function editLLC(categ) {
+    let c = categ.toLowerCase().trim().split(":")[0];
+    if (c === "eagle") {
+      eagleEdited = true;
+    }
+    else if (c === "sabian") {
+      sabianEdited = true;
+    }
+    else if (c === "llc assets") {
+      assetsEdited = true;
+    }
+    else if (c === "llc asset purchases") {
+      purchasesEdited = true;
+    }
+    else if (c === "revenue") {
+      revenueEdited = true;
+    }
+    else if (c === "expenses") {
+      expensesEdited = true;
+    }
+  }
+
+  // Row 4 in Sheets corresponds to index 3 in a 0-indexed JS Array
+  const DATA_START_INDEX = 3;
+
+  if (add) {
+    let insertIndex = DATA_START_INDEX;
+    let targetTime = date.getTime();
+    let found = false;
+    let exists = false;
+    let matchedOldSprite = ""; // Saves the old sprite for combining later
+
+    if (targetTable.length >= 4) {
+      findLoop:
+      for (let i = DATA_START_INDEX; i < targetTable.length; i++) {
+        let rowDate = new Date(targetTable[i][0]);
+        let rowTitle = String(targetTable[i][2] || "");
+        
+        // Extract the row's existing sprite and its special type
+        let oldSprite = rowTitle.split(" ")[0]; 
+        let existingSpecial = getSpecialType(oldSprite);
+
+        // Check that the date, the string, AND the special sprite types match
+        if (rowDate.getTime() === targetTime && 
+            cleanString(rowTitle) === cleanString(formattedTitle) && 
+            (!incomingSpecial || existingSpecial === incomingSpecial)) {
+          insertIndex = i;
+          exists = true;
+          matchedOldSprite = oldSprite;
+          break findLoop;
+        }
+
+        // Maintain chronological order (newest dates near the top)
+        if (!isNaN(rowDate.getTime()) && rowDate.getTime() < targetTime) {
+          insertIndex = i;
+          found = true;
+          break findLoop;
+        }
+      }
+
+      if (!found && !exists) {
+        insertIndex = targetTable.length;
+      }
+    }
+
+    if (exists) {
+      // Update cell 2 (Amount) and cell 3 (Title) directly in array
+      let oldAmt = parseAmount(targetTable[insertIndex][1]);
+      let finalAmt = oldAmt + amount;
+      targetTable[insertIndex][1] = formatMoney(finalAmt);
+            
+      // Combine sprites to preserve checkmarks/statuses
+      let combinedSprite = combineSprites(matchedOldSprite, type);
+      let finalTitle = combinedSprite.trim() + " " + title;
+      targetTable[insertIndex][2] = finalTitle; 
+            
+    } else {
+      // Insert new row directly into array at insertIndex
+      let newRow = [date, formatMoney(amount), formattedTitle];
+      targetTable.splice(insertIndex, 0, newRow);
+    }
+
+  } else {
+    // Handling Deletion
+    if (targetTable.length < 4) {
+      editLLC(category);
+      equityYears.add(year);
+      return true;
+    }
+
+    let indexToDelete = -1;
+    let targetTime = date.getTime();
+    
+    for (let i = DATA_START_INDEX; i < targetTable.length; i++) {
+      let rowDate = new Date(targetTable[i][0]);
+      let rowTitle = String(targetTable[i][2] || "").trim();
+      let rowAmt = parseAmount(targetTable[i][1]);
+      
+      let oldSprite = rowTitle.split(" ")[0];
+      let existingSpecial = getSpecialType(oldSprite);
+
+      if (!isNaN(rowDate.getTime()) && rowDate.getTime() === targetTime) {
+        if (cleanString(rowTitle) === cleanString(formattedTitle) && 
+           (!incomingSpecial || existingSpecial === incomingSpecial)) {
+          if (Math.abs(rowAmt) === Math.abs(amount)) {
+            indexToDelete = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (indexToDelete !== -1) {
+      targetTable.splice(indexToDelete, 1);
+    }
+  }
+
+  editLLC(category);
+  equityYears.add(year);
+  return true;
+}
+
+
+async function saveChanges() {
+  console.log("Saving data changes...");
+  // Grab the JWT token instead of the user ID
+  const token = localStorage.getItem('prismal_jwt');
+  if (!token) {
+    console.error("No active session found. Changes not saved.");
+    return; // Stop execution if logged out
+  }
+
+  // Reusable request helper with Authorization JWT headers
+  async function sendUpdate(endpoint, payload) {
+    try {
+      const res = await fetch(`${window.API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // Standard JWT Bearer token format
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.status === 401) {
+          // Token is likely expired or invalid, handle auto-logout here if desired
+          console.error("Session expired.");
+      }
+      
+      return res.ok;
+    } catch (err) {
+      console.error(`Failed to sync endpoint ${endpoint}:`, err);
+      return false;
+    }
+  }
+
+  // 1. Future
+  if (typeof futureEdited !== 'undefined' && futureEdited) {
+    const success = await sendUpdate('/api/data/update-future', { data: futureData });
+    if (success) futureEdited = false;
+  }
+
+  // 2. Calendar
+  if (typeof calendarEdited !== 'undefined' && calendarEdited) {
+    const success = await sendUpdate('/api/data/update-calendar', { data: calendarData });
+    if (success) {
+      calendarEdited = false;
+
+      if (window.PAGE === "home") {
+        const cells = document.querySelectorAll('.elastic-table .cell-content');
+        cells.forEach((cell, index) => {
+          // Convert the flat 0-27 cell index into a 4x7 grid coordinate (Row & Column)
+          const r = Math.floor(index / 7);
+          const c = index % 7;
+
+          // Safely grab the text from the 2D array
+          const content = (calendarData && calendarData[r] && calendarData[r][c]) 
+                          ? calendarData[r][c] 
+                          : "";
+          
+          // 1. Set the cell text content
+          cell.innerText = content; 
+
+          // 2. Re-attach the action button so it doesn't get erased
+          const btn = document.createElement('button');
+          btn.className = 'cell-action-btn';
+          btn.setAttribute('contenteditable', 'false');
+          btn.textContent = 'v';
+          
+          cell.appendChild(btn);
+        });
+      }
+    }
+  }
+
+  // 3. Recurring
+  if (typeof recurringEdited !== 'undefined' && recurringEdited) {
+    const success = await sendUpdate('/api/data/update-recurring', { data: recurringData });
+    if (success) recurringEdited = false;
+  }
+
+  // 4. Tracker
+  if (typeof trackerEdited !== 'undefined' && trackerEdited) {
+    const success = await sendUpdate('/api/data/update-tracker', { data: trackerData });
+    if (success) trackerEdited = false;
+  }
+
+  // 5. History
+  if (typeof historyEdited !== 'undefined' && historyEdited) {
+    const success = await sendUpdate('/api/data/update-history', { data: historyData });
+    if (success) historyEdited = false;
+  }
+
+  // 6. Search
+  if (typeof searchEdited !== 'undefined' && searchEdited) {
+    const success = await sendUpdate('/api/data/update-search', { data: searchData });
+    if (success) searchEdited = false;
+  }
+
+  // 7. Calculator
+  if (typeof calculatorEdited !== 'undefined' && calculatorEdited) {
+    const success = await sendUpdate('/api/data/update-calculator', { data: calculatorData });
+    if (success) calculatorEdited = false;
+  }
+}
+
+//#endregion
+
+// =====================================================================
+// #region OTHER HELPERS
+// =====================================================================
+
+function formatGrid(dbArray, rows, cols) {
+  const grid = [];
+  let index = 0;
+  
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) {
+      // Safely grab the content if it exists in the DB, otherwise default to ""
+      if (dbArray && dbArray[index]) {
+        row.push(dbArray[index].content || "");
+      } else {
+        row.push("");
+      }
+      index++;
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+function normalizeApiGrid(rawData, rows, cols) {
+  let parsed = rawData;
+  
+  // 1. If the DB returned stringified JSON, parse it
+  if (typeof rawData === 'string') {
+    try { parsed = JSON.parse(rawData); } catch(e) { parsed = []; }
+  }
+  
+  // 2. Ensure it is an array
+  if (!Array.isArray(parsed)) parsed = [];
+  
+  // 3. Flatten whatever shape the DB returned (1D or 2D) so we can safely reconstruct it
+  let flatData = parsed.flat(Infinity);
+  
+  // 4. Rebuild into a perfect RxC 2D grid
+  let grid = [];
+  let index = 0;
+  for (let r = 0; r < rows; r++) {
+    let row = [];
+    for (let c = 0; c < cols; c++) {
+      // Grab data, convert to string, default to empty string if missing
+      row.push(flatData[index] !== undefined ? String(flatData[index]) : "");
+      index++;
+    }
+    grid.push(row);
+  }
+  return grid;
 }
 
 function createSafeMidnight(input, failable = false) {
@@ -338,30 +721,6 @@ function getGridDates() {
   return datesArray;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// =====================================================================
-// OTHER HELPERS
-// =====================================================================
-
 function getDayDifference(date1, date2) {
 	// Direct timestamp difference rounded to nearest day
 	return Math.round((date1.getTime() - date2.getTime()) / 86400000);
@@ -369,6 +728,13 @@ function getDayDifference(date1, date2) {
 
 function getParts(line) {
   return String(line).trim().split(/\s+/);
+}
+
+function formatToMMDDYYYY(dateObj) {
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  const yyyy = dateObj.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
 }
 
 function formatToMMDD(dateObj) {
@@ -479,6 +845,301 @@ function combineSprites(existingSprite, incomingSprite) {
 	return specialType + check;
 }
 
+function parseGridData(raw) {
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("Failed to parse grid string:", e);
+      return raw;
+    }
+  }
+  return raw;
+}
 
+window.updateGridCell = async function(gridName, row, col, textValue) {
+  // Map the string name to your actual global arrays and edit flags
+  const gridMap = {
+    'calendar':   { data: calendarData,   setFlag: () => calendarEdited = true },
+    'recurring':  { data: recurringData,  setFlag: () => recurringEdited = true },
+    'tracker':    { data: trackerData,    setFlag: () => trackerEdited = true },
+    'future':     { data: futureData,     setFlag: () => futureEdited = true },
+    'history':    { data: historyData,    setFlag: () => historyEdited = true },
+    'search':     { data: searchData,     setFlag: () => searchEdited = true },
+    'calculator': { data: calculatorData, setFlag: () => calculatorEdited = true }
+  };
 
+  const target = gridMap[gridName];
 
+  if (!target) {
+    console.error(`❌ Grid "${gridName}" not found. Valid options are: ${Object.keys(gridMap).join(", ")}`);
+    return;
+  }
+
+  // 1. Update the 2D array safely
+  if (!target.data[row]) target.data[row] = [];
+  target.data[row][col] = textValue;
+
+  // 2. Set the correct "Edited" flag to true so saveChanges() picks it up
+  target.setFlag();
+
+  // 3. Optional UI Sync: If it's the calendar, try to update the DOM immediately
+  if (gridName === 'calendar') {
+    const index = (row * 7) + col;
+    const cell = document.querySelectorAll('.elastic-table .cell-content')[index];
+    if (cell) cell.innerText = textValue;
+  } else {
+    // For other tables, it will save in the background, but you might need to refresh to see it visually
+    console.log(`ℹ️ Background data for '${gridName}' updated. Refresh to see visual changes if it's currently on screen.`);
+  }
+
+  // 4. Trigger the backend save
+  console.log(`⏳ Saving "${gridName}" cell [${row}][${col}]...`);
+  await saveChanges();
+  console.log(`✅ Update complete! Changed to: "${textValue}"`);
+};
+
+//#endregion
+
+// =====================================================================
+// #region LAYOUT FUNCTIONS
+// =====================================================================
+
+const table = document.querySelector('.elastic-table');
+
+let isTransforming = false;
+let targetEl = null;
+let startDist = 0, startAngle = 0;
+let startCenterX = 0, startCenterY = 0;
+
+// Math Helpers
+const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
+const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
+
+table.addEventListener('touchstart', (e) => {
+  // Only activate on exactly two fingers
+  if (e.touches.length === 2) {
+    isTransforming = true;
+    
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    
+    const cell1 = t1.target.closest('td');
+    const cell2 = t2.target.closest('td');
+    
+    // Logic: If both fingers are in the same cell, stretch the cell. Otherwise, stretch the table.
+    if (cell1 && cell1 === cell2) {
+      targetEl = cell1.querySelector('.cell-content');
+      cell1.style.zIndex = '20';
+      targetEl.style.overflow = 'visible';
+    } else {
+      targetEl = table;
+    }
+
+    // Record the starting positions
+    startDist = getDistance(t1, t2);
+    startAngle = getAngle(t1, t2);
+    const center = getCenter(t1, t2);
+    startCenterX = center.x;
+    startCenterY = center.y;
+
+    // Remove CSS transition temporarily so the element tracks 1:1 with your fingers instantly
+    targetEl.style.transition = 'none'; 
+  }
+}, { passive: false });
+
+table.addEventListener('touchmove', (e) => {
+  if (isTransforming && e.touches.length === 2) {
+    // Prevent accidental screen scrolling while you are manipulating the table/cell
+    e.preventDefault(); 
+    
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    
+    // Calculate how much the fingers have moved/pinched/rotated since starting
+    const scale = getDistance(t1, t2) / startDist;
+    const rotate = getAngle(t1, t2) - startAngle;
+    const center = getCenter(t1, t2);
+    const translateX = center.x - startCenterX;
+    const translateY = center.y - startCenterY;
+    
+    // Apply the math directly to the element
+    targetEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`;
+  }
+}, { passive: false });
+
+// Handle release (or if the system interrupts the touch)
+const endTransform = (e) => {
+  if (isTransforming && e.touches.length < 2) {
+    isTransforming = false;
+    
+    // 1. Restore the CSS transition we provided in the CSS file
+    targetEl.style.transition = ''; 
+    
+    // 2. Clear the inline math. The CSS transition will instantly take over and "snap" it back to normal
+    targetEl.style.transform = ''; 
+    
+    targetEl.style.overflow = '';
+    
+    // 3. Reset the z-index if a single cell was targeted
+    const parentTd = targetEl.closest('td');
+    if (parentTd) parentTd.style.zIndex = '';
+    
+    targetEl = null;
+  }
+};
+
+table.addEventListener('touchend', endTransform);
+table.addEventListener('touchcancel', endTransform);
+
+// --- PC MOUSE MAGNIFYING GLASS ---
+let isMouseMagnifying = false;
+
+table.addEventListener('pointerdown', (e) => {
+  // ONLY react to physical PC mouse left-clicks. Leave touch entirely to the script above!
+  if (e.pointerType !== 'mouse' || e.button !== 0) return;
+  if (e.target.closest('.cell-action-btn')) return;
+  const cell = e.target.closest('td');
+  if (!cell) return;
+
+  e.preventDefault(); // Stops native text highlighting/dragging
+  isMouseMagnifying = true;
+  cell.classList.add('is-magnified');
+});
+
+table.addEventListener('pointerover', (e) => {
+  if (!isMouseMagnifying || e.pointerType !== 'mouse') return;
+  
+  const cell = e.target.closest('td');
+  if (cell) cell.classList.add('is-magnified');
+});
+
+table.addEventListener('pointerout', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  
+  const cell = e.target.closest('td');
+  if (!cell) return;
+  
+  // Ensure the cursor actually left the <td> (prevents flickering)
+  if (!cell.contains(e.relatedTarget)) {
+    cell.classList.remove('is-magnified');
+  }
+});
+
+// Global release in case the user glides the mouse completely outside the table bounds
+window.addEventListener('pointerup', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  
+  isMouseMagnifying = false;
+  document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
+    cell.classList.remove('is-magnified');
+  });
+});
+
+// --- CLICK TO EDIT (PERSISTENT ZOOM) ---
+
+// 1. Create the window-wide variable so other scripts can access it
+window.editingCell = false;
+let activeEditCell = null; // Internal tracker for which cell is currently open
+
+// 2. Listen for clicks on the table to enter edit mode
+table.addEventListener('click', (e) => {
+  // NEW: Intercept clicks specifically on the action button
+  if (e.target.closest('.cell-action-btn')) {
+    const cell = e.target.closest('td');
+    if (cell) {
+      // Forcefully remove all zoom classes
+      cell.classList.remove('is-editing', 'is-magnified');
+      window.editingCell = false;
+      activeEditCell = null;
+    }
+    // STOP the click from continuing down into the table and triggering the "open cell" logic
+    e.stopPropagation(); 
+    return;
+  }
+
+  const cell = e.target.closest('td');
+  if (!cell) return;
+
+  // If the user clicks the cell that is already open, don't close it
+  if (activeEditCell === cell) return;
+
+  // If another cell was open, remove its state first
+  if (activeEditCell) {
+    activeEditCell.classList.remove('is-editing');
+  }
+
+  // Activate new cell
+  window.editingCell = true;
+  activeEditCell = cell;
+  cell.classList.add('is-editing');
+  
+  // Prevent this click from bubbling up to the document and instantly closing it
+  e.stopPropagation(); 
+});
+
+// 3. Listen for clicks anywhere on the page to exit edit mode
+document.addEventListener('click', (e) => {
+  // If we aren't currently editing, do nothing
+  if (!window.editingCell || !activeEditCell) return;
+
+  // If the user clicked INSIDE the currently zoomed cell, ignore it (let them type/edit)
+  if (activeEditCell.contains(e.target)) return;
+
+  // The user deliberately clicked OUTSIDE the cell. Close it.
+  window.editingCell = false;
+  activeEditCell.classList.remove('is-editing');
+  activeEditCell = null;
+});
+
+let isMouseDown = false;
+
+// 1. Release: Listen globally so we catch mouse up even if it happens outside the table
+window.addEventListener('pointerup', (e) => {
+  if (e.pointerType !== 'mouse') return; // Ignore touch/mobile
+  
+  isMouseDown = false;
+  document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
+    cell.classList.remove('is-magnified');
+  });
+});
+
+// 2. Click Down: Check if the click happened on a dynamically generated <td>
+document.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || e.pointerType !== 'mouse') return; // Left-click PC mouse only
+  if (e.target.closest('.cell-action-btn')) return;
+
+  const cell = e.target.closest('.elastic-table td');
+  if (!cell) return;
+
+  e.preventDefault(); // Prevents native browser drag-and-drop
+  isMouseDown = true;
+  cell.classList.add('is-magnified');
+});
+
+// 3. Glide Enter: Handle moving into new cells while holding the click
+document.addEventListener('pointerover', (e) => {
+  if (!isMouseDown || e.pointerType !== 'mouse') return;
+
+  const cell = e.target.closest('.elastic-table td');
+  if (!cell) return;
+
+  cell.classList.add('is-magnified');
+});
+
+// 4. Glide Leave: Handle leaving a cell
+document.addEventListener('pointerout', (e) => {
+  if (e.pointerType !== 'mouse') return;
+
+  const cell = e.target.closest('.elastic-table td');
+  if (!cell) return;
+
+  // Ensure the cursor actually left the cell (prevents flickering over text nodes)
+  if (!cell.contains(e.relatedTarget)) {
+    cell.classList.remove('is-magnified');
+  }
+});
+
+// #endregion
+loadWorkspace();

@@ -3,11 +3,12 @@ let lastThrottleTime = 0;
 
 // 1. Function to check if 15 minutes have passed
 function verifySession() {
-  const userId = localStorage.getItem('prismal_user_id');
+  // Grab the JWT token instead of the old user ID
+  const token = localStorage.getItem('prismal_jwt');
   const lastActivity = localStorage.getItem('prismal_last_activity');
 
   // If not logged in, send to login page
-  if (!userId) {
+  if (!token) {
     window.location.replace('/login.html');
     return;
   }
@@ -17,7 +18,11 @@ function verifySession() {
 
     // If 15+ minutes have passed since last activity
     if (timeElapsed >= TIMEOUT_DURATION) {
-      localStorage.clear(); // Clear session
+      // Clear the specific JWT session keys rather than wiping all of localStorage
+      localStorage.removeItem('prismal_jwt');
+      localStorage.removeItem('prismal_username');
+      localStorage.removeItem('prismal_last_activity');
+      
       window.location.replace('/login.html'); // Redirect to login
     }
   }

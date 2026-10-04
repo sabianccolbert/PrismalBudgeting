@@ -1,67 +1,56 @@
 <!DOCTYPE html>
 <html lang="en" class="noJs">
   <head>
-    <!-- Preload background to reduce flicker when navigating between pages -->
-    <link rel="preload" as="image" href="/Resources/Background.webp">
-    <!-- Check for updates and load scripts/css -->
     <script src="/Javascript/Boot.js"></script>
-    <!-- No JS fallback -->
-    <noscript>
-      <link rel="stylesheet" href="/stylesheet.css">
-    </noscript>
-    
-    <title>404 Page Not Found</title>
-    <meta name="description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
+    <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="stylesheet" href="/debug.css">
+    <title>Prismal Budget - 404 Not Found</title>
+    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
 
-    <meta property="og:title" content="The I Collection - 404 Page Not Found">
-    <meta property="og:description" content="The audio book set “I Can't Stop Dying” is a psychological horror series with in-depth voice acting and cinematic sound design, with weeks of work carefully crafted into each and every episode.">
-    <meta property="og:image" content="https://stayingoutsidethebox.com/Favicons/og-image.jpg">
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Budget - 404 Not Found">
+    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://stayingoutsidethebox.com">
-    
-    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png?v=20260922" sizes="96x96" />
-    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg?v=20260922" />
-    <link rel="shortcut icon" href="/Favicon/favicon.ico?v=20260922" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png?v=20260922" />
-    <link rel="manifest" href="/Favicon/site.webmanifest?v=20260922" />
-    <meta name="msapplication-TileColor" content="#000000">
-    <meta name="msapplication-TileImage" content="/Favicons/mstile-144x144.png">
-    <link rel="stylesheet" href="/debug.css">
-  </head>
+    <meta property="og:url" content="https://prismalbudget.org">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
 
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+  </head>
   <body>
     <canvas id="constellations"></canvas>
-
     <div id="transitionContainer">
+      
       <header>
-        <h1>404 Page Not Found</h1>
-        <h2>Link Doesn't Exist</h2>
-        <hr>
-
+        <div class="brand">
+          <img src="/Resources/Prismal.png" alt="Prismal Logo" class="brand-icon">
+          <h2 class="logo">404 Not Found</h2>
+        </div>
+        
         <nav class="navButtons">
           <a href="/">
             <img src="/Resources/Home.png" alt="Home">
           </a>
         </nav>
-
-        <hr>
       </header>
+      <hr>
 <footer>
-    <p>I Can’t Stop Dying™ and The I Collection™ are trademarks of Staying Outside The Box™ LLC</p>
-    <p>
-      Contact: 
-      <a href="mailto:admin@stayingoutsidethebox.com">
-        Admin@&#8203;StayingOutsideTheBox&#8203;.com
-      </a>
-    </p>
-<a href="/privacy and terms.html">
-      Privacy Policy &amp; Terms of Use
-    </a>
     <div id="debugBox">
                   <!-- Star controller -->
           <input type="text" id="controller" placeholder="Controller">
