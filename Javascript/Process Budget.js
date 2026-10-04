@@ -907,28 +907,26 @@ window.updateGridCell = async function(gridName, row, col, textValue) {
 
 const table = document.querySelector('.elastic-table');
 
+// 1. TOUCH: TWO-FINGER PINCH & DRAG
+
 let isTransforming = false;
 let targetEl = null;
 let startDist = 0, startAngle = 0;
 let startCenterX = 0, startCenterY = 0;
 
-// Math Helpers
 const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
 const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
 
 table.addEventListener('touchstart', (e) => {
-  // Only activate on exactly two fingers
   if (e.touches.length === 2) {
     isTransforming = true;
     
     const t1 = e.touches[0];
     const t2 = e.touches[1];
-    
     const cell1 = t1.target.closest('td');
     const cell2 = t2.target.closest('td');
     
-    // Logic: If both fingers are in the same cell, stretch the cell. Otherwise, stretch the table.
     if (cell1 && cell1 === cell2) {
       targetEl = cell1.querySelector('.cell-content');
       cell1.style.zIndex = '20';
@@ -937,55 +935,40 @@ table.addEventListener('touchstart', (e) => {
       targetEl = table;
     }
 
-    // Record the starting positions
     startDist = getDistance(t1, t2);
     startAngle = getAngle(t1, t2);
     const center = getCenter(t1, t2);
     startCenterX = center.x;
     startCenterY = center.y;
-
-    // Remove CSS transition temporarily so the element tracks 1:1 with your fingers instantly
     targetEl.style.transition = 'none'; 
   }
 }, { passive: false });
 
 table.addEventListener('touchmove', (e) => {
   if (isTransforming && e.touches.length === 2) {
-    // Prevent accidental screen scrolling while you are manipulating the table/cell
     e.preventDefault(); 
-    
     const t1 = e.touches[0];
     const t2 = e.touches[1];
     
-    // Calculate how much the fingers have moved/pinched/rotated since starting
     const scale = getDistance(t1, t2) / startDist;
     const rotate = getAngle(t1, t2) - startAngle;
     const center = getCenter(t1, t2);
     const translateX = center.x - startCenterX;
     const translateY = center.y - startCenterY;
     
-    // Apply the math directly to the element
     targetEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`;
   }
 }, { passive: false });
 
-// Handle release (or if the system interrupts the touch)
 const endTransform = (e) => {
   if (isTransforming && e.touches.length < 2) {
     isTransforming = false;
-    
-    // 1. Restore the CSS transition we provided in the CSS file
     targetEl.style.transition = ''; 
-    
-    // 2. Clear the inline math. The CSS transition will instantly take over and "snap" it back to normal
     targetEl.style.transform = ''; 
-    
     targetEl.style.overflow = '';
     
-    // 3. Reset the z-index if a single cell was targeted
     const parentTd = targetEl.closest('td');
     if (parentTd) parentTd.style.zIndex = '';
-    
     targetEl = null;
   }
 };
@@ -993,153 +976,91 @@ const endTransform = (e) => {
 table.addEventListener('touchend', endTransform);
 table.addEventListener('touchcancel', endTransform);
 
-// --- PC MOUSE MAGNIFYING GLASS ---
-let isMouseMagnifying = false;
+// 2. CLICK TO EDIT (PERSISTENT ZOOM)
 
-table.addEventListener('pointerdown', (e) => {
-  // ONLY react to physical PC mouse left-clicks. Leave touch entirely to the script above!
-  if (e.pointerType !== 'mouse' || e.button !== 0) return;
-  if (e.target.closest('.cell-action-btn')) return;
-  const cell = e.target.closest('td');
-  if (!cell) return;
-
-  e.preventDefault(); // Stops native text highlighting/dragging
-  isMouseMagnifying = true;
-  cell.classList.add('is-magnified');
-});
-
-table.addEventListener('pointerover', (e) => {
-  if (!isMouseMagnifying || e.pointerType !== 'mouse') return;
-  
-  const cell = e.target.closest('td');
-  if (cell) cell.classList.add('is-magnified');
-});
-
-table.addEventListener('pointerout', (e) => {
-  if (e.pointerType !== 'mouse') return;
-  
-  const cell = e.target.closest('td');
-  if (!cell) return;
-  
-  // Ensure the cursor actually left the <td> (prevents flickering)
-  if (!cell.contains(e.relatedTarget)) {
-    cell.classList.remove('is-magnified');
-  }
-});
-
-// Global release in case the user glides the mouse completely outside the table bounds
-window.addEventListener('pointerup', (e) => {
-  if (e.pointerType !== 'mouse') return;
-  
-  isMouseMagnifying = false;
-  document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
-    cell.classList.remove('is-magnified');
-  });
-});
-
-// --- CLICK TO EDIT (PERSISTENT ZOOM) ---
-
-// 1. Create the window-wide variable so other scripts can access it
 window.editingCell = false;
-let activeEditCell = null; // Internal tracker for which cell is currently open
+let activeEditCell = null; 
 
-// 2. Listen for clicks on the table to enter edit mode
 table.addEventListener('click', (e) => {
-  // NEW: Intercept clicks specifically on the action button
   if (e.target.closest('.cell-action-btn')) {
     const cell = e.target.closest('td');
     if (cell) {
-      // Forcefully remove all zoom classes
       cell.classList.remove('is-editing', 'is-magnified');
       window.editingCell = false;
       activeEditCell = null;
     }
-    // STOP the click from continuing down into the table and triggering the "open cell" logic
     e.stopPropagation(); 
     return;
   }
 
   const cell = e.target.closest('td');
   if (!cell) return;
-
-  // If the user clicks the cell that is already open, don't close it
   if (activeEditCell === cell) return;
+  if (activeEditCell) activeEditCell.classList.remove('is-editing');
 
-  // If another cell was open, remove its state first
-  if (activeEditCell) {
-    activeEditCell.classList.remove('is-editing');
-  }
-
-  // Activate new cell
   window.editingCell = true;
   activeEditCell = cell;
   cell.classList.add('is-editing');
-  
-  // Prevent this click from bubbling up to the document and instantly closing it
   e.stopPropagation(); 
 });
 
-// 3. Listen for clicks anywhere on the page to exit edit mode
 document.addEventListener('click', (e) => {
-  // If we aren't currently editing, do nothing
   if (!window.editingCell || !activeEditCell) return;
-
-  // If the user clicked INSIDE the currently zoomed cell, ignore it (let them type/edit)
   if (activeEditCell.contains(e.target)) return;
 
-  // The user deliberately clicked OUTSIDE the cell. Close it.
   window.editingCell = false;
   activeEditCell.classList.remove('is-editing');
   activeEditCell = null;
 });
 
-let isMouseDown = false;
+// 3. PC MOUSE GLIDE & MAGNIFYING GLASS
 
-// 1. Release: Listen globally so we catch mouse up even if it happens outside the table
+let isMouseDown = false;
+let magnifyDelay = null;
+
 window.addEventListener('pointerup', (e) => {
-  if (e.pointerType !== 'mouse') return; // Ignore touch/mobile
+  if (e.pointerType !== 'mouse') return;
   
   isMouseDown = false;
+  clearTimeout(magnifyDelay); // Clear timer on release
+
   document.querySelectorAll('.elastic-table td.is-magnified').forEach(cell => {
     cell.classList.remove('is-magnified');
   });
 });
 
-// 2. Click Down: Check if the click happened on a dynamically generated <td>
 document.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || e.pointerType !== 'mouse') return; // Left-click PC mouse only
+  if (e.button !== 0 || e.pointerType !== 'mouse') return; 
   if (e.target.closest('.cell-action-btn')) return;
 
   const cell = e.target.closest('.elastic-table td');
   if (!cell) return;
 
-  e.preventDefault(); // Prevents native browser drag-and-drop
+  e.preventDefault(); 
   isMouseDown = true;
-  cell.classList.add('is-magnified');
+
+  // Delay of 150ms prevents jittering on a fast click
+  magnifyDelay = setTimeout(() => {
+    if (isMouseDown) cell.classList.add('is-magnified');
+  }, 150);
 });
 
-// 3. Glide Enter: Handle moving into new cells while holding the click
 document.addEventListener('pointerover', (e) => {
   if (!isMouseDown || e.pointerType !== 'mouse') return;
-
   const cell = e.target.closest('.elastic-table td');
   if (!cell) return;
-
   cell.classList.add('is-magnified');
 });
 
-// 4. Glide Leave: Handle leaving a cell
 document.addEventListener('pointerout', (e) => {
   if (e.pointerType !== 'mouse') return;
-
   const cell = e.target.closest('.elastic-table td');
   if (!cell) return;
-
-  // Ensure the cursor actually left the cell (prevents flickering over text nodes)
+  
   if (!cell.contains(e.relatedTarget)) {
     cell.classList.remove('is-magnified');
   }
 });
-
 // #endregion
+
 loadWorkspace();
