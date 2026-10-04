@@ -83,7 +83,7 @@
   /* ===============================
    *  4) Inject versioned CSS
    * =============================== */
-  document.write(`<link rel="stylesheet" href="${v("/stylesheet.css")}">`);
+  //dont need, javascript is required so inline css links are used document.write(`<link rel="stylesheet" href="${v("/stylesheet.css")}">`);
 
   /* ===============================
    *  5) Append page scripts at END

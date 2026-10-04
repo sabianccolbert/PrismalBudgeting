@@ -221,7 +221,7 @@ async function performDailyUpdate() {
             let lineAmt = parseAmount(parts[1]);
             let lineType = parts[0];
             let lineDate = gridDates[r][c];
-            // processEquity(add, originalTitle, lineDate, lineAmt, lineType);
+            processEquity(add, originalTitle, lineDate, lineAmt, lineType);
           }
           
           if (parts[0].includes("✔️")) {
@@ -325,6 +325,159 @@ async function performDailyUpdate() {
   }
 }
 
+async function processEquity(add, title, date, amount, type) {
+  console.log("Processing equity...");
+  
+  // 1. Extract Category BEFORE modifying title with type/sprite
+  let category = isLLC && title.includes(":") ? title.split(":")[0].trim() : null;
+  if (!category) return false;
+
+  if (type === "") type = "❗️";
+    
+  // Determine incoming special type for accurate sprite matching
+  let incomingSpecial = type === "" ? null : getSpecialType(type); 
+  
+  // 2. Format title for table entry
+  let formattedTitle = type.trim() + " " + title;
+  let year = date.getFullYear();
+  let activeTabTitle = "C " + category;
+  
+  if (category === "C Revenue" || category === "Revenue") {
+    activeTabTitle = "C Revenue " + year;
+  } else if (category === "C Expenses" || category === "Expenses") {
+    activeTabTitle = "C Expenses " + year;
+  }
+  
+  // Retrieve the 2D array table from your workspace data map
+  let targetTable = getTableData(activeTabTitle);
+  if (!targetTable) {
+    console.log("Equity table not found: " + activeTabTitle + "; Category: " + category);
+    return false;
+  }
+
+  function editLLC(categ) {
+    let c = categ.toLowerCase().trim().split(":")[0];
+    if (c === "eagle") {
+      eagleEdited = true;
+    }
+    else if (c === "sabian") {
+      sabianEdited = true;
+    }
+    else if (c === "llc assets") {
+      assetsEdited = true;
+    }
+    else if (c === "llc asset purchases") {
+      purchasesEdited = true;
+    }
+    else if (c === "revenue") {
+      revenueEdited = true;
+    }
+    else if (c === "expenses") {
+      expensesEdited = true;
+    }
+  }
+
+  // Row 4 in Sheets corresponds to index 3 in a 0-indexed JS Array
+  const DATA_START_INDEX = 3;
+
+  if (add) {
+    let insertIndex = DATA_START_INDEX;
+    let targetTime = date.getTime();
+    let found = false;
+    let exists = false;
+    let matchedOldSprite = ""; // Saves the old sprite for combining later
+
+    if (targetTable.length >= 4) {
+      findLoop:
+      for (let i = DATA_START_INDEX; i < targetTable.length; i++) {
+        let rowDate = new Date(targetTable[i][0]);
+        let rowTitle = String(targetTable[i][2] || "");
+        
+        // Extract the row's existing sprite and its special type
+        let oldSprite = rowTitle.split(" ")[0]; 
+        let existingSpecial = getSpecialType(oldSprite);
+
+        // Check that the date, the string, AND the special sprite types match
+        if (rowDate.getTime() === targetTime && 
+            cleanString(rowTitle) === cleanString(formattedTitle) && 
+            (!incomingSpecial || existingSpecial === incomingSpecial)) {
+          insertIndex = i;
+          exists = true;
+          matchedOldSprite = oldSprite;
+          break findLoop;
+        }
+
+        // Maintain chronological order (newest dates near the top)
+        if (!isNaN(rowDate.getTime()) && rowDate.getTime() < targetTime) {
+          insertIndex = i;
+          found = true;
+          break findLoop;
+        }
+      }
+
+      if (!found && !exists) {
+        insertIndex = targetTable.length;
+      }
+    }
+
+    if (exists) {
+      // Update cell 2 (Amount) and cell 3 (Title) directly in array
+      let oldAmt = parseAmount(targetTable[insertIndex][1]);
+      let finalAmt = oldAmt + amount;
+      targetTable[insertIndex][1] = formatMoney(finalAmt);
+            
+      // Combine sprites to preserve checkmarks/statuses
+      let combinedSprite = combineSprites(matchedOldSprite, type);
+      let finalTitle = combinedSprite.trim() + " " + title;
+      targetTable[insertIndex][2] = finalTitle; 
+            
+    } else {
+      // Insert new row directly into array at insertIndex
+      let newRow = [date, formatMoney(amount), formattedTitle];
+      targetTable.splice(insertIndex, 0, newRow);
+    }
+
+  } else {
+    // Handling Deletion
+    if (targetTable.length < 4) {
+      editLLC(category);
+      equityYears.add(year);
+      return true;
+    }
+
+    let indexToDelete = -1;
+    let targetTime = date.getTime();
+    
+    for (let i = DATA_START_INDEX; i < targetTable.length; i++) {
+      let rowDate = new Date(targetTable[i][0]);
+      let rowTitle = String(targetTable[i][2] || "").trim();
+      let rowAmt = parseAmount(targetTable[i][1]);
+      
+      let oldSprite = rowTitle.split(" ")[0];
+      let existingSpecial = getSpecialType(oldSprite);
+
+      if (!isNaN(rowDate.getTime()) && rowDate.getTime() === targetTime) {
+        if (cleanString(rowTitle) === cleanString(formattedTitle) && 
+           (!incomingSpecial || existingSpecial === incomingSpecial)) {
+          if (Math.abs(rowAmt) === Math.abs(amount)) {
+            indexToDelete = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (indexToDelete !== -1) {
+      targetTable.splice(indexToDelete, 1);
+    }
+  }
+
+  editLLC(category);
+  equityYears.add(year);
+  return true;
+}
+
+
 async function saveChanges() {
   console.log("Saving data changes...");
   // Grab the JWT token instead of the user ID
@@ -382,8 +535,16 @@ async function saveChanges() {
                           ? calendarData[r][c] 
                           : "";
           
-          // Use innerText instead of textContent so your \n line breaks format correctly!
+          // 1. Set the cell text content
           cell.innerText = content; 
+
+          // 2. Re-attach the action button so it doesn't get erased
+          const btn = document.createElement('button');
+          btn.className = 'cell-action-btn';
+          btn.setAttribute('contenteditable', 'false');
+          btn.textContent = 'v';
+          
+          cell.appendChild(btn);
         });
       }
     }
@@ -838,7 +999,7 @@ let isMouseMagnifying = false;
 table.addEventListener('pointerdown', (e) => {
   // ONLY react to physical PC mouse left-clicks. Leave touch entirely to the script above!
   if (e.pointerType !== 'mouse' || e.button !== 0) return;
-  
+  if (e.target.closest('.cell-action-btn')) return;
   const cell = e.target.closest('td');
   if (!cell) return;
 
@@ -884,6 +1045,20 @@ let activeEditCell = null; // Internal tracker for which cell is currently open
 
 // 2. Listen for clicks on the table to enter edit mode
 table.addEventListener('click', (e) => {
+  // NEW: Intercept clicks specifically on the action button
+  if (e.target.closest('.cell-action-btn')) {
+    const cell = e.target.closest('td');
+    if (cell) {
+      // Forcefully remove all zoom classes
+      cell.classList.remove('is-editing', 'is-magnified');
+      window.editingCell = false;
+      activeEditCell = null;
+    }
+    // STOP the click from continuing down into the table and triggering the "open cell" logic
+    e.stopPropagation(); 
+    return;
+  }
+
   const cell = e.target.closest('td');
   if (!cell) return;
 
@@ -933,6 +1108,7 @@ window.addEventListener('pointerup', (e) => {
 // 2. Click Down: Check if the click happened on a dynamically generated <td>
 document.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || e.pointerType !== 'mouse') return; // Left-click PC mouse only
+  if (e.target.closest('.cell-action-btn')) return;
 
   const cell = e.target.closest('.elastic-table td');
   if (!cell) return;
