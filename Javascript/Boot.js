@@ -107,11 +107,14 @@
   function loadPageScripts(){
     GLOBAL_SCRIPTS.forEach(appendScript);
 
-    if (PAGE === "notfound") {
-      appendScript("/Javascript/Debug.js");
-    }
     if (PAGE === "login") {
       appendScript("/Javascript/Login.js");
+    }
+    else{
+      appendScript("/Javascript/Session.js");
+    }
+    if (PAGE === "notfound") {
+      appendScript("/Javascript/Debug.js");
     }
     if (PAGE === "home") {
       appendScript("/Javascript/Process Budget.js");

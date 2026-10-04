@@ -146,18 +146,30 @@ async function loadWorkspace() {
     
     const data = await response.json();
 
-    // Use the new normalizer to guarantee a perfect 2D array structure
-    calendarData   = normalizeApiGrid(data.calendar, calendarRows, calendarCols);
-    recurringData  = normalizeApiGrid(data.recurring, recurringRows, recurringCols);
-    trackerData    = normalizeApiGrid(data.tracker, trackerRows, trackerCols); 
-    futureData     = normalizeApiGrid(data.future, futureRows, futureCols);
-    historyData    = normalizeApiGrid(data.history, historyRows, historyCols);
-    searchData     = normalizeApiGrid(data.search, searchRows, searchCols);
-    calculatorData = normalizeApiGrid(data.calculator, calcRows, calcCols);
+    // NEW: Helper function to safely extract and parse the database content string
+    function parseDB(dbResult) {
+      if (dbResult && dbResult.length > 0 && dbResult[0].content) {
+        try {
+          return JSON.parse(dbResult[0].content);
+        } catch (e) {
+          console.error("JSON parse error on DB content:", e);
+          return null;
+        }
+      }
+      return null; 
+    }
+
+    // Safely extract and parse the strings back into 2D arrays before normalizing
+    calendarData   = normalizeApiGrid(parseDB(data.calendar), calendarRows, calendarCols);
+    recurringData  = normalizeApiGrid(parseDB(data.recurring), recurringRows, recurringCols);
+    trackerData    = normalizeApiGrid(parseDB(data.tracker), trackerRows, trackerCols); 
+    futureData     = normalizeApiGrid(parseDB(data.future), futureRows, futureCols);
+    historyData    = normalizeApiGrid(parseDB(data.history), historyRows, historyCols);
+    searchData     = normalizeApiGrid(parseDB(data.search), searchRows, searchCols);
+    calculatorData = normalizeApiGrid(parseDB(data.calculator), calcRows, calcCols);
     
     // Use the date from the database, fallback to yesterday if new account
     lastDailyUpdate = createSafeMidnight(data.last_processed_date || yesterday);
-    
     // Perform routine maintenance
     if (isDailyUpdate || lastDailyUpdate.getTime() < today.getTime()) {
       await performDailyUpdate();
