@@ -1,0 +1,4 @@
+Placeholder for Help.png: the Help button at the bottom of Home, Other Accounts, Recurring Entries,
+Tracker, History, and Paycheck Calculator.
+It shows up to about 75 pixels tall, so a transparent PNG around 256 pixels tall is plenty.
+Replace this file with Help.png.

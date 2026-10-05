@@ -59,6 +59,32 @@
         <div id="panelSlot"></div>
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <div id="dataView"></div>
+
+        <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Paycheck Calculator Help</h3>
+          <p>The Paycheck Calculator figures out a paycheck's take home pay. Setting it up takes some work the first time, but after that it's fast: the boxes keep your last numbers, so next time you only change your hours and tap Calculate.</p>
+
+          <h4>Setting It Up</h4>
+          <ul>
+            <li>Get your last two or three paychecks.</li>
+            <li>Anything that's the same on every paycheck is a fixed amount: put it in a box marked $.</li>
+            <li>Anything that changes along with your pay is a percentage: put it in a box marked %. To find it, divide the amount by the pay it comes out of (see How The Math Works below), then multiply by 100.</li>
+            <li>Tap Calculate, then compare the results with a real paycheck. How It Adds Up shows each step, so you can see which number is off.</li>
+            <li>A blank box counts as 0.</li>
+            <li>Tip: you can send an AI assistant a few of your paychecks and a screenshot of this page, and ask it what to put in each box. Cover up personal details, like your Social Security number, first.</li>
+          </ul>
+
+          <h4>How The Math Works</h4>
+          <ul>
+            <li><strong>Gross</strong>: regular hours × base pay, plus overtime and premium hours (paid at base pay × their multipliers), plus taxable allowances.</li>
+            <li>Pre-tax medical, pre-tax retirement, and post-tax deduction percentages come out of gross.</li>
+            <li><strong>FICA</strong> comes out of gross minus pre-tax medical.</li>
+            <li><strong>Federal</strong> and <strong>state</strong> taxes come out of gross minus pre-tax medical and pre-tax retirement.</li>
+            <li><strong>Take Home</strong>: gross, minus pre-tax deductions, taxes, and post-tax deductions, plus non-taxable reimbursements.</li>
+          </ul>
+        </section>
       </main>
     </div>
   </body>

@@ -38,7 +38,7 @@
       <header>
       <div class="stacked">
         <h1>Privacy Policy & Terms of Use</h1>
-        <h2>Effective Date: January 1, 2026</h2>
+        <h2>Effective Date: October 5, 2026</h2>
       </div>
       <nav class="navButtons">
         <a id="normalBack" href="back">
@@ -57,7 +57,7 @@
       <h3>Privacy Policy</h3>
     
       <p>
-  <strong>Effective Date: September 22, 2026</strong><br><br>
+  <strong>Effective Date: October 5, 2026</strong><br><br>
   This Privacy Policy explains how Sabian Colbert (“we”, “us”, “our”) collects, uses, and protects your information when you use the Prismal Budget website and services (the “Site”). If you do not agree with this Policy, please do not use the Site.
 </p>
 
@@ -67,17 +67,22 @@
 
 <p><strong>A) Information You Provide directly</strong></p>
 <p>
-  When you create an account, we collect the credentials you provide. We store your budget and finance data, as well as your passwords (which are securely hashed), in our Cloudflare SQL database. 
+  When you create an account, we collect the username, password, and email address you provide, and we record when you agreed to this Privacy Policy and the Terms of Use. We store your account details, your budget and finance data (such as your entries, recurring payments, history, and change logs), and your password (which is securely hashed) in our Cloudflare SQL database. We use your email address to send you account emails, such as password reset links.
 </p>
 
-<p><strong>B) Connected Financial Data (via Plaid)</strong></p>
+<p><strong>B) Reminders, Notifications & Quick Entry</strong></p>
+<p>
+  If you turn on daily reminders, we store your reminder time, your time zone, and which days your budget needs a reminder. If you turn on push notifications, we store the push address your browser gives us for that device (provided by your browser's push service, such as Apple, Google, or Mozilla). If you turn on a calendar link, we store the private code in that link. If you set up a Quick Entry home screen icon, we store a scrambled (hashed) copy of its key, along with the entries you make with it until they're added to your budget.
+</p>
+
+<p><strong>C) Connected Financial Data (via Plaid)</strong></p>
 <p>
   To help you track your finances, we use Plaid Inc. (“Plaid”) to connect your Prismal Budget account with your bank accounts. By using our service, you grant us and Plaid the right, power, and authority to act on your behalf to access and transmit your personal and financial information from the relevant financial institution. Your financial data transmitted through Plaid is also subject to Plaid’s Privacy Policy, available at <a href="https://plaid.com/legal" target="_blank">plaid.com/legal</a>.
 </p>
 
-<p><strong>C) Analytics & Advertising Data</strong></p>
+<p><strong>D) Analytics & Advertising Data</strong></p>
 <p>
-  We use third-party services, including Google AdSense, to monetize the Site. These services may collect general device and browser information, approximate location (derived from IP address), and site usage events. 
+  We use Google Analytics to understand how the Site is used, and third-party services, including Google AdSense, to monetize the Site. These services may collect general device and browser information, approximate location (derived from IP address), and site usage events.
 </p>
 
 <hr class="divider">
@@ -99,6 +104,7 @@
 <p>
   • operate and improve the Prismal Budget platform<br>
   • securely sync and display your personal budget data<br>
+  • send account emails (such as password reset links) and the reminders you turn on<br>
   • troubleshoot issues, prevent fraud, and maintain security<br>
   • serve relevant advertisements to support the Site
 </p>
@@ -110,21 +116,23 @@
 
 <h4>4) Sharing & Third Parties</h4>
 <p>
-  We share information with service providers only as needed to operate the Site. This includes our database infrastructure provider (Cloudflare), our financial data connector (Plaid), and our advertising partner (Google AdSense). These third parties process data according to their own terms and privacy policies.
+  We share information with service providers only as needed to operate the Site. This includes our website host (GitHub Pages), our server and database infrastructure provider (Cloudflare), our email delivery provider (Resend), which receives your email address and the contents of the emails we send you, your browser's push notification service (such as Apple, Google, or Mozilla) if you turn on push notifications, our analytics provider (Google Analytics), our financial data connector (Plaid), and our advertising partner (Google AdSense). These third parties process data according to their own terms and privacy policies.
 </p>
 
 <hr class="divider">
 
 <h4>5) Security & Data Retention</h4>
 <p>
-  Your financial data and account credentials are saved using modern cloud infrastructure (Cloudflare). Passwords are cryptographically hashed and are never stored in plain text. While we use reasonable administrative and technical safeguards to protect your information, no method of transmission or storage is 100% secure. We retain your data as long as your account is active or as needed for legitimate business purposes.
+  Your financial data and account credentials are saved using modern cloud infrastructure (Cloudflare). Passwords are cryptographically hashed and are never stored in plain text. Password reset links work only once and expire after one hour. Like Quick Entry keys, they're stored only in hashed form. Resetting your password signs you out on every device and stops all of your Quick Entry icons from working. While we use reasonable administrative and technical safeguards to protect your information, no method of transmission or storage is 100% secure. We retain your data as long as your account is active or as needed for legitimate business purposes. When you delete your account, we delete it and all of its data from our database right away, though copies may remain in our database provider's backups for up to 30 days.
 </p>
 
 <hr class="divider">
 
 <h4>6) Your Choices</h4>
 <p>
-  • <strong>Account Data:</strong> You may update or delete your budget data by managing your account settings on the Site.<br>
+  • <strong>Account Data:</strong> You may update or delete your budget data on the Site. In Settings, you can change your email address, or delete your account and all of its data at any time.<br>
+  • <strong>Reminders:</strong> You can turn push notifications and the calendar link on or off in Settings.<br>
+  • <strong>Quick Entry:</strong> A Quick Entry icon can only add entries to your budget. It can't see your budget, only the names of your Other Accounts (so you can pick one). To stop all of your Quick Entry icons from working, reset your password.<br>
   • <strong>Advertising:</strong> You can block or delete cookies through your browser settings, or use the opt-out links provided in Section 2.
 </p>
 
@@ -187,7 +195,7 @@
 
           <h4>5) Third-Party Services</h4>
           <p>
-            Our Site relies on third-party integrations (such as Plaid for banking connections). We do not control and are not responsible for the uptime, accuracy, or practices of these third-party services.
+            Our Site relies on third-party integrations (such as Cloudflare for our servers, Resend for account emails, and Plaid for banking connections). We do not control and are not responsible for the uptime, accuracy, or practices of these third-party services.
           </p>
 
           <hr class="divider">

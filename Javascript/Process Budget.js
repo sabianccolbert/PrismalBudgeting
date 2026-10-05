@@ -11,7 +11,7 @@ let futureData = null;
 let historyData = null;
 let searchData = null;
 let calculatorData = null;
-let accountsData = null; // Other Accounts: { "C Savings": [[...]], "C Revenue 2026": [[...]], ... }
+let accountsData = null; // Other Accounts: { version, list: [[...]], equity: {...} } (see normalizeApiAccounts)
 let logsData = null;     // Change Logs (the spreadsheet's "Form Entries" tab), newest first
 
 // Data Sizes
@@ -26,7 +26,8 @@ const TABLE_SHAPES = {
   history:    { cols: 7, minRows: 1 },  // [0] column titles, then one row per week (newest first)
   search:     { cols: 4, minRows: 3 },  // [0]-[2] search summary
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
-  account:    { cols: 3, minRows: 3 },  // Each Other Accounts table: 3 header rows, then [date, amount, title]
+  accounts:   { cols: 3, minRows: 1 },  // Other Accounts: [0] column titles, then [name, start, "default" | ""]
+  account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
   logs:       { cols: 8, minRows: 1 }   // [0] column titles, then [time, duration, action, 4 details, status]
 };
 
@@ -189,9 +190,13 @@ async function loadWorkspace() {
     historyData    = normalizeApiTable(parseDB(data.history, "history"), TABLE_SHAPES.history);
     searchData     = normalizeApiTable(parseDB(data.search, "search"), TABLE_SHAPES.search);
     calculatorData = normalizeApiTable(parseDB(data.calculator, "calculator"), TABLE_SHAPES.calculator);
-    accountsData   = normalizeApiAccounts(parseDB(data.accounts, "accounts"));
+    const storedAccounts = parseDB(data.accounts, "accounts");
+    accountsData   = normalizeApiAccounts(storedAccounts);
     logsData       = normalizeApiTable(parseDB(data.logs, "logs"), TABLE_SHAPES.logs);
     workspaceLoaded = true;
+    // Accounts that were just set up (like Savings in a new budget) are saved right away, so the
+    // Quick Entry page can list them too
+    if (!unsavableTables.has("accounts") && JSON.stringify(accountsData) !== JSON.stringify(storedAccounts)) accountsEdited = true;
 
     // Use the date from the database (yesterday if it's missing). A brand-new account (never
     // processed, empty calendar) starts today instead: there are no missed days to catch up.
@@ -224,6 +229,7 @@ async function loadWorkspace() {
     if (allSaved && pendingProcessedDate) {
       if (await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
     }
+    await applyQuickEntries(data.quick_entries); // Made with the home screen Quick Entry icon since last time
     queueReminderPlanSync();
     return true;
 
@@ -504,10 +510,9 @@ function applyCellBudgetMath(cellText, lastInBank) {
     if (systemEmojis.includes(parts[0])) continue;
     // Hidden entries are on accounts outside the budget: the tracker counts them, In Bank doesn't
     if (parts[0].includes("✖️")) continue;
-    let lineTitle = extractTitle(lines[l]);
     let lineAmt = parseAmount(parts[1]);
     if (parts[0].includes("⭕️")) {
-      moneyMoves += lineTitle === "savings" ? (lineAmt * -1) : lineAmt;
+      moneyMoves += lineAmt;
     } else if (lineAmt < 0) {
       costs += Math.abs(lineAmt);
     } else {
@@ -737,7 +742,8 @@ mirrors the old onFormSubmit flow:
   5. log it to Change Logs, save, and tell the page to re-render ("budget:updated")
 Changes run one at a time (the spreadsheet used a script lock). A change that fails part
 way is rolled back, so half-finished data is never saved.
-Savings keeps the spreadsheet's sign rules for now; it moves to Other Accounts later.
+Other Accounts (like Savings) are changed by Hidden and Transfer entries titled with their names,
+see OTHER ACCOUNTS below.
 */
 
 // Change Logs rows kept. Each table is saved as a single database row (2 MB max), so this is capped.
@@ -746,10 +752,11 @@ const MAX_LOG_ROWS = 1000;
 // Tracker rows that updateTrackerTab fills in itself (their titles and aliases aren't user-edited)
 const TRACKER_AUTO_ROWS = ["gains", "costs", "undefined"];
 
-// Tables the recurring/tracker edit mode can reorder, add sections to, and delete from
+// Tables the edit mode can reorder and delete from (and add sections to, when they have categoryRow)
 const ROW_TABLES = {
   recurring: { name: "Recurring", headerRows: 2, get: () => recurringData, set: (rows) => { recurringData = rows; }, categoryRow: (title) => ["-", title, "", "", "", "-"] },
-  tracker:   { name: "Tracker",   headerRows: 1, get: () => trackerData,   set: (rows) => { trackerData = rows; },   categoryRow: (title) => ["-", title, "", "", "-"] }
+  tracker:   { name: "Tracker",   headerRows: 1, get: () => trackerData,   set: (rows) => { trackerData = rows; },   categoryRow: (title) => ["-", title, "", "", "-"] },
+  accounts:  { name: "Accounts",  headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; } }
 };
 
 // Every saved table: snapshots for rollback, and change detection so only changed tables are saved
@@ -818,7 +825,14 @@ function deleteBudgetRows(tableName, indexes) {
   return runBudgetAction(`🔧 Delete ${ROW_TABLES[tableName].name} Rows`, () => deleteTableRows(tableName, indexes));
 }
 
-// Search bar. query: { aliases, from, to } as typed. Resolves with result.search.
+// New account (index null, from edit mode) or change the tapped one. fields: { name, balance: number | null }
+// (null keeps a changed account's balance where it is; a new account starts at $0.00)
+function saveAccount(fields, index = null) {
+  return runBudgetAction("", () => accountEntry(fields, index));
+}
+
+// Search bar. query: { terms: [{ title, match: "all" | "costs" | "gains" | "category" }], from, to }.
+// Resolves with result.search.
 function searchBudget(query) {
   return runBudgetAction("🔎 Search", () => ({ search: search(query) }));
 }
@@ -826,6 +840,69 @@ function searchBudget(query) {
 // Paycheck Calculator. values: { [input key]: number } for every CALCULATOR_INPUTS key. Resolves with result.paycheck.
 function savePaycheck(values) {
   return runBudgetAction("🧮 Calculator", () => calculator(values));
+}
+
+/* ---------- Quick Entry (the home screen icon's page, quick.html) ---------- */
+// The Quick Entry page can't open the budget (its key can only queue entries), so its entries wait in
+// the API until the budget opens here. Each is added like a New Entry, then leaves the API's queue in
+// the same request that saves the table it landed in (see saveChanges): never lost, never added twice.
+
+// Refraction types by name, as the Quick Entry page sends them
+const QUICK_ENTRY_TYPES = { auto: "", regular: "❗️", hidden: "✖️", transfer: "⭕️" };
+// Queued entry ids to send with the next save of the table each one landed in
+let quickEntryAcks = { calendar: [], history: [], future: [] };
+
+// queue: [{ id, entry: { title, type, amount, date: "YYYY-MM-DD" } }] from the API, oldest first
+async function applyQuickEntries(queue) {
+  if (!Array.isArray(queue) || queue.length === 0) return;
+  let added = 0;
+  const failed = [];
+  for (const quick of queue) {
+    const result = await runBudgetAction("", () => quickEntry(quick));
+    if (result.ok) added++;
+    else failed.push({ quick, message: result.message });
+  }
+  // The toast below says why, so entries that can't be added stop coming back
+  if (failed.length > 0) await budgetApi("/api/quick/dismiss", { ids: failed.map(({ quick }) => quick.id) });
+
+  if (typeof BudgetUI === "undefined") return;
+  const plural = (count) => `${count} quick ${count === 1 ? "entry" : "entries"}`;
+  const messages = [];
+  if (added > 0) messages.push(`Added ${plural(added)} from your home screen icon.`);
+  if (failed.length > 0) {
+    const first = failed[0];
+    messages.push(`Couldn't add ${failed.length === 1 ? "the quick entry" : plural(failed.length) + ", like"} "${first.quick?.entry?.title ?? "Untitled"}": ${first.message}`);
+  }
+  BudgetUI.showToast(messages.join(" "), failed.length > 0);
+}
+
+// One queued entry, added like the calendar's New Entry. Says which table it landed in.
+function quickEntry(quick) {
+  const entry = quick && quick.entry;
+  const date = entry ? createSafeMidnight(entry.date, true) : new Date("invalid");
+  if (!entry || typeof entry.amount !== "number" || isNaN(date.getTime())) throw new BudgetInputError("It couldn't be read.");
+  const table = date < gridStartDate ? "history" : (date > gridEndDate ? "future" : "calendar");
+  if (table === "history" && !historyHasDay(date)) {
+    throw new BudgetInputError(`${formatToMMDDYYYY(date)} is before your budget's History starts.`);
+  }
+  unique({
+    title: entry.title,
+    sprite: Object.prototype.hasOwnProperty.call(QUICK_ENTRY_TYPES, entry.type) ? QUICK_ENTRY_TYPES[entry.type] : "",
+    action: entry.amount > 0 ? "add" : "subtract",
+    amount: String(Math.abs(entry.amount)),
+    date
+  });
+  formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
+  return { quickEntry: { id: quick.id, table } };
+}
+
+// Does History have a cell for this day? (an entry for an older day would have nowhere to go)
+function historyHasDay(date) {
+  const target = formatToMMDDYYYY(date);
+  return historyData.slice(1).some(row => row.some(cell => {
+    const header = String(cell ?? "").split("\n")[0].trim();
+    return header !== "" && (header === target || createSafeMidnight(header, true).getTime() === date.getTime());
+  }));
 }
 
 /* ---------- Running a change ---------- */
@@ -869,6 +946,11 @@ async function processBudgetAction(logType, change) {
   }
 
   markChangedTables(snapshot);
+  // A quick entry leaves the API's queue in the same request that saves the table it landed in
+  if (result.quickEntry) {
+    BUDGET_TABLES[result.quickEntry.table].markEdited();
+    quickEntryAcks[result.quickEntry.table].push(result.quickEntry.id);
+  }
   const saved = await saveChanges();
   notifyBudgetChanged();
   queueReminderPlanSync();
@@ -995,10 +1077,6 @@ function unique(entry) {
   let modifier = String(entry.sprite || "").trim();
   let sprite = modifier;
   let explicitSpecial = sprite !== "" ? getSpecialType(sprite) : null;
-
-  // Savings: spreadsheet rules until it moves to Other Accounts
-  if (action !== "delete") checkSavingsRule(title, explicitSpecial);
-  if (!isLLC && cleanString(title) === "savings") amt *= -1;
 
   formEntryRow[3] = (sprite || "❗️") + " " + title;
 
@@ -1134,15 +1212,6 @@ function unique(entry) {
   let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : formatMoney(rawAmtString);
   formEntryRow[6] = capitalize(rawAction) + ": " + formEntrySuffix;
   return {};
-}
-
-// Savings keeps the spreadsheet's rules until it moves to Other Accounts: its amount is counted
-// from the savings side, so it has to be a Hidden or Transfer entry (ending one is always allowed)
-function checkSavingsRule(title, special, endDate = null) {
-  if (isLLC || cleanString(title) !== "savings") return;
-  if (special === "✖️" || special === "⭕️") return;
-  if (endDate instanceof Date && endDate.getTime() < today.getTime()) return;
-  throw new BudgetInputError("Savings entries need to be Hidden or Transfer. Transfer changes your In Bank balance (like moving money to or from savings). Hidden doesn't (like your first savings update).");
 }
 
 // Put an entry on a day (calendar, History, or Future Dates, depending on the date), combining it
@@ -1351,9 +1420,8 @@ function recurring(fields) {
     let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(row[2]);
     let endDate = resolveEndDate(fields.endDate, row[4]);
     let finalSprite = sprite || existingSprite || "✔️";
-    checkSavingsRule(title, getSpecialType(finalSprite), endDateToDate(endDate));
 
-    row[1] = formatMoney(hasAmount ? fields.amount : parseAmount(row[1]));
+    row[1] =formatMoney(hasAmount ? fields.amount : parseAmount(row[1]));
     row[2] = formatToMMDDYYYY(startDate);
     row[3] = frequency;
     row[4] = endDate;
@@ -1371,7 +1439,6 @@ function recurring(fields) {
   if (frequency === "") frequency = "Monthly";
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(today);
   let endDate = resolveEndDate(fields.endDate, "None");
-  checkSavingsRule(title, getSpecialType(finalSprite), endDateToDate(endDate));
 
   let amount = formatMoney(hasAmount ? fields.amount : 0);
   recurringData.push([title, amount, formatToMMDDYYYY(startDate), frequency, endDate, finalSprite]);
@@ -1396,7 +1463,6 @@ function editRecurringRow(index, fields) {
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(row[2]);
   let endDate = resolveEndDate(fields.endDate ?? "None", row[4]);
   let frequency = String(fields.frequency || "").trim() || row[3];
-  checkSavingsRule(title, getSpecialType(sprite), endDateToDate(endDate));
 
   row[0] = title;
   row[1] = formatMoney(hasAmount ? fields.amount : parseAmount(row[1]));
@@ -1423,14 +1489,10 @@ function resolveEndDate(endDate, current) {
   return isNaN(parsed.getTime()) ? "None" : formatToMMDDYYYY(parsed);
 }
 
-function endDateToDate(endDate) {
-  return endDate === "None" ? null : createSafeMidnight(endDate, true);
-}
-
 /* ---------- Tracker rows ---------- */
 
 // Create a tracker row, or change the clicked one (or the one with this title).
-// fields: { title, aliases: "rent-, paycheck+, atm", tracksTransfers: boolean (⭕️ title prefix) }
+// fields: { title, aliases: [{ title, count: "all" | "costs" | "gains" }], tracksTransfers: boolean (⭕️ title prefix) }
 function trackerEntry(fields, index) {
   let baseTitle = capitalize(String(fields.title || "").replace(/⭕️/g, "").replace(/\s+/g, " ").trim());
   if (!baseTitle) throw new BudgetInputError("Give the tracker row a title.");
@@ -1451,30 +1513,290 @@ function trackerEntry(fields, index) {
       row[4] = aliases;
     }
     formEntryRow[3] = "Changed: " + row[0];
-    formEntryRow[4] = "Aliases: " + (row[4] || "None");
+    formEntryRow[4] = "Aliases: " + (describeAliases(row[4]) || "None");
     return {};
   }
 
   trackerData.push([fullTitle, "", "", "", aliases]);
   formEntryRow[3] = "Created: " + fullTitle;
-  formEntryRow[4] = "Aliases: " + (aliases || "None");
+  formEntryRow[4] = "Aliases: " + (describeAliases(aliases) || "None");
   return {};
 }
 
-// "rent-,  Paycheck+ , rent-" -> "rent-, Paycheck+" (trimmed, no blanks or repeats)
-function normalizeAliases(text) {
-  let seen = new Set();
-  let aliases = [];
-  for (let alias of String(text || "").split(",")) {
-    let trimmed = alias.trim();
-    if (!trimmed || seen.has(trimmed.toLowerCase())) continue;
-    seen.add(trimmed.toLowerCase());
-    aliases.push(trimmed);
-  }
-  return aliases.join(", ");
+// An alias is an entry title plus which of its amounts it counts: all, only costs, or only gains.
+// They're stored the spreadsheet's way so existing rows keep working: "rent-" counts costs,
+// "paycheck+" gains, and "atm" everything (so did the spreadsheet's "atm=").
+const ALIAS_SUFFIXES = { all: "", costs: "-", gains: "+" };
+
+// "Rent-" -> { title: "Rent", clean: "rent", count: "costs" }. Without an ending, count is defaultCount.
+function parseAlias(text, defaultCount = "all") {
+  let trimmed = String(text ?? "").replace(/\s+/g, " ").trim();
+  let suffix = /[-+=]$/.test(trimmed) ? trimmed.slice(-1) : "";
+  let title = suffix ? trimmed.slice(0, -1).trim() : trimmed;
+  let count = { "-": "costs", "+": "gains", "=": "all" }[suffix] || defaultCount;
+  return { title, clean: cleanString(title), count };
 }
 
-/* ---------- Edit mode: reorder, sections, delete (Recurring and Tracker) ---------- */
+// Does an alias with this count include this amount?
+function aliasCounts(count, amount) {
+  return count === "all" || (count === "costs" && amount < 0) || (count === "gains" && amount > 0);
+}
+
+// [{ title: "Rent", count: "costs" }, { title: "paycheck", count: "gains" }] -> "Rent-, paycheck+".
+// Blanks are left out, and each title is kept once (one picked for costs and gains counts all of it).
+function normalizeAliases(list) {
+  let byTitle = new Map();
+  for (let alias of Array.isArray(list) ? list : []) {
+    let title = String(alias?.title ?? "").replace(/\s+/g, " ").replace(/[\s+=-]+$/, "").trim();
+    let clean = cleanString(title);
+    if (!clean) continue;
+    let counted = byTitle.get(clean) || { title, costs: false, gains: false };
+    if (alias.count !== "gains") counted.costs = true;
+    if (alias.count !== "costs") counted.gains = true;
+    byTitle.set(clean, counted);
+  }
+  return [...byTitle.values()]
+    .map(alias => alias.title + ALIAS_SUFFIXES[alias.costs && alias.gains ? "all" : (alias.costs ? "costs" : "gains")])
+    .join(", ");
+}
+
+// "rent-, paycheck+, atm" -> "rent (costs), paycheck (gains), atm": aliases in words, for people
+function describeAliases(text) {
+  return String(text ?? "").split(",").map(alias => parseAlias(alias)).filter(alias => alias.clean)
+    .map(alias => alias.count === "all" ? alias.title : `${alias.title} (${alias.count})`)
+    .join(", ");
+}
+
+/* ---------- Other Accounts ---------- */
+// Accounts outside the budget, like Savings. A Hidden or Transfer entry titled with an account's name
+// moves money into or out of it: the account gets the opposite of what the entry adds to the calendar
+// (a $100 cost puts $100 in the account, a $100 gain takes $100 out). An account's balance is its start
+// plus all of those changes, so changing, moving, or deleting one of its entries changes it too.
+// accountsData.list: [0] column titles, then [name, start (its balance before any of its entries),
+// "default" | ""]. The default account, Savings, is always there and can't be deleted.
+
+const ACCOUNTS_VERSION = 2;
+const DEFAULT_ACCOUNT = "Savings";
+const MAX_ACCOUNT_NAME = 60;
+
+function isDefaultAccount(row) {
+  return String(row?.[2] ?? "").trim() === "default";
+}
+
+// The accounts (not the column titles), in order: [{ index, row, name, clean }]
+function accountRows() {
+  let accounts = [];
+  let list = accountsData?.list || [];
+  for (let i = 1; i < list.length; i++) {
+    let name = String(list[i][0] ?? "").trim();
+    let clean = cleanString(name);
+    if (clean) accounts.push({ index: i, row: list[i], name, clean });
+  }
+  return accounts;
+}
+
+// The accounts' names, in order (the account pickers list these)
+function otherAccountNames() {
+  return accountRows().map(account => account.name);
+}
+
+// Clean account name -> its account (a Map, so names like "constructor" are just names)
+function accountTitleMap() {
+  let byTitle = new Map();
+  for (let account of accountRows()) {
+    if (!byTitle.has(account.clean)) byTitle.set(account.clean, account);
+  }
+  return byTitle;
+}
+
+// The account an entry changes (a Hidden or Transfer entry titled with its name), or null.
+// accounts: accountTitleMap(), passed in by loops so it's built once.
+function linkedAccount(sprite, cleanTitle, accounts = accountTitleMap()) {
+  let special = getSpecialType(String(sprite || ""));
+  if (special !== "✖️" && special !== "⭕️") return null;
+  return accounts.get(cleanTitle) || null;
+}
+
+// Transfers, and entries that change another account, move money between your own accounts:
+// they aren't costs or gains (the tracker, search, and the recurring summary treat them alike)
+function isMoveEntry(sprite, cleanTitle, accounts = accountTitleMap()) {
+  return String(sprite || "").includes("⭕️") || linkedAccount(sprite, cleanTitle, accounts) !== null;
+}
+
+// Each account's balance today and on the calendar's last day, with the entries that changed it (and
+// the ones on the calendar that will), newest first:
+// [{ index, name, isDefault, start, today, calendarEnd, entries: [{ date, change, sprite }] }]
+function accountSummaries() {
+  let accounts = accountTitleMap();
+  let summaries = new Map(accountRows().map(account => [account.index, {
+    index: account.index,
+    name: account.name,
+    isDefault: isDefaultAccount(account.row),
+    start: parseAmount(account.row[1]),
+    today: 0,
+    calendarEnd: 0,
+    entries: []
+  }]));
+
+  const addCell = (cellText, date) => {
+    let lines = String(cellText ?? "").split("\n");
+    for (let l = 1; l < lines.length; l++) {
+      let parts = getParts(lines[l]);
+      if (parts.length < 3 || systemEmojis.includes(parts[0])) continue;
+      let account = linkedAccount(parts[0], extractTitle(lines[l]), accounts);
+      let change = -parseAmount(parts[1]);
+      if (account && change !== 0) summaries.get(account.index).entries.push({ date, change, sprite: parts[0] });
+    }
+  };
+  for (let r = 3; r >= 0; r--) {
+    for (let c = 6; c >= 0; c--) addCell(calendarData[r][c], gridDates[r][c]);
+  }
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 6; c >= 0; c--) {
+      let date = createSafeMidnight(String(historyData[r][c] ?? "").split("\n")[0].trim(), true);
+      if (!isNaN(date.getTime())) addCell(historyData[r][c], date);
+    }
+  }
+
+  const round = (amount) => Math.round(amount * 100) / 100;
+  return [...summaries.values()].map(summary => {
+    summary.entries.sort((a, b) => b.date - a.date);
+    let throughToday = summary.entries.filter(entry => entry.date <= today).reduce((total, entry) => total + entry.change, 0);
+    let throughCalendar = summary.entries.reduce((total, entry) => total + entry.change, 0);
+    summary.today = round(summary.start + throughToday);
+    summary.calendarEnd = round(summary.start + throughCalendar);
+    return summary;
+  });
+}
+
+// New account (index null) or change the tapped one. fields: { name, balance: number | null }.
+// Setting a balance sets the account's start so that its balance today is that amount (a new account
+// starts at $0.00). A new name goes on its entries and tracker aliases too, so they stay with it.
+function accountEntry(fields, index) {
+  let name = capitalize(String(fields.name || "").replace(/\s+/g, " ").trim());
+  let clean = cleanString(name);
+  if (!clean) throw new BudgetInputError("Give the account a name, like Cash or Investments.");
+  if (name.length > MAX_ACCOUNT_NAME) throw new BudgetInputError(`Account names can be up to ${MAX_ACCOUNT_NAME} characters.`);
+  let balance = fields.balance ?? null;
+  if (balance !== null && (typeof balance !== "number" || !Number.isFinite(balance))) {
+    throw new BudgetInputError("Enter the balance as a number, like 250.00.");
+  }
+
+  let list = accountsData.list;
+  let isNew = index === null || index === undefined;
+  let row = isNew ? null : list[index];
+  if (!isNew && (!row || index < 1 || !cleanString(row[0]))) throw new BudgetInputError("That account couldn't be found. Please try again.");
+  let taken = accountRows().find(account => account.clean === clean && account.row !== row);
+  if (taken) throw new BudgetInputError(`You already have an account called ${taken.name}.`);
+
+  formEntryRow[5] = "";
+  if (isNew) {
+    row = [name, formatMoney(0), ""];
+    list.push(row);
+    if (balance === null) balance = 0;
+    formEntryRow[2] = "🏦 New Account";
+  } else {
+    let oldName = String(row[0]).trim();
+    if (cleanString(oldName) !== clean) {
+      renameAccountEntries(cleanString(oldName), name);
+      formEntryRow[5] = "Renamed From: " + oldName;
+    }
+    row[0] = name;
+    formEntryRow[2] = "🏦 Change Account";
+  }
+
+  let summary = accountSummaries().find(account => account.index === list.indexOf(row));
+  if (balance !== null) {
+    row[1] = formatMoney(balance - (summary.today - summary.start));
+    summary.today = balance;
+  }
+  formEntryRow[3] = "Account: " + name;
+  formEntryRow[4] = "Balance: " + formatMoney(summary.today);
+  return {};
+}
+
+// A renamed account keeps its entries: Hidden and Transfer entries with the old name (on the calendar,
+// in History, Upcoming, and Recurring) and tracker aliases for it get the new name
+function renameAccountEntries(oldClean, newName) {
+  const isAccountEntry = (sprite, title) => {
+    let special = getSpecialType(String(sprite || ""));
+    return (special === "✖️" || special === "⭕️") && cleanString(title) === oldClean;
+  };
+  const renameCell = (cellText) => {
+    let lines = String(cellText ?? "").split("\n");
+    let renamed = false;
+    for (let l = 1; l < lines.length; l++) {
+      let parts = getParts(lines[l]);
+      if (parts.length < 3 || systemEmojis.includes(parts[0]) || !isAccountEntry(parts[0], parts.slice(2).join(" "))) continue;
+      lines[l] = `${parts[0]} ${parts[1]} ${newName}`;
+      renamed = true;
+    }
+    return renamed ? mergeSameEntries(lines).join("\n") : cellText;
+  };
+
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) calendarData[r][c] = renameCell(calendarData[r][c]);
+  }
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 0; c < 7; c++) historyData[r][c] = renameCell(historyData[r][c]);
+  }
+
+  // Upcoming: rename, then combine any that now match another entry on the same day
+  let futureKept = [futureData[0]];
+  let futureByKey = new Map();
+  for (let f = 1; f < futureData.length; f++) {
+    let row = futureData[f];
+    if (isAccountEntry(row[3], row[0])) row[0] = newName;
+    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + String(row[3]).trim();
+    let same = cleanString(row[0]) ? futureByKey.get(key) : undefined;
+    if (same) {
+      same[1] = formatMoney(parseAmount(same[1]) + parseAmount(row[1]));
+      continue;
+    }
+    futureByKey.set(key, row);
+    futureKept.push(row);
+  }
+  futureData = futureKept;
+
+  for (let i = 2; i < recurringData.length; i++) {
+    let row = recurringData[i];
+    if (String(row[0]).trim() !== "-" && isAccountEntry(row[5], row[0])) row[0] = newName;
+  }
+
+  for (let i = 1; i < trackerData.length; i++) {
+    let row = trackerData[i];
+    let rowType = cleanString(row[0]);
+    if (String(row[0]).trim() === "-" || TRACKER_AUTO_ROWS.includes(rowType)) continue;
+    let aliases = String(row[4] || "").split(",").map(alias => parseAlias(alias)).filter(alias => alias.clean);
+    if (!aliases.some(alias => alias.clean === oldClean)) continue;
+    row[4] = normalizeAliases(aliases.map(alias => ({ title: alias.clean === oldClean ? newName : alias.title, count: alias.count })));
+  }
+}
+
+// One line per title and type on a day (a rename can make two the same): their amounts add together
+function mergeSameEntries(lines) {
+  let kept = [lines[0]];
+  let byKey = new Map();
+  for (let l = 1; l < lines.length; l++) {
+    let parts = getParts(lines[l]);
+    if (parts.length < 3 || systemEmojis.includes(parts[0])) {
+      kept.push(lines[l]);
+      continue;
+    }
+    let key = parts[0] + "|" + extractTitle(lines[l]);
+    if (!byKey.has(key)) {
+      byKey.set(key, kept.length);
+      kept.push(lines[l]);
+      continue;
+    }
+    let at = byKey.get(key);
+    let first = getParts(kept[at]);
+    kept[at] = `${first[0]} ${formatMoney(parseAmount(first[1]) + parseAmount(parts[1]))} ${first.slice(2).join(" ")}`;
+  }
+  return kept;
+}
+
+/* ---------- Edit mode: reorder, sections, delete (Recurring, Tracker, and Other Accounts) ---------- */
 
 // order: row indexes top to bottom. Rows left out (blank rows the page doesn't show) stay at the end.
 function reorderTableRows(tableName, order, movedIndex) {
@@ -1504,6 +1826,7 @@ function reorderTableRows(tableName, order, movedIndex) {
 
 function insertCategory(tableName, atIndex, title) {
   let table = ROW_TABLES[tableName];
+  if (!table.categoryRow) throw new BudgetInputError("Sections can't be added here.");
   let rows = table.get();
   let cleanTitle = capitalize(String(title || "").replace(/\s+/g, " ").trim());
   if (!cleanTitle) throw new BudgetInputError("Give the section a title.");
@@ -1528,6 +1851,7 @@ function renameCategory(tableName, index, title) {
 
 // Recurring entries end yesterday instead of vanishing, so the normal flow removes them and turns
 // their temps into unique entries (same as expiring one in the spreadsheet). Everything else is removed.
+// The default account (Savings) can't be deleted; a deleted account's entries stay as they are.
 function deleteTableRows(tableName, indexes) {
   let table = ROW_TABLES[tableName];
   let rows = table.get();
@@ -1535,6 +1859,8 @@ function deleteTableRows(tableName, indexes) {
     .filter(i => Number.isInteger(i) && i >= table.headerRows && i < rows.length)
     .sort((a, b) => b - a);
   if (valid.length === 0) throw new BudgetInputError("Nothing is selected to delete.");
+  let locked = tableName === "accounts" ? valid.find(i => isDefaultAccount(rows[i])) : undefined;
+  if (locked !== undefined) throw new BudgetInputError(`${rows[locked][0]} is your default account, so it can't be deleted.`);
 
   let titles = [];
   for (let i of valid) {
@@ -1555,10 +1881,13 @@ function deleteTableRows(tableName, indexes) {
 /* ---------- Search (the old Search tab, now the home page's search bar) ---------- */
 
 // Find entries by title and date in History, the calendar, Future Dates, and recurring entries past
-// the calendar. Aliases: "rent" (all), "rent-" (costs only), "rent+" (gains only), "car stuff="
-// (every alias in that tracker row). Blank aliases = everything. Blank From = from the start,
+// the calendar. terms: the search bar's list, one title per line, each with its own buttons (which
+// replace the spreadsheet's rent-, rent+ and car stuff=): match "all", "costs" (only costs), "gains"
+// (only gains), or "category" (the title is a tracker row: find what the row counts). With no titles,
+// the first line's buttons pick everything, every cost, or every gain. Blank From = from the start,
 // blank To = to the end.
-// query: { aliases, from, to } as typed. Returns { results: [{ date, amount, sprite, title, isTransfer }], from, to, aliases }
+// query: { terms: [{ title, match }], from, to } as typed.
+// Returns { results: [{ date, amount, sprite, title, isMove, checked }], from, to, searchingFor }
 function search(query) {
   // 1. Date range
   let rawFrom = String(query.from || "").trim();
@@ -1575,46 +1904,24 @@ function search(query) {
   let dateB = toDate ? formatToMMDDYYYY(toDate) : "the end";
   const inRange = (time) => time >= startTime && time <= endTime;
 
-  // 2. Build Alias Dictionary
-  let rawAliases = String(query.aliases || "").trim();
-  let aliases = rawAliases.split(",").map(t => t.trim()).filter(t => t !== "");
-  let aliasDictionary = {};
-  for (let a = 0; a < aliases.length; a++) {
-    let alias = aliases[a];
-    let suffix = alias.slice(-1);
-    let cleanAlias = cleanString(alias);
-    let signCheck = null;
-    if (suffix === "-" || suffix === "+" || suffix === "=") signCheck = suffix;
-    if (!cleanAlias) continue;
-    // "=" means every alias in the tracker row with that title
-    if (suffix === "=") {
-      for (let i = 1; i < trackerData.length; i++) {
-        let category = trackerData[i][0];
-        if (category === "-") continue;
-        if (cleanString(category) === cleanAlias) {
-          let categoryAliases = String(trackerData[i][4]).split(",").map(t => cleanString(t)).filter(t => t !== "");
-          aliases.push(...categoryAliases);
-          break;
-        }
-      }
-      continue;
-    }
-    if (!aliasDictionary[cleanAlias]) aliasDictionary[cleanAlias] = [];
-    aliasDictionary[cleanAlias].push({ signCheck: signCheck });
+  // 2. What to find: targets for one title each (or every title), and whose amounts they count
+  let { targets, searchingFor } = searchTargets(query.terms);
+  let targetsByTitle = new Map();
+  let everyTitle = [];
+  for (let target of targets) {
+    if (target.clean === null) everyTitle.push(target);
+    else targetsByTitle.set(target.clean, [...(targetsByTitle.get(target.clean) || []), target]);
   }
 
-  // An entry matches when an alias for its title fits the amount's sign (no aliases = everything)
-  const matches = (lookupTitle, rawAmt) => {
-    if (rawAliases === "") return true;
-    let dictionaryMatches = aliasDictionary[lookupTitle];
-    if (!dictionaryMatches) return false;
-    return dictionaryMatches.some(m =>
-      (m.signCheck === "-" && rawAmt < 0) || (m.signCheck === "+" && rawAmt > 0) || !m.signCheck);
-  };
-
+  // An entry is found when a target for its title counts its amount. Moves (transfers, and entries
+  // that change another account) start unchecked, unless a tracker row that counts transfers found them.
   let searchResults = [];
-  const addResult = (date, amount, sprite, title) => {
-    searchResults.push({ date, amount, sprite, title, isTransfer: String(sprite).includes("⭕️") });
+  let accounts = accountTitleMap();
+  const addIfFound = (date, amount, sprite, title, cleanTitle) => {
+    let found = [...everyTitle, ...(targetsByTitle.get(cleanTitle) || [])].filter(target => aliasCounts(target.count, amount));
+    if (found.length === 0) return;
+    let isMove = isMoveEntry(sprite, cleanTitle, accounts);
+    searchResults.push({ date, amount, sprite, title, isMove, checked: !isMove || found.some(target => target.withTransfers) });
   };
 
   // 3. Future Dates entries
@@ -1623,8 +1930,7 @@ function search(query) {
     if (!row || !String(row[0]).trim()) continue;
     let cellDate = createSafeMidnight(row[2], true);
     if (isNaN(cellDate.getTime()) || !inRange(cellDate.getTime())) continue;
-    let rawAmt = parseAmount(row[1]);
-    if (matches(cleanString(row[0]), rawAmt)) addResult(cellDate, rawAmt, String(row[3] || ""), String(row[0]));
+    addIfFound(cellDate, parseAmount(row[1]), String(row[3] || ""), String(row[0]), cleanString(row[0]));
   }
 
   // 4. Recurring entries past the calendar (calendar days are searched directly below), skipping
@@ -1650,7 +1956,7 @@ function search(query) {
         if (shown.has(key) || !recurringRowHits(row.parsed, day)) continue;
         shown.add(key);
         if (blockers.has(day.getTime() + "|" + key)) continue;
-        if (matches(row.parsed.cleanTitle, row.amt)) addResult(new Date(day), row.amt, String(row.sprite || ""), row.title);
+        addIfFound(new Date(day), row.amt, String(row.sprite || ""), row.title, row.parsed.cleanTitle);
       }
     }
   }
@@ -1661,8 +1967,7 @@ function search(query) {
     for (let l = 1; l < lines.length; l++) {
       let parts = getParts(lines[l]);
       if (systemEmojis.includes(parts[0]) || parts.length < 3) continue;
-      let rawAmt = parseAmount(parts[1]);
-      if (matches(extractTitle(lines[l]), rawAmt)) addResult(cellDate, rawAmt, parts[0], parts.slice(2).join(" "));
+      addIfFound(cellDate, parseAmount(parts[1]), parts[0], parts.slice(2).join(" "), extractTitle(lines[l]));
     }
   };
   for (let r = 3; r >= 0; r--) {
@@ -1682,11 +1987,62 @@ function search(query) {
   searchResults.sort((a, b) => b.date - a.date);
 
   formEntryRow[2] = "🔎 Search";
-  formEntryRow[3] = "Aliases: " + (rawAliases || "All");
+  formEntryRow[3] = "For: " + searchingFor;
   formEntryRow[4] = "From: " + dateA;
   formEntryRow[5] = "To: " + dateB;
   formEntryRow[6] = "Results Found: " + searchResults.length;
-  return { results: searchResults, from: dateA, to: dateB, aliases: rawAliases || "All" };
+  return { results: searchResults, from: dateA, to: dateB, searchingFor };
+}
+
+// What a search looks for: { targets: [{ clean (null = every title), count: "all" | "costs" | "gains",
+// withTransfers }], searchingFor: "rent (costs only), the Food tracker row" }. See search() for terms.
+const SEARCH_MATCHES = ["all", "costs", "gains", "category"];
+
+function searchTargets(terms) {
+  let lines = (Array.isArray(terms) ? terms : []).map(term => ({
+    title: String(term?.title ?? "").replace(/\s+/g, " ").trim(),
+    match: SEARCH_MATCHES.includes(term?.match) ? term.match : "all"
+  }));
+  let filled = lines.filter(line => cleanString(line.title) !== "");
+
+  // No titles: the first line's buttons say what to find
+  if (filled.length === 0) {
+    let match = lines.length > 0 ? lines[0].match : "all";
+    if (match === "category") throw new BudgetInputError("Type the title of a tracker row, like Food.");
+    return { targets: [{ clean: null, count: match, withTransfers: false }], searchingFor: { all: "everything", costs: "every cost", gains: "every gain" }[match] };
+  }
+
+  let targets = [];
+  let described = [];
+  let rowsFound = new Set();
+  for (let { title, match } of filled) {
+    if (match !== "category") {
+      targets.push({ clean: cleanString(title), count: match, withTransfers: false });
+      described.push(title + (match === "all" ? "" : ` (${match} only)`));
+      continue;
+    }
+
+    // Tracker: the title is a tracker row. Find what the row counts: each of its aliases with its own
+    // costs/gains setting (Costs and Gains count every cost or gain), and transfers if it counts them.
+    let index = trackerData.findIndex((row, i) => i > 0 && String(row[0]).trim() !== "-" && cleanString(row[0]) === cleanString(title));
+    if (index === -1) throw new BudgetInputError(`There's no tracker row called "${title}".`);
+    if (rowsFound.has(index)) continue;
+    rowsFound.add(index);
+
+    let row = trackerData[index];
+    let rowType = cleanString(row[0]);
+    described.push(`the ${String(row[0]).replace(/⭕️/g, "").trim()} tracker row`);
+    if (rowType === "costs" || rowType === "gains") {
+      targets.push({ clean: null, count: rowType, withTransfers: false });
+      continue;
+    }
+    let withTransfers = String(row[0]).startsWith("⭕️") || rowType === "undefined"; // Undefined counts transfers too
+    for (let alias of String(row[4] || "").split(",")) {
+      let { clean, count } = parseAlias(alias);
+      if (clean) targets.push({ clean, count, withTransfers });
+    }
+  }
+  return { targets, searchingFor: described.join(", ") };
 }
 
 /* ---------- Rebuilding the calendar (the spreadsheet's worker functions) ---------- */
@@ -1910,10 +2266,9 @@ function writeBudgetMath() {
         if (systemEmojis.includes(parts[0])) continue;
         // Hidden entries are on accounts outside the budget: the tracker counts them, In Bank doesn't
         if (parts[0].includes("✖️")) continue;
-        let lineTitle = extractTitle(lineStr);
         let lineAmt = parseAmount(parts[1]);
         if (parts[0].includes("⭕️")) {
-          moneyMoves += lineTitle === "savings" ? (lineAmt * -1) : lineAmt;
+          moneyMoves += lineAmt;
         } else if (lineAmt < 0) {
           costs += Math.abs(lineAmt);
           if (isToday) manualNotif = true;
@@ -1973,11 +2328,6 @@ function getPredictionData(lastInBank) {
     let fAmt = parseAmount(futureData[f][1]);
     let fSprite = futureData[f][3] || "";
 
-    // Invert the amount if it's a savings transfer
-    if (fSprite.includes("⭕️") && fTitle === "savings") {
-      fAmt *= -1;
-    }
-
     parsedFuture.push({
       title: fTitle,
       amt: fAmt,
@@ -2016,10 +2366,7 @@ function getPredictionData(lastInBank) {
             break;
           }
         }
-        if (hasNoOverride) {
-          if (recurringSprite.includes("⭕️") && recurringTitle === "savings") recurringAmt *= -1;
-          dayTotal += recurringAmt;
-        }
+        if (hasNoOverride) dayTotal += recurringAmt;
       }
     }
 
@@ -2143,7 +2490,7 @@ function updateTrackerTab() {
 
   let activeTrackerData = trackerData.slice(1);
   let trackerRows = [];
-  let allAliases = [];
+  let coverage = new Map(); // Title -> which of its amounts the rows count ({ costs, gains }), for Undefined
 
   for (let r = 0; r < activeTrackerData.length; r++) {
     let title = String(activeTrackerData[r][0]).trim().toLowerCase();
@@ -2154,13 +2501,14 @@ function updateTrackerTab() {
     }
 
     let aliases = rawAliases.split(",").map(t => t.trim()).filter(t => t !== "");
-    if (title !== "undefined") {
-      // Retain suffixes in allAliases for accurate Undefined filtering
-      for (let a of aliases) {
-        let suffix = a.slice(-1);
-        let sign = (suffix === "+" || suffix === "-" || suffix === "=") ? suffix : "";
-        let base = cleanString(a);
-        if (base) allAliases.push(base + sign);
+    if (!TRACKER_AUTO_ROWS.includes(title)) {
+      for (let alias of aliases) {
+        let { clean, count } = parseAlias(alias);
+        if (!clean) continue;
+        let counted = coverage.get(clean) || { costs: false, gains: false };
+        if (count !== "gains") counted.costs = true;
+        if (count !== "costs") counted.gains = true;
+        coverage.set(clean, counted);
       }
     }
     trackerRows.push({ title: title, sum28: 0, sum90: 0, sum365: 0, aliases: aliases, isSeparator: false, countsMoves: title.startsWith("⭕️") });
@@ -2183,13 +2531,10 @@ function updateTrackerTab() {
     trackerRows.push({ title: "Undefined", sum28: 0, sum90: 0, sum365: 0, aliases: [], isSeparator: false, countsMoves: true });
     undefIndex = trackerRows.length - 1;
   } else {
-    // Only remove from Undefined if the alias is FULLY covered by other rows
+    // Only remove from Undefined if the alias is FULLY covered by other rows (costs and gains)
     trackerRows[undefIndex].aliases = trackerRows[undefIndex].aliases.filter(alias => {
-      let base = cleanString(alias);
-      let hasFull = allAliases.includes(base) || allAliases.includes(base + "=");
-      let hasPos = allAliases.includes(base + "+");
-      let hasNeg = allAliases.includes(base + "-");
-      return !(hasFull || (hasPos && hasNeg));
+      let counted = coverage.get(cleanString(alias));
+      return !(counted && counted.costs && counted.gains);
     });
   }
 
@@ -2210,18 +2555,16 @@ function updateTrackerTab() {
   const pastDays = getDayDifference(today, startOfYear) + 1;
   let counter = 0;
 
-  let aliasDictionary = {};
+  // Entry title -> the rows with an alias for it, and which of its amounts each counts.
+  // (A Map, so titles like "constructor" can't collide with an object's built-in properties.)
+  let aliasDictionary = new Map();
   for (let tr = 0; tr < trackerRows.length; tr++) {
     if (tr === undefIndex || tr === costIndex || tr === gainIndex || trackerRows[tr].isSeparator) continue;
-    for (let a = 0; a < trackerRows[tr].aliases.length; a++) {
-      let alias = trackerRows[tr].aliases[a];
-      let suffix = alias.slice(-1);
-      let cleanAlias = cleanString(alias);
-      let signCheck = null;
-      if (suffix === "-" || suffix === "+" || suffix === "=") signCheck = suffix;
-      if (!cleanAlias) continue;
-      if (!aliasDictionary[cleanAlias]) aliasDictionary[cleanAlias] = [];
-      aliasDictionary[cleanAlias].push({ trackerIndex: tr, signCheck: signCheck });
+    for (let alias of trackerRows[tr].aliases) {
+      let { clean, count } = parseAlias(alias);
+      if (!clean) continue;
+      if (!aliasDictionary.has(clean)) aliasDictionary.set(clean, []);
+      aliasDictionary.get(clean).push({ trackerIndex: tr, count });
     }
   }
 
@@ -2231,6 +2574,7 @@ function updateTrackerTab() {
     if (counter <= 28) row.sum28 += amount;
   };
 
+  let accounts = accountTitleMap();
   for (let i = 0; i < pastCells.length; i++) {
     counter++;
     if (counter > 365) break;
@@ -2241,37 +2585,34 @@ function updateTrackerTab() {
       let lineStr = lines[l].trim();
       let lineTitle = extractTitle(lineStr);
       let parts = getParts(lineStr);
-      if (systemEmojis.includes(parts[0]) || lineTitle === "savings") continue;
+      if (systemEmojis.includes(parts[0])) continue;
 
       let lineAmt = parseAmount(parts[1]);
       if (lineAmt === 0) continue;
 
-      if (lineAmt > 0 && !parts[0].includes("⭕️")) addToRow(trackerRows[gainIndex], lineAmt);
-      if (lineAmt < 0 && !parts[0].includes("⭕️")) addToRow(trackerRows[costIndex], lineAmt);
+      // Transfers (and entries that change another account) move money between your own accounts,
+      // so they aren't costs or gains
+      let isMove = isMoveEntry(parts[0], lineTitle, accounts);
+      if (lineAmt > 0 && !isMove) addToRow(trackerRows[gainIndex], lineAmt);
+      if (lineAmt < 0 && !isMove) addToRow(trackerRows[costIndex], lineAmt);
 
-      let hasMatch = false;
-      let dictionaryMatches = aliasDictionary[lineTitle];
-      if (dictionaryMatches) {
-        for (let m = 0; m < dictionaryMatches.length; m++) {
-          let matchData = dictionaryMatches[m];
-          if (((matchData.signCheck === "-" && lineAmt < 0) ||
-            (matchData.signCheck === "+" && lineAmt > 0) ||
-            (!matchData.signCheck) ||
-            (matchData.signCheck === "=")) && (trackerRows[matchData.trackerIndex].countsMoves === true || !parts[0].includes("⭕️"))) {
-            hasMatch = true;
-            addToRow(trackerRows[matchData.trackerIndex], lineAmt);
-            // No break: every row tracking this alias updates
-          }
-        }
+      // Every row tracking this title counts it, once each (moves only in rows that count transfers)
+      let countedBy = new Set();
+      for (let match of aliasDictionary.get(lineTitle) || []) {
+        let row = trackerRows[match.trackerIndex];
+        if (countedBy.has(row) || !aliasCounts(match.count, lineAmt)) continue;
+        if (isMove && !row.countsMoves) continue;
+        countedBy.add(row);
+        addToRow(row, lineAmt);
       }
 
-      // Everything no row tracks goes to Undefined (including transfers)
-      if (!hasMatch) {
+      // Everything no row tracks goes to Undefined (including moves)
+      if (countedBy.size === 0) {
         if (!trackerRows[undefIndex].aliases.includes(lineTitle)) trackerRows[undefIndex].aliases.push(lineTitle);
         addToRow(trackerRows[undefIndex], lineAmt);
       }
 
-      if (lineAmt < 0 && counter <= pastDays && !parts[0].includes("⭕️")) yearly += lineAmt;
+      if (lineAmt < 0 && counter <= pastDays && !isMove) yearly += lineAmt;
     }
   }
 
@@ -2294,7 +2635,8 @@ function updateTrackerTab() {
   newRows[costIndex][4] = trackerRows[costIndex].aliases.join(", ");
   trackerData = [trackerData[0], ...newRows];
 
-  // Recurring summary: projected spending this year (on top of what's already spent) and per month
+  // Recurring summary: projected spending this year (on top of what's already spent) and per month.
+  // Like the spending so far, moves (like a transfer to savings) aren't spending.
   for (let i = 2; i < recurringData.length; i++) {
     let title = String(recurringData[i][0]).trim();
     let amt = parseAmount(String(recurringData[i][1]));
@@ -2302,6 +2644,7 @@ function updateTrackerTab() {
     let frequency = String(recurringData[i][3]).toLowerCase().trim();
     let endDateVal = recurringData[i][4];
     if (!title || title === "-" || isNaN(startDate.getTime()) || amt >= 0) continue;
+    if (isMoveEntry(String(recurringData[i][5] || ""), cleanString(title), accounts)) continue;
 
     let endOfThisYear = createSafeMidnight(new Date(today.getFullYear(), 11, 31));
     let effectiveEndDate = endOfThisYear;
@@ -2324,6 +2667,9 @@ function updateTrackerTab() {
       monthly += amt * 4;
     } else if (frequency === "biweekly" || frequency === "bi-weekly") {
       yearly += (activeDaysThisYear / 14) * amt;
+      monthly += amt * 2;
+    } else if (frequency === "semi-monthly") { // The 1st and 15th: twice a month
+      yearly += (activeDaysThisYear / 15.208) * amt;
       monthly += amt * 2;
     } else if (frequency === "3 month") {
       yearly += (activeDaysThisYear / 91.25) * amt;
@@ -2589,15 +2935,23 @@ async function saveChanges() {
     return result.ok;
   }
 
+  // Quick entries stored in this table go with it, so the API drops them from its queue in the same save
+  async function sendTable(table, data) {
+    const done = [...quickEntryAcks[table]];
+    const ok = await sendUpdate(`/api/data/update-${table}`, done.length > 0 ? { data, quickEntriesDone: done } : { data });
+    if (ok) quickEntryAcks[table] = quickEntryAcks[table].filter(id => !done.includes(id));
+    return ok;
+  }
+
   // 1. Future
   if (typeof futureEdited !== 'undefined' && futureEdited) {
-    const success = await sendUpdate('/api/data/update-future', { data: futureData });
+    const success = await sendTable('future', futureData);
     if (success) futureEdited = false;
   }
 
   // 2. Calendar
   if (typeof calendarEdited !== 'undefined' && calendarEdited) {
-    const success = await sendUpdate('/api/data/update-calendar', { data: calendarData });
+    const success = await sendTable('calendar', calendarData);
     if (success) calendarEdited = false;
   }
 
@@ -2615,7 +2969,7 @@ async function saveChanges() {
 
   // 5. History
   if (typeof historyEdited !== 'undefined' && historyEdited) {
-    const success = await sendUpdate('/api/data/update-history', { data: historyData });
+    const success = await sendTable('history', historyData);
     if (success) historyEdited = false;
   }
 
@@ -2631,7 +2985,7 @@ async function saveChanges() {
     if (success) calculatorEdited = false;
   }
 
-  // 8. Other Accounts (Savings / LLC equity tables)
+  // 8. Other Accounts (and the LLC equity tables)
   if (accountsEdited) {
     const success = await sendUpdate('/api/data/update-accounts', { data: accountsData });
     if (success) accountsEdited = false;
@@ -2675,9 +3029,10 @@ async function budgetApi(endpoint, payload) {
 // #region OTHER HELPERS
 // =====================================================================
 
-// Other Accounts table by its spreadsheet tab name (e.g. "C Savings", "C Revenue 2026"), or null
+// An LLC equity table by its spreadsheet tab name (e.g. "C Revenue 2026"), or null
 function getTableData(tabName) {
-  return (accountsData && accountsData[tabName]) || null;
+  let equity = accountsData && accountsData.equity;
+  return equity && Object.prototype.hasOwnProperty.call(equity, tabName) ? equity[tabName] : null;
 }
 
 // Rebuild a stored table as rows of strings, keeping EVERY row and column that was saved.
@@ -2710,19 +3065,36 @@ function normalizeApiTable(rawData, shape) {
   return rows;
 }
 
-// Rebuild the Other Accounts store: { tabName: table } with each table normalized
+// Rebuild the Other Accounts store: { version: 2, list, equity }
+//   list: [0] column titles, then [name, start, "default" | ""] (see OTHER ACCOUNTS). The default
+//         account, Savings, is added if it's missing.
+//   equity: the LLC version's equity tables, { tabName: table } (see processEquity), kept as stored.
+//           Before version 2, the whole store was these tables.
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
   if (typeof parsed === 'string') {
     try { parsed = JSON.parse(parsed); } catch (e) { parsed = {}; }
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) parsed = {};
+  let isCurrent = parsed.version === ACCOUNTS_VERSION;
 
-  let accounts = {};
-  for (let tabName of Object.keys(parsed)) {
-    accounts[tabName] = normalizeApiTable(parsed[tabName], TABLE_SHAPES.account);
+  let storedEquity = isCurrent ? parsed.equity : parsed;
+  let equity = {};
+  if (storedEquity && typeof storedEquity === 'object' && !Array.isArray(storedEquity)) {
+    for (let tabName of Object.keys(storedEquity)) {
+      if (tabName === "__proto__") continue; // Would replace the object's prototype instead of adding a table
+      equity[tabName] = normalizeApiTable(storedEquity[tabName], TABLE_SHAPES.account);
+    }
   }
-  return accounts;
+
+  let list = normalizeApiTable(isCurrent ? parsed.list : [], TABLE_SHAPES.accounts);
+  list[0] = ["Account", "Start", "Default"];
+  if (!list.some((row, i) => i > 0 && isDefaultAccount(row))) {
+    let savings = list.findIndex((row, i) => i > 0 && cleanString(row[0]) === cleanString(DEFAULT_ACCOUNT));
+    if (savings !== -1) list[savings][2] = "default";
+    else list.splice(1, 0, [DEFAULT_ACCOUNT, formatMoney(0), "default"]);
+  }
+  return { version: ACCOUNTS_VERSION, list, equity };
 }
 
 function formatGrid(dbArray, rows, cols) {
@@ -3310,4 +3682,5 @@ document.addEventListener('pointerout', (e) => {
 
 // Load (and daily-update) the workspace. Page scripts wait on this before rendering:
 //   window.workspaceReady.then(loaded => { if (loaded) render(); });
-window.workspaceReady = loadWorkspace();
+// The Quick Entry page only borrows the helpers here: it has no login, so it never loads a budget.
+window.workspaceReady = window.PAGE === "quick" ? Promise.resolve(false) : loadWorkspace();

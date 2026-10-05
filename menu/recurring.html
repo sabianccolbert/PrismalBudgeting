@@ -59,6 +59,38 @@
         <div id="panelSlot"></div>
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <div id="dataView"></div>
+
+        <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Recurring Entries Help</h3>
+          <p>Recurring entries are added to your calendar for you, like paychecks and bills, on every day they land on from today on. They start with a checkmark: ✔️ Regular, ✔️✖️ Hidden, or ✔️⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
+
+          <h4>Adding And Changing</h4>
+          <ul>
+            <li>Tap New Entry to add one. If you already have one with that title (and refraction type, if you picked one), it changes that one instead of making another, keeping anything you left alone.</li>
+            <li>For Hidden or Transfer, you can pick one of your Other Accounts, like Savings for a transfer into savings every payday. The account gets the opposite amount each time it lands (Help on the Other Accounts page has more).</li>
+            <li>Tap a row to change it or delete it.</li>
+            <li>To change just one day, tap that day on the calendar, then tap the entry. That makes a temporary recurring entry (like ❗️✔️) for that day only.</li>
+          </ul>
+
+          <h4>When They Land</h4>
+          <ul>
+            <li><strong>Weekly</strong> and <strong>Biweekly</strong> repeat every 1 or 2 weeks from the Start Date.</li>
+            <li><strong>Semi-Monthly</strong> lands on the 1st and 15th of every month.</li>
+            <li><strong>Monthly</strong>, <strong>3 Month</strong>, <strong>6 Month</strong>, and <strong>Yearly</strong> land on the Start Date's day of the month, or on the month's last day when the month is shorter.</li>
+            <li><strong>End Date</strong> is the last day it can land on. Leave it blank to keep it going.</li>
+          </ul>
+
+          <h4>Days That Already Passed</h4>
+          <p>Once a day passes, its recurring entries turn into unique entries (like ❗️✔️), so changing or deleting a recurring entry only changes today and later. Deleting one stops it from today on, and any days you changed for it keep their changes.</p>
+
+          <h4>Monthly And Yearly</h4>
+          <p>At the top, Monthly is about how much your recurring costs add up to each month. Yearly is what you've spent so far this year, plus your recurring costs through the end of the year. Neither counts transfers or entries for your Other Accounts, since that money is still yours.</p>
+
+          <h4>Edit</h4>
+          <p>Tap Edit to drag rows by their ≡ bar, add sections (+ Section) to group your rows, or check rows and delete them.</p>
+        </section>
       </main>
     </div>
   </body>

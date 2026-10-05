@@ -3,7 +3,7 @@
 // calendar link for Google or Apple Calendar. Both are optional. Which days get a reminder comes
 // from the budget (buildReminderPlan in Process Budget.js); the API sends and serves them.
 // Then the account: change the email (needs the password), email a password reset link, or
-// delete the account (needs the password).
+// delete the account (needs the password). Emails go out through Resend (see account.js in the API).
 
 // =====================================================================
 // #region SETUP
@@ -343,10 +343,15 @@ async function changeEmail(event) {
     return;
   }
   const added = !account.email;
+  const before = account.email;
   account = result.data;
   form.reset();
   renderAccount();
-  BudgetUI.showToast(added ? `Email added: ${account.email}` : `Email changed to ${account.email}.`);
+  // The API emails the new address (and the old one, when there was one) to say it changed
+  const noted = account.canEmail && account.email !== before;
+  BudgetUI.showToast(added
+    ? `Email added: ${account.email}.${noted ? " We sent it a note, so you can check that it works." : ""}`
+    : `Email changed to ${account.email}.${noted ? " We sent a note to it and to your old email." : ""}`);
 }
 
 async function sendResetLink(event) {

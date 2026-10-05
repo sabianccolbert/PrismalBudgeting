@@ -201,6 +201,13 @@
   text-shadow: var(--SHADOW);
 }
 
+/* A quiet tip under a table */
+.dataHint {
+  margin: -2vmin auto 3vmin;
+  font-size: var(--UI_TEXT);
+  opacity: 0.7;
+}
+
 /* Horizontal scroll for wide tables (phones) */
 .dataScroll {
   width: 94vw;
@@ -623,6 +630,52 @@ input.dateInput.isPickTarget {
   color: var(--BASE_COLOR);
 }
 
+/* Title lists (tracker aliases, the search bar): a title box, its buttons, and × on each line */
+.termList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+/* Each line in its own box, so its buttons clearly go with its title when the line wraps */
+.termRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em 0.5em;
+  padding: 0.45em 0.5em;
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.budgetPanel .termRow .termInput {
+  flex: 1 1 9em;
+  width: auto;
+}
+
+.termRow .segmented {
+  flex: 0 0 auto;
+}
+
+.termRemove {
+  margin-left: auto;
+}
+
+.budgetButton.termAdd {
+  margin-top: 0.5em;
+  padding: 0.25em 0.9em;
+  font-size: calc(var(--UI_TEXT) * 0.9);
+}
+
+/* Other Account picker (New Entry and Recurring, for Hidden and Transfer) */
+.budgetPanel select.accountSelect {
+  width: auto;
+  min-width: 12em;
+  max-width: 100%;
+  align-self: flex-start;
+}
+
 .panelEntry {
   padding: 0.45em 0.7em;
   border-radius: 8px;
@@ -634,6 +687,13 @@ input.dateInput.isPickTarget {
   margin: 0;
   font-size: 0.9em;
   color: var(--NEGATIVE_TEXT);
+}
+
+/* Paragraphs in a panel (the global p is much bigger) */
+.panelText {
+  margin: 0;
+  font-size: 1em;
+  line-height: 1.4;
 }
 
 .panelButtons {
@@ -694,8 +754,60 @@ input.dateInput.isPickTarget {
   padding: 0.45em 1em;
 }
 
-.searchBar #searchAliases {
+/* The titles to search for: one line each, with All / Costs / Gains / Tracker and × */
+.searchTerms {
+  flex: 1 1 100%;
+  font-size: var(--UI_TEXT);
+}
+
+.searchTerms .termList {
+  gap: 1vmin;
+}
+
+/* A single line sits right on the bar; once there are more, each gets its own box */
+.searchTerms .termRow {
+  justify-content: center;
+  gap: 1vmin;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.searchTerms .termList:has(.termRow + .termRow) .termRow {
+  padding: 0.45em 0.5em;
+  border: 1px solid var(--PANEL_LINE);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.searchBar .termInput {
   flex: 3 1 16em;
+}
+
+.searchTerms .segmented {
+  justify-content: center;
+}
+
+.searchTerms .termRemove {
+  margin-left: 0;
+}
+
+/* + Add Title, From, To, and Search stay together when the bar wraps (on phones, they wrap under each other) */
+.searchDates {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  flex: 1 1 100%;
+  gap: 1vmin;
+}
+
+.searchDates input {
+  flex: 0 1 12em;
+}
+
+.searchDates .budgetButton.termAdd {
+  margin-top: 0;
+  padding: 0.45em 1em;
 }
 
 .searchResults {
@@ -823,6 +935,7 @@ input.dateInput.isPickTarget {
 .calendarToolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 1.2vmin;
   width: 90vw;
   margin: 0 auto 1.5vmin;
 }
@@ -875,6 +988,52 @@ input.dateInput.isPickTarget {
 .dataTable .selectCell {
   width: 2.2em;
   text-align: center;
+}
+
+/* A row that can't be deleted (Savings on Other Accounts) */
+.dataTable .lockedRow {
+  opacity: 0.7;
+}
+
+/* Other Accounts: a narrower table, centered */
+.dataTable.accountsTable {
+  width: min(100%, 720px);
+  margin: 0 auto;
+}
+
+/* An account's entries, in its panel */
+.accountEntries {
+  max-height: 15em;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.accountEntry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 0.9em;
+  padding: 0.25em 0;
+  border-bottom: 1px solid var(--PANEL_LINE);
+  font-variant-numeric: tabular-nums;
+}
+
+.accountEntryDate {
+  opacity: 0.75;
+}
+
+.accountEntryAmount {
+  min-width: 6.5em;
+}
+
+.accountEntryType {
+  opacity: 0.85;
+}
+
+.accountEntry.upcomingChange {
+  font-style: italic;
+  opacity: 0.85;
 }
 
 .sectionInsertRow td {
@@ -1045,6 +1204,37 @@ a.budgetButton:hover {
 
 .settingsForm .panelButtons {
   margin-top: 0.6em;
+}
+
+/* Help: the Help button at the bottom of a page opens the page's help right below it */
+.helpButton {
+  margin-top: 5vmin;
+}
+
+.helpView {
+  margin-top: 2vmin;
+  line-height: 1.45;
+}
+
+.helpView h4 {
+  margin: 1.2em 0 0.4em;
+  font-size: 1.1em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.helpView ul,
+.helpView ol {
+  margin: 0 0 0.8em;
+  padding-left: 1.4em;
+}
+
+.helpView li {
+  margin-bottom: 0.4em;
+}
+
+.helpView li > ol {
+  margin: 0.4em 0 0;
 }
 
 /* Paycheck Calculator */

@@ -279,8 +279,9 @@ window.addEventListener("pageshow", (EVENT) => {
   if (!CONTAINER) return;
   
   const isLoggedIn = !!localStorage.getItem("prismal_jwt");
-  const isPublicPage = location.pathname.toLowerCase().includes("login") || 
-                       location.pathname.toLowerCase().includes("privacy");
+  const isPublicPage = location.pathname.toLowerCase().includes("login") ||
+                       location.pathname.toLowerCase().includes("privacy") ||
+                       location.pathname.toLowerCase().includes("quick"); // Quick Entry uses the key in its link
 
   if (!isLoggedIn && !isPublicPage) {
     window.location.replace("/login.html");
@@ -391,11 +392,12 @@ function transitionTo(URL, useReplace = false) {
  *====================================================================*/
 
 /* GROUP: Small DOM utility */
-// Toggle an element’s hidden state by id.
+// Toggle an element’s hidden state by id. Returns the element (null if there isn't one).
 function toggleElement(ELEMENT_ID) {
-  if (!ELEMENT_ID) return;
+  if (!ELEMENT_ID) return null;
   const ELEMENT = document.getElementById(ELEMENT_ID);
   if (ELEMENT) ELEMENT.hidden = !ELEMENT.hidden;
+  return ELEMENT;
 }
 
 /* GROUP: Click/touch navigation with swipe detection */
@@ -511,10 +513,15 @@ function onDOMReady(fn) {
 }
 // Attach navigation overrides once elements exist in the DOM.
 onDOMReady(() => {
+  // Buttons that show/hide a section (like a page's Help, which opens at the bottom of the page)
   document.querySelectorAll("button[data-toggle]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-toggle");
-      toggleElement(id);
+      const ELEMENT = toggleElement(btn.getAttribute("data-toggle"));
+      if (!ELEMENT) return;
+      btn.setAttribute("aria-expanded", String(!ELEMENT.hidden));
+      if (ELEMENT.hidden) return;
+      const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      ELEMENT.scrollIntoView({ behavior: REDUCED_MOTION ? "auto" : "smooth", block: "start" });
     });
   });
   injectGlobalFooter();

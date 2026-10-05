@@ -7,6 +7,9 @@
 // #region SETUP
 // =====================================================================
 
+// The search bar works right away (a search before the budget loads says it's still loading)
+wireSearch();
+
 window.workspaceReady.then((loaded) => {
   if (!loaded) {
     const dave = document.getElementById("daveMessage");
@@ -15,8 +18,8 @@ window.workspaceReady.then((loaded) => {
   }
   renderHome();
   wireCalendar();
-  wireSearch();
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => openNewEntryPanel(event.currentTarget));
+  document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
 });
 
 document.addEventListener("budget:updated", () => {
@@ -26,6 +29,7 @@ document.addEventListener("budget:updated", () => {
 function renderHome() {
   renderCalendar();
   renderInfoRow();
+  fillTrackerRowTitles();
 }
 
 //#endregion
@@ -128,31 +132,64 @@ function renderInfoRow() {
 // #region ENTRY PANELS
 // =====================================================================
 
-// New entry: title, amount (cost or gain), date, and optional refraction type.
-// Same title + refraction type on that day combines with what's there.
+// New entry: title, amount (cost or gain), date, optional refraction type, and for Hidden or Transfer,
+// an Other Account. Same title + refraction type on that day combines with what's there.
 function openNewEntryPanel(origin) {
   BudgetUI.openPanel({
     origin,
     size: "large",
     title: "New Entry",
     build(form, panel) {
-      const title = BudgetUI.textField({ label: "Title", placeholder: "Coffee, paycheck, gas..." });
-      const amount = BudgetUI.amountField();
-      const date = BudgetUI.dateField({ label: "Date", date: today });
-      const refraction = BudgetUI.refractionField();
-      form.append(title.el, amount.el, date.el, refraction.el, BudgetUI.buttonRow([
+      const fields = BudgetUI.newEntryFields({ accounts: otherAccountNames() });
+      form.append(...fields.els, BudgetUI.buttonRow([
         { label: "Add Entry", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }
       ]));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const entry = { title: title.value(), amount: amount.value(), date: date.value(), sprite: refraction.value() };
-        if (!entry.title) return panel.setError("Give the entry a title.");
-        if (entry.amount === null || Number.isNaN(entry.amount)) return panel.setError("Enter an amount, like 12.50.");
-        if (entry.date === undefined) return panel.setError("That date isn't a real day. Use MM/DD/YYYY.");
-        entry.date = entry.date || today;
+        const { entry, error } = fields.read();
+        if (error) return panel.setError(error);
         BudgetUI.submit(panel, () => addCalendarEntry(entry));
+      });
+    }
+  });
+}
+
+// Quick Entry Icon: makes a key (only while signed in) and opens the Quick Entry page with it in the
+// link, ready to add to the home screen. The icon then opens that New Entry form with no login. The key
+// can only add entries (they join the budget the next time it opens), and stops working when the
+// password changes.
+function openQuickEntrySetup(origin) {
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "Quick Entry Icon",
+    build(form, panel) {
+      const text = (line) => BudgetUI.element("p", "panelText", line);
+      form.append(
+        text("Put an icon on your phone's home screen that opens a New Entry form, with no login needed."),
+        text("The icon can only add entries. It never sees your budget, just the names of your Other Accounts (so you can pick one). Its entries show up here the next time you open Prismal Budget. If your password changes, it stops working."),
+        text("On the next page, add it to your home screen: on iPhone, tap Share, then Add to Home Screen. On Android, tap ⋮, then Add to Home screen."),
+        BudgetUI.buttonRow([
+          { label: "Set It Up", kind: "primary", type: "submit" },
+          { label: "Cancel", onClick: () => panel.close() }
+        ])
+      );
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        panel.setError("");
+        panel.setBusy(true);
+        const result = await budgetApi("/api/quick/key", {});
+        if (!result.ok || !result.data || !result.data.key) {
+          panel.setBusy(false);
+          panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't set it up. Please try again.");
+          return;
+        }
+        const url = `/quick.html?key=${encodeURIComponent(result.data.key)}&setup=1`;
+        if (typeof window.transitionTo === "function") window.transitionTo(url);
+        else window.location.href = url;
       });
     }
   });
@@ -175,6 +212,9 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
     build(form, panel) {
       const display = BudgetUI.renderEntryLine(line, lineIndex);
       display.classList.add("panelEntry");
+      // An entry for an Other Account changes it by the opposite amount
+      const account = linkedAccount(parts[0], cleanString(title));
+      const accountNote = account ? BudgetUI.element("p", "panelHint", `${account.name} (Other Accounts) changes by the opposite of this entry's amount.`) : null;
 
       let mode = "set";
       const amount = BudgetUI.amountField({ label: "Amount", amount: currentAmount });
@@ -189,7 +229,7 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
       );
       const moveTo = BudgetUI.dateField({ label: "Move to", optional: true });
 
-      form.append(display, BudgetUI.field("Change the amount", modeToggle.el), amount.el, moveTo.el, BudgetUI.buttonRow([
+      form.append(display, ...(accountNote ? [accountNote] : []), BudgetUI.field("Change the amount", modeToggle.el), amount.el, moveTo.el, BudgetUI.buttonRow([
         { label: "Save", kind: "primary", type: "submit" },
         { label: "Delete", kind: "danger", onClick: deleteEntry },
         { label: "Cancel", onClick: () => panel.close() }
@@ -228,23 +268,55 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
 // #region SEARCH
 // =====================================================================
 
+// A list of titles, one per line, each with its own buttons (Enter adds the next line, and Enter on an
+// empty line searches), and optional From / To dates
 function wireSearch() {
   const form = document.getElementById("searchForm");
-  if (!form) return;
+  const slot = document.getElementById("searchTerms");
+  if (!form || !slot) return;
+  // What each title finds (the spreadsheet typed rent-, rent+ and car stuff= instead, which still pick
+  // these): All, Costs, Gains, or Tracker (the title is a tracker row: find what it counts)
+  const searchButtons = [
+    { key: "all", label: "All" },
+    { key: "costs", label: "Costs" },
+    { key: "gains", label: "Gains" },
+    { key: "category", label: "Tracker" }
+  ];
   for (const id of ["searchFrom", "searchTo"]) {
     document.getElementById(id)?.addEventListener("focus", (event) => BudgetUI.setPickTarget(event.target));
   }
 
+  const submitButton = form.querySelector("button[type=submit]");
+  const typedEarly = slot.querySelector("input")?.value || ""; // Typed before this script loaded
+  const terms = BudgetUI.termList({
+    items: [{ title: typedEarly, mode: "all" }],
+    options: searchButtons,
+    endings: { "-": "costs", "+": "gains", "=": "category" },
+    label: "Titles to search for",
+    lineLabel: "Title",
+    addLabel: "+ Add Title",
+    // Tracker looks for tracker rows by title, so those get suggested
+    placeholder: (mode) => (mode === "category" ? "Tracker row, like Food" : "Title, like rent"),
+    suggestions: (mode) => (mode === "category" ? "trackerRowTitles" : null),
+    onEnterEmpty: () => submitButton.click()
+  });
+  // The page has a first line already (so nothing moves while the page loads); the working list
+  // looks the same
+  slot.replaceChildren(terms.lines);
+  const pageAddButton = document.getElementById("searchAdd");
+  terms.addButton.id = "searchAdd";
+  if (pageAddButton) pageAddButton.replaceWith(terms.addButton);
+  else form.querySelector(".searchDates")?.prepend(terms.addButton);
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const button = form.querySelector("button[type=submit]");
-    button.disabled = true;
+    submitButton.disabled = true;
     const result = await searchBudget({
-      aliases: document.getElementById("searchAliases").value,
+      terms: terms.items().map(({ title, mode }) => ({ title, match: mode })),
       from: document.getElementById("searchFrom").value,
       to: document.getElementById("searchTo").value
     });
-    button.disabled = false;
+    submitButton.disabled = false;
     BudgetUI.setPickTarget(null);
     BudgetUI.warnIfUnsaved(result);
     if (!result.ok) return showSearchMessage(result.message);
@@ -258,15 +330,30 @@ function showSearchMessage(message) {
   container.hidden = false;
 }
 
-// Results: newest first, each with a checkbox (transfers start unchecked) and a running total
-// of the checked amounts, like the spreadsheet's Search tab
-function renderSearchResults({ results, from, to, aliases }) {
+// Suggestions for a search title's Tracker button: the tracker's row titles
+function fillTrackerRowTitles() {
+  const list = document.getElementById("trackerRowTitles");
+  if (!list) return;
+  const rowTitles = trackerData.slice(1)
+    .filter(row => !["", "-"].includes(String(row[0] ?? "").trim()))
+    .map(row => String(row[0]).replace(/⭕️/g, "").trim());
+  list.replaceChildren(...[...new Set(rowTitles)].map(title => {
+    const option = document.createElement("option");
+    option.value = title;
+    return option;
+  }));
+}
+
+// Results: newest first, each with a checkbox and a running total of the checked amounts, like the
+// spreadsheet's Search tab. Transfers (and entries for Other Accounts) start unchecked, unless a tracker
+// row that counts transfers found them.
+function renderSearchResults({ results, from, to, searchingFor }) {
   const container = document.getElementById("searchResults");
   container.replaceChildren();
   container.hidden = false;
 
   const header = BudgetUI.element("div", "searchHeader");
-  header.appendChild(BudgetUI.element("p", "searchSummary", `Searching from ${from} to ${to} for: ${aliases}`));
+  header.appendChild(BudgetUI.element("p", "searchSummary", `Searching from ${from} to ${to} for: ${searchingFor}`));
   const closeButton = BudgetUI.element("button", "panelClose", "×");
   closeButton.type = "button";
   closeButton.setAttribute("aria-label", "Close search results");
@@ -302,7 +389,7 @@ function renderSearchResults({ results, from, to, aliases }) {
     const checkCell = tr.insertCell();
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.checked = !result.isTransfer;
+    checkbox.checked = result.checked;
     checkbox.dataset.amount = result.amount;
     checkbox.setAttribute("aria-label", `Count ${result.title}`);
     checkCell.appendChild(checkbox);

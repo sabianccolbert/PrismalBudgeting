@@ -59,6 +59,19 @@
         <div id="panelSlot"></div>
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <div id="dataView"></div>
+
+        <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">History Help</h3>
+          <ul>
+            <li>History keeps every week after it's over, with the newest week on top. Each day shows its date, its In Bank at the end of that day, and its entries.</li>
+            <li>A week moves here when the next one starts (on Sunday), so your calendar always starts with this week.</li>
+            <li>By then, its recurring entries have turned into unique entries (like ❗️✔️), so changing a recurring entry never changes your History.</li>
+            <li>To add an entry to a day in History, use New Entry on the home page (or your Quick Entry icon) with that day's date. If that day already has an entry with the same title and refraction type, the amounts are added together. History's In Bank amounts don't change, but the tracker and Search count the new entry.</li>
+            <li>The tracker counts the last 365 days, from History and the calendar.</li>
+          </ul>
+        </section>
       </main>
     </div>
   </body>

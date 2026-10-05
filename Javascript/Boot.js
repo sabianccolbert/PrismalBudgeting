@@ -7,7 +7,7 @@
   /* ===============================
    * 0) SITE VERSION (bump per deploy)
    * =============================== */
-  const SITE_VERSION = "10.04.2026.A";
+  const SITE_VERSION = "10.05.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   /* ===============================
@@ -43,6 +43,7 @@
     if (p === "/login") return "login";
     if (p === "/privacy%20and%20terms") return "privacy";
     if (p === "/settings") return "settings";
+    if (p === "/quick") return "quick";
 
     // Menu pages (folder: /menu/)
     if (p === "/menu" || p === "/menu/index") return "menu";
@@ -72,9 +73,11 @@
   const isLoggedIn = !!localStorage.getItem("prismal_jwt");
   // The link in a password reset email (/login.html?reset=...) opens the login page even when signed in
   const isResetLink = PAGE === "login" && new URLSearchParams(location.search).has("reset");
+  // Pages that work without logging in (Quick Entry uses the key in its link instead)
+  const PUBLIC_PAGES = ["login", "privacy", "quick"];
 
-  // If they are not logged in, and not already on the login page, redirect them.
-  if (!isLoggedIn && PAGE !== "login" && PAGE !== "privacy") {
+  // If they are not logged in, and not already on a page that works without it, redirect them.
+  if (!isLoggedIn && !PUBLIC_PAGES.includes(PAGE)) {
     window.location.replace("/login.html");
     return;
   }
@@ -105,12 +108,14 @@
     "/Javascript/Analytics.js"
   ];
 
-  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "tracker", "calculator", "logs", "settings"];
+  // Quick Entry borrows the budget helpers and New Entry form without loading a budget (see Quick Entry.js)
+  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "tracker", "calculator", "logs", "settings", "quick"];
 
   // The script that draws each budget page (the menu data pages share Budget Pages.js)
   const PAGE_SCRIPTS = {
     home: "/Javascript/Calendar Page.js",
-    settings: "/Javascript/Settings Page.js"
+    settings: "/Javascript/Settings Page.js",
+    quick: "/Javascript/Quick Entry.js"
   };
 
   function appendScript(src){
@@ -122,13 +127,14 @@
   
 
   function loadPageScripts(){
-    GLOBAL_SCRIPTS.forEach(appendScript);
+    // Quick Entry's link carries its key, so that page never loads analytics
+    GLOBAL_SCRIPTS.filter(src => PAGE !== "quick" || !src.endsWith("/Analytics.js")).forEach(appendScript);
 
     if (PAGE === "login") {
       appendScript("/Javascript/Login.js");
     }
-    else{
-      appendScript("/Javascript/Session.js");
+    else if (!PUBLIC_PAGES.includes(PAGE)) {
+      appendScript("/Javascript/Session.js"); // Sends signed-out visitors to login, so public pages skip it
     }
     if (PAGE === "notfound") {
       appendScript("/Javascript/Debug.js");

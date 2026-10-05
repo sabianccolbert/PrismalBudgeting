@@ -1,6 +1,7 @@
-// Budget Pages: the menu data pages (Recurring, History, Tracker, Paycheck Calculator, Change Logs, ...).
-// Recurring and Tracker: New Entry, tap a row to change it, and an Edit mode with section
-// buttons between rows, delete checkboxes, and a move bar to drag rows.
+// Budget Pages: the menu data pages (Recurring, History, Other Accounts, Tracker, Paycheck Calculator,
+// Change Logs). Recurring and Tracker: New Entry, tap a row to change it, and an Edit mode with section
+// buttons between rows, delete checkboxes, and a move bar to drag rows. Other Accounts: tap an account
+// to change it, and an Edit mode to add, delete, and drag accounts.
 // Every change goes through Process Budget.js (runBudgetAction), which saves and then fires
 // "budget:updated" so the page re-renders.
 
@@ -15,7 +16,7 @@ const PAGE_RENDERERS = {
   tracker: renderTrackerPage,
   logs: renderLogsPage,
   calculator: renderCalculatorPage,
-  accounts: null
+  accounts: renderAccountsPage
 };
 
 const FREQUENCIES = ["Weekly", "Biweekly", "Semi-Monthly", "Monthly", "3 Month", "6 Month", "Yearly"];
@@ -121,7 +122,7 @@ function renderHistoryPage(view) {
 }
 
 // Tracker tab: [0] column titles, then
-// [title, last 4 weeks, last 3 months, last year, aliases]
+// [title, last 4 weeks, last 3 months, last year, aliases ("rent-, paycheck+, atm", see parseAlias)]
 // Separator rows: ["-", category title, "", "", "-"]
 // Titles starting with ⭕️ also count Transfers
 function renderTrackerPage(view) {
@@ -144,11 +145,39 @@ function renderTrackerPage(view) {
       tr.appendChild(cell(row[1], "amountCell"));
       tr.appendChild(cell(row[2], "amountCell"));
       tr.appendChild(cell(row[3], "amountCell"));
-      tr.appendChild(cell(row[4], "aliasCell"));
+      tr.appendChild(cell(trackerAliasText(row), "aliasCell"));
     },
     onEntryClick: (index, origin) => openTrackerPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
+}
+
+// Other Accounts: [0] column titles, then [name, start, "default" | ""] (see OTHER ACCOUNTS in Process
+// Budget.js). Balances come from each account's start and its entries (Hidden and Transfer entries
+// titled with its name): today, and on the calendar's last day. Savings can't be deleted.
+function renderAccountsPage(view) {
+  renderToolbar("accounts", (origin) => openAccountPanel(origin, null), { newLabel: "New Account", newInEditMode: true });
+  view.replaceChildren();
+  const summaries = new Map(accountSummaries().map(summary => [summary.index, summary]));
+
+  const tableEl = buildRowTable({
+    tableName: "accounts",
+    columns: ["Account", "Balance", `By ${formatToMMDD(gridEndDate)}`],
+    rows: indexedRows(accountsData.list, 1),
+    extraClass: "accountsTable",
+    sections: false,
+    canSelect: (row) => !isDefaultAccount(row),
+    lockedNote: (row) => `${row[0]} is your default account, so it can't be deleted.`,
+    renderEntry(tr, row, index) {
+      const summary = summaries.get(index);
+      tr.appendChild(cell(row[0], "titleCell"));
+      tr.appendChild(cell(formatMoney(summary ? summary.today : 0), "amountCell"));
+      tr.appendChild(cell(formatMoney(summary ? summary.calendarEnd : 0), "amountCell"));
+    },
+    onEntryClick: (index, origin) => openAccountPanel(origin, index)
+  });
+  view.appendChild(wrapScroll(tableEl));
+  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", "Tap an account to rename it or set its balance."));
 }
 
 // Change Logs (the spreadsheet's "Form Entries" tab), newest first:
@@ -309,15 +338,17 @@ function calculatorForm(inputs) {
 // #region TOOLBAR + EDIT MODE TABLE
 // =====================================================================
 
-// New Entry + Edit normally; Delete Selected + Done in edit mode
-function renderToolbar(tableName, openNewEntry) {
+// New Entry + Edit normally; Delete Selected + Done in edit mode. Other Accounts adds accounts in edit
+// mode instead (newLabel: the add button's label, newInEditMode: show it in edit mode).
+function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMode = false } = {}) {
   const bar = document.getElementById("pageToolbar");
   if (!bar) return;
   bar.replaceChildren();
+  const newButton = (kind) => toolbarButton(newLabel, kind, (event) => openNew(event.currentTarget));
 
   if (!editMode) {
-    bar.append(toolbarButton("New Entry", "primary", (event) => openNewEntry(event.currentTarget)));
-    bar.append(toolbarButton("Edit", "", () => {
+    if (!newInEditMode) bar.append(newButton("primary"));
+    bar.append(toolbarButton("Edit", newInEditMode ? "primary" : "", () => {
       editMode = true;
       selectedRows.clear();
       BudgetUI.closePanel(true);
@@ -328,6 +359,7 @@ function renderToolbar(tableName, openNewEntry) {
 
   const deleteButton = toolbarButton("Delete Selected", "danger", () => deleteSelected(tableName));
   deleteButton.id = "deleteSelectedButton";
+  if (newInEditMode) bar.append(newButton(""));
   bar.append(deleteButton, toolbarButton("Done", "primary", () => {
     editMode = false;
     selectedRows.clear();
@@ -351,10 +383,15 @@ function updateDeleteButton() {
   button.disabled = selectedRows.size === 0;
 }
 
+const DELETE_NOTES = {
+  recurring: " Recurring entries stop from today on; days that already passed keep theirs.",
+  accounts: " Their entries stay on your calendar, but they won't change an account anymore."
+};
+
 async function deleteSelected(tableName) {
   const count = selectedRows.size;
   if (!count) return;
-  const note = tableName === "recurring" ? " Recurring entries stop from today on; days that already passed keep theirs." : "";
+  const note = DELETE_NOTES[tableName] || "";
   if (!window.confirm(`Delete ${count} row${count > 1 ? "s" : ""}?${note}`)) return;
   const result = await deleteBudgetRows(tableName, [...selectedRows]);
   if (!result.ok) return BudgetUI.showToast(result.message, true);
@@ -363,8 +400,9 @@ async function deleteSelected(tableName) {
 }
 
 // Rows for a table: entries and sections, with a move bar + delete checkbox in edit mode,
-// and "+ Section" buttons between rows
-function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, extraClass }) {
+// and "+ Section" buttons between rows (sections: false leaves those out). canSelect(row) false
+// locks a row out of deleting; lockedNote(row) says why when it's tapped in edit mode.
+function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, extraClass, sections = true, canSelect = () => true, lockedNote = null }) {
   const headers = editMode ? ["", "", ...columns] : columns;
   const tableEl = createDataTable(headers);
   if (extraClass) tableEl.classList.add(extraClass);
@@ -372,13 +410,13 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
   const body = tableEl.tBodies[0];
 
   for (const { index, row } of rows) {
-    if (editMode) body.appendChild(sectionButtonRow(index, headers.length));
+    if (editMode && sections) body.appendChild(sectionButtonRow(index, headers.length));
 
     const tr = document.createElement("tr");
     tr.dataset.index = index;
     if (editMode) {
       tr.appendChild(moveBarCell());
-      tr.appendChild(selectCell(index));
+      tr.appendChild(selectCell(index, canSelect(row)));
       if (selectedRows.has(index)) tr.classList.add("selected");
     }
     if (isSeparatorRow(row)) {
@@ -388,12 +426,12 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
       td.textContent = row[1] ?? "";
       tr.appendChild(td);
     } else {
-      renderEntry(tr, row);
+      renderEntry(tr, row, index);
     }
     tr.classList.add("clickable");
     body.appendChild(tr);
   }
-  if (editMode) body.appendChild(sectionButtonRow(ROW_TABLES[tableName].get().length, headers.length));
+  if (editMode && sections) body.appendChild(sectionButtonRow(ROW_TABLES[tableName].get().length, headers.length));
 
   body.addEventListener("click", (event) => {
     const sectionButton = event.target.closest(".sectionButton");
@@ -408,6 +446,10 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
     if (editMode) {
       // Tapping a row (or its checkbox) toggles it for deletion
       const checkbox = tr.querySelector(".selectRow");
+      if (!checkbox) {
+        if (lockedNote) BudgetUI.showToast(lockedNote(ROW_TABLES[tableName].get()[index]));
+        return;
+      }
       if (event.target !== checkbox) checkbox.checked = !checkbox.checked;
       toggleSelected(index, checkbox.checked, tr);
       return;
@@ -452,9 +494,18 @@ function moveBarCell() {
   return td;
 }
 
-function selectCell(index) {
+// A delete checkbox, or a lock for a row that can't be deleted
+function selectCell(index, selectable = true) {
   const td = document.createElement("td");
   td.className = "selectCell";
+  if (!selectable) {
+    const lock = BudgetUI.element("span", "lockedRow", "🔒");
+    lock.title = "Can't be deleted";
+    lock.setAttribute("role", "img");
+    lock.setAttribute("aria-label", "Can't be deleted");
+    td.appendChild(lock);
+    return td;
+  }
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
   checkbox.className = "selectRow";
@@ -571,14 +622,21 @@ function openRecurringPanel(origin, index) {
       const frequency = BudgetUI.selectField({ label: "Frequency", options: frequencies, value: existing ? existing[3] : "Monthly" });
       const start = BudgetUI.dateField({ label: "Start Date", date: existing ? parseTypedDate(existing[2]) : today });
       const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : null, optional: true });
-      const refraction = BudgetUI.refractionField({ value: existing ? getSpecialType(existing[5]) : "", allowAuto: !existing });
+      // Hidden and Transfer entries can move money into or out of an Other Account (like a savings transfer)
+      const account = BudgetUI.accountField({ accounts: otherAccountNames(), title, amount });
+      const refraction = BudgetUI.refractionField({
+        value: existing ? getSpecialType(existing[5]) : "",
+        allowAuto: !existing,
+        onChange: (key) => account.setVisible(BudgetUI.isAccountType(key))
+      });
+      account.setVisible(BudgetUI.isAccountType(refraction.value()));
       let frequencyTouched = false;
       frequency.input.addEventListener("change", () => { frequencyTouched = true; });
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteEntry }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Entry", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(title.el, amount.el, frequency.el, start.el, end.el, refraction.el, BudgetUI.buttonRow(buttons));
+      form.append(title.el, amount.el, frequency.el, start.el, end.el, refraction.el, account.el, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -609,7 +667,8 @@ function openRecurringPanel(origin, index) {
   });
 }
 
-// New tracker row (index null) or change the tapped one
+// New tracker row (index null) or change the tapped one. Each alias gets All / Costs / Gains buttons.
+// Costs, Gains, and Undefined fill in by themselves, so their panels only say what they count.
 function openTrackerPanel(origin, index) {
   const existing = index === null ? null : trackerData[index];
   const isAuto = !!existing && TRACKER_AUTO_ROWS.includes(cleanString(existing[0]));
@@ -620,23 +679,23 @@ function openTrackerPanel(origin, index) {
     build(form, panel) {
       const existingTitle = existing ? String(existing[0]).replace("⭕️", "") : "";
       const title = BudgetUI.textField({ label: "Title", value: existingTitle, placeholder: "Groceries, car stuff...", disabled: isAuto });
-      const aliasHint = isAuto
-        ? (cleanString(existing[0]) === "undefined" ? "Filled in automatically: entry titles no other row tracks." : "Counts every entry automatically.")
-        : "Entry titles to count, separated by commas. rent- counts only costs, paycheck+ only gains.";
-      const aliases = BudgetUI.textField({ label: "Aliases", value: existing ? existing[4] : "", placeholder: "rent-, paycheck+, atm", multiline: true, hint: aliasHint, disabled: isAuto, optional: !isAuto });
-      const transfers = BudgetUI.checkboxField({ label: "Also count ⭕️ Transfers", checked: existing ? String(existing[0]).startsWith("⭕️") : false, disabled: isAuto });
+      const aliases = isAuto ? null : BudgetUI.aliasField({ aliases: existing ? aliasList(existing[4]) : [] });
+      const transfers = BudgetUI.checkboxField({ label: "Also count ⭕️ Transfers", checked: existing ? String(existing[0]).startsWith("⭕️") : false });
+      const fields = isAuto
+        ? [title.el, BudgetUI.field("Counts", BudgetUI.element("p", "panelText", autoRowNote(existing)))]
+        : [title.el, aliases.el, transfers.el];
 
       const buttons = existing
         ? [...(isAuto ? [] : [{ label: "Save", kind: "primary", type: "submit" }]), { label: "Delete", kind: "danger", onClick: deleteRow }, { label: isAuto ? "Close" : "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Row", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(title.el, aliases.el, transfers.el, BudgetUI.buttonRow(buttons));
+      form.append(...fields, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         if (isAuto) return;
-        const fields = { title: title.value(), aliases: aliases.input.value, tracksTransfers: transfers.value() };
-        if (!fields.title) return panel.setError("Give the tracker row a title.");
-        BudgetUI.submit(panel, () => saveTrackerEntry(fields, index));
+        const changes = { title: title.value(), aliases: aliases.value(), tracksTransfers: transfers.value() };
+        if (!changes.title) return panel.setError("Give the tracker row a title.");
+        BudgetUI.submit(panel, () => saveTrackerEntry(changes, index));
       });
 
       function deleteRow() {
@@ -646,6 +705,78 @@ function openTrackerPanel(origin, index) {
       }
     }
   });
+}
+
+// New account (index null, from edit mode) or change the tapped one: its name and today's balance,
+// and the entries that changed it. Setting the balance makes today's balance that amount; entries
+// keep changing it from there.
+function openAccountPanel(origin, index) {
+  const existing = index === null ? null : accountsData.list[index];
+  const summary = existing ? accountSummaries().find(account => account.index === index) : null;
+  const isDefault = !!existing && isDefaultAccount(existing);
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: existing ? "Change Account" : "New Account",
+    build(form, panel) {
+      const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Cash, investments, HSA..." });
+      const balance = BudgetUI.textField({
+        label: "Balance",
+        value: summary ? summary.today.toFixed(2) : "",
+        placeholder: "0.00",
+        optional: !existing,
+        hint: existing ? "What's in it today. Change it any time to match the real account." : "What's in it today."
+      });
+      balance.input.inputMode = "decimal";
+
+      const fields = [name.el, balance.el];
+      if (isDefault) fields.push(BudgetUI.element("p", "panelHint", `${existing[0]} is your default account, so it can't be deleted.`));
+      if (summary) fields.push(accountEntriesField(summary));
+      const buttons = existing
+        ? [{ label: "Save", kind: "primary", type: "submit" }, ...(isDefault ? [] : [{ label: "Delete", kind: "danger", onClick: deleteAccount }]), { label: "Cancel", onClick: () => panel.close() }]
+        : [{ label: "Add Account", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
+      form.append(...fields, BudgetUI.buttonRow(buttons));
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!name.value()) return panel.setError("Give the account a name.");
+        const typed = balance.input.value.replace(/[$,\s]/g, "");
+        const amount = typed === "" ? null : Number(typed); // Blank keeps the balance (a new account starts at $0.00)
+        if (amount !== null && !Number.isFinite(amount)) return panel.setError("Enter the balance as a number, like 250.00.");
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), balance: amount }, index));
+      });
+
+      function deleteAccount() {
+        if (!window.confirm(`Delete ${existing[0]}? Its entries stay on your calendar, but they won't change an account anymore.`)) return;
+        BudgetUI.submit(panel, () => deleteBudgetRows("accounts", [index]));
+      }
+    }
+  });
+}
+
+// An account's entries for its panel: the ones still to come on the calendar, then the latest ones.
+// Amounts are what the account gets (the opposite of the entry's amount).
+const ACCOUNT_ENTRIES_SHOWN = 8;
+
+function accountEntriesField(summary) {
+  const upcoming = summary.entries.filter(entry => entry.date > today);
+  const latest = summary.entries.filter(entry => entry.date <= today).slice(0, ACCOUNT_ENTRIES_SHOWN);
+  if (upcoming.length === 0 && latest.length === 0) {
+    return BudgetUI.field("Entries", BudgetUI.element("p", "panelText", `None yet. Hidden and Transfer entries titled ${summary.name} change it.`));
+  }
+  const list = BudgetUI.element("ul", "accountEntries");
+  for (const entry of [...upcoming, ...latest]) {
+    const item = BudgetUI.element("li", entry.date > today ? "accountEntry upcomingChange" : "accountEntry");
+    item.appendChild(BudgetUI.element("span", "accountEntryDate", formatToMMDDYYYY(entry.date)));
+    const amount = BudgetUI.element("span", "accountEntryAmount", (entry.change > 0 ? "+" : "") + formatMoney(entry.change));
+    if (entry.change > 0) amount.classList.add("positive");
+    if (entry.change < 0) amount.classList.add("negative");
+    item.appendChild(amount);
+    const type = getSpecialType(entry.sprite) === "⭕️" ? "⭕️ Transfer" : "✖️ Hidden";
+    item.appendChild(BudgetUI.element("span", "accountEntryType", entry.date > today ? `${type}, coming up` : type));
+    list.appendChild(item);
+  }
+  return BudgetUI.field("Entries", list, { hint: "What each entry put in or took out. Upcoming ones are on the calendar after today." });
 }
 
 // New section (index null, inserted at atIndex) or rename/delete the tapped one
@@ -733,6 +864,28 @@ function wrapScroll(tableEl) {
 
 function isSeparatorRow(row) {
   return String(row[0] ?? "").trim() === "-";
+}
+
+// A tracker row's stored aliases ("rent-, paycheck+, atm") as [{ title, clean, count }]
+function aliasList(text) {
+  return String(text ?? "").split(",").map(alias => parseAlias(alias)).filter(alias => alias.clean);
+}
+
+// The Aliases column in words: "rent (costs), paycheck (gains), atm"
+function trackerAliasText(row) {
+  const rowType = cleanString(row[0]);
+  if (rowType === "costs") return "Every cost";
+  if (rowType === "gains") return "Every gain";
+  return describeAliases(row[4]);
+}
+
+// What Costs, Gains, or Undefined counts, for its panel
+function autoRowNote(row) {
+  const rowType = cleanString(row[0]);
+  if (rowType === "costs") return "Every cost, except transfers. This row fills in by itself.";
+  if (rowType === "gains") return "Every gain, except transfers. This row fills in by itself.";
+  const titles = trackerAliasText(row);
+  return `Entries that no other row counts${titles ? ": " + titles : " (there aren't any right now)"}. This row fills in by itself.`;
 }
 
 function isBlankRow(row) {

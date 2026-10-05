@@ -32,7 +32,8 @@ const BudgetUI = (() => {
 
   // Open a panel. size "large" goes into the page's #panelSlot (right above the calendar/table),
   // "small" floats next to its origin. build(form, panel) adds the fields and buttons.
-  function openPanel({ origin, size = "large", title, build }) {
+  // closable: false leaves out the × and Escape (for a page that is just the panel, like Quick Entry).
+  function openPanel({ origin, size = "large", title, build, closable = true }) {
     closePanel(true);
 
     const panel = element("section", `budgetPanel ${size}`);
@@ -44,7 +45,7 @@ const BudgetUI = (() => {
     const closeButton = element("button", "panelClose", "×");
     closeButton.type = "button";
     closeButton.setAttribute("aria-label", "Close");
-    header.appendChild(closeButton);
+    if (closable) header.appendChild(closeButton);
 
     const form = element("form", "panelBody");
     form.noValidate = true;
@@ -58,6 +59,7 @@ const BudgetUI = (() => {
       panel,
       form,
       origin,
+      closable,
       close: () => closePanel(),
       setError(message) {
         error.textContent = message || "";
@@ -91,7 +93,7 @@ const BudgetUI = (() => {
 
     // Date fields fill from calendar taps right away (no keyboard needed on phones)
     const firstDate = form.querySelector("input.dateInput");
-    if (firstDate) setPickTarget(firstDate);
+    if (firstDate && hasCalendar()) setPickTarget(firstDate);
     if (window.matchMedia("(pointer: fine)").matches) {
       const firstField = form.querySelector("input:not([type=checkbox]):not(:disabled), textarea:not(:disabled), select:not(:disabled)");
       if (firstField) firstField.focus({ preventScroll: true });
@@ -182,7 +184,7 @@ const BudgetUI = (() => {
   }
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && currentPanel) closePanel();
+    if (event.key === "Escape" && currentPanel && currentPanel.closable) closePanel();
   });
 
   //#endregion
@@ -260,13 +262,68 @@ const BudgetUI = (() => {
     };
   }
 
-  // Refraction type picker. value(): "" (Auto), "❗️", "✖️", or "⭕️".
-  function refractionField({ value = "", allowAuto = true, optional = allowAuto } = {}) {
+  // Refraction type picker. value(): "" (Auto), "❗️", "✖️", or "⭕️". onChange(key) runs when one is tapped.
+  function refractionField({ value = "", allowAuto = true, optional = allowAuto, onChange = null } = {}) {
     const options = allowAuto ? [{ key: "", label: "Auto" }, ...REFRACTION_TYPES] : REFRACTION_TYPES;
-    const picker = segmented(options, value || (allowAuto ? "" : "❗️"));
+    const picker = segmented(options, value || (allowAuto ? "" : "❗️"), onChange);
     const hint = allowAuto ? "Auto matches an entry that's already there, or uses Regular." : "";
     return { el: field("Refraction Type", picker.el, { optional, hint }), value: () => picker.value() };
   }
+
+  // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked.
+  // An entry changes an account when it's titled with the account's name, so picking one fills in the
+  // title (and typing an account's name picks it). The account gets the opposite of the entry's amount.
+  // accounts: names in order. title, amount: the form's textField and amountField.
+  function accountField({ accounts = [], title, amount }) {
+    const select = element("select", "selectInput accountSelect");
+    select.appendChild(new Option("None", ""));
+    for (const name of accounts) select.appendChild(new Option(name, name));
+    const wrapper = field("Other Account", select, { optional: true });
+    const hint = element("span", "panelHint");
+    wrapper.appendChild(hint);
+    wrapper.hidden = true;
+
+    const accountTitled = (text) => accounts.find(name => cleanString(name) === cleanString(text)) || "";
+    function describe() {
+      const name = select.value;
+      const value = amount.value();
+      if (!name) hint.textContent = "Pick an account if this money moves into or out of it.";
+      else if (value === null || Number.isNaN(value) || value === 0) hint.textContent = `A cost adds to ${name}, and a gain takes from it.`;
+      else if (value < 0) hint.textContent = `Adds ${formatMoney(-value)} to ${name}.`;
+      else hint.textContent = `Takes ${formatMoney(value)} out of ${name}.`;
+    }
+
+    select.addEventListener("change", () => {
+      if (select.value) {
+        title.input.value = select.value;
+      } else if (accountTitled(title.input.value)) {
+        // Titled with an account's name, it would still change that account
+        title.input.value = "";
+        title.input.focus();
+      }
+      describe();
+    });
+    title.input.addEventListener("input", () => {
+      select.value = accountTitled(title.input.value);
+      describe();
+    });
+    amount.el.addEventListener("input", describe);
+    amount.el.addEventListener("click", describe); // The Cost / Gain buttons
+
+    return {
+      el: wrapper,
+      select,
+      // Shown for Hidden and Transfer (when there are accounts to pick)
+      setVisible(visible) {
+        wrapper.hidden = !visible || accounts.length === 0;
+        select.value = accountTitled(title.input.value);
+        describe();
+      },
+      value: () => (wrapper.hidden ? "" : select.value)
+    };
+  }
+
+  const isAccountType = (key) => key === "✖️" || key === "⭕️";
 
   // Date field. value(): Date, null when blank, undefined when it isn't a real date.
   function dateField({ label = "Date", date = null, optional = false } = {}) {
@@ -311,6 +368,158 @@ const BudgetUI = (() => {
     return { el: wrapper, input, value: () => input.checked };
   }
 
+  // A list of titles, one per line, each with its own buttons (like All / Costs / Gains) and an ×.
+  // The tracker's aliases and the search bar use it. A comma starts the next line (so a pasted list
+  // splits up), Enter adds a line, and a title typed with an ending (rent-, paycheck+) picks its button.
+  //   items: [{ title, mode }]. options: [{ key, label }] (the first is the default for new lines).
+  //   endings: { "-": mode, ... }. placeholder and suggestions (a datalist id) can be functions of the
+  //   line's mode. onEnterEmpty: runs when Enter is pressed on an empty line.
+  // Returns { el (the lines and the add button), lines, addButton, items(): [{ title, mode }] for
+  // every line, blank ones too }
+  function termList({ items = [], options, endings = {}, label, lineLabel, addLabel, placeholder = "", suggestions = null, onEnterEmpty = null }) {
+    const list = element("div", "termList");
+    list.setAttribute("role", "group");
+    list.setAttribute("aria-label", label);
+    const lines = [];
+    const defaultMode = options[0].key;
+    const forMode = (setting, mode) => (typeof setting === "function" ? setting(mode) : setting);
+
+    // "rent-" -> { title: "rent", mode: endings["-"], ended: true }; without an ending, the line keeps its mode
+    const readTyped = (text, mode) => {
+      const trimmed = String(text ?? "").replace(/\s+/g, " ").trim();
+      const ending = trimmed.slice(-1);
+      if (ending && Object.prototype.hasOwnProperty.call(endings, ending)) {
+        return { title: trimmed.slice(0, -1).trim(), mode: endings[ending], ended: true };
+      }
+      return { title: trimmed, mode, ended: false };
+    };
+
+    // A line goes after the line `after`, or at the end
+    function addLine(item = { title: "", mode: defaultMode }, after = null) {
+      const row = element("div", "termRow");
+      const input = element("input", "termInput");
+      input.type = "text";
+      input.value = item.title;
+      input.setAttribute("aria-label", lineLabel);
+      const modes = segmented(options, item.mode, (mode) => showMode(mode));
+      modes.el.setAttribute("aria-label", `${lineLabel}: find`);
+      const remove = element("button", "panelClose termRemove", "×");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${lineLabel.toLowerCase()}`);
+      row.append(input, modes.el, remove);
+
+      // Placeholder and suggestions for the line's button (the search bar's Tracker suggests rows)
+      function showMode(mode) {
+        input.placeholder = forMode(placeholder, mode);
+        const listId = suggestions ? suggestions(mode) : null;
+        if (listId) input.setAttribute("list", listId);
+        else input.removeAttribute("list");
+      }
+      showMode(item.mode);
+
+      const line = { input, modes };
+      if (after) {
+        lines.splice(lines.indexOf(after) + 1, 0, line);
+        after.input.closest(".termRow").after(row);
+      } else {
+        lines.push(line);
+        list.appendChild(row);
+      }
+
+      const readEnding = () => {
+        const typed = readTyped(input.value, modes.value());
+        if (!typed.ended) return;
+        input.value = typed.title;
+        modes.set(typed.mode);
+        showMode(typed.mode);
+      };
+      input.addEventListener("change", readEnding);
+
+      input.addEventListener("input", () => {
+        if (!input.value.includes(",")) return;
+        const [first, ...rest] = input.value.split(",");
+        if (!input.value.replace(/,/g, "").trim()) {
+          input.value = ""; // Just commas: nothing to split
+          return;
+        }
+        input.value = first.trim();
+        readEnding();
+        let last = line;
+        rest.forEach((piece, i) => {
+          if (!piece.trim() && i < rest.length - 1) return; // ",," leaves no empty line
+          last = addLine(readTyped(piece, defaultMode), last);
+        });
+        last.input.focus();
+        last.input.setSelectionRange(last.input.value.length, last.input.value.length);
+      });
+
+      // Enter starts the next line instead of sending the form
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.isComposing) return;
+        event.preventDefault();
+        if (!input.value.trim()) {
+          if (onEnterEmpty) onEnterEmpty();
+          return;
+        }
+        readEnding();
+        const next = lines[lines.indexOf(line) + 1];
+        (next && !next.input.value.trim() ? next : addLine(undefined, line)).input.focus();
+      });
+
+      remove.addEventListener("click", () => {
+        lines.splice(lines.indexOf(line), 1);
+        row.remove();
+        if (lines.length === 0) addLine();
+        addButton.focus();
+      });
+      return line;
+    }
+
+    const addButton = element("button", "budgetButton termAdd", addLabel);
+    addButton.type = "button";
+    addButton.addEventListener("click", () => {
+      (lines.find(line => !line.input.value.trim()) || addLine()).input.focus();
+    });
+
+    for (const item of items) addLine(item);
+    if (lines.length === 0) addLine();
+
+    const el = element("div", "termField");
+    el.append(list, addButton);
+    return {
+      el,
+      lines: list,
+      addButton,
+      items: () => lines.map(line => {
+        const { title, mode } = readTyped(line.input.value, line.modes.value());
+        return { title, mode };
+      })
+    };
+  }
+
+  // Tracker row aliases: one entry title per line, each counting All of its amounts, only Costs, or
+  // only Gains (rent-, paycheck+, and atm= pick them too).
+  // aliases: [{ title, count }]. value(): [{ title, count }] (blank lines left out)
+  const ALIAS_COUNTS = [{ key: "all", label: "All" }, { key: "costs", label: "Costs" }, { key: "gains", label: "Gains" }];
+
+  function aliasField({ aliases = [], hint = "Entry titles this row counts. All counts every amount, Costs only costs, and Gains only gains." } = {}) {
+    const terms = termList({
+      items: aliases.map(alias => ({ title: alias.title, mode: alias.count })),
+      options: ALIAS_COUNTS,
+      endings: { "-": "costs", "+": "gains", "=": "all" },
+      label: "Aliases",
+      lineLabel: "Alias",
+      addLabel: "+ Add Alias",
+      placeholder: "Entry title"
+    });
+    return {
+      el: field("Aliases", terms.el, { optional: true, hint }),
+      value: () => terms.items()
+        .filter(item => cleanString(item.title))
+        .map(item => ({ title: item.title, count: item.mode }))
+    };
+  }
+
   // Pill buttons where exactly one is chosen
   function segmented(options, value, onChange) {
     const group = element("div", "segmented");
@@ -333,6 +542,29 @@ const BudgetUI = (() => {
     }
     set(value);
     return { el: group, value: () => current, set };
+  }
+
+  // The New Entry form's fields: title, amount (cost or gain), date, optional refraction type, and for
+  // Hidden or Transfer, the Other Account it moves money into or out of (accounts: their names).
+  // The calendar's New Entry panel and the Quick Entry page share it, so they always match.
+  // read(): { entry: { title, amount, date, sprite } } when it's filled in right, otherwise { error }
+  function newEntryFields({ date = today, accounts = [] } = {}) {
+    const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas..." });
+    const amount = amountField();
+    const dateInput = dateField({ label: "Date", date });
+    const account = accountField({ accounts, title, amount });
+    const refraction = refractionField({ onChange: (key) => account.setVisible(isAccountType(key)) });
+    return {
+      els: [title.el, amount.el, dateInput.el, refraction.el, account.el],
+      read() {
+        const entry = { title: title.value(), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
+        if (!entry.title) return { error: "Give the entry a title." };
+        if (entry.amount === null || Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
+        if (entry.date === undefined) return { error: "That date isn't a real day. Use MM/DD/YYYY." };
+        entry.date = entry.date || date;
+        return { entry };
+      }
+    };
   }
 
   // Buttons: [{ label, kind: "primary" | "danger" | "", type: "submit" | "button", onClick }]
@@ -455,7 +687,12 @@ const BudgetUI = (() => {
     dateField,
     selectField,
     checkboxField,
+    accountField,
+    isAccountType,
+    termList,
+    aliasField,
     segmented,
+    newEntryFields,
     buttonRow,
     setPickTarget,
     datePickActive,

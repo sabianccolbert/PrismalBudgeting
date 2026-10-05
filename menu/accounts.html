@@ -59,6 +59,32 @@
         <div id="panelSlot"></div>
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <div id="dataView"></div>
+
+        <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Other Accounts Help</h3>
+          <p>Other Accounts keeps track of your money outside your budget's account, like savings, cash, or investments. Balance is what's in each account today. The By column also counts what's still coming up on your calendar.</p>
+
+          <h4>Moving Money In And Out</h4>
+          <ul>
+            <li>When you add a Hidden or Transfer entry (on the calendar, in Recurring Entries, or with the Quick Entry icon), pick the account under Other Account. The entry is titled with the account's name.</li>
+            <li>The account gets the opposite of the entry's amount: a cost on your calendar adds to the account, and a gain takes from it. Moving $100 into savings is a $100 Transfer cost: In Bank goes down $100, and Savings goes up $100.</li>
+            <li>⭕️ <strong>Transfer</strong> changes In Bank too, since the money moves between your budget's account and this one. ✖️ <strong>Hidden</strong> doesn't, like putting cash into savings.</li>
+            <li>Every Hidden or Transfer entry titled with an account's name counts, even one you typed yourself. Changing, moving, or deleting one changes the account too.</li>
+            <li>Since the money is still yours, the tracker doesn't count these entries as costs or gains. Like transfers, only a tracker row set to count transfers counts them.</li>
+          </ul>
+
+          <h4>Balances</h4>
+          <p>Tap an account to set its balance to what's in the real account today. Its entries keep changing it from there, so you only need to set it again if it drifts. Tapping an account also shows its latest entries and the ones coming up.</p>
+
+          <h4>Edit</h4>
+          <ul>
+            <li>Tap Edit to add an account (New Account), drag accounts by their ≡ bar, or check accounts and delete them.</li>
+            <li>Savings is always there, so it can't be deleted (🔒), but you can rename it.</li>
+            <li>Renaming an account renames its entries (and tracker aliases) too. Deleting one leaves its entries on your calendar, but they stop changing an account.</li>
+          </ul>
+        </section>
       </main>
     </div>
   </body>

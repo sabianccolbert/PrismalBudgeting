@@ -59,11 +59,31 @@
       <main>
         <section class="searchBar" aria-label="Search entries">
           <form id="searchForm" autocomplete="off">
-            <input id="searchAliases" type="text" placeholder="Search: rent, paycheck+, car stuff=" aria-label="Search entries">
-            <input id="searchFrom" class="dateInput" type="text" inputmode="numeric" placeholder="From MM/DD/YYYY" aria-label="From date" data-next-pick="searchTo">
-            <input id="searchTo" class="dateInput" type="text" inputmode="numeric" placeholder="To MM/DD/YYYY" aria-label="To date">
-            <button type="submit" class="budgetButton primary">Search</button>
+            <!-- Titles to search for, one per line, each with its own All / Costs / Gains / Tracker
+                 buttons. Calendar Page.js swaps in the working list, which looks the same. -->
+            <div id="searchTerms" class="searchTerms">
+              <div class="termList" role="group" aria-label="Titles to search for">
+                <div class="termRow">
+                  <input class="termInput" type="text" placeholder="Title, like rent" aria-label="Title">
+                  <div class="segmented" role="radiogroup" aria-label="Title: find">
+                    <button type="button" class="budgetButton" role="radio" aria-checked="true">All</button>
+                    <button type="button" class="budgetButton" role="radio" aria-checked="false">Costs</button>
+                    <button type="button" class="budgetButton" role="radio" aria-checked="false">Gains</button>
+                    <button type="button" class="budgetButton" role="radio" aria-checked="false">Tracker</button>
+                  </div>
+                  <button type="button" class="panelClose termRemove" aria-label="Remove title">×</button>
+                </div>
+              </div>
+            </div>
+            <div class="searchDates">
+              <button id="searchAdd" type="button" class="budgetButton termAdd">+ Add Title</button>
+              <input id="searchFrom" class="dateInput" type="text" inputmode="numeric" placeholder="From MM/DD/YYYY" aria-label="From date" data-next-pick="searchTo">
+              <input id="searchTo" class="dateInput" type="text" inputmode="numeric" placeholder="To MM/DD/YYYY" aria-label="To date">
+              <button type="submit" class="budgetButton primary">Search</button>
+            </div>
           </form>
+          <!-- Tracker row titles, suggested while a title's Tracker button is picked -->
+          <datalist id="trackerRowTitles"></datalist>
           <div id="searchResults" class="searchResults" hidden></div>
         </section>
 
@@ -73,8 +93,8 @@
             <span id="lowestAmount" class="lowestAmount">--</span>
           </div>
           <div class="infoCard daveCard">
-            <!-- Dave's image: set src once it's ready -->
-            <img class="daveImage" alt="Dave">
+            <!-- Dave's picture: Resources/Dave.webp (see Dave.webpdummy) -->
+            <img class="daveImage" src="/Resources/Dave.webp" alt="Dave">
             <p id="daveMessage" class="daveMessage">Loading...</p>
           </div>
           <div class="infoCard upcomingCard">
@@ -84,8 +104,9 @@
         </section>
 
         <div class="calendarToolbar">
-          <!-- New entry button image: set src once it's ready -->
-          <button id="addEntryButton" class="imageButton" type="button"><img alt="New Entry"></button>
+          <!-- Button images: Resources/Quick Entry.png and Resources/New Entry.png (see their .pngdummy files) -->
+          <button id="quickEntryButton" class="imageButton" type="button"><img src="/Resources/Quick Entry.png" alt="Quick Entry Icon"></button>
+          <button id="addEntryButton" class="imageButton" type="button"><img src="/Resources/New Entry.png" alt="New Entry"></button>
         </div>
         <div id="panelSlot"></div>
 
@@ -133,6 +154,77 @@
             </tbody>
           </table>
         </article>
+
+        <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Home Help</h3>
+
+          <h4>The Calendar</h4>
+          <ul>
+            <li>Your calendar shows four weeks, starting with this one. Each day shows its In Bank balance, its Gains and Costs, and then its entries.</li>
+            <li>✅ In Bank is what will be in your account at the end of that day. It turns ⛔️, and the day turns red, when it goes below $0.</li>
+            <li>Tap New Entry to add an entry. Tap a day to zoom in on it, then tap one of its entries to change its amount, move it to another day, or delete it. On a computer, you can also hold the mouse button down and slide across the days to magnify them.</li>
+            <li>While a date box is waiting for a date, tapping a day on the calendar fills it in.</li>
+            <li>When a week is over, it moves to History.</li>
+          </ul>
+
+          <h4>Search</h4>
+          <p>Search finds entries by title in History, the calendar, and Upcoming.</p>
+          <ul>
+            <li>Type a title, then pick what to find for it: <strong>All</strong> finds every entry with that title, <strong>Costs</strong> only its costs, and <strong>Gains</strong> only its gains.</li>
+            <li><strong>Tracker</strong> finds what a tracker row counts: type the row's title (like Food), and Search uses that row's aliases, each with its own All, Costs, or Gains setting.</li>
+            <li>To search for more than one title, press Enter (or tap + Add Title) to start the next line, and pick that line's own buttons. Tap × to take a line out.</li>
+            <li>Tap Search, or press Enter on an empty line, to search. Leave the title blank to find everything (or every cost, or every gain).</li>
+            <li>From and To are optional: a blank From searches from the beginning, and a blank To searches to the end. You can tap days on the calendar to fill them in. To include recurring entries after the calendar, pick a To date after it (up to two years ahead).</li>
+            <li>Results are newest first, with a total of the ones that are checked. ⭕️ Transfers and entries for your Other Accounts start unchecked, since they aren't really costs or gains, unless you searched a tracker row that counts transfers.</li>
+          </ul>
+
+          <h4>Entry Types</h4>
+          <p>The emojis at the start of each entry show what kind of entry it is.</p>
+          <ul>
+            <li><strong>Recurring entries</strong> (✔️ ✔️✖️ ✔️⭕️) always start with a checkmark. They come from your Recurring Entries page (like paychecks and bills), and are added for you on today and every day after. Once a day passes, its recurring entries turn into unique entries, so later changes to a recurring entry never change days that already happened.</li>
+            <li><strong>Unique entries</strong> (❗️ ✖️ ⭕️ ❗️✔️ ✖️✔️ ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
+            <li><strong>Temporary recurring entries</strong> (❗️✔️ ✖️✔️ ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
+            <li>Adding an entry with the same title and refraction type as one already on that day adds the two together.</li>
+          </ul>
+
+          <h4>Refraction Types</h4>
+          <p>Besides the checkmark, an entry's emoji is its refraction type (a recurring entry with only ✔️ is Regular):</p>
+          <ul>
+            <li>❗️ <strong>Regular</strong>: a normal cost or gain. It changes In Bank, and the tracker counts it.</li>
+            <li>✖️ <strong>Hidden</strong>: money spent or received outside your budget's account, like spending cash. Only the tracker counts it: In Bank and the day's Gains and Costs stay the same.</li>
+            <li>⭕️ <strong>Transfer</strong>: money moving between your own accounts without really being gained or lost, like depositing cash. It changes In Bank, but it isn't a cost or gain: the day's Gains and Costs leave it out, and so does the tracker, unless a row is set to count transfers.</li>
+            <li><strong>Auto</strong>, when you add an entry, uses the type of an entry with that title already on that day, or Regular if there isn't one.</li>
+          </ul>
+
+          <h4>Other Accounts</h4>
+          <p>When you pick Hidden or Transfer for a new entry, you can also pick one of your Other Accounts, like Savings. The entry is titled with the account's name, and the account gets the opposite amount: a cost on your calendar adds to the account, and a gain takes from it.</p>
+          <ul>
+            <li>Moving $100 into savings: a $100 Transfer cost, with Savings picked. In Bank goes down $100, and Savings goes up $100.</li>
+            <li>Taking $200 out of savings: a $200 Transfer gain, with Savings picked. In Bank goes up $200, and Savings goes down $200.</li>
+            <li>Putting $50 in cash into savings: a $50 Hidden cost, with Savings picked. In Bank stays the same, and Savings goes up $50.</li>
+          </ul>
+          <p>Since the money is still yours, these entries aren't costs or gains: the tracker treats them like transfers. Other Accounts (in the Menu) shows each account's balance.</p>
+
+          <h4>The Last Day's Extra Lines</h4>
+          <p>The calendar's last day has two extra lines that look at the 28 days after the calendar, counting your recurring entries and Upcoming entries (but not Hidden ones):</p>
+          <ul>
+            <li><strong>Lowest</strong>: the lowest In Bank in those 28 days, and the date it happens.</li>
+            <li><strong>Day 28 In Bank</strong>: what In Bank will be on the 28th day.</li>
+          </ul>
+          <p>If the lowest goes below $0, the last day turns red too.</p>
+
+          <h4>Lowest In Bank, Dave, And Upcoming</h4>
+          <ul>
+            <li><strong>Lowest in bank after today</strong> is the lowest In Bank from today through the 28 days after the calendar.</li>
+            <li><strong>Dave</strong> looks over your budget and lets you know what to keep in mind: days that go below $0, going below $0 in the 28 days after the calendar, uncommon recurring entries (every 3 months, 6 months, or year) on the calendar, and Upcoming entries. Dave also has a new affirmation for you every day.</li>
+            <li><strong>Upcoming</strong> lists entries dated after the calendar. Each one moves onto the calendar when its day shows up.</li>
+          </ul>
+
+          <h4>Quick Entry Icon</h4>
+          <p>The Quick Entry Icon button puts an icon on your phone's home screen that opens a New Entry form, with no login needed. The icon can only add entries. It never sees your budget, just the names of your Other Accounts (so you can pick one). Its entries show up here the next time you open Prismal Budget. If your password changes, the icon stops working.</p>
+        </section>
       </main>
     </div>
   </body>
