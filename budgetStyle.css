@@ -437,26 +437,6 @@ body.datePicking .elastic-table td {
   font: inherit;
 }
 
-/* Checkboxes (the global input style hides native controls) */
-input[type="checkbox"] {
-  -webkit-appearance: checkbox;
-  appearance: auto;
-  display: inline-block;
-  width: 1.15em;
-  height: 1.15em;
-  margin: 0;
-  padding: 0;
-  border: none;
-  accent-color: var(--LINK_LIGHT);
-  cursor: pointer;
-}
-
-input[type="checkbox"]:hover,
-input[type="checkbox"]:focus {
-  transform: none;
-  box-shadow: none;
-}
-
 /*========================================*
  *  PANELS (new entry, entry options, recurring, tracker, sections)
  *========================================*/
@@ -932,4 +912,229 @@ input.dateInput.isPickTarget {
 
 .dataTable tr.dragRow .moveBar {
   cursor: grabbing;
+}
+
+/*========================================*
+ *  CARDS (Paycheck Calculator, Settings)
+ *========================================*/
+
+/* Rounded content cards, same look as the home page's info row */
+.budgetCard {
+  box-sizing: border-box;
+  width: min(94vw, 760px);
+  margin: 0 auto 2.5vmin;
+  padding: 1em 1.2em;
+  text-align: left;
+  font-size: var(--UI_TEXT);
+  color: var(--BASE_COLOR);
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.15));
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: var(--PANEL_RADIUS);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetCard h3 {
+  margin: 0 0 0.6em;
+  font-size: 1.3em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.budgetCard p {
+  margin: 0 0 0.6em;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+/* Inputs inside cards (the global input style is a big centered pill) */
+.budgetCard input[type="text"],
+.budgetCard input[type="time"],
+.budgetCard input[type="email"],
+.budgetCard input[type="password"] {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0.5em 0.8em;
+  font-family: 'Main Font', sans-serif;
+  font-size: var(--UI_TEXT);
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetCard input[type="text"]:hover,
+.budgetCard input[type="text"]:focus,
+.budgetCard input[type="time"]:hover,
+.budgetCard input[type="time"]:focus,
+.budgetCard input[type="email"]:hover,
+.budgetCard input[type="email"]:focus,
+.budgetCard input[type="password"]:hover,
+.budgetCard input[type="password"]:focus {
+  transform: none;
+  text-shadow: none;
+  border-color: var(--LINK_LIGHT);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+  outline: none;
+}
+
+.budgetCard .panelButtons {
+  justify-content: flex-start;
+}
+
+/* Links that look like buttons (open calendar apps) */
+a.budgetButton {
+  margin: 0;
+  padding: 0.45em 1.1em;
+  color: var(--BASE_COLOR);
+  border: 2px solid var(--BASE_COLOR);
+  border-radius: 9999px;
+  text-decoration: none;
+  line-height: normal;
+}
+
+a.budgetButton:hover {
+  transform: scale(1.05);
+  color: var(--LINK_LIGHT);
+  border-color: var(--LINK_LIGHT);
+  box-shadow: var(--SHADOW);
+}
+
+/* Settings */
+.settingsList {
+  margin: 0 0 1em;
+  padding: 0;
+  list-style: none;
+  line-height: 1.7;
+}
+
+/* Wrapped lines line up after the emoji */
+.settingsList li {
+  padding-left: 1.6em;
+  text-indent: -1.6em;
+}
+
+.settingsField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  margin: 0 0 0.4em;
+  font-size: 1em; /* The global label is much bigger */
+}
+
+.budgetCard .settingsField .timeInput {
+  width: auto;
+  min-width: 10em;
+  align-self: flex-start;
+}
+
+.budgetCard .linkInput {
+  margin-bottom: 0.8em;
+  font-size: 0.85em;
+}
+
+/* Account forms (the global form centers everything) */
+.settingsForm {
+  align-items: stretch;
+}
+
+.settingsForm .panelButtons {
+  margin-top: 0.6em;
+}
+
+/* Paycheck Calculator */
+.paycheckResults {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5vmin;
+  width: min(94vw, 760px);
+  margin: 1vmin auto 2.5vmin;
+  text-align: left;
+  font-size: clamp(12px, 2.3vmin, 17px);
+}
+
+.paycheckAmount {
+  font-size: 1.8em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+}
+
+.takeHome .paycheckAmount {
+  font-size: 2.3em;
+}
+
+.breakdownList {
+  margin: 0;
+}
+
+.breakdownRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 0.25em 0;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.breakdownRow dt,
+.breakdownRow dd {
+  margin: 0;
+}
+
+.breakdownRow dd {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdownRow.total {
+  font-weight: bold;
+  border-bottom-color: var(--PANEL_BORDER);
+}
+
+.calculatorForm {
+  align-items: stretch; /* The global form centers everything */
+}
+
+.calculatorSection {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14em), 1fr));
+  gap: 0.7em 1em;
+  margin: 0 0 0.8em;
+  padding: 0.6em 0.9em 0.9em;
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.calculatorSection legend {
+  padding: 0 0.4em;
+  font-size: 1.05em;
+}
+
+.unitInput {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.budgetCard .unitInput input[type="text"] {
+  padding-right: 3.6em;
+  font-variant-numeric: tabular-nums;
+}
+
+.inputUnit {
+  position: absolute;
+  right: 0.8em;
+  font-size: 0.85em;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .paycheckResults {
+    grid-template-columns: 1fr;
+  }
 }

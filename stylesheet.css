@@ -311,8 +311,8 @@ article {
   margin: 0 auto 3vmin;
 }
 
-/* Hide blocks via [hidden] (chapters, etc.) */
-article[hidden] {
+/* Hide anything with [hidden] (chapters, etc.), even elements given a display (like inputs) */
+[hidden] {
   /* Step 3: hard-hide for safety */
   display: none !important;
 }
@@ -667,7 +667,7 @@ header .stacked h2 {
  *        .ready     -> resting position (translateY(0))
  *        .slide-out -> leaving position (translateY(var(--SLIDE_DISTANCE)))
  *   3) html has either .homeJs or .otherJs depending on page type
- *   4) .noJs disables all transforms for graceful fallback
+ *   4) .noJs (JavaScript is off) hides the page and asks for JavaScript instead
  */
 
 /* Homepage: slides DOWN into view, OUT up */
@@ -699,10 +699,19 @@ header .stacked h2 {
   transform: translateY(var(--SLIDE_DISTANCE));
 }
 
-/* No javascript fallback */
+/* No javascript fallback: nothing works without it, so the page only asks for it */
 .noJs #transitionContainer {
-  transform: translateY(0) !important;
-  transition: none !important;
+  display: none;
+}
+
+.noJs body::before {
+  content: "Prismal Budget needs JavaScript to work. Please turn on JavaScript in your browser's settings, then reload this page.";
+  margin: auto;
+  padding: 6vmin;
+  max-width: 80vw;
+  font-size: clamp(18px, 5vmin, 40px);
+  line-height: 1.4;
+  text-shadow: 0 0 10px rgb(0, 0, 0);
 }
 
 /* #endregion 11) SLIDE-IN PAGE TRANSITION SYSTEM */
@@ -812,4 +821,59 @@ input:focus {
 }
 .hidden {
   display: none !important;
+}
+
+/* Checkboxes (the input style above hides native controls) */
+input[type="checkbox"] {
+  -webkit-appearance: checkbox;
+  appearance: auto;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0;
+  padding: 0;
+  border: none;
+  accent-color: var(--LINK_LIGHT);
+  cursor: pointer;
+}
+
+input[type="checkbox"]:hover,
+input[type="checkbox"]:focus {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Create account: agree to the Privacy Policy & Terms of Use */
+.termsField {
+  display: flex;
+  align-items: center;
+  gap: 2vmin;
+  max-width: 80vw;
+  margin: 1vmin auto 2vmin;
+  font-size: 4vmin;
+  text-align: left;
+}
+
+.termsField a {
+  padding-bottom: 0;
+}
+
+/* Login page instructions (forgot password, new password) */
+.formHint {
+  max-width: 80vw;
+  margin: 2vmin auto;
+  font-size: 4.5vmin;
+}
+
+/* A button that reads like a link (Forgot Password?) */
+.textButton {
+  margin-top: 2vmin;
+  padding: 0.3em 0.8em;
+  border: none;
+  font-size: 4vmin;
+}
+
+.textButton:hover {
+  box-shadow: none;
 }

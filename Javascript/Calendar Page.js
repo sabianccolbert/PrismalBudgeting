@@ -59,7 +59,9 @@ function renderCalendar() {
     td.dataset.row = r;
     td.dataset.col = c;
     td.classList.toggle("isToday", gridDates[r][c].getTime() === today.getTime());
-    td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0);
+    // The last day also turns red when the 28 days after the calendar go negative (its "Lowest" line)
+    const isLastDay = r === 3 && c === 6;
+    td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0 || (isLastDay && nextFourNegative));
   });
 }
 

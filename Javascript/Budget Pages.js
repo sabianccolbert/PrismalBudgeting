@@ -1,4 +1,4 @@
-// Budget Pages: the menu data pages (Recurring, History, Tracker, Change Logs, ...).
+// Budget Pages: the menu data pages (Recurring, History, Tracker, Paycheck Calculator, Change Logs, ...).
 // Recurring and Tracker: New Entry, tap a row to change it, and an Edit mode with section
 // buttons between rows, delete checkboxes, and a move bar to drag rows.
 // Every change goes through Process Budget.js (runBudgetAction), which saves and then fires
@@ -14,8 +14,8 @@ const PAGE_RENDERERS = {
   history: renderHistoryPage,
   tracker: renderTrackerPage,
   logs: renderLogsPage,
-  accounts: null,
-  calculator: null
+  calculator: renderCalculatorPage,
+  accounts: null
 };
 
 const FREQUENCIES = ["Weekly", "Biweekly", "Semi-Monthly", "Monthly", "3 Month", "6 Month", "Yearly"];
@@ -178,6 +178,129 @@ function renderLogsPage(view) {
   }
   tableEl.tBodies[0].appendChild(fragment);
   view.appendChild(wrapScroll(tableEl));
+}
+
+// Paycheck Calculator: the last calculation's results and how they add up, then the inputs
+// (filled in with the last calculation's values) to calculate again
+function renderCalculatorPage(view) {
+  view.replaceChildren();
+  const inputs = readCalculatorInputs();
+  const saved = readCalculatorResults();
+
+  const results = BudgetUI.element("section", "paycheckResults");
+  results.setAttribute("aria-label", "Paycheck results");
+  for (const { key, label } of CALCULATOR_RESULTS) {
+    const card = BudgetUI.element("div", `infoCard paycheckResult${key === "takeHome" ? " takeHome" : ""}`);
+    card.appendChild(BudgetUI.element("span", "infoLabel", label));
+    const amount = BudgetUI.element("span", "paycheckAmount", saved ? formatMoney(saved[key]) : "--");
+    if (saved && key === "takeHome") amount.classList.add(saved.takeHome < 0 ? "negative" : "positive");
+    card.appendChild(amount);
+    results.appendChild(card);
+  }
+  view.appendChild(results);
+
+  if (saved) view.appendChild(paycheckBreakdown(computePaycheck(inputs), inputs));
+  else view.appendChild(emptyMessage("Fill in your pay below, then tap Calculate."));
+  view.appendChild(calculatorForm(inputs));
+}
+
+// How the take-home pay adds up ($0 lines are left out)
+function paycheckBreakdown(paycheck, inputs) {
+  const lines = [
+    ["Regular Pay", paycheck.regPay],
+    ["Overtime Pay", paycheck.otPay],
+    ["Premium Pay", paycheck.premPay],
+    ["Taxable Allowances", inputs.taxableAllowances],
+    ["Gross", paycheck.grossPay, true],
+    ["Pre-tax Medical", -paycheck.medicalDed],
+    ["Pre-tax Retirement", -paycheck.retirementDed],
+    ["FICA", -paycheck.ficaTax],
+    ["Federal", -paycheck.federalTax],
+    ["State", -paycheck.stateTax],
+    ["Post-tax Deductions", -paycheck.postTaxDed],
+    ["Non-taxable Reimbursements", inputs.nontaxableReimbursements],
+    ["Take Home", paycheck.netPay, true]
+  ];
+  const card = BudgetUI.element("section", "budgetCard paycheckBreakdown");
+  card.appendChild(BudgetUI.element("h3", "", "How It Adds Up"));
+  const list = BudgetUI.element("dl", "breakdownList");
+  for (const [label, amount, isTotal] of lines) {
+    if (!isTotal && Math.round(amount * 100) === 0) continue;
+    const row = BudgetUI.element("div", `breakdownRow${isTotal ? " total" : ""}`);
+    row.appendChild(BudgetUI.element("dt", "", label));
+    const value = BudgetUI.element("dd", "", formatMoney(amount));
+    if (amount < 0) value.classList.add("negative");
+    row.appendChild(value);
+    list.appendChild(row);
+  }
+  card.appendChild(list);
+  return card;
+}
+
+// The calculator inputs, grouped like the spreadsheet's. Blank counts as 0.
+function calculatorForm(inputs) {
+  const form = BudgetUI.element("form", "budgetCard calculatorForm");
+  form.noValidate = true;
+  form.autocomplete = "off";
+  form.appendChild(BudgetUI.element("h3", "", "Calculate a Paycheck"));
+
+  const fields = {};
+  let section = null;
+  for (const field of CALCULATOR_INPUTS) {
+    if (!section || section.dataset.section !== field.section) {
+      section = BudgetUI.element("fieldset", "calculatorSection");
+      section.dataset.section = field.section;
+      section.appendChild(BudgetUI.element("legend", "", field.section));
+      form.appendChild(section);
+    }
+    const input = BudgetUI.element("input", "calculatorInput");
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.placeholder = "0";
+    input.name = field.key;
+    input.value = inputs[field.key] ? String(inputs[field.key]) : "";
+    const wrapper = BudgetUI.element("div", "unitInput");
+    wrapper.append(input, BudgetUI.element("span", "inputUnit", field.unit));
+    section.appendChild(BudgetUI.field(field.label, wrapper));
+    fields[field.key] = input;
+  }
+
+  const error = BudgetUI.element("p", "panelError");
+  error.hidden = true;
+  error.setAttribute("role", "alert");
+  form.append(error, BudgetUI.buttonRow([{ label: "Calculate", kind: "primary", type: "submit" }]));
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    error.hidden = true;
+    const values = {};
+    for (const field of CALCULATOR_INPUTS) {
+      const text = fields[field.key].value.replace(/[$,%\s]/g, "").replace(/[x×]$/i, "");
+      const number = text === "" ? 0 : Number(text);
+      if (!Number.isFinite(number) || number < 0) {
+        error.textContent = `${field.label} needs to be a number (0 or more).`;
+        error.hidden = false;
+        fields[field.key].focus();
+        return;
+      }
+      values[field.key] = number;
+    }
+
+    const button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+    const result = await savePaycheck(values);
+    button.disabled = false;
+    if (!result.ok) {
+      error.textContent = result.message || "That didn't work. Please try again.";
+      error.hidden = false;
+      return;
+    }
+    BudgetUI.warnIfUnsaved(result);
+    // The page has redrawn with the new results; bring them into view
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.querySelector(".paycheckResults")?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+  });
+  return form;
 }
 
 //#endregion

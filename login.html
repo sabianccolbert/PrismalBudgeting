@@ -43,23 +43,40 @@
       </header>
       <main>
         <article>
+          <!-- Login.js shows the groups each mode needs: login, create, forgot, reset -->
           <form id="auth-form">
-            <label for="username">Username</label>
-            <input type="text" id="username" required autocomplete="username">
-      
-            <label for="password">Password</label>
-            <input type="password" id="password" required autocomplete="current-password">
-      
-            <!-- Starts hidden with the .hidden class -->
+            <p id="form-hint" class="formHint hidden"></p>
+
+            <div id="username-group">
+              <label for="username">Username</label>
+              <input type="text" id="username" required autocomplete="username">
+            </div>
+
+            <div id="email-group" class="hidden">
+              <label for="email">Email</label>
+              <input type="email" id="email" required autocomplete="email" disabled>
+            </div>
+
+            <div id="password-group">
+              <label for="password" id="password-label">Password</label>
+              <input type="password" id="password" required autocomplete="current-password">
+            </div>
+
             <div id="verify-password-group" class="hidden">
               <label for="verify-password">Verify Password</label>
-              <input type="password" id="verify-password" autocomplete="new-password">
+              <input type="password" id="verify-password" required autocomplete="new-password" disabled>
             </div>
-      
-            <p id="status-message"></p>
-      
+
+            <label id="terms-group" class="termsField hidden">
+              <input type="checkbox" id="agree-terms" required disabled>
+              <span>I agree to the <a href="/privacy and terms.html" target="_blank">Privacy Policy & Terms of Use</a></span>
+            </label>
+
+            <p id="status-message" role="status"></p>
+
             <button type="submit" id="primary-action-btn">Login</button>
             <button type="button" id="toggle-mode-btn">New Account?</button>
+            <button type="button" id="forgot-btn" class="textButton">Forgot Password?</button>
           </form>
         </article>
       </main>

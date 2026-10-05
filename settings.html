@@ -3,6 +3,7 @@
   <head>
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="stylesheet" href="/budgetStyle.css">
     <title>Prismal Budget - Settings</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -54,7 +55,77 @@
       </header>
       <hr>
       <main>
-        settings
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <div id="settingsView" hidden>
+          <section class="budgetCard settingsCard" aria-labelledby="reminderHeading">
+            <h3 id="reminderHeading">Daily Reminder</h3>
+            <p>On days your budget needs a look, you can get a "🗓️ Check Budget" reminder at this time:</p>
+            <ul class="settingsList">
+              <li>⛔️ Your In Bank is negative that day</li>
+              <li>✔️ An uncommon recurring payment (3 month, 6 month, or yearly) is in the current four weeks</li>
+              <li>❗️ You have a cost that day</li>
+            </ul>
+            <label class="settingsField">
+              <span class="fieldLabel">Reminder time</span>
+              <input id="reminderTime" class="timeInput" type="time" step="300">
+            </label>
+            <p id="timeZoneNote" class="panelHint"></p>
+            <p class="panelHint">Get it as a push notification, on your calendar, or both. Each one is optional.</p>
+          </section>
+
+          <section class="budgetCard settingsCard" aria-labelledby="pushHeading">
+            <h3 id="pushHeading">Push Notifications</h3>
+            <p id="pushStatus"></p>
+            <div id="pushButtons" class="panelButtons"></div>
+          </section>
+
+          <section class="budgetCard settingsCard" aria-labelledby="calendarHeading">
+            <h3 id="calendarHeading">Calendar Link</h3>
+            <p id="calendarStatus"></p>
+            <input id="calendarUrl" class="linkInput" type="text" readonly aria-label="Calendar link" hidden>
+            <div id="calendarButtons" class="panelButtons"></div>
+          </section>
+        </div>
+
+        <div id="accountView" hidden>
+          <section class="budgetCard settingsCard" aria-labelledby="emailHeading">
+            <h3 id="emailHeading">Email</h3>
+            <p id="emailStatus"></p>
+            <form id="emailForm" class="settingsForm">
+              <label class="settingsField">
+                <span class="fieldLabel">New email</span>
+                <input id="newEmail" type="email" required autocomplete="email">
+              </label>
+              <label class="settingsField">
+                <span class="fieldLabel">Your password</span>
+                <input id="emailPassword" type="password" required autocomplete="current-password">
+              </label>
+              <div class="panelButtons">
+                <button id="emailButton" type="submit" class="budgetButton primary">Change Email</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="budgetCard settingsCard" aria-labelledby="passwordHeading">
+            <h3 id="passwordHeading">Password Reset</h3>
+            <p id="passwordStatus"></p>
+            <div id="passwordButtons" class="panelButtons"></div>
+          </section>
+
+          <section class="budgetCard settingsCard" aria-labelledby="deleteHeading">
+            <h3 id="deleteHeading">Delete Account</h3>
+            <p>This permanently deletes your account and everything in your budget. It can't be undone.</p>
+            <form id="deleteForm" class="settingsForm">
+              <label class="settingsField">
+                <span class="fieldLabel">Your password</span>
+                <input id="deletePassword" type="password" required autocomplete="current-password">
+              </label>
+              <div class="panelButtons">
+                <button type="submit" class="budgetButton danger">Delete Account</button>
+              </div>
+            </form>
+          </section>
+        </div>
       </main>
     </div>
   </body>

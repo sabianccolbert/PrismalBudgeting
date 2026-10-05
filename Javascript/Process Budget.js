@@ -193,8 +193,12 @@ async function loadWorkspace() {
     logsData       = normalizeApiTable(parseDB(data.logs, "logs"), TABLE_SHAPES.logs);
     workspaceLoaded = true;
 
-    // Use the date from the database, fallback to yesterday if new account
-    lastDailyUpdate = createSafeMidnight(data.last_processed_date || yesterday);
+    // Use the date from the database (yesterday if it's missing). A brand-new account (never
+    // processed, empty calendar) starts today instead: there are no missed days to catch up.
+    const calendarIsEmpty = calendarData.every(row => row.every(cell => String(cell).trim() === ""));
+    const isNewAccount = !data.last_processed_date && calendarIsEmpty;
+    lastDailyUpdate = isNewAccount ? today : createSafeMidnight(data.last_processed_date || yesterday);
+    if (isNewAccount) pendingProcessedDate = formatToMMDDYYYY(today);
     const isNewDay = lastDailyUpdate.getTime() < today.getTime();
 
     // Catch up any missed days, then rebuild everything computed from the entries
@@ -220,6 +224,7 @@ async function loadWorkspace() {
     if (allSaved && pendingProcessedDate) {
       if (await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
     }
+    queueReminderPlanSync();
     return true;
 
   } catch (err) {
@@ -493,16 +498,15 @@ function applyCellBudgetMath(cellText, lastInBank) {
   let gains = 0;
   let costs = 0;
   let moneyMoves = 0;
-  let hiddenEntries = 0;
 
   for (let l = 1; l < lines.length; l++) {
     let parts = getParts(lines[l]);
     if (systemEmojis.includes(parts[0])) continue;
+    // Hidden entries are on accounts outside the budget: the tracker counts them, In Bank doesn't
+    if (parts[0].includes("✖️")) continue;
     let lineTitle = extractTitle(lines[l]);
     let lineAmt = parseAmount(parts[1]);
-    if (parts[0].includes("✖️")) {
-      hiddenEntries += lineTitle === "savings" ? (lineAmt * -1) : lineAmt;
-    } else if (parts[0].includes("⭕️")) {
+    if (parts[0].includes("⭕️")) {
       moneyMoves += lineTitle === "savings" ? (lineAmt * -1) : lineAmt;
     } else if (lineAmt < 0) {
       costs += Math.abs(lineAmt);
@@ -511,7 +515,7 @@ function applyCellBudgetMath(cellText, lastInBank) {
     }
   }
 
-  let inBank = Math.round((gains - costs + lastInBank + moneyMoves - hiddenEntries) * 100) / 100;
+  let inBank = Math.round((gains - costs + lastInBank + moneyMoves) * 100) / 100;
   let finalLines = [lines[0]];
   finalLines.push((inBank < 0 ? "⛔️ " : "✅ ") + formatMoney(inBank) + " In Bank");
   if (gains > 0) finalLines.push(`❇️ ${formatMoney(gains)} Gains`);
@@ -819,6 +823,11 @@ function searchBudget(query) {
   return runBudgetAction("🔎 Search", () => ({ search: search(query) }));
 }
 
+// Paycheck Calculator. values: { [input key]: number } for every CALCULATOR_INPUTS key. Resolves with result.paycheck.
+function savePaycheck(values) {
+  return runBudgetAction("🧮 Calculator", () => calculator(values));
+}
+
 /* ---------- Running a change ---------- */
 
 // Queue one change through the full budget flow
@@ -862,6 +871,7 @@ async function processBudgetAction(logType, change) {
   markChangedTables(snapshot);
   const saved = await saveChanges();
   notifyBudgetChanged();
+  queueReminderPlanSync();
   return { ok: true, saved, notFound, ...result };
 }
 
@@ -1893,17 +1903,16 @@ function writeBudgetMath() {
       let gains = 0;
       let costs = 0;
       let moneyMoves = 0;
-      let hiddenEntries = 0;
       let isToday = (formatToMMDD(gridDates[r][c]) === formatToMMDD(today));
       for (let l = 1; l < lines.length; l++) {
         let lineStr = lines[l].trim();
         let parts = getParts(lineStr);
         if (systemEmojis.includes(parts[0])) continue;
+        // Hidden entries are on accounts outside the budget: the tracker counts them, In Bank doesn't
+        if (parts[0].includes("✖️")) continue;
         let lineTitle = extractTitle(lineStr);
         let lineAmt = parseAmount(parts[1]);
-        if (parts[0].includes("✖️")) {
-          hiddenEntries += lineTitle === "savings" ? (lineAmt * -1) : lineAmt;
-        } else if (parts[0].includes("⭕️")) {
+        if (parts[0].includes("⭕️")) {
           moneyMoves += lineTitle === "savings" ? (lineAmt * -1) : lineAmt;
         } else if (lineAmt < 0) {
           costs += Math.abs(lineAmt);
@@ -1912,7 +1921,7 @@ function writeBudgetMath() {
           gains += lineAmt;
         }
       }
-      let inBank = Math.round((gains - costs + lastInBank + moneyMoves - hiddenEntries) * 100) / 100;
+      let inBank = Math.round((gains - costs + lastInBank + moneyMoves) * 100) / 100;
       if (gridDates[r][c] >= today && inBank < lowest) lowest = inBank;
 
       let bankLine;
@@ -2015,7 +2024,8 @@ function getPredictionData(lastInBank) {
     }
 
     for (let f = 0; f < parsedFuture.length; f++) {
-      if (parsedFuture[f].time === currentTestTime) dayTotal += parsedFuture[f].amt;
+      // Hidden entries don't change In Bank (hidden recurring entries are skipped above)
+      if (parsedFuture[f].time === currentTestTime && parsedFuture[f].special !== "✖️") dayTotal += parsedFuture[f].amt;
     }
 
     lastInBank += dayTotal;
@@ -2330,6 +2340,211 @@ function updateTrackerTab() {
   recurringData[0][2] = formatMoney(Math.round(monthly * 100) / 100);
 }
 
+/* ---------- Paycheck Calculator ---------- */
+// Calculator tab: [row][0] label, [row][1] value. Rows 0-2 are the results, rows 4-20 the inputs
+// (the last calculation's inputs, which start the next one, like the spreadsheet's form defaults).
+
+const CALCULATOR_RESULTS = [
+  { row: 0, key: "takeHome", label: "Take Home" },
+  { row: 1, key: "taxes", label: "Taxes" },
+  { row: 2, key: "gross", label: "Gross" }
+];
+
+// section/unit are shown on the page. fallback is used until a value has been saved (otherwise 0).
+const CALCULATOR_INPUTS = [
+  { row: 4,  key: "basePay",                  label: "Base Pay",                       section: "Earnings",           unit: "$/hr" },
+  { row: 5,  key: "regularHours",             label: "Regular Hours",                  section: "Earnings",           unit: "hrs" },
+  { row: 6,  key: "overtimeMultiplier",       label: "Overtime Multiplier",            section: "Earnings",           unit: "×", fallback: 1.5 },
+  { row: 7,  key: "overtimeHours",            label: "Overtime Hours",                 section: "Earnings",           unit: "hrs" },
+  { row: 8,  key: "premiumMultiplier",        label: "Premium Multiplier",             section: "Earnings",           unit: "×", fallback: 2 },
+  { row: 9,  key: "premiumHours",             label: "Premium Hours",                  section: "Earnings",           unit: "hrs" },
+  { row: 10, key: "taxableAllowances",        label: "Taxable Allowances",             section: "Earnings",           unit: "$" },
+  { row: 11, key: "preTaxMedicalPercent",     label: "Pre-tax Medical Percentage",     section: "Pre-tax Deductions", unit: "%" },
+  { row: 12, key: "preTaxMedicalFixed",       label: "Pre-tax Medical Fixed",          section: "Pre-tax Deductions", unit: "$" },
+  { row: 13, key: "preTaxRetirementPercent",  label: "Pre-tax Retirement Percentage",  section: "Pre-tax Deductions", unit: "%" },
+  { row: 14, key: "preTaxRetirementFixed",    label: "Pre-tax Retirement Fixed",       section: "Pre-tax Deductions", unit: "$" },
+  { row: 15, key: "ficaPercent",              label: "FICA Taxes",                     section: "Taxes",              unit: "%", fallback: 7.65 },
+  { row: 16, key: "federalPercent",           label: "Federal Taxes",                  section: "Taxes",              unit: "%" },
+  { row: 17, key: "statePercent",             label: "State Taxes",                    section: "Taxes",              unit: "%" },
+  { row: 18, key: "postTaxPercent",           label: "Post-tax Deductions Percentage", section: "Post-tax",           unit: "%" },
+  { row: 19, key: "postTaxFixed",             label: "Post-tax Deductions Fixed",      section: "Post-tax",           unit: "$" },
+  { row: 20, key: "nontaxableReimbursements", label: "Non-taxable Reimbursements",     section: "Post-tax",           unit: "$" }
+];
+
+// The saved inputs as numbers ({ [key]: number })
+function readCalculatorInputs() {
+  let inputs = {};
+  for (let field of CALCULATOR_INPUTS) {
+    let stored = String(calculatorData[field.row]?.[1] ?? "").trim();
+    inputs[field.key] = stored === "" ? (field.fallback ?? 0) : parseAmount(stored);
+  }
+  return inputs;
+}
+
+// The saved results ({ takeHome, taxes, gross }), or null before the first calculation
+function readCalculatorResults() {
+  let results = {};
+  for (let field of CALCULATOR_RESULTS) {
+    let stored = String(calculatorData[field.row]?.[1] ?? "").trim();
+    if (stored === "") return null;
+    results[field.key] = parseAmount(stored);
+  }
+  return results;
+}
+
+// The spreadsheet's paycheck math, step for step (each step rounded to cents like payroll software)
+function computePaycheck(inputs) {
+  const roundCurrency = (num) => Math.round(num * 100) / 100;
+  // 1. Earnings
+  const regPay = roundCurrency(inputs.regularHours * inputs.basePay);
+  const otRate = roundCurrency(inputs.basePay * inputs.overtimeMultiplier);
+  const otPay = roundCurrency(inputs.overtimeHours * otRate);
+  const premPay = roundCurrency(inputs.premiumHours * (inputs.basePay * inputs.premiumMultiplier));
+  const grossPay = regPay + otPay + premPay + inputs.taxableAllowances;
+  // 2. Pre-tax deductions: medical/HSA lowers both the FICA and income tax bases, retirement only income tax
+  const medicalDed = roundCurrency((grossPay * (inputs.preTaxMedicalPercent / 100)) + inputs.preTaxMedicalFixed);
+  const ficaTaxablePay = grossPay - medicalDed;
+  const retirementDed = roundCurrency((grossPay * (inputs.preTaxRetirementPercent / 100)) + inputs.preTaxRetirementFixed);
+  const incomeTaxablePay = ficaTaxablePay - retirementDed;
+  // 3. Taxes: FICA on the FICA base, federal and state on the income tax base
+  const ficaTax = roundCurrency(ficaTaxablePay * (inputs.ficaPercent / 100));
+  const federalTax = roundCurrency(incomeTaxablePay * (inputs.federalPercent / 100));
+  const stateTax = roundCurrency(incomeTaxablePay * (inputs.statePercent / 100));
+  const totalTaxes = roundCurrency(ficaTax + federalTax + stateTax);
+  // 4. Post-tax deductions
+  const postTaxDed = roundCurrency((grossPay * (inputs.postTaxPercent / 100)) + inputs.postTaxFixed);
+  // 5. Take home: income-taxable pay, minus taxes and post-tax deductions, plus reimbursements
+  const netPay = roundCurrency(incomeTaxablePay - totalTaxes - postTaxDed + inputs.nontaxableReimbursements);
+  return { regPay, otPay, premPay, grossPay, medicalDed, retirementDed, ficaTaxablePay, incomeTaxablePay, ficaTax, federalTax, stateTax, totalTaxes, postTaxDed, netPay };
+}
+
+// Calculate a paycheck, then save its inputs (they start the next calculation) and results
+function calculator(values) {
+  let inputs = {};
+  for (let field of CALCULATOR_INPUTS) {
+    let value = values[field.key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      throw new BudgetInputError(`${field.label} needs to be a number (0 or more).`);
+    }
+    inputs[field.key] = value;
+  }
+  let paycheck = computePaycheck(inputs);
+  let results = { takeHome: paycheck.netPay, taxes: paycheck.totalTaxes, gross: paycheck.grossPay };
+
+  while (calculatorData.length < TABLE_SHAPES.calculator.minRows) calculatorData.push(["", ""]);
+  for (let field of CALCULATOR_INPUTS) {
+    calculatorData[field.row][0] = field.label;
+    calculatorData[field.row][1] = String(inputs[field.key]);
+  }
+  for (let field of CALCULATOR_RESULTS) {
+    calculatorData[field.row][0] = field.label;
+    calculatorData[field.row][1] = formatMoney(results[field.key]);
+  }
+
+  formEntryRow[2] = "🧮 Calculator";
+  formEntryRow[3] = "Base Pay: " + formatMoney(inputs.basePay);
+  formEntryRow[4] = "Regular Hours: " + inputs.regularHours;
+  // The spreadsheet joined these two as text ("5" and "0" logged as "50"); this adds them
+  formEntryRow[5] = "Other Hours: " + Math.round((inputs.overtimeHours + inputs.premiumHours) * 100) / 100;
+  formEntryRow[6] = "Take Home: " + formatMoney(paycheck.netPay);
+  return { paycheck };
+}
+
+/* ---------- Daily reminders (the spreadsheet's Google Calendar notification) ---------- */
+// The API sends the "🗓️ Check Budget" push notifications and serves the calendar link, both
+// optional in Settings. It needs to know which days get a reminder, so after every change the
+// page sends it this plan (only when it changed).
+
+// Recurring frequencies the spreadsheet called "uncommon" (Dave and the ✔️ reminder count them)
+const UNCOMMON_FREQUENCIES = ["3 month", "6 month", "yearly"];
+const REMINDER_PLAN_KEY = "prismal_reminder_plan"; // The last plan this browser sent
+let reminderSync = Promise.resolve();
+
+// Days from today through the 28 days after the calendar that need a reminder, using the
+// spreadsheet's three notification flags:
+//   negative: that day's In Bank is negative (⛔️)
+//   uncommon: uncommon recurring payments from that day to the end of its 4-week calendar (✔️)
+//   cost:     that day has a cost (❗️)
+// Days past the calendar are worked out the same way the daily update will fill them in.
+function buildReminderPlan() {
+  let recurringRows = getParsedRecurringRows();
+  let futureByDate = groupFutureRowsByDate();
+  let lastDay = addDays(gridEndDate, 28);
+
+  // Uncommon recurring payments per day, through the end of the last day's 4-week calendar
+  let uncommonRows = recurringRows.filter(row => UNCOMMON_FREQUENCIES.includes(row.parsed.frequency));
+  let countsEnd = addDays(lastDay, 27 - lastDay.getDay());
+  let uncommonCounts = [];
+  for (let day = today; day <= countsEnd; day = addDays(day, 1)) {
+    uncommonCounts.push(uncommonRows.filter(row => recurringRowHits(row.parsed, day)).length);
+  }
+
+  let days = {};
+  let inBank = readInBank(calendarData[3][6]) ?? 0;
+  for (let day = today, i = 0; day <= lastDay; day = addDays(day, 1), i++) {
+    let cellText;
+    let dayInBank;
+    if (day <= gridEndDate) {
+      let index = getDayDifference(day, gridStartDate);
+      cellText = calendarData[Math.floor(index / 7)][index % 7];
+      dayInBank = readInBank(cellText) ?? 0;
+    } else {
+      // Future Dates entries, then recurring entries, then the In Bank math (like the catch-up)
+      let text = formatToMMDD(day);
+      for (let f of futureByDate.get(day.getTime()) || []) {
+        text += `\n${String(futureData[f][3])} ${formatMoney(parseAmount(futureData[f][1]))} ${String(futureData[f][0]).trim()}`;
+      }
+      let math = applyCellBudgetMath(writeRecurringToCell(text, day, recurringRows), inBank);
+      cellText = math.text;
+      dayInBank = inBank = math.inBank;
+    }
+
+    let windowEnd = getDayDifference(addDays(day, 27 - day.getDay()), today);
+    let uncommon = 0;
+    for (let c = i; c <= windowEnd; c++) uncommon += uncommonCounts[c];
+    let reminder = {
+      negative: dayInBank < 0,
+      uncommon: uncommon,
+      cost: cellText.split("\n").some(line => line.trim().startsWith("✴️")) // The Costs line
+    };
+    if (reminder.negative || reminder.uncommon > 0 || reminder.cost) days[formatToYMD(day)] = reminder;
+  }
+  return { from: formatToYMD(today), to: formatToYMD(lastDay), days: days };
+}
+
+// Send the plan (and this device's time zone) to the API when it changed. Never blocks the page.
+// force sends it even if this browser already did (Settings does this when a reminder is turned on).
+function queueReminderPlanSync(force = false) {
+  reminderSync = reminderSync
+    .then(() => syncReminderPlan(force))
+    .catch(err => { console.warn("Couldn't send the reminder plan:", err); return false; });
+  return reminderSync;
+}
+
+async function syncReminderPlan(force) {
+  if (!workspaceLoaded) return false;
+  const payload = { plan: buildReminderPlan(), timezone: currentTimeZone() };
+  const text = JSON.stringify(payload);
+  let lastSent = null;
+  try { lastSent = localStorage.getItem(REMINDER_PLAN_KEY); } catch {}
+  if (!force && text === lastSent) return true;
+
+  const result = await budgetApi("/api/notify/plan", payload);
+  if (result.ok) {
+    try { localStorage.setItem(REMINDER_PLAN_KEY, text); } catch {}
+  }
+  return result.ok;
+}
+
+// This device's time zone (reminders go out at the reminder time where the user is)
+function currentTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch (e) {
+    return "UTC";
+  }
+}
+
 //#endregion
 
 async function saveChanges() {
@@ -2366,26 +2581,12 @@ async function saveChanges() {
   }
 
   async function postUpdate(endpoint, payload) {
-    try {
-      const res = await fetch(`${window.API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // Standard JWT Bearer token format
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      if (res.status === 401) {
-          // Token is likely expired or invalid, handle auto-logout here if desired
-          console.error("Session expired.");
-      }
-      
-      return res.ok;
-    } catch (err) {
-      console.error(`Failed to sync endpoint ${endpoint}:`, err);
-      return false;
+    const result = await budgetApi(endpoint, payload);
+    if (result.status === 401) {
+      // Token is likely expired or invalid, handle auto-logout here if desired
+      console.error("Session expired.");
     }
+    return result.ok;
   }
 
   // 1. Future
@@ -2443,6 +2644,29 @@ async function saveChanges() {
   }
 
   return allSaved;
+}
+
+// One request to the API with the login token: a POST of JSON when there's a payload, a GET otherwise.
+// Resolves to { ok, status, data } and never throws (status 0 = the server couldn't be reached).
+async function budgetApi(endpoint, payload) {
+  const token = localStorage.getItem('prismal_jwt');
+  if (!token) return { ok: false, status: 401, data: null };
+  try {
+    const res = await fetch(`${window.API_BASE_URL}${endpoint}`, {
+      method: payload === undefined ? 'GET' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` // Standard JWT Bearer token format
+      },
+      body: payload === undefined ? undefined : JSON.stringify(payload)
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) {}
+    return { ok: res.ok, status: res.status, data };
+  } catch (err) {
+    console.error(`Failed to reach ${endpoint}:`, err);
+    return { ok: false, status: 0, data: null };
+  }
 }
 
 //#endregion
@@ -2665,6 +2889,13 @@ function formatToMMDDYYYY(dateObj) {
   const dd = String(dateObj.getDate()).padStart(2, '0');
   const yyyy = dateObj.getFullYear();
   return `${mm}/${dd}/${yyyy}`;
+}
+
+// "YYYY-MM-DD" (local date), the API's reminder plan format
+function formatToYMD(dateObj) {
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  return `${dateObj.getFullYear()}-${mm}-${dd}`;
 }
 
 function formatToMMDD(dateObj) {

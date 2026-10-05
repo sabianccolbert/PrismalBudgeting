@@ -1,10 +1,13 @@
 (function boot(){
   "use strict";
 
+  // JavaScript is on: drop the "turn on JavaScript" fallback first, so redirects below never show it
+  document.documentElement.classList.remove("noJs");
+
   /* ===============================
    * 0) SITE VERSION (bump per deploy)
    * =============================== */
-  const SITE_VERSION = "10.03.2026.A";
+  const SITE_VERSION = "10.04.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   /* ===============================
@@ -39,8 +42,9 @@
     if (p === "/404") return "notfound";
     if (p === "/login") return "login";
     if (p === "/privacy%20and%20terms") return "privacy";
+    if (p === "/settings") return "settings";
 
-    // Menu pages (folder: /Menu/)
+    // Menu pages (folder: /menu/)
     if (p === "/menu" || p === "/menu/index") return "menu";
     if (p === "/menu/recurring") return "recurring";
     if (p === "/menu/history") return "history";
@@ -66,13 +70,15 @@
     : 'https://prismal-budget-api.prismalbudget.workers.dev'; // Production API handles both live & tunnel requests // Production Cloudflare Worker
 
   const isLoggedIn = !!localStorage.getItem("prismal_jwt");
-  
+  // The link in a password reset email (/login.html?reset=...) opens the login page even when signed in
+  const isResetLink = PAGE === "login" && new URLSearchParams(location.search).has("reset");
+
   // If they are not logged in, and not already on the login page, redirect them.
   if (!isLoggedIn && PAGE !== "login" && PAGE !== "privacy") {
     window.location.replace("/login.html");
     return;
   }
-  if (isLoggedIn && PAGE === "login") {
+  if (isLoggedIn && PAGE === "login" && !isResetLink) {
     window.location.replace("/index.html");
     return;
   }
@@ -81,7 +87,6 @@
    *  4) CSS mode flip
    * =============================== */
   const html = document.documentElement;
-  html.classList.remove("noJs");
 
   if (PAGE === "home") {
     html.classList.add("homeJs");
@@ -100,7 +105,13 @@
     "/Javascript/Analytics.js"
   ];
 
-  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "tracker", "calculator", "logs"];
+  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "tracker", "calculator", "logs", "settings"];
+
+  // The script that draws each budget page (the menu data pages share Budget Pages.js)
+  const PAGE_SCRIPTS = {
+    home: "/Javascript/Calendar Page.js",
+    settings: "/Javascript/Settings Page.js"
+  };
 
   function appendScript(src){
     const s = document.createElement("script");
@@ -123,11 +134,11 @@
       appendScript("/Javascript/Debug.js");
     }
     // Every page that shows budget data loads + saves it through Process Budget,
-    // then draws itself: the calendar page, or the menu data pages
+    // then draws itself: the calendar page, settings, or the menu data pages
     if (BUDGET_PAGES.includes(PAGE)) {
       appendScript("/Javascript/Process Budget.js");
       appendScript("/Javascript/Budget UI.js");
-      appendScript(PAGE === "home" ? "/Javascript/Calendar Page.js" : "/Javascript/Budget Pages.js");
+      appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");
     }
   }
   
