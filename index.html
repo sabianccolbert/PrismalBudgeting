@@ -57,6 +57,38 @@
       </header>
       <hr>
       <main>
+        <section class="searchBar" aria-label="Search entries">
+          <form id="searchForm" autocomplete="off">
+            <input id="searchAliases" type="text" placeholder="Search: rent, paycheck+, car stuff=" aria-label="Search entries">
+            <input id="searchFrom" class="dateInput" type="text" inputmode="numeric" placeholder="From MM/DD/YYYY" aria-label="From date" data-next-pick="searchTo">
+            <input id="searchTo" class="dateInput" type="text" inputmode="numeric" placeholder="To MM/DD/YYYY" aria-label="To date">
+            <button type="submit" class="budgetButton primary">Search</button>
+          </form>
+          <div id="searchResults" class="searchResults" hidden></div>
+        </section>
+
+        <section class="infoRow">
+          <div class="infoCard lowestCard">
+            <span class="infoLabel">Lowest in bank after today</span>
+            <span id="lowestAmount" class="lowestAmount">--</span>
+          </div>
+          <div class="infoCard daveCard">
+            <!-- Dave's image: set src once it's ready -->
+            <img class="daveImage" alt="Dave">
+            <p id="daveMessage" class="daveMessage">Loading...</p>
+          </div>
+          <div class="infoCard upcomingCard">
+            <span class="infoLabel">Upcoming</span>
+            <ul id="upcomingList" class="upcomingList"></ul>
+          </div>
+        </section>
+
+        <div class="calendarToolbar">
+          <!-- New entry button image: set src once it's ready -->
+          <button id="addEntryButton" class="imageButton" type="button"><img alt="New Entry"></button>
+        </div>
+        <div id="panelSlot"></div>
+
         <article>
           <table class="elastic-table">
             <tbody>

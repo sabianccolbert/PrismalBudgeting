@@ -1,7 +1,7 @@
 // thank heavens for chatGPT <3
 // Keyboard-driven impulse controller for the Starfield engine.
 // This file translates discrete key presses into one-frame forces
-// written onto window.KEYBOARD for Active Starfield to consume.
+// and sends them to the engine (Active Starfield, in a worker) as KEYBOARD messages.
 
 /*======================================================================
  *  MENU
@@ -32,10 +32,16 @@
  * #region 1) SETUP
  *====================================================================*/
 
-/* GROUP: Keyboard state alias */
-// Create a short alias to the shared KEYBOARD impulse object.
-// This object is read and cleared every frame by Active Starfield.
-var K = window.KEYBOARD;
+/* GROUP: Engine bridge */
+// The engine runs in a worker and can't see this page's objects,
+// so each key sends only the fields it changes. The engine merges them
+// into its KEYBOARD object and clears the one-shot ones after a frame.
+var S = window.STARFIELD;
+
+// Send an impulse patch (ex: { addY: -1 }) to the engine.
+function SEND_IMPULSE(IMPULSE) {
+  S.sendToEngine({ type: "KEYBOARD", impulse: IMPULSE });
+}
 
 /* GROUP: Keydown listener */
 // Listen globally so keyboard input works regardless of focus,
@@ -53,7 +59,7 @@ window.addEventListener("keydown", (EVENT) => {
 
 /* GROUP: Key → action dispatch table */
 // Maps physical keys to semantic actions.
-// Each action writes impulses into window.KEYBOARD,
+// Each action sends impulses to the engine's KEYBOARD,
 // which are then applied exactly once in the physics step.
 const KEY_FUNCTIONS = {
 
@@ -113,25 +119,25 @@ const KEY_FUNCTIONS = {
 // W = Up
 function RUN_W() {
   // Apply upward impulse in screen space.
-  K.addY = -1;
+  SEND_IMPULSE({ addY: -1 });
 }
 
 // A = Left
 function RUN_A() {
   // Apply leftward impulse in screen space.
-  K.addX = -1;
+  SEND_IMPULSE({ addX: -1 });
 }
 
 // S = Down
 function RUN_S() {
   // Apply downward impulse in screen space.
-  K.addY = 1;
+  SEND_IMPULSE({ addY: 1 });
 }
 
 // D = Right
 function RUN_D() {
   // Apply rightward impulse in screen space.
-  K.addX = 1;
+  SEND_IMPULSE({ addX: 1 });
 }
 
 /* GROUP: Diagonal impulses */
@@ -139,26 +145,22 @@ function RUN_D() {
 
 // Q = Up-left
 function RUN_Q() {
-  K.addX = -0.5; // Left component
-  K.addY = -0.5; // Up component
+  SEND_IMPULSE({ addX: -0.5, addY: -0.5 }); // Left + up components
 }
 
 // E = Up-right
 function RUN_E() {
-  K.addX = 0.5;  // Right component
-  K.addY = -0.5; // Up component
+  SEND_IMPULSE({ addX: 0.5, addY: -0.5 });  // Right + up components
 }
 
 // Z = Down-left
 function RUN_Z() {
-  K.addX = -0.5; // Left component
-  K.addY = 0.5;  // Down component
+  SEND_IMPULSE({ addX: -0.5, addY: 0.5 });  // Left + down components
 }
 
 // X = Down-right
 function RUN_X() {
-  K.addX = 0.5;  // Right component
-  K.addY = 0.5;  // Down component
+  SEND_IMPULSE({ addX: 0.5, addY: 0.5 });   // Right + down components
 }
 
 /* #endregion 2) GLOBAL MOVEMENT */
@@ -175,56 +177,47 @@ function RUN_X() {
 
 // Y = Top-left
 function RUN_Y() {
-  K.magnetX = 16.5; // Near left
-  K.magnetY = 16.5; // Near top
+  SEND_IMPULSE({ magnetX: 16.5, magnetY: 16.5 }); // Near left, near top
 }
 
 // U = Top-center
 function RUN_U() {
-  K.magnetX = 50;   // Center horizontally
-  K.magnetY = 16.5; // Near top
+  SEND_IMPULSE({ magnetX: 50, magnetY: 16.5 });   // Center horizontally, near top
 }
 
 // I = Top-right
 function RUN_I() {
-  K.magnetX = 83.5; // Near right
-  K.magnetY = 16.5;
+  SEND_IMPULSE({ magnetX: 83.5, magnetY: 16.5 }); // Near right, near top
 }
 
 // H = Middle-left
 function RUN_H() {
-  K.magnetX = 16.5;
-  K.magnetY = 50;
+  SEND_IMPULSE({ magnetX: 16.5, magnetY: 50 });
 }
 
 // J = Middle-center
 function RUN_J() {
-  K.magnetX = 50;
-  K.magnetY = 50;
+  SEND_IMPULSE({ magnetX: 50, magnetY: 50 });
 }
 
 // K = Middle-right
 function RUN_K() {
-  K.magnetX = 83.5;
-  K.magnetY = 50;
+  SEND_IMPULSE({ magnetX: 83.5, magnetY: 50 });
 }
 
 // B = Bottom-left
 function RUN_B() {
-  K.magnetX = 16.5;
-  K.magnetY = 83.5;
+  SEND_IMPULSE({ magnetX: 16.5, magnetY: 83.5 });
 }
 
 // N = Bottom-center
 function RUN_N() {
-  K.magnetX = 50;
-  K.magnetY = 83.5;
+  SEND_IMPULSE({ magnetX: 50, magnetY: 83.5 });
 }
 
 // M = Bottom-right
 function RUN_M() {
-  K.magnetX = 83.5;
-  K.magnetY = 83.5;
+  SEND_IMPULSE({ magnetX: 83.5, magnetY: 83.5 });
 }
 
 /* #endregion 3) QUADRANT MAGNETISM */
@@ -238,28 +231,40 @@ function RUN_M() {
 // These control the paddles overlay and the special “ball star”.
 // paddlesTimer controls visibility fade-out.
 
+// Paddle position is tracked here so relative nudges can be sent as absolute values.
+// Clamped to 0..100 (percent space), same as the engine's render clamp.
+const PADDLES = { x: 50, y: 50 };
+
+// Shift paddles and make them visible.
+function NUDGE_PADDLES(DX, DY) {
+  PADDLES.x = Math.max(0, Math.min(100, PADDLES.x + DX));
+  PADDLES.y = Math.max(0, Math.min(100, PADDLES.y + DY));
+
+  SEND_IMPULSE({
+    paddlesTimer: 50,     // Make paddles visible
+    paddlesX: PADDLES.x,
+    paddlesY: PADDLES.y
+  });
+}
+
 // R = Paddle left
 function RUN_R() {
-  K.paddlesTimer = 50; // Make paddles visible
-  K.paddlesX -= 1;     // Shift paddles left
+  NUDGE_PADDLES(-1, 0);
 }
 
 // T = Paddle right
 function RUN_T() {
-  K.paddlesTimer = 50;
-  K.paddlesX += 1;
+  NUDGE_PADDLES(1, 0);
 }
 
 // F = Paddle up
 function RUN_F() {
-  K.paddlesTimer = 50;
-  K.paddlesY -= 1;
+  NUDGE_PADDLES(0, -1);
 }
 
 // C = Paddle down
 function RUN_C() {
-  K.paddlesTimer = 50;
-  K.paddlesY += 1;
+  NUDGE_PADDLES(0, 1);
 }
 
 /* #endregion 4) PONG */
@@ -274,43 +279,32 @@ function RUN_C() {
 
 // V = Reduce speed
 function RUN_V() {
-  K.multX = 0.6; // Horizontal slowdown
-  K.multY = 0.6; // Vertical slowdown
+  SEND_IMPULSE({ multX: 0.6, multY: 0.6 }); // Horizontal + vertical slowdown
 }
 
 // G = Increase speed
 function RUN_G() {
-  K.multX = 1.7; // Horizontal boost
-  K.multY = 1.7; // Vertical boost
+  SEND_IMPULSE({ multX: 1.7, multY: 1.7 }); // Horizontal + vertical boost
 }
 
 /* GROUP: Orbit mode */
 // Enables pointer-centered magnetism.
 // Active Starfield reads this and clears it every frame.
 function RUN_O() {
-  K.magnetPointer = true;
+  SEND_IMPULSE({ magnetPointer: true });
 }
 
 /* GROUP: Passive drift inversion */
 // Immediately flips base drift velocity for every star.
-// This is a permanent change, not an impulse.
+// This is a permanent change, not an impulse (the engine owns the stars, so it does the flip).
 function RUN_P() {
-  const S = window.STARFIELD;
-  if (!S?.starList?.length) return;
-
-  for (const STAR of S.starList) {
-    STAR.vx = -STAR.vx; // Invert X drift
-    STAR.vy = -STAR.vy; // Invert Y drift
-  }
+  S.sendToEngine({ type: "INVERT_DRIFT" });
 }
 
 /* GROUP: Link rebuild trigger */
 // Forces links to disappear and fade back in over time.
 function RUN_L() {
-  const S = window.STARFIELD;
-  if (!S) return;
-
-  S.linkRebuildTimer = 300;
+  S.sendToEngine({ type: "REBUILD_LINKS" });
 }
 
 /* #endregion 5) OTHERS */

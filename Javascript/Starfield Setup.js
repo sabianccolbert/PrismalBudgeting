@@ -1,206 +1,113 @@
 // thank heavens for chatGPT <3
-// Starfield Setup: builds the STARFIELD namespace, storage, utilities, UI bindings,
-// resize math, animation loop bootstrap. Active Starfield owns physics/render/input.
+// Starfield Setup: the main-thread side of the starfield. Builds window.STARFIELD as a small bridge,
+// starts the engine (Active Starfield.js) in a Web Worker on an OffscreenCanvas, and forwards page
+// input to it: pointer, resize, sliders, freeze/unfreeze. Also owns saving to localStorage.
+// The worker can't touch the DOM or localStorage, so everything page-side lives here.
 
 /*======================================================================
  *  MENU
  *----------------------------------------------------------------------
- *  1) STARFIELD NAMESPACE + CANVAS
- *     - Create window.STARFIELD + window.KEYBOARD
- *     - Wire canvas + context
- *     - Create shared state buckets (pointer, metrics, scaling, guards)
+ *  1) STARFIELD NAMESPACE (BRIDGE)
+ *     - Create window.STARFIELD
+ *     - sendToEngine / setFrozen / handleEngineMessage
  *
  *  2) STORAGE (localStorage)
- *     - Save stars + meta so sessions persist
+ *     - Save the latest engine snapshot so sessions persist
+ *     - Read + parse saved stars/meta for the engine
  *
- *  3) UTILITIES
- *     - Time helpers + Safari timestamp normalization
- *     - Random helper
- *     - Edge fade helper
- *
- *  4) INIT: RESTORE OR CREATE STARS
- *     - Restore star list + meta, rescale to new canvas
- *     - Create fresh stars if missing/corrupt
- *
- *  5) UI CONTROLS (STEPPERS + BINDINGS)
- *     - Slider/number binding
+ *  3) UI CONTROLS (STEPPERS + BINDINGS)
+ *     - Slider/number binding (forwards changes to the engine)
  *     - Hold-to-repeat steppers
  *     - DOMContentLoaded wiring
  *
- *  6) RESIZE + ANIMATION
- *     - Resize canvas backing store
- *     - Recompute scaling powers and caps
- *     - Rescale existing stars for continuity
- *     - Run animation loop (calls Active functions if installed)
+ *  4) ENGINE STARTUP
+ *     - Worker + OffscreenCanvas (normal case)
+ *     - Main-thread fallback when OffscreenCanvas is unsupported
  *
- *  7) BOOTSTRAP
- *     - Wait for usable canvas size
- *     - Initialize stars once
- *     - Start loop once
- *     - Wire resize listener once
+ *  5) PAGE INPUT -> ENGINE
+ *     - Pointer/touch events
+ *     - Resize
+ *
+ *  6) BOOTSTRAP
  *====================================================================*/
 
 
 /*======================================================================
- * #region 1) STARFIELD NAMESPACE + CANVAS
+ * #region 1) STARFIELD NAMESPACE (BRIDGE)
  *====================================================================*/
 
-/* GROUP: Global containers */
+/* GROUP: Global container */
 // Create the global STARFIELD namespace container.
+// On the page this is only a bridge: the real star state lives in the engine (worker).
 window.STARFIELD = {};
 
-// Create the global keyboard impulse container.
-// Active Starfield reads this each frame to apply keyboard-driven forces.
-window.KEYBOARD = {
-
-  // Multiply star passive velocity X by this factor (ex: slow/fast modes).
-  multX: 1,
-
-  // Multiply star passive velocity Y by this factor (ex: slow/fast modes).
-  multY: 1,
-
-  // Add a global drift impulse on X (ex: WASD movement).
-  addX: 0,
-
-  // Add a global drift impulse on Y (ex: WASD movement).
-  addY: 0,
-
-  // Paddles: X position (0..100 style “percent” space used by your pong logic).
-  paddlesX: 50,
-
-  // Paddles: Y position (0..100 style “percent” space used by your pong logic).
-  paddlesY: 50,
-
-  // Paddles: timer that keeps paddles “active” briefly after input.
-  paddlesTimer: 0,
-
-  // When true, magnet targets pointer instead of quadrant coordinates.
-  magnetPointer: false,
-
-  // Magnet target X in percent space (0..100).
-  magnetX: 0,
-
-  // Magnet target Y in percent space (0..100).
-  magnetY: 0
-};
-
 // Create a short alias for the STARFIELD namespace.
-// We use S everywhere to keep code compact and consistent.
 var S = window.STARFIELD;
 
 /* GROUP: Canvas wiring */
 // Find the canvas element by id (required for the starfield).
+// The 2D context is created by the engine, not here.
 S.constellationCanvas = document.getElementById("constellations");
 
-// Get a 2D drawing context if canvas exists and supports getContext.
-S.drawingContext =
-  S.constellationCanvas && S.constellationCanvas.getContext
-    ? S.constellationCanvas.getContext("2d")
-    : null;
+// Record whether the starfield can run on this page.
+S.isCanvasReady = !!S.constellationCanvas;
 
-// Record whether canvas drawing is actually available.
-S.isCanvasReady = !!(S.constellationCanvas && S.drawingContext);
-
-// Warn when canvas is missing or unsupported.
-// We keep the page alive, but starfield setup/loop will bail early.
+// Warn when canvas is missing.
 if (!S.isCanvasReady) {
-  console.warn("Constellation canvas not found or unsupported; starfield disabled.");
+  console.warn("Constellation canvas not found; starfield disabled.");
 }
 
-// Track whether the simulation should pause.
-// Layout transitions or visibility changes toggle this.
+// Worker running Active Starfield.js (null in the main-thread fallback).
+S.worker = null;
+
+// Track whether the simulation is paused (mirrors what we last sent the engine).
 S.isFrozen = false;
 
-/* GROUP: Pointer state (Active updates these) */
-// Track the current pointer X position in client coordinates.
-S.pointerClientX = 0;
+// Latest stars + meta the engine sent back. Saved to localStorage on freeze/leave.
+S.latestSnapshot = null;
 
-// Track the current pointer Y position in client coordinates.
-S.pointerClientY = 0;
-
-// Track the last pointer timestamp baseline in “perf-style ms”.
-S.lastPointerTimeMs = 0;
-
-// Track the current pointer speed in normalized “energy” units.
-S.pointerSpeedUnits = 0;
-
-// Track the poke impulse timer used by the poke burst effect.
-S.pokeImpulseTimer = 0;
-
-// Track the ring timer used to animate the pointer ring.
-S.pointerRingTimer = 0;
-
-/* GROUP: Canvas metrics (Setup updates these) */
-// Track current canvas pixel width used for physics + drawing.
-S.canvasWidth = 0;
-
-// Track current canvas pixel height used for physics + drawing.
-S.canvasHeight = 0;
-
-// Track a “screen size” proxy used for scaling (width + height).
-S.screenPerimeter = 0;
-
-// Track the scale-up factor used to grow values on large screens.
-S.screenScaleUp = 0;
-
-// Track the scale-down factor used to normalize values on small screens.
-S.screenScaleDown = 0;
-
-// Track the computed maximum number of stars allowed for this screen size.
-S.starCountLimit = 0;
-
-// Track the computed maximum link distance for this screen size.
-S.maxLinkDistance = 0;
-
-// Track the current target link distance (lets Active animate link distance smoothly).
-S.goalLinkDistance = 0;
-
-// Track the timer used to rebuild links after certain effects.
-S.linkRebuildTimer = 0;
-
-/* GROUP: Precomputed physics scaling powers */
-// Store scaling multipliers so physics stays screen-consistent.
-// Setup writes these, Active reads them each frame.
-S.screenScalePowers = {
-
-  // Scales attraction radius math for larger screens.
-  attractionGradient: 1,
-
-  // Scales repulsion radius math for larger screens.
-  repulsionGradient: 1,
-
-  // Scales attraction falloff curve shaping.
-  attractionShape: 1,
-  
-  // Scales repel falloff curve shaping.
-  repulsionShape: 1,
-
-  // Scales attraction force strength across screens.
-  attractionForce: 1,
-
-  // Scales repulsion force strength across screens.
-  repulsionForce: 1,
-
-  // Scales the global momentum clamp across screens.
-  forceClamp: 1
+/* GROUP: Debug readouts */
+// Optional debug elements (only on the 404 page). The engine sends DEBUG values when they exist.
+S.debugReadouts = {
+  misc: document.getElementById("dbgMisc"),
+  circle: document.getElementById("dbgCircle"),
+  speed: document.getElementById("dbgSpeed"),
+  poke: document.getElementById("dbgPoke")
 };
 
-/* GROUP: Star storage */
-// Store the active star objects array.
-// Setup creates/restores, Active updates, Render draws.
-S.starList = [];
+/* GROUP: Messaging */
+// Send a message to the engine. Replaced in region 4 once the engine starts;
+// until then input is dropped (there are no stars to affect yet).
+S.sendToEngine = function sendToEngine() {};
 
-/* GROUP: Bootstrap guards */
-// Prevent starting the animation loop more than once.
-S.hasAnimationLoopStarted = false;
+// Pause or resume the simulation (Layout.js calls this on page hide/transition).
+S.setFrozen = function setFrozen(IS_FROZEN) {
+  S.isFrozen = !!IS_FROZEN;
+  S.sendToEngine({ type: "FREEZE", frozen: S.isFrozen });
+};
 
-// Prevent wiring the resize listener more than once.
-S.hasResizeListenerWired = false;
+// Handle messages coming back from the engine.
+S.handleEngineMessage = function handleEngineMessage(MESSAGE) {
+  switch (MESSAGE.type) {
+    case "SNAPSHOT":
+      S.latestSnapshot = MESSAGE;
 
-// Prevent restoring/creating stars more than once.
-S.hasStarsInitialized = false;
+      // The engine sends a fresh snapshot right after FREEZE; save it immediately.
+      if (S.isFrozen) S.saveStarfieldToStorage();
+      break;
 
-/* #endregion 1) STARFIELD NAMESPACE + CANVAS */
+    case "DEBUG": {
+      const DBG = S.debugReadouts;
+      if (DBG.misc) DBG.misc.textContent = MESSAGE.misc;     // Show frame time (ms)
+      if (DBG.circle) DBG.circle.textContent = MESSAGE.circle; // Show ring timer
+      if (DBG.speed) DBG.speed.textContent = MESSAGE.speed;   // Show pointer energy
+      if (DBG.poke) DBG.poke.textContent = MESSAGE.poke;      // Show poke timer
+      break;
+    }
+  }
+};
+
+/* #endregion 1) STARFIELD NAMESPACE (BRIDGE) */
 
 
 
@@ -209,47 +116,24 @@ S.hasStarsInitialized = false;
  *====================================================================*/
 
 /* GROUP: Save stars + meta */
-// Persist stars and meta state so the starfield survives reloads.
+// Persist the latest engine snapshot so the starfield survives reloads.
+// This is synchronous on purpose: pagehide can't wait for a reply from the worker.
 // This is “best effort”: storage can fail in private mode or with quota limits.
 S.saveStarfieldToStorage = function saveStarfieldToStorage() {
 
-  // Bail if canvas isn't active so we don't save unusable state.
-  if (!S.isCanvasReady) return;
+  // Bail if there's nothing usable to save yet.
+  if (!S.isCanvasReady || !S.latestSnapshot) return;
 
   try {
     // Save the star list under a stable key (kept for compatibility).
-    localStorage.setItem("constellationStars", JSON.stringify(S.starList));
+    localStorage.setItem("constellationStars", JSON.stringify(S.latestSnapshot.stars));
 
     // Save meta under a stable key (kept for compatibility).
+    // Canvas size, pointer + timers come from the engine's snapshot.
     localStorage.setItem(
       "constellationMeta",
       JSON.stringify({
-
-        /* CANVAS SIZE */
-        // Save canvas width so we can rescale X later on restore.
-        width: S.canvasWidth,
-
-        // Save canvas height so we can rescale Y later on restore.
-        height: S.canvasHeight,
-
-        /* POINTER + TIMERS */
-        // Save poke timer so poke resumes smoothly after reload.
-        pokeTimer: S.pokeImpulseTimer,
-
-        // Save pointer speed so interaction “energy” resumes smoothly.
-        userSpeed: S.pointerSpeedUnits,
-
-        // Save pointer X so ring resumes at correct position.
-        userX: S.pointerClientX,
-
-        // Save pointer Y so ring resumes at correct position.
-        userY: S.pointerClientY,
-
-        // Save pointer time baseline (legacy/optional field).
-        userTime: S.lastPointerTimeMs,
-
-        // Save ring timer so ring resumes smoothly.
-        ringTimer: S.pointerRingTimer,
+        ...S.latestSnapshot.meta,
 
         /* UI PARAMS */
         // Save attraction strength slider value.
@@ -284,329 +168,70 @@ S.saveStarfieldToStorage = function saveStarfieldToStorage() {
   }
 };
 
-/* #endregion 2) STORAGE */
-
-
-
-/*======================================================================
- * #region 3) UTILITIES
- *====================================================================*/
-
-/* GROUP: Time base */
-// Return a high-resolution timestamp in milliseconds when possible.
-S.getNowMs = function getNowMs() {
-
-  // Prefer performance.now() for stable frame deltas.
-  if (window.performance && performance.now) return performance.now();
-
-  // Fallback to Date.now() when performance.now is unavailable.
-  return Date.now();
-};
-
-/* GROUP: Safari timestamp normalization */
-/**
- * Convert pointer event timestamps into the same “perf-style ms” space as performance.now().
- * Some browsers provide epoch-style timestamps; this normalizes into a consistent space.
- */
-S.normalizePointerTimestampMs = function normalizePointerTimestampMs(RAW_TIMESTAMP) {
-
-  // If missing/invalid, use “now” so time deltas stay safe.
-  if (!Number.isFinite(RAW_TIMESTAMP) || RAW_TIMESTAMP <= 0) return S.getNowMs();
-
-  // Epoch ms is usually huge (ex: 1700000000000).
-  // If we detect epoch-style values, translate to perf-space when possible.
-  if (RAW_TIMESTAMP > 1e12) {
-
-    // Use timeOrigin to convert epoch ms into performance.now() space.
-    if (performance && Number.isFinite(performance.timeOrigin)) {
-      return RAW_TIMESTAMP - performance.timeOrigin;
-    }
-
-    // If timeOrigin is unavailable, fall back to “now”.
-    return S.getNowMs();
-  }
-
-  // Otherwise it already looks like performance.now() space.
-  return RAW_TIMESTAMP;
-};
-
-/* GROUP: Random helpers */
-// Return a random float between MIN_VALUE and MAX_VALUE.
-S.randomBetween = (MIN_VALUE, MAX_VALUE) =>
-  Math.random() * (MAX_VALUE - MIN_VALUE) + MIN_VALUE;
-
-/* GROUP: Edge fade */
-/** Return 0 at/beyond wrap threshold, 1 safely away from edges. */
-S.getEdgeFadeFactor = function getEdgeFadeFactor(STAR) {
-
-  // Approximate star radius based on how large it draws.
-  const STAR_RADIUS = (STAR.whiteValue * 2 + STAR.size) || 0;
-
-  // Distance to left edge (including star padding).
-  const DIST_LEFT = STAR.x + STAR_RADIUS;
-
-  // Distance to right edge (including star padding).
-  const DIST_RIGHT = S.canvasWidth + STAR_RADIUS - STAR.x;
-
-  // Distance to top edge (including star padding).
-  const DIST_TOP = STAR.y + STAR_RADIUS;
-
-  // Distance to bottom edge (including star padding).
-  const DIST_BOTTOM = S.canvasHeight + STAR_RADIUS - STAR.y;
-
-  // Find the closest edge distance (worst-case direction).
-  const MIN_EDGE_DISTANCE = Math.min(DIST_LEFT, DIST_RIGHT, DIST_TOP, DIST_BOTTOM);
-
-  // Define fade band size near edges (cap keeps it stable and cheap).
-  const FADE_BAND = Math.min(90, S.screenPerimeter * 0.03);
-
-  // Convert closest distance into 0..1 interpolation factor.
-  let T = MIN_EDGE_DISTANCE / FADE_BAND;
-
-  // Clamp low end.
-  if (T < 0) T = 0;
-
-  // Clamp high end.
-  if (T > 1) T = 1;
-
-  // Smoothstep easing so fade is gentle instead of linear.
-  return T * T * (3 - 2 * T);
-};
-
-/* #endregion 3) UTILITIES */
-
-
-
-/*======================================================================
- * #region 4) INIT: RESTORE OR CREATE STARS
- *====================================================================*/
-
-/* GROUP: Restore or create */
-// Restore saved stars if possible, otherwise create a fresh random field.
-S.restoreOrCreateStars = function restoreOrCreateStars() {
-
-  // Bail if canvas isn't active so we don't create unusable state.
-  if (!S.isCanvasReady) return;
+/* GROUP: Read saved stars + meta */
+// Read and parse what was saved last session, for the engine's INIT message.
+// Returns { stars, meta } or null. Also restores the slider settings from meta.
+S.readSavedStarfield = function readSavedStarfield() {
 
   /* GROUP: Load star list */
-  // Attempt to read saved stars from localStorage.
   let RAW_STARS_JSON = null;
 
   // Read saved star JSON (storage can throw in private mode).
   try { RAW_STARS_JSON = localStorage.getItem("constellationStars"); } catch {}
 
-  // If there is no saved data, generate a new starfield.
-  if (!RAW_STARS_JSON) {
-    S.createNewStars();
-    return;
-  }
+  // No saved data: the engine will generate a new starfield.
+  if (!RAW_STARS_JSON) return null;
+
+  let PARSED_STARS = null;
 
   try {
     // Parse saved star list from JSON.
-    const PARSED_STARS = JSON.parse(RAW_STARS_JSON);
-
-    // Regenerate if parsed data is not a usable array.
-    if (!Array.isArray(PARSED_STARS) || !PARSED_STARS.length) {
-      S.createNewStars();
-      return;
-    }
-
-    // Adopt saved stars (keep object shape stable for compatibility).
-    S.starList = PARSED_STARS;
-
-    /* GROUP: Load meta */
-    // Attempt to read saved meta from localStorage.
-    let RAW_META_JSON = null;
-
-    // Read meta JSON (storage can throw in private mode).
-    try { RAW_META_JSON = localStorage.getItem("constellationMeta"); } catch {}
-
-    // If meta is missing, keep stars and exit.
-    if (!RAW_META_JSON) return;
-
-    try {
-      // Parse saved meta object from JSON.
-      const SAVED_META = JSON.parse(RAW_META_JSON);
-
-      /* GROUP: Rescale stars */
-      // Rescale stars to current canvas so they don’t “corner spawn” after resize.
-      if (SAVED_META.width > 0 && SAVED_META.height > 0) {
-
-        // Compute X scale ratio from old canvas to new canvas.
-        const SCALE_X = S.canvasWidth / SAVED_META.width;
-
-        // Compute Y scale ratio from old canvas to new canvas.
-        const SCALE_Y = S.canvasHeight / SAVED_META.height;
-
-        // Compute a size scale ratio from old perimeter to new perimeter.
-        const SIZE_SCALE =
-          (S.canvasWidth + S.canvasHeight) / (SAVED_META.width + SAVED_META.height);
-
-        // Apply rescale to each star position and size.
-        for (const STAR of S.starList) {
-          STAR.x *= SCALE_X;        // Scale X into new canvas space.
-          STAR.y *= SCALE_Y;        // Scale Y into new canvas space.
-          STAR.size *= SIZE_SCALE;  // Scale size for consistent feel.
-        }
-      }
-
-      /* GROUP: Restore interaction state */
-      // Restore poke timer (fallback to 0).
-      S.pokeImpulseTimer = SAVED_META.pokeTimer ?? 0;
-
-      // Restore pointer speed “energy” (fallback to 0).
-      S.pointerSpeedUnits = SAVED_META.userSpeed ?? 0;
-
-      // Restore ring timer (fallback to 0).
-      S.pointerRingTimer = SAVED_META.ringTimer ?? 0;
-
-      /* GROUP: Restore UI settings */
-      // Restore attraction strength (fallback to current).
-      S.interactionSettings.attractStrength =
-        SAVED_META.attractStrength ?? S.interactionSettings.attractStrength;
-
-      // Restore attraction radius (fallback to current).
-      S.interactionSettings.attractRadius =
-        SAVED_META.attractRadius ?? S.interactionSettings.attractRadius;
-
-      // Restore attraction curve (fallback to current).
-      S.interactionSettings.attractScale =
-        SAVED_META.attractScale ?? S.interactionSettings.attractScale;
-
-      // Restore clamp (fallback to current).
-      S.interactionSettings.clamp =
-        SAVED_META.clamp ?? S.interactionSettings.clamp;
-
-      // Restore repulsion strength (fallback to current).
-      S.interactionSettings.repelStrength =
-        SAVED_META.repelStrength ?? S.interactionSettings.repelStrength;
-
-      // Restore repulsion radius (fallback to current).
-      S.interactionSettings.repelRadius =
-        SAVED_META.repelRadius ?? S.interactionSettings.repelRadius;
-
-      // Restore repulsion curve (fallback to current).
-      S.interactionSettings.repelScale =
-        SAVED_META.repelScale ?? S.interactionSettings.repelScale;
-
-      // Restore poke strength (fallback to current).
-      S.interactionSettings.pokeStrength =
-        SAVED_META.pokeStrength ?? S.interactionSettings.pokeStrength;
-
-      /* GROUP: Restore pointer position */
-      // Restore pointer X when saved as a number.
-      if (typeof SAVED_META.userX === "number") S.pointerClientX = SAVED_META.userX;
-
-      // Restore pointer Y when saved as a number.
-      if (typeof SAVED_META.userY === "number") S.pointerClientY = SAVED_META.userY;
-
-      /* GROUP: Reset pointer time baseline */
-      // Reset timing baseline to “now” so next delta is sane.
-      S.lastPointerTimeMs = S.getNowMs();
-
-    } catch (ERROR) {
-
-      // Meta can be corrupted, so warn and keep stars.
-      console.warn("Could not parse constellationMeta; skipping meta restore.", ERROR);
-    }
+    PARSED_STARS = JSON.parse(RAW_STARS_JSON);
   } catch (ERROR) {
 
-    // Stars JSON can be corrupted, so warn and regenerate.
+    // Stars JSON can be corrupted, so warn and let the engine regenerate.
     console.warn("Could not parse constellationStars; recreating.", ERROR);
-    S.createNewStars();
+    return null;
   }
+
+  // Regenerate if parsed data is not a usable array.
+  if (!Array.isArray(PARSED_STARS) || !PARSED_STARS.length) return null;
+
+  /* GROUP: Load meta */
+  let SAVED_META = null;
+
+  try {
+    // Read + parse meta JSON (storage can throw in private mode).
+    const RAW_META_JSON = localStorage.getItem("constellationMeta");
+    if (RAW_META_JSON) SAVED_META = JSON.parse(RAW_META_JSON);
+  } catch (ERROR) {
+
+    // Meta can be corrupted, so warn and keep stars.
+    console.warn("Could not parse constellationMeta; skipping meta restore.", ERROR);
+  }
+
+  /* GROUP: Restore UI settings */
+  // Sliders live on this page, so their saved values are restored here (fallback to current).
+  if (SAVED_META) {
+    for (const KEY of Object.keys(S.interactionSettings)) {
+      S.interactionSettings[KEY] = SAVED_META[KEY] ?? S.interactionSettings[KEY];
+    }
+  }
+
+  return { stars: PARSED_STARS, meta: SAVED_META };
 };
 
-/* GROUP: Create new stars */
-// Create a fresh randomized set of stars sized for the current screen.
-S.createNewStars = function createNewStars() {
-
-  // Bail if canvas isn't active so we don't create unusable state.
-  if (!S.isCanvasReady) return;
-
-  // Clear any existing stars before rebuilding.
-  S.starList = [];
-
-  /* GROUP: Star size limits */
-  // Define minimum allowed star size.
-  const MIN_SIZE = 3;
-
-  // Define maximum allowed star size (scaled by screen).
-  const MAX_SIZE = Math.min(10, S.screenPerimeter / 400 || 3);
-
-  /* GROUP: Build stars */
-  // Create each star object (keep fields stable for storage compatibility).
-  for (let STAR_INDEX = 0; STAR_INDEX < S.starCountLimit; STAR_INDEX++) {
-    S.starList.push({
-
-      // Spawn X uniformly across the canvas.
-      x: Math.random() * S.canvasWidth,
-
-      // Spawn Y uniformly across the canvas.
-      y: Math.random() * S.canvasHeight,
-
-      // Passive drift velocity X.
-      vx: S.randomBetween(-0.15, 0.15),
-
-      // Passive drift velocity Y.
-      vy: S.randomBetween(-0.15, 0.15),
-
-      // Base size used by rendering.
-      size: S.randomBetween(
-        Math.min(MIN_SIZE, MAX_SIZE),
-        Math.max(MIN_SIZE, MAX_SIZE)
-      ),
-
-      // Rotation (used by line-y sprite / starburst style).
-      rotation: Math.random() * Math.PI * 2,
-
-      // Twinkle opacity baseline.
-      opacity: S.randomBetween(0.005, 1.8),
-
-      // Twinkle fade speed multiplier.
-      fadeSpeed: S.randomBetween(1, 2.1),
-
-      // Redness used by darkness overlay.
-      redValue: S.randomBetween(50, 200),
-
-      // White flash intensity (Active updates this).
-      whiteValue: 0,
-
-      // Accumulated momentum X (forces add here).
-      momentumX: 0,
-
-      // Accumulated momentum Y (forces add here).
-      momentumY: 0,
-
-      // Cached edge fade factor used by link brightness.
-      edge: 1,
-
-      // Keyboard force X (legacy/optional).
-      keyboardForceX: 0,
-
-      // Keyboard force Y (legacy/optional).
-      keyboardForceY: 0
-    });
-  }
-
-  /* GROUP: Pong ball consistency */
-  // Force star[0] to have a consistent velocity for the paddles ball.
-  if (S.starList.length) {
-    S.starList[0].vx = 0.25;
-    S.starList[0].vy = 0.25;
-  }
-};
-
-/* #endregion 4) INIT */
+/* #endregion 2) STORAGE */
 
 
 
 /*======================================================================
- * #region 5) UI CONTROLS (STEPPERS + BINDINGS)
+ * #region 3) UI CONTROLS (STEPPERS + BINDINGS)
  *====================================================================*/
 
 /* GROUP: Settings object */
 // Store interactive settings controlled by sliders and steppers.
+// The engine keeps its own copy; setInteractionSetting keeps the two in sync.
 S.interactionSettings = {
 
   // How strongly stars are pulled toward the pointer.
@@ -632,6 +257,13 @@ S.interactionSettings = {
 
   // Strength of poke burst on tap/click.
   pokeStrength: 5
+};
+
+/* GROUP: Apply one setting */
+// Update the page copy and forward the change to the engine.
+S.setInteractionSetting = function setInteractionSetting(KEY, VALUE) {
+  S.interactionSettings[KEY] = VALUE;
+  S.sendToEngine({ type: "SETTINGS", settings: { [KEY]: VALUE } });
 };
 
 /* GROUP: Hold-to-repeat steppers */
@@ -853,59 +485,56 @@ S.initializeGravityControlsIfPresent = function initializeGravityControlsIfPrese
   /* GROUP: Attract controls */
   S.bindSliderAndNumberInput(
     "ATTRACT_STRENGTH",
-    (VALUE) => (S.interactionSettings.attractStrength = VALUE),
+    (VALUE) => S.setInteractionSetting("attractStrength", VALUE),
     S.interactionSettings.attractStrength
   );
 
   S.bindSliderAndNumberInput(
     "ATTRACT_RADIUS",
-    (VALUE) => (S.interactionSettings.attractRadius = VALUE),
+    (VALUE) => S.setInteractionSetting("attractRadius", VALUE),
     S.interactionSettings.attractRadius
   );
 
   S.bindSliderAndNumberInput(
     "ATTRACT_SCALE",
-    (VALUE) => (S.interactionSettings.attractScale = VALUE),
+    (VALUE) => S.setInteractionSetting("attractScale", VALUE),
     S.interactionSettings.attractScale
   );
 
   /* GROUP: Clamp control */
   S.bindSliderAndNumberInput(
     "CLAMP",
-    (VALUE) => (S.interactionSettings.clamp = VALUE),
+    (VALUE) => S.setInteractionSetting("clamp", VALUE),
     S.interactionSettings.clamp
   );
 
   /* GROUP: Repel controls */
   S.bindSliderAndNumberInput(
     "REPEL_STRENGTH",
-    (VALUE) => (S.interactionSettings.repelStrength = VALUE),
+    (VALUE) => S.setInteractionSetting("repelStrength", VALUE),
     S.interactionSettings.repelStrength
   );
 
   S.bindSliderAndNumberInput(
     "REPEL_RADIUS",
-    (VALUE) => (S.interactionSettings.repelRadius = VALUE),
+    (VALUE) => S.setInteractionSetting("repelRadius", VALUE),
     S.interactionSettings.repelRadius
   );
 
   S.bindSliderAndNumberInput(
     "REPEL_SCALE",
-    (VALUE) => (S.interactionSettings.repelScale = VALUE),
+    (VALUE) => S.setInteractionSetting("repelScale", VALUE),
     S.interactionSettings.repelScale
   );
 
   /* GROUP: Poke control */
   S.bindSliderAndNumberInput(
     "POKE_STRENGTH",
-    (VALUE) => (S.interactionSettings.pokeStrength = VALUE),
+    (VALUE) => S.setInteractionSetting("pokeStrength", VALUE),
     S.interactionSettings.pokeStrength
   );
 };
 
-// Wire UI bindings after the DOM is ready.
-
-onDOMReady(S.initializeGravityControlsIfPresent);
 /* ===============================
  * DOM READY HELPER
  * =============================== */
@@ -917,147 +546,173 @@ function onDOMReady(fn) {
   }
 }
 
-/* #endregion 5) UI CONTROLS */
+/* #endregion 3) UI CONTROLS */
 
 
 
 /*======================================================================
- * #region 6) RESIZE + ANIMATION
+ * #region 4) ENGINE STARTUP
  *====================================================================*/
 
-/* GROUP: Resize canvas + recompute scaling */
-// Resize canvas, recompute scaling, and rescale stars to match new viewport.
-S.resizeStarfieldCanvas = function resizeStarfieldCanvas() {
+/* GROUP: Engine script location */
+// Absolute path: a relative one would resolve against the page URL, not /Javascript/.
+S.engineScriptUrl = "/Javascript/Active Starfield.js";
 
-  // Bail if canvas isn't active so we don't work with null refs.
-  if (!S.isCanvasReady) return;
-
-  /* GROUP: Capture old state for rescale */
-  const OLD_WIDTH = S.canvasWidth;
-  const OLD_HEIGHT = S.canvasHeight;
-  const OLD_SCREEN_PERIMETER = S.screenPerimeter || 1;
-
-  /* GROUP: Read new viewport size */
-  S.canvasWidth = window.innerWidth || 0;
-  S.canvasHeight = window.innerHeight || 0;
-
-  /* GROUP: Resize canvas backing store */
-  S.constellationCanvas.width = S.canvasWidth;
-  S.constellationCanvas.height = S.canvasHeight;
-
-  /* GROUP: Recompute scaling helpers */
-  S.screenPerimeter = S.canvasWidth + S.canvasHeight;
-  S.screenScaleUp = Math.pow(S.screenPerimeter / 1200, 0.35);
-  S.screenScaleDown = Math.pow(1200 / S.screenPerimeter, 0.35);
-
-  /* GROUP: Recompute caps */
-  S.starCountLimit = Math.min(400, S.screenScaleUp * 80);
-  S.maxLinkDistance = S.screenScaleUp ** 6.5 * 275;
-  S.goalLinkDistance = S.maxLinkDistance;
-
-  /* GROUP: Recompute physics scaling powers */
-  S.screenScalePowers.attractionGradient = 5.51 * S.screenScaleUp ** 0.5;
-  S.screenScalePowers.repulsionGradient = 2.8 * S.screenScaleUp ** 0.66;
-  S.screenScalePowers.attractionShape = 0.48 * S.screenScaleDown ** 8.89;
-  S.screenScalePowers.repulsionShape = 0.64;
-  S.screenScalePowers.attractionForce = 0.0053 * S.screenScaleDown ** 6.46;
-  S.screenScalePowers.repulsionForce = 0.0171 * S.screenScaleDown ** 0.89;
-  S.screenScalePowers.forceClamp = S.screenScaleUp ** 1.8;
-
-  /* GROUP: Rescale existing stars */
-  if (OLD_WIDTH !== 0 && OLD_HEIGHT !== 0 && S.starList.length) {
-
-    const SCALE_X = S.canvasWidth / OLD_WIDTH;
-    const SCALE_Y = S.canvasHeight / OLD_HEIGHT;
-    const SIZE_SCALE = S.screenPerimeter / OLD_SCREEN_PERIMETER;
-
-    for (const STAR of S.starList) {
-      STAR.x *= SCALE_X;
-      STAR.y *= SCALE_Y;
-      STAR.size *= SIZE_SCALE;
-    }
-  }
+// Add the site version so deploys bust the cache (matches Boot.js).
+S.getVersionedUrl = function getVersionedUrl(URL) {
+  const VERSION = window.SITE_VERSION || "dev";
+  const JOINER = URL.includes("?") ? "&" : "?";
+  return `${URL}${JOINER}v=${encodeURIComponent(VERSION)}`;
 };
 
-/* GROUP: Animation loop */
-// Main animation loop that calls Active physics + render when present.
-function runAnimationLoop() {
+/* GROUP: Start the engine */
+// Prefer a worker drawing on an OffscreenCanvas; fall back to the main thread if unsupported.
+S.startEngine = function startEngine() {
 
+  // Bail if this page has no canvas.
   if (!S.isCanvasReady) return;
 
-  if (S.isFrozen) {
-    requestAnimationFrame(runAnimationLoop);
+  // Read saved stars first (this also restores slider settings before the sliders bind).
+  const SAVED = S.readSavedStarfield();
+
+  // Everything the engine needs to begin.
+  const INIT_MESSAGE = {
+    type: "INIT",
+    width: window.innerWidth || 0,
+    height: window.innerHeight || 0,
+    settings: { ...S.interactionSettings },
+    saved: SAVED,
+    wantsDebug: Object.values(S.debugReadouts).some(Boolean)
+  };
+
+  /* GROUP: Worker path */
+  const SUPPORTS_OFFSCREEN =
+    typeof Worker !== "undefined" &&
+    typeof S.constellationCanvas.transferControlToOffscreen === "function";
+
+  if (SUPPORTS_OFFSCREEN) {
+
+    // Hand drawing control to the worker. After this the page can't draw on (or resize) the canvas.
+    const OFFSCREEN = S.constellationCanvas.transferControlToOffscreen();
+
+    S.worker = new Worker(S.getVersionedUrl(S.engineScriptUrl));
+    S.worker.onmessage = (EVENT) => S.handleEngineMessage(EVENT.data);
+    S.worker.onerror = (EVENT) => console.error("Starfield worker error:", EVENT.message, EVENT);
+
+    // postMessage queues until the worker script has loaded, so it's safe to send right away.
+    S.sendToEngine = (MESSAGE, TRANSFER) => S.worker.postMessage(MESSAGE, TRANSFER || []);
+
+    // The OffscreenCanvas must be in the transfer list (it moves, it can't be copied).
+    INIT_MESSAGE.canvas = OFFSCREEN;
+    S.sendToEngine(INIT_MESSAGE, [OFFSCREEN]);
     return;
   }
 
-  if (typeof S.updateStarPhysics === "function") {
-    S.updateStarPhysics();
-  }
+  /* GROUP: Main-thread fallback */
+  // Load the engine as a normal script. It installs S.engineReceive, and we call it directly.
+  console.info("OffscreenCanvas not supported; running starfield on the main thread.");
 
-  if (typeof S.renderStarsAndLinks === "function") {
-    S.renderStarsAndLinks();
-  }
+  const SCRIPT = document.createElement("script");
+  SCRIPT.src = S.getVersionedUrl(S.engineScriptUrl);
+  SCRIPT.onload = () => {
+    if (typeof S.engineReceive !== "function") return;
 
-  requestAnimationFrame(runAnimationLoop);
-}
+    S.sendToEngine = (MESSAGE) => S.engineReceive(MESSAGE);
 
-// Expose loop for debugging and manual starts.
-S._runAnimationLoop = runAnimationLoop;
+    // Real <canvas> instead of an OffscreenCanvas; grab settings now in case sliders moved meanwhile.
+    INIT_MESSAGE.canvas = S.constellationCanvas;
+    INIT_MESSAGE.settings = { ...S.interactionSettings };
+    S.sendToEngine(INIT_MESSAGE);
 
-/* #endregion 6) RESIZE + ANIMATION */
+    // Pick up any freeze that happened while the script was loading.
+    if (S.isFrozen) S.setFrozen(true);
+  };
+  document.body.appendChild(SCRIPT);
+};
+
+/* #endregion 4) ENGINE STARTUP */
 
 
 
 /*======================================================================
- * #region 7) BOOTSTRAP
+ * #region 5) PAGE INPUT -> ENGINE
  *====================================================================*/
 
-/* GROUP: Canvas usability check */
-// Return true when canvas size is stable enough to run starfield.
-function isCanvasSizeUsable() {
-  return (
-    Number.isFinite(S.canvasWidth) &&
-    Number.isFinite(S.canvasHeight) &&
-    S.canvasWidth > 50 &&
-    S.canvasHeight > 50
-  );
-}
+/* GROUP: Pointer timestamps */
+// Event timestamps are relative to this page's clock, and the worker's clock starts at a
+// different moment. Send epoch ms; the engine converts it into its own performance.now() space.
+S.toEngineTimeMs = function toEngineTimeMs(EVENT_TIMESTAMP) {
+  if (EVENT_TIMESTAMP > 1e12) return EVENT_TIMESTAMP; // Already epoch-style (some Safari versions)
+  if (!Number.isFinite(performance.timeOrigin)) return undefined; // Engine falls back to “now”
+  return performance.timeOrigin + EVENT_TIMESTAMP;
+};
 
-/* GROUP: Start function */
-// Initialize starfield once the canvas has usable dimensions.
-function startStarfield() {
+// Forward one pointer sample to the engine.
+S.sendPointer = function sendPointer(TYPE, X, Y, EVENT_TIMESTAMP) {
+  S.sendToEngine({ type: TYPE, x: X, y: Y, time: S.toEngineTimeMs(EVENT_TIMESTAMP) });
+};
 
-  S.resizeStarfieldCanvas();
+/* GROUP: Event listeners */
+// Mouse click starts interaction.
+window.addEventListener("mousedown", (EVENT) =>
+  S.sendPointer("POINTER_DOWN", EVENT.clientX, EVENT.clientY, EVENT.timeStamp)
+);
 
-  if (!isCanvasSizeUsable()) {
-    requestAnimationFrame(startStarfield);
-    return;
-  }
+// Pointer move for mouse/pen.
+// Touch is handled by touchmove instead: pointermove stops (pointercancel) once a touch starts scrolling.
+window.addEventListener("pointermove", (EVENT) => {
+  if (EVENT.pointerType === "touch") return;
+  S.sendPointer("POINTER_MOVE", EVENT.clientX, EVENT.clientY, EVENT.timeStamp);
+});
 
-  /* GROUP: Stars init */
-  if (!S.hasStarsInitialized) {
-    S.hasStarsInitialized = true;
-    S.restoreOrCreateStars();
-  }
+// Touch begins: start poke/ring at touch position.
+window.addEventListener(
+  "touchstart",
+  (EVENT) => {
+    const TOUCH = EVENT.touches[0];
+    if (!TOUCH) return;
+    S.sendPointer("POINTER_DOWN", TOUCH.clientX, TOUCH.clientY, EVENT.timeStamp);
+  },
+  { passive: true } // Passive: allow native scrolling
+);
 
-  /* GROUP: Start loop */
-  if (!S.hasAnimationLoopStarted) {
-    S.hasAnimationLoopStarted = true;
-    requestAnimationFrame(S._runAnimationLoop);
-  }
+// Touch moves: update pointer energy/position (keeps firing while the page scrolls).
+window.addEventListener(
+  "touchmove",
+  (EVENT) => {
+    const TOUCH = EVENT.touches[0];
+    if (!TOUCH) return;
+    S.sendPointer("POINTER_MOVE", TOUCH.clientX, TOUCH.clientY, EVENT.timeStamp);
+  },
+  { passive: true } // Passive: allow native scrolling
+);
 
-  /* GROUP: Resize listener */
-  if (!S.hasResizeListenerWired) {
-    S.hasResizeListenerWired = true;
-    window.addEventListener("resize", S.resizeStarfieldCanvas);
-  }
-}
+/* GROUP: Resize */
+// The engine resizes the canvas backing store; it just needs the new viewport size.
+window.addEventListener("resize", () => {
+  S.sendToEngine({
+    type: "RESIZE",
+    width: window.innerWidth || 0,
+    height: window.innerHeight || 0
+  });
+});
+
+/* #endregion 5) PAGE INPUT -> ENGINE */
+
+
+
+/*======================================================================
+ * #region 6) BOOTSTRAP
+ *====================================================================*/
 
 /* GROUP: Bootstrap guard */
 try {
-  startStarfield();
+  S.startEngine();
 } catch (ERROR) {
   console.error("Initialization error in Starfield Setup:", ERROR);
 }
 
-/* #endregion 7) BOOTSTRAP */
+// Wire UI bindings after the DOM is ready (after startEngine so restored values show).
+onDOMReady(S.initializeGravityControlsIfPresent);
+
+/* #endregion 6) BOOTSTRAP */

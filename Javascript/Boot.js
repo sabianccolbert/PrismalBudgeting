@@ -8,7 +8,7 @@
   window.SITE_VERSION = SITE_VERSION;
 
   /* ===============================
-   * 0.5) HTML CACHE BUSTER
+   * 1) HTML CACHE BUSTER
    * =============================== */
   const storedVersion = localStorage.getItem("LOCAL_SITE_VERSION");
 
@@ -26,7 +26,7 @@
   }
 
   /* ===============================
-   *  1) PAGE DETECTION
+   *  2) PAGE DETECTION
    * =============================== */
   function getPageKey(){
     let p = location.pathname.toLowerCase();
@@ -40,13 +40,22 @@
     if (p === "/login") return "login";
     if (p === "/privacy%20and%20terms") return "privacy";
 
+    // Menu pages (folder: /Menu/)
+    if (p === "/menu" || p === "/menu/index") return "menu";
+    if (p === "/menu/recurring") return "recurring";
+    if (p === "/menu/history") return "history";
+    if (p === "/menu/accounts") return "accounts";
+    if (p === "/menu/tracker") return "tracker";
+    if (p === "/menu/calculator") return "calculator";
+    if (p === "/menu/logs") return "logs";
+
     return "generic";
   }
 
   window.PAGE = getPageKey();
 
   /* ===============================
-   *  1.5) AUTHENTICATION REDIRECT
+   *  3) AUTHENTICATION REDIRECT
    * =============================== */
   const hostname = window.location.hostname;
 
@@ -69,7 +78,7 @@
   }
 
   /* ===============================
-   *  3) CSS mode flip
+   *  4) CSS mode flip
    * =============================== */
   const html = document.documentElement;
   html.classList.remove("noJs");
@@ -79,22 +88,19 @@
   } else {
     html.classList.add("otherJs");
   }
-  
-  /* ===============================
-   *  4) Inject versioned CSS
-   * =============================== */
-  //dont need, javascript is required so inline css links are used document.write(`<link rel="stylesheet" href="${v("/stylesheet.css")}">`);
-
   /* ===============================
    *  5) Append page scripts at END
    * =============================== */
+  // Starfield Setup starts the worker (Active Starfield.js) itself, so Active isn't listed here.
+  // Setup must come before Keyboard and Layout, which use window.STARFIELD.
   const GLOBAL_SCRIPTS = [
     "/Javascript/Starfield Setup.js",
-    "/Javascript/Active Starfield.js",
     "/Javascript/Layout.js",
     "/Javascript/Keyboard Starfield.js",
     "/Javascript/Analytics.js"
   ];
+
+  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "tracker", "calculator", "logs"];
 
   function appendScript(src){
     const s = document.createElement("script");
@@ -116,8 +122,12 @@
     if (PAGE === "notfound") {
       appendScript("/Javascript/Debug.js");
     }
-    if (PAGE === "home") {
+    // Every page that shows budget data loads + saves it through Process Budget,
+    // then draws itself: the calendar page, or the menu data pages
+    if (BUDGET_PAGES.includes(PAGE)) {
       appendScript("/Javascript/Process Budget.js");
+      appendScript("/Javascript/Budget UI.js");
+      appendScript(PAGE === "home" ? "/Javascript/Calendar Page.js" : "/Javascript/Budget Pages.js");
     }
   }
   
@@ -150,6 +160,7 @@
     HTML.style.overflowY = "hidden";
     BODY.style.overflowY = "hidden";
     CONTAINER.style.overflowY = "visible";
+
     loadPageScripts();
     addVersionBadge();
   });

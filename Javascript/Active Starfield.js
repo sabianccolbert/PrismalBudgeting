@@ -1,47 +1,246 @@
 // thank heavens for chatGPT <3                                           // Credit header
-// Active Starfield: owns physics, rendering, and pointer input.           // File purpose
-// Requires Starfield Setup.js to have created window.STARFIELD and canvas state. // Dependency note
+// Active Starfield: the starfield engine. Owns state, physics, rendering, pointer math, and the loop. // File purpose
+// Runs inside a Web Worker on an OffscreenCanvas, started by Starfield Setup.js. // Where it runs
+// Workers can't see the page (no window/document/localStorage), so ALL input arrives as messages (region 6). // Key rule
+// If OffscreenCanvas is unsupported, Setup loads this file on the main thread instead (same message path). // Fallback
 
 /*======================================================================  // Big section divider
  *  MENU                                                                  // Table of contents
  *----------------------------------------------------------------------
- *  0) PERF HELPERS                                                        // Perf + shared helpers
+ *  0) ENGINE STATE + HELPERS                                              // State, keyboard impulses, utilities, sprite
  *  1) PHYSICS                                                             // Forces + movement
  *  2) RENDERING                                                           // Drawing stars + links + ring
- *  3) USER INPUT                                                          // Mouse/touch input -> speed + poke
+ *  3) USER INPUT                                                          // Pointer events (sent by Setup) -> speed + poke
+ *  4) INIT: RESTORE OR CREATE STARS                                       // Adopt saved stars or build fresh ones
+ *  5) RESIZE + ANIMATION LOOP                                             // Canvas sizing, scaling, loop, snapshots
+ *  6) MESSAGES                                                            // Setup <-> engine message handling
  *====================================================================*/   // End menu block
+
+// Wrap the engine so its names (S, KEYBOARD, helpers) never clash with page globals   // Why the wrapper exists
+// when the main-thread fallback loads this file as a normal <script>.               // (Layout/Keyboard also use a global S)
+(function STARFIELD_ENGINE() {
 
 
 /*======================================================================  // Region divider
- * #region 0) PERF HELPERS                                                // Start region 0
+ * #region 0) ENGINE STATE + HELPERS                                      // Start region 0
  *====================================================================*/   // Divider
 
-/* GROUP: Shared state alias */                                           // Group label
-// Grab the shared STARFIELD state created by Starfield Setup.js.          // Explanation
-var S = window.STARFIELD;                                                 // Local alias to global STARFIELD (can be undefined on pages without starfield)
+/* GROUP: Where are we running? */                                        // Group label
+// True inside the Web Worker, false when Setup loaded us on the main thread as a fallback. // Explanation
+const IS_WORKER =
+  typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope; // Only workers have WorkerGlobalScope
 
-/* GROUP: Debug refs cached (NOT on STARFIELD) */                         // Group label
-// Cache debug element references so we don't query the DOM every frame.   // Why we cache
-const DBG = {                                                             // Debug element bucket
+/* GROUP: Engine state */                                                 // Group label
+// The engine's own STARFIELD state. In the worker this is NOT window.STARFIELD   // Explanation
+// (the worker can't see the page); Setup only reaches it through messages.      // Explanation
+const S = {};
 
-  // Displays a sample value (frame ms) for quick sanity checks.           // Debug meaning
-  misc: null,                                                             // DOM element ref (or null)
+/* GROUP: Canvas wiring (filled by the INIT message) */
+// OffscreenCanvas in the worker, or the real <canvas> in the fallback.
+S.constellationCanvas = null;
 
-  // Displays pointer ring timer.                                          // Debug meaning
-  circle: null,                                                           // DOM element ref (or null)
+// 2D drawing context for the canvas above.
+S.drawingContext = null;
 
-  // Displays pointer speed energy.                                        // Debug meaning
-  speed: null,                                                            // DOM element ref (or null)
+// Record whether canvas drawing is actually available.
+S.isCanvasReady = false;
 
-  // Displays poke timer.                                                  // Debug meaning
-  poke: null                                                              // DOM element ref (or null)
-};                                                                        // End debug bucket
+// Track whether the simulation should pause (Setup sends FREEZE on page hide/transition).
+S.isFrozen = false;
 
-// Look up optional debug elements (they don't exist on most pages).       // Note
-DBG.misc = document.getElementById("dbgMisc");                            // Cache misc readout element
-DBG.circle = document.getElementById("dbgCircle");                        // Cache ring timer readout element
-DBG.speed = document.getElementById("dbgSpeed");                          // Cache pointer speed readout element
-DBG.poke = document.getElementById("dbgPoke");                            // Cache poke timer readout element
+// True when the page has debug readouts (404 page), so we post DEBUG values each frame.
+S.wantsDebug = false;
+
+/* GROUP: Pointer state (pointer events update these) */
+// Track the current pointer X position in client coordinates.
+S.pointerClientX = 0;
+
+// Track the current pointer Y position in client coordinates.
+S.pointerClientY = 0;
+
+// Track the last pointer timestamp baseline in “perf-style ms”.
+S.lastPointerTimeMs = 0;
+
+// Track the current pointer speed in normalized “energy” units.
+S.pointerSpeedUnits = 0;
+
+// Track the poke impulse timer used by the poke burst effect.
+S.pokeImpulseTimer = 0;
+
+// Track the ring timer used to animate the pointer ring.
+S.pointerRingTimer = 0;
+
+/* GROUP: Canvas metrics (resize updates these) */
+// Track current canvas pixel width used for physics + drawing.
+S.canvasWidth = 0;
+
+// Track current canvas pixel height used for physics + drawing.
+S.canvasHeight = 0;
+
+// Track a “screen size” proxy used for scaling (width + height).
+S.screenPerimeter = 0;
+
+// Track the scale-up factor used to grow values on large screens.
+S.screenScaleUp = 0;
+
+// Track the scale-down factor used to normalize values on small screens.
+S.screenScaleDown = 0;
+
+// Track the computed maximum number of stars allowed for this screen size.
+S.starCountLimit = 0;
+
+// Track the computed maximum link distance for this screen size.
+S.maxLinkDistance = 0;
+
+// Track the current target link distance (lets physics animate link distance smoothly).
+S.goalLinkDistance = 0;
+
+// Track the timer used to rebuild links after certain effects.
+S.linkRebuildTimer = 0;
+
+/* GROUP: Precomputed physics scaling powers */
+// Store scaling multipliers so physics stays screen-consistent.
+// Resize writes these, physics reads them each frame.
+S.screenScalePowers = {
+
+  // Scales attraction radius math for larger screens.
+  attractionGradient: 1,
+
+  // Scales repulsion radius math for larger screens.
+  repulsionGradient: 1,
+
+  // Scales attraction falloff curve shaping.
+  attractionShape: 1,
+
+  // Scales repel falloff curve shaping.
+  repulsionShape: 1,
+
+  // Scales attraction force strength across screens.
+  attractionForce: 1,
+
+  // Scales repulsion force strength across screens.
+  repulsionForce: 1,
+
+  // Scales the global momentum clamp across screens.
+  forceClamp: 1
+};
+
+/* GROUP: Slider settings */
+// Defaults only; Setup owns the sliders and sends the real values (INIT + SETTINGS messages).
+S.interactionSettings = {
+  attractStrength: 50,
+  attractRadius: 50,
+  attractScale: 5,
+  clamp: 5,
+  repelStrength: 50,
+  repelRadius: 50,
+  repelScale: 5,
+  pokeStrength: 5
+};
+
+/* GROUP: Star storage */
+// Store the active star objects array.
+S.starList = [];
+
+// Saved stars/meta from localStorage (sent in INIT), held until the canvas has a usable size.
+S.pendingSave = null;
+
+// Last time we posted a SNAPSHOT back to Setup for saving.
+S.lastSnapshotMs = 0;
+
+/* GROUP: Bootstrap guards */
+// Prevent starting the animation loop more than once.
+S.hasAnimationLoopStarted = false;
+
+// Prevent restoring/creating stars more than once.
+S.hasStarsInitialized = false;
+
+/* GROUP: Keyboard impulses */
+// One-frame forces from Keyboard Starfield.js (arrive as KEYBOARD messages).
+// Physics reads these each frame, then resets the one-shot ones.
+const KEYBOARD = {
+
+  // Multiply star passive velocity X by this factor (ex: slow/fast modes).
+  multX: 1,
+
+  // Multiply star passive velocity Y by this factor (ex: slow/fast modes).
+  multY: 1,
+
+  // Add a global drift impulse on X (ex: WASD movement).
+  addX: 0,
+
+  // Add a global drift impulse on Y (ex: WASD movement).
+  addY: 0,
+
+  // Paddles: X position (0..100 style “percent” space used by your pong logic).
+  paddlesX: 50,
+
+  // Paddles: Y position (0..100 style “percent” space used by your pong logic).
+  paddlesY: 50,
+
+  // Paddles: timer that keeps paddles “active” briefly after input.
+  paddlesTimer: 0,
+
+  // When true, magnet targets pointer instead of quadrant coordinates.
+  magnetPointer: false,
+
+  // Magnet target X in percent space (0..100).
+  magnetX: 0,
+
+  // Magnet target Y in percent space (0..100).
+  magnetY: 0
+};
+
+/* GROUP: Time base */
+// Return a high-resolution timestamp in milliseconds when possible.
+S.getNowMs = function getNowMs() {
+
+  // Prefer performance.now() for stable frame deltas (exists in workers too).
+  if (typeof performance !== "undefined" && performance.now) return performance.now();
+
+  // Fallback to Date.now() when performance.now is unavailable.
+  return Date.now();
+};
+
+/* GROUP: Pointer timestamp normalization */
+/**
+ * Convert pointer event timestamps into the same “perf-style ms” space as performance.now().
+ * Setup sends epoch-style ms (the worker's clock starts at a different time than the page's),
+ * and some browsers provide epoch-style timestamps anyway; this normalizes both.
+ */
+S.normalizePointerTimestampMs = function normalizePointerTimestampMs(RAW_TIMESTAMP) {
+
+  // If missing/invalid, use “now” so time deltas stay safe.
+  if (!Number.isFinite(RAW_TIMESTAMP) || RAW_TIMESTAMP <= 0) return S.getNowMs();
+
+  // Epoch ms is usually huge (ex: 1700000000000).
+  // If we detect epoch-style values, translate to perf-space when possible.
+  if (RAW_TIMESTAMP > 1e12) {
+
+    // Use timeOrigin to convert epoch ms into performance.now() space.
+    if (typeof performance !== "undefined" && Number.isFinite(performance.timeOrigin)) {
+      return RAW_TIMESTAMP - performance.timeOrigin;
+    }
+
+    // If timeOrigin is unavailable, fall back to “now”.
+    return S.getNowMs();
+  }
+
+  // Otherwise it already looks like performance.now() space.
+  return RAW_TIMESTAMP;
+};
+
+/* GROUP: Random helpers */
+// Return a random float between MIN_VALUE and MAX_VALUE.
+S.randomBetween = (MIN_VALUE, MAX_VALUE) =>
+  Math.random() * (MAX_VALUE - MIN_VALUE) + MIN_VALUE;
+
+/* GROUP: Talking back to Setup */
+// Worker: postMessage to the page. Fallback: call Setup's handler directly.
+function postToMain(MESSAGE) {
+  if (IS_WORKER) self.postMessage(MESSAGE);
+  else if (self.STARFIELD) self.STARFIELD.handleEngineMessage(MESSAGE);
+}
 
 /* GROUP: Sprite stars (WebP) */                                          // Group label
 // Hold sprite loading state so rendering can bail until the image is ready. // Why we track load state
@@ -50,33 +249,27 @@ const STAR_SPRITES = {                                                    // Spr
   // True once the star image is fully loaded.                             // Meaning
   ready: false,                                                           // Loading gate
 
-  // The Image() object used by drawImage().                               // Meaning
+  // The ImageBitmap used by drawImage().                                  // Meaning
   img: null                                                               // Image reference
 };                                                                        // End sprite state
 
 // Load the star sprite immediately so it is ready by the time rendering starts. // Why IIFE exists
+// Workers have no Image(), so fetch the file and decode it into an ImageBitmap. // Why fetch
 (function loadStarSpriteNow() {                                           // IIFE: runs once at parse time
-
-  // Create a new image object for the star sprite.                        // Create Image()
-  const IMG = new Image();                                                // Image instance used by canvas
-
-  // Hint: decode image off the main thread if possible.                   // Browser decode hint
-  IMG.decoding = "async";                                                 // Ask browser to decode asynchronously
-
-  // Hint: start loading immediately.                                      // Browser loading hint
-  IMG.loading = "eager";                                                  // Prefer immediate fetch
-
-  // Mark sprite as ready once the image loads successfully.               // Onload handler purpose
-  IMG.onload = () => { STAR_SPRITES.ready = true; };                      // Flip ready flag on success
-
-  // Mark sprite as not ready if the image fails to load.                  // Onerror handler purpose
-  IMG.onerror = () => { STAR_SPRITES.ready = false; };                    // Keep ready false on error
-
-  // Provide the sprite URL (starts the network request).                  // Begin fetch
-  IMG.src = "/Resources/Star.webp";                                       // Sprite path
-
-  // Store the image object for later drawing.                             // Persist reference
-  STAR_SPRITES.img = IMG;                                                 // Save image into sprite state
+  fetch("/Resources/Star.webp")                                           // Sprite path (same origin as the worker)
+    .then((RESPONSE) => {                                                 // Check the download
+      if (!RESPONSE.ok) throw new Error("HTTP " + RESPONSE.status);       // Treat 404 etc. as a failure
+      return RESPONSE.blob();                                             // Raw image bytes
+    })
+    .then((BLOB) => createImageBitmap(BLOB))                              // Decode off the render path
+    .then((BITMAP) => {                                                   // Decoded and ready
+      STAR_SPRITES.img = BITMAP;                                          // Save bitmap into sprite state
+      STAR_SPRITES.ready = true;                                          // Flip ready flag on success
+    })
+    .catch((ERROR) => {                                                   // Download or decode failed
+      STAR_SPRITES.ready = false;                                         // Keep ready false on error
+      console.warn("Could not load star sprite:", ERROR);                 // Say why stars aren't drawing
+    });
 })();                                                                     // Invoke immediately
 
 /* GROUP: Link throttle state */                                          // Group label
@@ -296,30 +489,30 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
     STAR.momentumY += (STAR.vy * DRIFT_BOOST) * DT_FRAMES;                // Add baseline drift (y) into momentum
 
     /* GROUP: Keyboard influence */                                       // Group label
-    STAR.momentumX += window.KEYBOARD.addX + (window.KEYBOARD.multX * STAR.vx * 0.05); // Add keyboard impulse + drift assist (x)
-    STAR.momentumY += window.KEYBOARD.addY + (window.KEYBOARD.multY * STAR.vy * 0.05); // Add keyboard impulse + drift assist (y)
+    STAR.momentumX += KEYBOARD.addX + (KEYBOARD.multX * STAR.vx * 0.05); // Add keyboard impulse + drift assist (x)
+    STAR.momentumY += KEYBOARD.addY + (KEYBOARD.multY * STAR.vy * 0.05); // Add keyboard impulse + drift assist (y)
 
-    STAR.momentumX *= window.KEYBOARD.multX;                               // Multiply momentum (x) for speed scaling keys
-    STAR.momentumY *= window.KEYBOARD.multY;                               // Multiply momentum (y) for speed scaling keys
+    STAR.momentumX *= KEYBOARD.multX;                               // Multiply momentum (x) for speed scaling keys
+    STAR.momentumY *= KEYBOARD.multY;                               // Multiply momentum (y) for speed scaling keys
 
     /* GROUP: Magnet orbit */                                             // Group label
-    if (window.KEYBOARD.magnetY > 0 || window.KEYBOARD.magnetPointer) {    // If magnet mode is active
+    if (KEYBOARD.magnetY > 0 || KEYBOARD.magnetPointer) {    // If magnet mode is active
 
       const CANVAS = S.constellationCanvas;                               // Canvas ref for bounding rect conversions
 
       if (CANVAS) {                                                       // Proceed only if canvas exists
 
-        const RECT = CANVAS.getBoundingClientRect();                      // Canvas position in viewport
+        const RECT = { left: 0, top: 0 };                                 // Canvas is position:fixed + inset:0 (no DOM rect in a worker)
 
-        // Magnet target in CANVAS space.                                  // Target variables
+        // Magnet target in CANVAS space.                                // Target variables
         let MAGNET_X_CANVAS, MAGNET_Y_CANVAS;                             // Target coordinates
 
-        if (window.KEYBOARD.magnetPointer) {                              // Pointer-centered magnet mode
+        if (KEYBOARD.magnetPointer) {                              // Pointer-centered magnet mode
           MAGNET_X_CANVAS = S.pointerClientX - RECT.left;                 // Pointer x relative to canvas
           MAGNET_Y_CANVAS = S.pointerClientY - RECT.top;                  // Pointer y relative to canvas
         } else {                                                          // Grid magnet mode
-          MAGNET_X_CANVAS = (window.KEYBOARD.magnetX / 100) * S.canvasWidth;  // Percent -> canvas x
-          MAGNET_Y_CANVAS = (window.KEYBOARD.magnetY / 100) * S.canvasHeight; // Percent -> canvas y
+          MAGNET_X_CANVAS = (KEYBOARD.magnetX / 100) * S.canvasWidth;  // Percent -> canvas x
+          MAGNET_Y_CANVAS = (KEYBOARD.magnetY / 100) * S.canvasHeight; // Percent -> canvas y
         }
 
         // Vector from star -> magnet.                                     // Delta vector
@@ -336,13 +529,13 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
         const UNIT_TOWARD_MAGNET_Y = (DELTA_TO_MAGNET_Y / DIST_TO_MAGNET) * 5; // uy * gain
 
         // Orbit direction (default clockwise).                            // Orbit direction choice
-        const ORBIT_DIR = (window.KEYBOARD.magnetDir === -1) ? -1 : 1;    // -1 for CCW if requested, else +1
+        const ORBIT_DIR = (KEYBOARD.magnetDir === -1) ? -1 : 1;    // -1 for CCW if requested, else +1
 
         // Perpendicular orbit vector (rotate 90 degrees).                 // Perpendicular vector
         const UNIT_ORBIT_X = (-UNIT_TOWARD_MAGNET_Y) * ORBIT_DIR;         // Rotate (ux,uy) -> (-uy,ux)
         const UNIT_ORBIT_Y = ( UNIT_TOWARD_MAGNET_X) * ORBIT_DIR;         // Rotate (ux,uy) -> (-uy,ux)
 
-        const MAGNET_STRENGTH = window.KEYBOARD.magnetStrength || 1;      // Optional external strength knob (default 1)
+        const MAGNET_STRENGTH = KEYBOARD.magnetStrength || 1;      // Optional external strength knob (default 1)
 
         const FALLOFF = 0.35;                                             // Distance falloff constant
 
@@ -394,7 +587,7 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
     }
 
     /* GROUP: Paddle star physics */                                      // Group label
-    if (window.KEYBOARD.paddlesTimer > 0 && STAR === S.starList[0]) {      // If paddles active and this is the special "ball" star
+    if (KEYBOARD.paddlesTimer > 0 && STAR === S.starList[0]) {      // If paddles active and this is the special "ball" star
 
       STAR.whiteValue = 1;                                                // Force the ball star to appear bright
       STAR.opacity = 1;                                                   // Force full opacity for ball visibility
@@ -403,27 +596,27 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
 
       if (CANVAS) {                                                       // Proceed only if canvas exists
 
-        const RECT = CANVAS.getBoundingClientRect();                      // Canvas rect for viewport alignment
+        const RECT = { left: 0, top: 0 };                                 // Canvas is position:fixed + inset:0 (no DOM rect in a worker)
 
         const VIEW_LEFT = -RECT.left;                                     // Visible left bound in canvas space
         const VIEW_TOP = -RECT.top;                                       // Visible top bound in canvas space
-        const VIEW_RIGHT = VIEW_LEFT + window.innerWidth;                 // Visible right bound in canvas space
-        const VIEW_BOTTOM = VIEW_TOP + window.innerHeight;                // Visible bottom bound in canvas space
+        const VIEW_RIGHT = VIEW_LEFT + S.canvasWidth;                     // Visible right bound in canvas space
+        const VIEW_BOTTOM = VIEW_TOP + S.canvasHeight;                    // Visible bottom bound in canvas space
 
         const PADDLE_CENTER_X =
-          VIEW_LEFT + (window.KEYBOARD.paddlesX / 100) * window.innerWidth; // Paddle x (percent -> view/canvas space)
+          VIEW_LEFT + (KEYBOARD.paddlesX / 100) * S.canvasWidth;          // Paddle x (percent -> view/canvas space)
         const PADDLE_CENTER_Y =
-          VIEW_TOP + (window.KEYBOARD.paddlesY / 100) * window.innerHeight; // Paddle y (percent -> view/canvas space)
+          VIEW_TOP + (KEYBOARD.paddlesY / 100) * S.canvasHeight;          // Paddle y (percent -> view/canvas space)
 
-        const PADDLE_W = window.innerWidth * 0.10;                        // Paddle width as % of viewport
-        const PADDLE_H = window.innerHeight * 0.10;                       // Paddle height as % of viewport
+        const PADDLE_W = S.canvasWidth * 0.10;                            // Paddle width as % of viewport
+        const PADDLE_H = S.canvasHeight * 0.10;                           // Paddle height as % of viewport
 
         const HALF_PW = PADDLE_W * 0.5;                                   // Half paddle width
         const HALF_PH = PADDLE_H * 0.5;                                   // Half paddle height
 
         const PADDLE_THICKNESS = Math.max(                                // Paddle stroke thickness
           2,                                                              // Minimum thickness
-          Math.min(window.innerWidth, window.innerHeight) * 0.03          // Thickness scaled to viewport
+          Math.min(S.canvasWidth, S.canvasHeight) * 0.03                  // Thickness scaled to viewport
         );
 
         const HALF_T = PADDLE_THICKNESS * 0.5;                            // Half thickness for collision padding
@@ -569,13 +762,13 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
   }
 
   /* GROUP: Reset keyboard impulses */                                     // Group label
-  window.KEYBOARD.multX = 1;                                               // Reset speed multiplier x
-  window.KEYBOARD.multY = 1;                                               // Reset speed multiplier y
-  window.KEYBOARD.addX = 0;                                                // Reset impulse add x
-  window.KEYBOARD.addY = 0;                                                // Reset impulse add y
-  window.KEYBOARD.magnetX = 0;                                             // Clear magnet target x
-  window.KEYBOARD.magnetY = 0;                                             // Clear magnet target y
-  window.KEYBOARD.magnetPointer = false;                                   // Clear pointer magnet flag
+  KEYBOARD.multX = 1;                                               // Reset speed multiplier x
+  KEYBOARD.multY = 1;                                               // Reset speed multiplier y
+  KEYBOARD.addX = 0;                                                // Reset impulse add x
+  KEYBOARD.addY = 0;                                                // Reset impulse add y
+  KEYBOARD.magnetX = 0;                                             // Clear magnet target x
+  KEYBOARD.magnetY = 0;                                             // Clear magnet target y
+  KEYBOARD.magnetPointer = false;                                   // Clear pointer magnet flag
 
   /* GROUP: Pointer energy decay */                                        // Group label
   S.pointerSpeedUnits *= POINTER_SPEED_DECAY;                              // Decay pointer energy
@@ -590,11 +783,14 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
   if (S.pokeImpulseTimer < 1) S.pokeImpulseTimer = 0;                      // Snap to 0 when small
 
   /* GROUP: Debug readouts (only when present) */                          // Group label
-  if (DBG.misc || DBG.circle || DBG.speed || DBG.poke) {                   // Only touch DOM if any debug elements exist
-    if (DBG.misc) DBG.misc.textContent = (S.getNowMs() - FRAME_START_MS).toFixed(3); // Show frame time (ms)
-    if (DBG.circle) DBG.circle.textContent = S.pointerRingTimer.toFixed(3); // Show ring timer
-    if (DBG.speed) DBG.speed.textContent = S.pointerSpeedUnits.toFixed(3);  // Show pointer energy
-    if (DBG.poke) DBG.poke.textContent = S.pokeImpulseTimer.toFixed(1);     // Show poke timer
+  if (S.wantsDebug) {                                                      // Only when the page has debug readouts
+    postToMain({                                                           // Setup writes these into the DOM
+      type: "DEBUG",                                                       // Message type
+      misc: (S.getNowMs() - FRAME_START_MS).toFixed(3),                    // Frame time (ms)
+      circle: S.pointerRingTimer.toFixed(3),                               // Ring timer
+      speed: S.pointerSpeedUnits.toFixed(3),                               // Pointer energy
+      poke: S.pokeImpulseTimer.toFixed(1)                                  // Poke timer
+    });
   }
 
   /* GROUP: Adaptive link-distance “lag buster” */                         // Group label
@@ -737,34 +933,34 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
   CONTEXT.clearRect(0, 0, S.canvasWidth, S.canvasHeight);                 // Clear full canvas each frame
 
   /* GROUP: Paddles overlay */                                            // Group label
-  if (window.KEYBOARD.paddlesTimer > 0) {                                 // Draw paddles only when active
+  if (KEYBOARD.paddlesTimer > 0) {                                 // Draw paddles only when active
 
-    window.KEYBOARD.paddlesX = Math.max(0, Math.min(100, window.KEYBOARD.paddlesX)); // Clamp paddlesX to 0..100
-    window.KEYBOARD.paddlesY = Math.max(0, Math.min(100, window.KEYBOARD.paddlesY)); // Clamp paddlesY to 0..100
+    KEYBOARD.paddlesX = Math.max(0, Math.min(100, KEYBOARD.paddlesX)); // Clamp paddlesX to 0..100
+    KEYBOARD.paddlesY = Math.max(0, Math.min(100, KEYBOARD.paddlesY)); // Clamp paddlesY to 0..100
 
     const CANVAS = S.constellationCanvas;                                 // Canvas ref
     if (!CANVAS) return;                                                  // Bail if missing (safety)
 
-    const RECT = CANVAS.getBoundingClientRect();                          // Canvas position in viewport
+    const RECT = { left: 0, top: 0 };                                     // Canvas is position:fixed + inset:0 (no DOM rect in a worker)
 
     const VIEW_LEFT = -RECT.left;                                         // View left in canvas space
     const VIEW_TOP = -RECT.top;                                           // View top in canvas space
-    const VIEW_RIGHT = VIEW_LEFT + window.innerWidth;                     // View right in canvas space
-    const VIEW_BOTTOM = VIEW_TOP + window.innerHeight;                    // View bottom in canvas space
+    const VIEW_RIGHT = VIEW_LEFT + S.canvasWidth;                         // View right in canvas space
+    const VIEW_BOTTOM = VIEW_TOP + S.canvasHeight;                        // View bottom in canvas space
 
-    const ALPHA = Math.min(1, Math.max(0, window.KEYBOARD.paddlesTimer)); // Map timer into alpha 0..1
+    const ALPHA = Math.min(1, Math.max(0, KEYBOARD.paddlesTimer)); // Map timer into alpha 0..1
 
     const PADDLE_CENTER_X =
-      VIEW_LEFT + (window.KEYBOARD.paddlesX / 100) * window.innerWidth;   // Paddle center x
+      VIEW_LEFT + (KEYBOARD.paddlesX / 100) * S.canvasWidth;              // Paddle center x
     const PADDLE_CENTER_Y =
-      VIEW_TOP + (window.KEYBOARD.paddlesY / 100) * window.innerHeight;   // Paddle center y
+      VIEW_TOP + (KEYBOARD.paddlesY / 100) * S.canvasHeight;              // Paddle center y
 
-    const PADDLE_W = window.innerWidth * 0.10;                            // Paddle width
-    const PADDLE_H = window.innerHeight * 0.10;                           // Paddle height
+    const PADDLE_W = S.canvasWidth * 0.10;                                // Paddle width
+    const PADDLE_H = S.canvasHeight * 0.10;                               // Paddle height
 
     CONTEXT.save();                                                       // Save canvas state
     CONTEXT.globalAlpha = ALPHA;                                          // Apply fade
-    CONTEXT.lineWidth = Math.max(2, Math.min(window.innerWidth, window.innerHeight) * 0.03); // Paddle thickness
+    CONTEXT.lineWidth = Math.max(2, Math.min(S.canvasWidth, S.canvasHeight) * 0.03); // Paddle thickness
     CONTEXT.lineCap = "round";                                            // Rounded ends
     CONTEXT.strokeStyle = "rgba(255,255,255,1)";                          // Paddle color
 
@@ -783,7 +979,7 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
     CONTEXT.stroke();                                                     // Draw paddles
     CONTEXT.restore();                                                    // Restore canvas state
 
-    window.KEYBOARD.paddlesTimer -= 0.1;                                  // Decrease paddles visibility timer
+    KEYBOARD.paddlesTimer -= 0.1;                                  // Decrease paddles visibility timer
   }
 
   /* GROUP: Links */                                                      // Group label
@@ -953,9 +1149,11 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
  *====================================================================*/   // Divider
 
 /* GROUP: Pointer speed energy */                                          // Group label
-S.updatePointerSpeed = function updatePointerSpeed(CURRENT_X, CURRENT_Y) { // Update pointer position + compute energy
+S.updatePointerSpeed = function updatePointerSpeed(CURRENT_X, CURRENT_Y, EVENT_TIME_MS) { // Update pointer position + compute energy
 
-  const NOW_MS = S.getNowMs();                                            // Current time for dt
+  // Use the event's own timestamp, not arrival time: messages can reach the worker bunched up, // Why not getNowMs()
+  // and two moves "1ms apart" would read as a huge speed spike.                               // Explanation
+  const NOW_MS = S.normalizePointerTimestampMs(EVENT_TIME_MS);            // Event time in this thread's perf space
 
   if (!S.lastPointerTimeMs) {                                             // If this is the first pointer sample
 
@@ -988,40 +1186,419 @@ S.updatePointerSpeed = function updatePointerSpeed(CURRENT_X, CURRENT_Y) { // Up
 };
 
 /* GROUP: Begin interaction */                                             // Group label
-S.beginPointerInteraction = function beginPointerInteraction(START_X, START_Y) { // Called on click/tap start
+S.beginPointerInteraction = function beginPointerInteraction(START_X, START_Y, EVENT_TIME_MS) { // Called on click/tap start
   S.pokeImpulseTimer = 200;                                               // Kick poke timer to full impulse
   S.lastPointerTimeMs = 0;                                                // Force pointer speed to re-init cleanly
-  S.updatePointerSpeed(START_X, START_Y);                                 // Seed pointer position and energy
+  S.updatePointerSpeed(START_X, START_Y, EVENT_TIME_MS);                  // Seed pointer position and energy
 };
 
-/* GROUP: Event listeners */                                               // Group label
-window.addEventListener("mousedown", (EVENT) =>                           // Mouse click starts interaction
-  S.beginPointerInteraction(EVENT.clientX, EVENT.clientY)                 // Start poke/ring at mouse position
-);
-
-window.addEventListener("pointermove", (EVENT) => {                       // Pointer move for mouse/pen
-  if (EVENT.pointerType === "touch") return;                              // Ignore touch here (handled by touchmove)
-  S.updatePointerSpeed(EVENT.clientX, EVENT.clientY);                     // Update pointer energy/position
-});
-
-window.addEventListener(                                                  // Touch start listener
-  "touchstart",                                                           // Touch begins
-  (EVENT) => {                                                            // Handler
-    const TOUCH = EVENT.touches[0];                                       // First touch point
-    if (!TOUCH) return;                                                   // Guard
-    S.beginPointerInteraction(TOUCH.clientX, TOUCH.clientY);              // Start poke/ring at touch position
-  },
-  { passive: true }                                                       // Passive: allow native scrolling
-);
-
-window.addEventListener(                                                  // Touch move listener
-  "touchmove",                                                            // Touch moves
-  (EVENT) => {                                                            // Handler
-    const TOUCH = EVENT.touches[0];                                       // First touch point
-    if (!TOUCH) return;                                                   // Guard
-    S.updatePointerSpeed(TOUCH.clientX, TOUCH.clientY);                   // Update pointer energy/position
-  },
-  { passive: true }                                                       // Passive: allow native scrolling
-);
 
 /* #endregion 3) USER INPUT */                                             // End region 3
+
+
+
+/*======================================================================
+ * #region 4) INIT: RESTORE OR CREATE STARS
+ *====================================================================*/
+
+/* GROUP: Restore or create */
+// Adopt saved stars if possible, otherwise create a fresh random field.
+// Setup reads + parses localStorage (workers can't) and sends the result in INIT.
+S.restoreOrCreateStars = function restoreOrCreateStars(SAVED) {
+
+  // Bail if canvas isn't active so we don't create unusable state.
+  if (!S.isCanvasReady) return;
+
+  // If there is no usable saved data, generate a new starfield.
+  if (!SAVED || !Array.isArray(SAVED.stars) || !SAVED.stars.length) {
+    S.createNewStars();
+    return;
+  }
+
+  // Adopt saved stars (keep object shape stable for compatibility).
+  S.starList = SAVED.stars;
+
+  // If meta is missing, keep stars and exit.
+  const SAVED_META = SAVED.meta;
+  if (!SAVED_META) return;
+
+  /* GROUP: Rescale stars */
+  // Rescale stars to current canvas so they don’t “corner spawn” after resize.
+  if (SAVED_META.width > 0 && SAVED_META.height > 0) {
+
+    // Compute X scale ratio from old canvas to new canvas.
+    const SCALE_X = S.canvasWidth / SAVED_META.width;
+
+    // Compute Y scale ratio from old canvas to new canvas.
+    const SCALE_Y = S.canvasHeight / SAVED_META.height;
+
+    // Compute a size scale ratio from old perimeter to new perimeter.
+    const SIZE_SCALE =
+      (S.canvasWidth + S.canvasHeight) / (SAVED_META.width + SAVED_META.height);
+
+    // Apply rescale to each star position and size.
+    for (const STAR of S.starList) {
+      STAR.x *= SCALE_X;        // Scale X into new canvas space.
+      STAR.y *= SCALE_Y;        // Scale Y into new canvas space.
+      STAR.size *= SIZE_SCALE;  // Scale size for consistent feel.
+    }
+  }
+
+  /* GROUP: Restore interaction state */
+  // (Slider settings are restored by Setup, which owns the sliders.)
+  // Restore poke timer (fallback to 0).
+  S.pokeImpulseTimer = SAVED_META.pokeTimer ?? 0;
+
+  // Restore pointer speed “energy” (fallback to 0).
+  S.pointerSpeedUnits = SAVED_META.userSpeed ?? 0;
+
+  // Restore ring timer (fallback to 0).
+  S.pointerRingTimer = SAVED_META.ringTimer ?? 0;
+
+  /* GROUP: Restore pointer position */
+  // Restore pointer X when saved as a number.
+  if (typeof SAVED_META.userX === "number") S.pointerClientX = SAVED_META.userX;
+
+  // Restore pointer Y when saved as a number.
+  if (typeof SAVED_META.userY === "number") S.pointerClientY = SAVED_META.userY;
+
+  /* GROUP: Reset pointer time baseline */
+  // Reset timing baseline to “now” so next delta is sane.
+  S.lastPointerTimeMs = S.getNowMs();
+};
+
+/* GROUP: Create new stars */
+// Create a fresh randomized set of stars sized for the current screen.
+S.createNewStars = function createNewStars() {
+
+  // Bail if canvas isn't active so we don't create unusable state.
+  if (!S.isCanvasReady) return;
+
+  // Clear any existing stars before rebuilding.
+  S.starList = [];
+
+  /* GROUP: Star size limits */
+  // Define minimum allowed star size.
+  const MIN_SIZE = 3;
+
+  // Define maximum allowed star size (scaled by screen).
+  const MAX_SIZE = Math.min(10, S.screenPerimeter / 400 || 3);
+
+  /* GROUP: Build stars */
+  // Create each star object (keep fields stable for storage compatibility).
+  for (let STAR_INDEX = 0; STAR_INDEX < S.starCountLimit; STAR_INDEX++) {
+    S.starList.push({
+
+      // Spawn X uniformly across the canvas.
+      x: Math.random() * S.canvasWidth,
+
+      // Spawn Y uniformly across the canvas.
+      y: Math.random() * S.canvasHeight,
+
+      // Passive drift velocity X.
+      vx: S.randomBetween(-0.15, 0.15),
+
+      // Passive drift velocity Y.
+      vy: S.randomBetween(-0.15, 0.15),
+
+      // Base size used by rendering.
+      size: S.randomBetween(
+        Math.min(MIN_SIZE, MAX_SIZE),
+        Math.max(MIN_SIZE, MAX_SIZE)
+      ),
+
+      // Rotation (used by line-y sprite / starburst style).
+      rotation: Math.random() * Math.PI * 2,
+
+      // Twinkle opacity baseline.
+      opacity: S.randomBetween(0.005, 1.8),
+
+      // Twinkle fade speed multiplier.
+      fadeSpeed: S.randomBetween(1, 2.1),
+
+      // Redness used by darkness overlay.
+      redValue: S.randomBetween(50, 200),
+
+      // White flash intensity (physics updates this).
+      whiteValue: 0,
+
+      // Accumulated momentum X (forces add here).
+      momentumX: 0,
+
+      // Accumulated momentum Y (forces add here).
+      momentumY: 0,
+
+      // Cached edge fade factor used by link brightness.
+      edge: 1,
+
+      // Keyboard force X (legacy/optional).
+      keyboardForceX: 0,
+
+      // Keyboard force Y (legacy/optional).
+      keyboardForceY: 0
+    });
+  }
+
+  /* GROUP: Pong ball consistency */
+  // Force star[0] to have a consistent velocity for the paddles ball.
+  if (S.starList.length) {
+    S.starList[0].vx = 0.25;
+    S.starList[0].vy = 0.25;
+  }
+};
+
+/* #endregion 4) INIT */
+
+
+
+/*======================================================================
+ * #region 5) RESIZE + ANIMATION LOOP
+ *====================================================================*/
+
+/* GROUP: Resize canvas + recompute scaling */
+// Resize canvas, recompute scaling, and rescale stars to match new viewport.
+// Width/height come from Setup (the worker has no window.innerWidth).
+S.resizeStarfieldCanvas = function resizeStarfieldCanvas(WIDTH, HEIGHT) {
+
+  // Bail if canvas isn't active so we don't work with null refs.
+  if (!S.isCanvasReady) return;
+
+  /* GROUP: Capture old state for rescale */
+  const OLD_WIDTH = S.canvasWidth;
+  const OLD_HEIGHT = S.canvasHeight;
+  const OLD_SCREEN_PERIMETER = S.screenPerimeter || 1;
+
+  /* GROUP: Read new viewport size */
+  S.canvasWidth = WIDTH || 0;
+  S.canvasHeight = HEIGHT || 0;
+
+  /* GROUP: Resize canvas backing store */
+  // On an OffscreenCanvas this also resizes the on-page <canvas> it came from.
+  S.constellationCanvas.width = S.canvasWidth;
+  S.constellationCanvas.height = S.canvasHeight;
+
+  /* GROUP: Recompute scaling helpers */
+  S.screenPerimeter = S.canvasWidth + S.canvasHeight;
+  S.screenScaleUp = Math.pow(S.screenPerimeter / 1200, 0.35);
+  S.screenScaleDown = Math.pow(1200 / S.screenPerimeter, 0.35);
+
+  /* GROUP: Recompute caps */
+  S.starCountLimit = Math.min(400, S.screenScaleUp * 80);
+  S.maxLinkDistance = S.screenScaleUp ** 6.5 * 275;
+  S.goalLinkDistance = S.maxLinkDistance;
+
+  /* GROUP: Recompute physics scaling powers */
+  S.screenScalePowers.attractionGradient = 5.51 * S.screenScaleUp ** 0.5;
+  S.screenScalePowers.repulsionGradient = 2.8 * S.screenScaleUp ** 0.66;
+  S.screenScalePowers.attractionShape = 0.48 * S.screenScaleDown ** 8.89;
+  S.screenScalePowers.repulsionShape = 0.64;
+  S.screenScalePowers.attractionForce = 0.0053 * S.screenScaleDown ** 6.46;
+  S.screenScalePowers.repulsionForce = 0.0171 * S.screenScaleDown ** 0.89;
+  S.screenScalePowers.forceClamp = S.screenScaleUp ** 1.8;
+
+  /* GROUP: Rescale existing stars */
+  if (OLD_WIDTH !== 0 && OLD_HEIGHT !== 0 && S.starList.length) {
+
+    const SCALE_X = S.canvasWidth / OLD_WIDTH;
+    const SCALE_Y = S.canvasHeight / OLD_HEIGHT;
+    const SIZE_SCALE = S.screenPerimeter / OLD_SCREEN_PERIMETER;
+
+    for (const STAR of S.starList) {
+      STAR.x *= SCALE_X;
+      STAR.y *= SCALE_Y;
+      STAR.size *= SIZE_SCALE;
+    }
+  }
+};
+
+/* GROUP: Frame scheduling */
+// requestAnimationFrame exists in modern workers; fall back to a ~60fps timer if not.
+function requestFrame(CALLBACK) {
+  if (typeof requestAnimationFrame === "function") return requestAnimationFrame(CALLBACK);
+  return setTimeout(() => CALLBACK(S.getNowMs()), SIXTY_FPS_FRAME_MS);
+}
+
+/* GROUP: Snapshots for saving */
+// How often to send Setup a fresh copy of the stars. Setup keeps the latest one so it can
+// save synchronously on pagehide (it can't wait for a worker reply while the page unloads).
+const SNAPSHOT_INTERVAL_MS = 500;
+
+// Send current stars + meta to Setup, which writes them to localStorage.
+function postSnapshot() {
+  if (!S.hasStarsInitialized) return;
+
+  postToMain({
+    type: "SNAPSHOT",
+    stars: S.starList,
+    meta: {
+
+      /* CANVAS SIZE */
+      // Save canvas width so we can rescale X later on restore.
+      width: S.canvasWidth,
+
+      // Save canvas height so we can rescale Y later on restore.
+      height: S.canvasHeight,
+
+      /* POINTER + TIMERS */
+      // Save poke timer so poke resumes smoothly after reload.
+      pokeTimer: S.pokeImpulseTimer,
+
+      // Save pointer speed so interaction “energy” resumes smoothly.
+      userSpeed: S.pointerSpeedUnits,
+
+      // Save pointer X so ring resumes at correct position.
+      userX: S.pointerClientX,
+
+      // Save pointer Y so ring resumes at correct position.
+      userY: S.pointerClientY,
+
+      // Save pointer time baseline (legacy/optional field).
+      userTime: S.lastPointerTimeMs,
+
+      // Save ring timer so ring resumes smoothly.
+      ringTimer: S.pointerRingTimer
+    }
+  });
+}
+
+/* GROUP: Animation loop */
+// Main animation loop that runs physics + render each frame.
+function runAnimationLoop() {
+
+  if (!S.isCanvasReady) return;
+
+  if (S.isFrozen) {
+    requestFrame(runAnimationLoop);
+    return;
+  }
+
+  S.updateStarPhysics();
+  S.renderStarsAndLinks();
+
+  // Periodically hand Setup a copy of the stars for saving.
+  const NOW_MS = S.getNowMs();
+  if (NOW_MS - S.lastSnapshotMs > SNAPSHOT_INTERVAL_MS) {
+    S.lastSnapshotMs = NOW_MS;
+    postSnapshot();
+  }
+
+  requestFrame(runAnimationLoop);
+}
+
+/* GROUP: Canvas usability check */
+// Return true when canvas size is stable enough to run starfield.
+function isCanvasSizeUsable() {
+  return (
+    Number.isFinite(S.canvasWidth) &&
+    Number.isFinite(S.canvasHeight) &&
+    S.canvasWidth > 50 &&
+    S.canvasHeight > 50
+  );
+}
+
+/* GROUP: Start once the canvas is usable */
+// Called after INIT and after every RESIZE; does nothing until the size is usable.
+function startEngineIfReady() {
+
+  if (!S.isCanvasReady || !isCanvasSizeUsable()) return;
+
+  /* GROUP: Stars init */
+  if (!S.hasStarsInitialized) {
+    S.hasStarsInitialized = true;
+    S.restoreOrCreateStars(S.pendingSave);
+    S.pendingSave = null;
+  }
+
+  /* GROUP: Start loop */
+  if (!S.hasAnimationLoopStarted) {
+    S.hasAnimationLoopStarted = true;
+    requestFrame(runAnimationLoop);
+  }
+}
+
+/* #endregion 5) RESIZE + ANIMATION LOOP */
+
+
+
+/*======================================================================
+ * #region 6) MESSAGES
+ *====================================================================*/
+
+/* =========================================================
+ * Engine message handler
+ * Everything from the page arrives here: Setup forwards pointer, resize,
+ * slider and freeze events; Keyboard Starfield forwards key impulses.
+ * ========================================================= */
+function handleMainMessage(MESSAGE) {
+  const { type, x, y, time, width, height, canvas } = MESSAGE;
+
+  switch (type) {
+    case "INIT":
+      // Take ownership of the canvas and the saved state, then start once sized.
+      S.constellationCanvas = canvas;
+      S.drawingContext = canvas ? canvas.getContext("2d") : null;
+      S.isCanvasReady = !!S.drawingContext;
+      if (!S.isCanvasReady) console.warn("Starfield engine: no 2D context; starfield disabled.");
+
+      Object.assign(S.interactionSettings, MESSAGE.settings);
+      S.wantsDebug = !!MESSAGE.wantsDebug;
+      S.pendingSave = MESSAGE.saved || null;
+
+      S.resizeStarfieldCanvas(width, height);
+      startEngineIfReady();
+      break;
+
+    case "RESIZE":
+      S.resizeStarfieldCanvas(width, height);
+      startEngineIfReady();
+      break;
+
+    case "POINTER_DOWN":
+      S.beginPointerInteraction(x, y, time);
+      break;
+
+    case "POINTER_MOVE":
+      S.updatePointerSpeed(x, y, time);
+      break;
+
+    case "KEYBOARD":
+      // Merge this key's impulse; physics consumes and resets it next frame.
+      Object.assign(KEYBOARD, MESSAGE.impulse);
+      break;
+
+    case "SETTINGS":
+      Object.assign(S.interactionSettings, MESSAGE.settings);
+      break;
+
+    case "FREEZE":
+      S.isFrozen = !!MESSAGE.frozen;
+      // Send a fresh snapshot right away so the save on leave is up to date.
+      if (S.isFrozen) postSnapshot();
+      break;
+
+    case "INVERT_DRIFT":
+      // Immediately flips base drift velocity for every star (permanent, not an impulse).
+      for (const STAR of S.starList) {
+        STAR.vx = -STAR.vx; // Invert X drift
+        STAR.vy = -STAR.vy; // Invert Y drift
+      }
+      break;
+
+    case "REBUILD_LINKS":
+      // Forces links to disappear and fade back in over time.
+      S.linkRebuildTimer = 300;
+      break;
+  }
+}
+
+/* GROUP: Wire the handler */
+// Worker: listen for postMessage. Fallback: give Setup a direct function to call.
+if (IS_WORKER) {
+  self.onmessage = (EVENT) => handleMainMessage(EVENT.data);
+} else if (self.STARFIELD) {
+  self.STARFIELD.engineReceive = handleMainMessage;
+}
+
+/* #endregion 6) MESSAGES */
+
+})(); // End STARFIELD_ENGINE

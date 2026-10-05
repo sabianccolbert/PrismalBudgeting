@@ -82,7 +82,7 @@ function freezeAndSaveStarfield() {
   S = window.STARFIELD; // Re-alias in case Setup loads after this file on some pages
   if (!S) return;
 
-  S.isFrozen = true;
+  if (typeof S.setFrozen === "function") S.setFrozen(true);
 
   if (typeof S.saveStarfieldToStorage === "function") {
     S.saveStarfieldToStorage();
@@ -106,7 +106,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     freezeAndSaveStarfield();
   } else if (document.visibilityState === "visible") {
-    S.isFrozen = false;
+    if (typeof S.setFrozen === "function") S.setFrozen(false);
   }
 });
 
@@ -290,7 +290,7 @@ window.addEventListener("pageshow", (EVENT) => {
   clearPendingTransitionTimers();
 
   S = window.STARFIELD;
-  if (S) S.isFrozen = false;
+  if (S && typeof S.setFrozen === "function") S.setFrozen(false);
 
   if (!isBackForwardNavigation(EVENT)) return;
 

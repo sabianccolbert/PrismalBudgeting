@@ -45,6 +45,7 @@
   top: 0;
   left: 0;
   display: flex;
+  flex-direction: column; /* One element per line (date, system lines, entries) */
   align-items: flex-start;
   justify-content: flex-start;
   will-change: transform;
@@ -110,6 +111,18 @@
   z-index: 1;
 }
 
+/* Anchor the first column so it zooms to the right */
+.elastic-table td:first-child,
+.elastic-table td:first-child .cell-content {
+  transform-origin: left center;
+}
+
+/* Anchor the last column so it zooms to the left */
+.elastic-table td:last-child,
+.elastic-table td:last-child .cell-content {
+  transform-origin: right center;
+}
+
 .cell-action-btn {
   position: absolute;
   top: 2px;
@@ -130,7 +143,7 @@
   font-family: sans-serif;
   cursor: pointer;
   z-index: 5;
-  
+
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -140,4 +153,783 @@
 .elastic-table td.is-editing .cell-action-btn {
   opacity: 1;
   visibility: visible;
+}
+
+/*========================================*
+ *  MENU DATA PAGES (Recurring, History, Tracker, ...)
+ *========================================*
+ *  Same look as the calendar: deep indigo panels fading to transparent
+ *  over the starfield, light gray text, red glow accents.
+ */
+
+:root {
+  --PANEL_DEEP: rgba(15, 0, 80, 0.85);   /* Calendar cell gradient start */
+  --PANEL_SOFT: rgba(15, 0, 80, 0.35);
+  --PANEL_DARK: rgba(0, 0, 0, 0.55);
+  --PANEL_LINE: rgba(189, 189, 189, 0.15);
+  --PANEL_BORDER: rgba(189, 189, 189, 0.35);
+  --PANEL_RADIUS: 14px;
+  --NEGATIVE_TEXT: #ff6b6b;
+  --POSITIVE_TEXT: #5ee39a;              /* Positive entries */
+  --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
+}
+
+/* Page links on the Menu page */
+.menuLinks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vmin;
+  margin: 4vmin auto;
+}
+
+.menuLinks a {
+  font-size: 6vmin;
+}
+
+/* Status + empty states */
+.dataStatus,
+.dataEmpty {
+  font-size: 4vmin;
+  opacity: 0.8;
+  margin: 4vmin auto;
+}
+
+.dataSummary {
+  font-size: 3.5vmin;
+  margin: 1vmin auto 3vmin;
+  text-shadow: var(--SHADOW);
+}
+
+/* Horizontal scroll for wide tables (phones) */
+.dataScroll {
+  width: 94vw;
+  max-width: 100%;
+  margin: 0 auto 4vmin;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Base data table */
+.dataTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0.4vmin;
+  font-size: clamp(10px, 2.4vmin, 18px);
+  text-align: left;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.dataTable th {
+  padding: 1.2vmin 1.5vmin;
+  font-size: clamp(12px, 3.2vmin, 26px);
+  font-weight: normal;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--BASE_COLOR);
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), var(--PANEL_SOFT));
+  border-bottom: 2px solid var(--LINK_LIGHT);
+  box-shadow: 0 6px 12px -8px rgba(200, 0, 0, 0.9);
+}
+
+.dataTable td {
+  padding: 0.8vmin 1.5vmin;
+  vertical-align: top;
+  background: var(--PANEL_DARK);
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+/* First-column titles get the deep panel, like the spreadsheet's colored title column */
+.dataTable .titleCell {
+  text-align: right;
+  white-space: nowrap;
+  background: linear-gradient(to left, var(--PANEL_DEEP), var(--PANEL_SOFT));
+}
+
+.dataTable .typeCell {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.dataTable .amountCell {
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dataTable .amountCell.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.dataTable .amountCell.positive {
+  color: var(--POSITIVE_TEXT);
+}
+
+.dataTable .aliasCell {
+  min-width: 30vmin;
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+/* Category separator rows */
+.dataTable .categoryRow td {
+  text-align: center;
+  font-size: 1.2em;
+  padding: 1vmin;
+  background: linear-gradient(to right, transparent, var(--PANEL_DEEP), transparent);
+  border-bottom: none;
+  text-shadow: var(--SHADOW);
+}
+
+/* History: 7 day columns of multi-line cells, styled like the calendar */
+.historyTable {
+  table-layout: fixed;
+  min-width: 640px;
+}
+
+.historyTable .historyCell {
+  white-space: pre-line;
+  font-size: clamp(9px, 1.8vmin, 14px);
+  line-height: 1.35;
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), transparent);
+  border-bottom: none;
+  overflow-wrap: anywhere;
+}
+
+/* Change Logs */
+.logsTable .timeCell {
+  white-space: nowrap;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+
+.logsTable .actionCell {
+  white-space: nowrap;
+}
+
+.logsTable .detailsCell {
+  white-space: pre-line;
+  font-size: 0.9em;
+}
+
+.logsTable tr.errorRow td {
+  background: rgba(120, 0, 20, 0.6);
+}
+
+.logsTable tr.notFoundRow td {
+  background: rgba(90, 40, 0, 0.5);
+}
+
+/*========================================*
+ *  ENTRY LINES (calendar, history, panels)
+ *========================================*/
+
+.lineDate {
+  font-weight: bold;
+}
+
+.lineEntry.positive,
+.positive {
+  color: var(--POSITIVE_TEXT);
+}
+
+.lineSystem.negative,
+.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+/* Calendar days: today glows, negative days turn red (like the spreadsheet's cell colors) */
+.elastic-table td.isToday .cell-content {
+  box-shadow: inset 0 0 0 1px rgba(201, 218, 248, 0.9), 0 0 10px rgba(120, 160, 255, 0.6);
+}
+
+.elastic-table td.isNegative .cell-content {
+  background: linear-gradient(to bottom, rgb(95, 0, 20), transparent);
+}
+
+.elastic-table td.isToday.isNegative .cell-content {
+  background: linear-gradient(to bottom, rgb(170, 0, 0), transparent);
+}
+
+/* Entries are tappable once their day is zoomed */
+.elastic-table td.is-editing .lineEntry {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+  margin: 0 -2px;
+}
+
+.elastic-table td.is-editing .lineEntry:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Date picking: tap a day to fill the waiting date field */
+body.datePicking .elastic-table {
+  outline: 2px dashed rgba(238, 0, 0, 0.55);
+  outline-offset: 6px;
+  border-radius: 6px;
+}
+
+body.datePicking .elastic-table td {
+  cursor: crosshair;
+}
+
+.elastic-table td.pickedFlash .cell-content {
+  animation: pickedFlash 0.7s ease-out;
+}
+
+@keyframes pickedFlash {
+  from { box-shadow: 0 0 0 3px var(--LINK_LIGHT), 0 0 22px var(--LINK_LIGHT); }
+  to   { box-shadow: 0 0 0 0 transparent; }
+}
+
+/*========================================*
+ *  BUTTONS (panels, toolbars, search)
+ *========================================*/
+
+.budgetButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  margin: 0;
+  padding: 0.45em 1.1em;
+  font-size: var(--UI_TEXT);
+  border-width: 2px;
+  white-space: nowrap;
+}
+
+.budgetButton.primary {
+  border-color: var(--LINK_LIGHT);
+}
+
+.budgetButton.danger {
+  color: var(--NEGATIVE_TEXT);
+  border-color: var(--NEGATIVE_TEXT);
+}
+
+.budgetButton:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Image buttons show their alt text until the image is added */
+.imageButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.35em 1.1em;
+  font-size: var(--UI_TEXT);
+  border-width: 2px;
+}
+
+.imageButton img {
+  width: auto;
+  height: auto;
+  max-height: 7vmin;
+  min-height: 1.2em;
+  border-radius: 0;
+  object-fit: contain;
+  color: var(--BASE_COLOR);
+  font: inherit;
+}
+
+/* Checkboxes (the global input style hides native controls) */
+input[type="checkbox"] {
+  -webkit-appearance: checkbox;
+  appearance: auto;
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0;
+  padding: 0;
+  border: none;
+  accent-color: var(--LINK_LIGHT);
+  cursor: pointer;
+}
+
+input[type="checkbox"]:hover,
+input[type="checkbox"]:focus {
+  transform: none;
+  box-shadow: none;
+}
+
+/*========================================*
+ *  PANELS (new entry, entry options, recurring, tracker, sections)
+ *========================================*/
+
+.budgetPanel {
+  box-sizing: border-box;
+  color: var(--BASE_COLOR);
+  text-align: left;
+  font-size: var(--UI_TEXT);
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(10, 0, 50, 0.92));
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: var(--PANEL_RADIUS);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 18px rgba(200, 0, 0, 0.25);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetPanel.large {
+  width: min(94vw, 560px);
+  margin: 2vmin auto 3vmin;
+}
+
+.budgetPanel.small {
+  position: absolute;
+  z-index: 1000;
+  width: min(88vw, 340px);
+}
+
+.budgetPanel.isBusy {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+.budgetPanel.isClosing {
+  pointer-events: none;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1em;
+  padding: 0.8em 1em 0.2em;
+}
+
+.panelHeader h3 {
+  margin: 0;
+  font-size: 1.25em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.panelClose {
+  display: inline-block;
+  margin: 0;
+  padding: 0 0.25em;
+  border: none;
+  background: none;
+  font-size: 1.6em;
+  line-height: 1;
+  color: var(--BASE_COLOR);
+}
+
+.panelClose:hover {
+  box-shadow: none;
+}
+
+.panelBody {
+  align-items: stretch;
+  gap: 0.75em;
+  padding: 0.6em 1em 1em;
+  box-sizing: border-box;
+}
+
+.panelField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+
+.fieldLabel {
+  font-size: 0.85em;
+  opacity: 0.9;
+}
+
+.fieldLabel .optional,
+.panelHint {
+  opacity: 0.65;
+  font-size: 0.85em;
+}
+
+.budgetPanel input[type="text"],
+.budgetPanel textarea,
+.budgetPanel select,
+.searchBar input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0.5em 0.8em;
+  font-family: 'Main Font', sans-serif;
+  font-size: var(--UI_TEXT);
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetPanel textarea {
+  resize: vertical;
+}
+
+.budgetPanel input[type="text"]:hover,
+.budgetPanel input[type="text"]:focus,
+.budgetPanel textarea:hover,
+.budgetPanel textarea:focus,
+.budgetPanel select:focus,
+.searchBar input:hover,
+.searchBar input:focus {
+  transform: none;
+  text-shadow: none;
+  border-color: var(--LINK_LIGHT);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+  outline: none;
+}
+
+.budgetPanel input:disabled,
+.budgetPanel textarea:disabled {
+  opacity: 0.6;
+}
+
+.budgetPanel input.positive {
+  color: var(--POSITIVE_TEXT);
+}
+
+.budgetPanel select option {
+  background: #0a0032;
+}
+
+/* The date field a calendar tap will fill */
+input.dateInput.isPickTarget {
+  border-color: var(--LINK_LIGHT);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+}
+
+.amountRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+
+.amountRow input {
+  flex: 1 1 8em;
+  width: auto;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.segmented .budgetButton {
+  padding: 0.35em 0.85em;
+  font-size: 0.9em;
+}
+
+.segmented .budgetButton[aria-checked="true"] {
+  color: #fff;
+  border-color: var(--LINK_LIGHT);
+  background: rgba(200, 0, 0, 0.28);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.6);
+}
+
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin: 0;
+  font-size: 1em;
+  color: var(--BASE_COLOR);
+}
+
+.panelEntry {
+  padding: 0.45em 0.7em;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 1.05em;
+}
+
+.panelError {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--NEGATIVE_TEXT);
+}
+
+.panelButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5em;
+  margin-top: 0.2em;
+}
+
+/* Toasts (e.g. a change that couldn't be saved yet) */
+.budgetToast {
+  position: fixed;
+  left: 50%;
+  bottom: 4vh;
+  z-index: 2000;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 90vw;
+  padding: 0.7em 1.2em;
+  font-size: var(--UI_TEXT);
+  color: var(--BASE_COLOR);
+  background: rgba(10, 0, 50, 0.95);
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: var(--PANEL_RADIUS);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  transition: opacity 0.5s ease;
+}
+
+.budgetToast.warning {
+  border-color: var(--NEGATIVE_TEXT);
+}
+
+.budgetToast.leaving {
+  opacity: 0;
+}
+
+/*========================================*
+ *  HOME PAGE: SEARCH BAR, INFO ROW, TOOLBAR
+ *========================================*/
+
+.searchBar {
+  width: min(94vw, 1100px);
+  margin: 1vmin auto 0;
+}
+
+.searchBar form {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1vmin;
+}
+
+.searchBar input {
+  flex: 1 1 9em;
+  width: auto;
+  border-radius: 9999px;
+  padding: 0.45em 1em;
+}
+
+.searchBar #searchAliases {
+  flex: 3 1 16em;
+}
+
+.searchResults {
+  margin-top: 1.5vmin;
+  padding: 0.8em 1em;
+  text-align: left;
+  font-size: var(--UI_TEXT);
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(10, 0, 50, 0.6));
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: var(--PANEL_RADIUS);
+}
+
+.searchHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1em;
+}
+
+.searchSummary,
+.searchTotal,
+.searchMessage {
+  margin: 0 0 0.5em;
+  font-size: var(--UI_TEXT);
+}
+
+.searchTotal {
+  font-size: 0.95em;
+}
+
+.searchScroll {
+  width: 100%;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.searchTable th:first-child,
+.searchTable td:first-child {
+  width: 2em;
+  text-align: center;
+}
+
+.infoRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr) minmax(0, 1.4fr);
+  gap: 1.5vmin;
+  width: min(94vw, 1100px);
+  margin: 2vmin auto;
+  text-align: left;
+  font-size: clamp(12px, 2.3vmin, 17px);
+}
+
+.infoCard {
+  padding: 0.9em 1em;
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.15));
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: var(--PANEL_RADIUS);
+}
+
+.infoLabel {
+  display: block;
+  margin-bottom: 0.3em;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.lowestAmount {
+  font-size: 2em;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+}
+
+.daveCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9em;
+}
+
+/* Room for Dave's picture (shows the alt text until there is one) */
+.daveImage {
+  flex-shrink: 0;
+  width: 12vmin;
+  height: 12vmin;
+  min-width: 52px;
+  min-height: 52px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--PANEL_BORDER);
+  color: var(--BASE_COLOR);
+  font-size: 0.8em;
+  text-align: center;
+  overflow: hidden;
+}
+
+.daveMessage {
+  margin: 0;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.upcomingList {
+  max-height: 9.5em;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.upcomingItem {
+  display: flex;
+  gap: 0.6em;
+  padding: 0.2em 0;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.upcomingDate {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.upcomingEmpty {
+  opacity: 0.7;
+}
+
+.calendarToolbar {
+  display: flex;
+  justify-content: flex-end;
+  width: 90vw;
+  margin: 0 auto 1.5vmin;
+}
+
+/* Recurring/Tracker toolbar */
+.tableToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.2vmin;
+  margin: 1vmin auto 2vmin;
+}
+
+.tableToolbar:empty {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .infoRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*========================================*
+ *  RECURRING / TRACKER EDIT MODE
+ *========================================*/
+
+.dataTable tr.clickable {
+  cursor: pointer;
+}
+
+.dataTable tr.clickable:hover td {
+  filter: brightness(1.3);
+}
+
+.dataTable tr.selected td {
+  background: rgba(200, 0, 0, 0.22);
+}
+
+.dataTable .moveBar {
+  width: 2.4em;
+  text-align: center;
+  font-size: 1.3em;
+  cursor: grab;
+  touch-action: none; /* Dragging the bar never scrolls the page */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dataTable .selectCell {
+  width: 2.2em;
+  text-align: center;
+}
+
+.sectionInsertRow td {
+  padding: 0;
+  text-align: center;
+  background: none;
+  border: none;
+}
+
+.sectionButton {
+  margin: 0.15em auto;
+  padding: 0.1em 0.9em;
+  font-size: 0.8em;
+  opacity: 0.55;
+}
+
+.sectionButton:hover {
+  opacity: 1;
+}
+
+/* Hidden but still taking space, so rows don't jump when a drag starts */
+.isDragging .sectionInsertRow {
+  visibility: hidden;
+}
+
+.isDragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dataTable tr.dragRow td {
+  background: rgba(200, 0, 0, 0.3);
+  box-shadow: 0 0 14px rgba(200, 0, 0, 0.6);
+}
+
+.dataTable tr.dragRow .moveBar {
+  cursor: grabbing;
 }

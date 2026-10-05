@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="stylesheet" href="/budgetStyle.css">
+    <title>Prismal Budget - Recurring Entries</title>
+    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal Recurring" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Budget - Recurring Entries">
+    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://prismalbudget.org">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="stacked">
+          <h1>Recurring Entries</h1>
+          <h2>Prismal Budget</h2>
+        </div>
+        <nav class="navButtons">
+          <a id="normalBack" href="back">
+            <img src="/Resources/Back.png" alt="Back">
+          </a>
+          <a href="/">
+            <img src="/Resources/Home.png" alt="Home">
+          </a>
+          <a id="logoutButton" href="logout">
+            <img src="/Resources/Logout.png" alt="Logout">
+          </a>
+        </nav>
+      </header>
+      <hr>
+      <main>
+        <div id="pageToolbar" class="tableToolbar"></div>
+        <div id="panelSlot"></div>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <div id="dataView"></div>
+      </main>
+    </div>
+  </body>
+</html>
