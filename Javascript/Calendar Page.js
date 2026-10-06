@@ -18,6 +18,8 @@ window.workspaceReady.then((loaded) => {
   }
   renderHome();
   wireCalendar();
+  wireGettingStarted();
+  wireUndoButtons();
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => openNewEntryPanel(event.currentTarget));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
 });
@@ -27,9 +29,134 @@ document.addEventListener("budget:updated", () => {
 });
 
 function renderHome() {
+  renderGettingStarted();
   renderCalendar();
   renderInfoRow();
   fillTrackerRowTitles();
+  renderUndoButtons();
+}
+
+//#endregion
+
+// =====================================================================
+// #region UNDO + REDO (calendar entries and quick entries; the steps are in Process Budget.js)
+// =====================================================================
+
+// Each button says what it would do ("Undo: added Coffee (-$4.50) on 10/05"), or is off with nothing to do
+function renderUndoButtons() {
+  const info = undoInfo();
+  for (const [id, label, verb] of [["undoButton", info.undo, "Undo"], ["redoButton", info.redo, "Redo"]]) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.disabled = historyBusy || !label;
+    button.title = label ? `${verb}: ${label}` : `Nothing to ${verb.toLowerCase()}`;
+    button.setAttribute("aria-label", button.title);
+  }
+}
+
+function wireUndoButtons() {
+  document.getElementById("undoButton")?.addEventListener("click", () => takeHistoryStep("undo"));
+  document.getElementById("redoButton")?.addEventListener("click", () => takeHistoryStep("redo"));
+  // Ctrl+Z (⌘Z on a Mac) undoes, and Ctrl+Shift+Z (⌘⇧Z) or Ctrl+Y redoes, except while typing in a box
+  // (where they undo the typing) or with a panel open
+  document.addEventListener("keydown", (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    const key = event.key.toLowerCase();
+    const redo = (key === "z" && event.shiftKey) || (key === "y" && !event.shiftKey);
+    if (key !== "z" && !redo) return;
+    if (event.target.closest?.("input, textarea, select, [contenteditable]") || document.querySelector(".budgetPanel")) return;
+    event.preventDefault();
+    takeHistoryStep(redo ? "redo" : "undo");
+  });
+}
+
+let historyBusy = false;
+async function takeHistoryStep(direction) {
+  if (historyBusy || !undoInfo()[direction]) return;
+  historyBusy = true;
+  renderUndoButtons();
+  const result = await (direction === "undo" ? undoCalendarChange() : redoCalendarChange());
+  historyBusy = false;
+  renderUndoButtons();
+  if (!result.ok) return BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+  if (result.saved === false) return BudgetUI.warnIfUnsaved(result);
+  BudgetUI.showToast(`${direction === "undo" ? "Undone" : "Redone"}: ${result.historyStep.label}.`);
+}
+
+//#endregion
+
+// =====================================================================
+// #region GETTING STARTED (a new budget's first steps)
+// =====================================================================
+// A new budget starts at $0, so its first step says what's in the bank: a ⭕️ Transfer titled Starting
+// Balance on today (it changes In Bank, but isn't a gain), and for savings a ✖️ Hidden cost titled with
+// the default account's name (it puts the money in that account without changing In Bank). The card
+// shows until the starting balance and a recurring entry are there, or it's hidden with ×.
+
+const STARTING_BALANCE = "Starting Balance";
+
+// Hidden per account on this device
+const gettingStartedHiddenKey = () => `prismal_setup_hidden_${localStorage.getItem("prismal_username") || ""}`;
+
+function gettingStartedSteps() {
+  const hasHistory = historyData.slice(1).some(row => row.some(cell => String(cell ?? "").trim() !== ""));
+  const hasStartingBalance = calendarData.some(row => row.some(cell =>
+    String(cell ?? "").split("\n").some(line => extractTitle(line) === cleanString(STARTING_BALANCE))));
+  const hasRecurring = recurringData.slice(2).some(row => !["", "-"].includes(String(row[0] ?? "").trim()));
+  return { balance: hasHistory || hasStartingBalance, recurring: hasRecurring };
+}
+
+function renderGettingStarted() {
+  const card = document.getElementById("gettingStarted");
+  if (!card) return;
+  const steps = gettingStartedSteps();
+  let hidden = false;
+  try { hidden = localStorage.getItem(gettingStartedHiddenKey()) === "1"; } catch (e) {}
+  card.hidden = hidden || (steps.balance && steps.recurring);
+  if (card.hidden) return;
+  document.getElementById("startBalanceStep").classList.toggle("done", steps.balance);
+  document.getElementById("startBalanceForm").hidden = steps.balance;
+  const done = document.getElementById("startBalanceDone");
+  done.hidden = !steps.balance;
+  done.textContent = "Done. It's a ⭕️ Starting Balance entry on today, so tap today to change it.";
+  document.getElementById("startRecurringStep").classList.toggle("done", steps.recurring);
+}
+
+function wireGettingStarted() {
+  document.getElementById("gettingStartedHide")?.addEventListener("click", () => {
+    try { localStorage.setItem(gettingStartedHiddenKey(), "1"); } catch (e) {}
+    document.getElementById("gettingStarted").hidden = true;
+  });
+  document.getElementById("startBalanceForm")?.addEventListener("submit", setStartingBalance);
+}
+
+// "1,500.00", "$1500", or "1500,50" -> the amount (to the cent); null when it isn't an amount
+function readStartAmount(text) {
+  const amount = readMoneyInput(text);
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : null;
+}
+
+async function setStartingBalance(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const balance = readStartAmount(document.getElementById("startBalance").value);
+  const savingsText = document.getElementById("startSavings").value.trim();
+  const savings = savingsText ? readStartAmount(savingsText) : 0;
+  if (balance === null) return BudgetUI.showToast("Enter what's in your bank account, like 1500.00 (or -25.00 if it's overdrawn).", true);
+  if (savings === null || savings < 0) return BudgetUI.showToast("Enter what's in savings, like 3000.00, or leave it blank.", true);
+
+  form.querySelectorAll("input, button").forEach(control => { control.disabled = true; });
+  const savingsAccount = accountRows().find(account => isDefaultAccount(account.row))?.name || otherAccounts()[0]?.name;
+  let result = await addCalendarEntry({ title: STARTING_BALANCE, sprite: "⭕️", amount: balance, date: today });
+  if (result.ok && savings > 0 && savingsAccount) {
+    result = await addCalendarEntry({ title: savingsAccount, sprite: "✖️", amount: -savings, date: today });
+  }
+  form.querySelectorAll("input, button").forEach(control => { control.disabled = false; });
+  if (!result.ok) return BudgetUI.showToast(result.message || "Couldn't set the starting balance. Please try again.", true);
+  if (result.saved === false) return BudgetUI.warnIfUnsaved(result);
+  BudgetUI.showToast(savings > 0 && savingsAccount
+    ? `Starting balance set: ${formatMoney(balance)} in the bank, and ${formatMoney(savings)} in ${savingsAccount}.`
+    : `Starting balance set: ${formatMoney(balance)}.`);
 }
 
 //#endregion
@@ -140,7 +267,7 @@ function openNewEntryPanel(origin) {
     size: "large",
     title: "New Entry",
     build(form, panel) {
-      const fields = BudgetUI.newEntryFields({ accounts: otherAccountNames() });
+      const fields = BudgetUI.newEntryFields({ accounts: otherAccounts() });
       form.append(...fields.els, BudgetUI.buttonRow([
         { label: "Add Entry", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }
@@ -169,7 +296,7 @@ function openQuickEntrySetup(origin) {
       const text = (line) => BudgetUI.element("p", "panelText", line);
       form.append(
         text("Put an icon on your phone's home screen that opens a New Entry form, with no login needed."),
-        text("The icon can only add entries. It never sees your budget, just the names of your Other Accounts (so you can pick one). Its entries show up here the next time you open Prismal Budget. If your password changes, it stops working."),
+        text("The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, or you turn icons off in Settings, it stops working."),
         text("On the next page, add it to your home screen: on iPhone, tap Share, then Add to Home Screen. On Android, tap ⋮, then Add to Home screen."),
         BudgetUI.buttonRow([
           { label: "Set It Up", kind: "primary", type: "submit" },
@@ -330,13 +457,14 @@ function showSearchMessage(message) {
   container.hidden = false;
 }
 
-// Suggestions for a search title's Tracker button: the tracker's row titles
+// Suggestions for a search title's Tracker button: the tracker's row titles (a row that counts
+// transfers keeps its ⭕️, since a title can have one of each)
 function fillTrackerRowTitles() {
   const list = document.getElementById("trackerRowTitles");
   if (!list) return;
   const rowTitles = trackerData.slice(1)
     .filter(row => !["", "-"].includes(String(row[0] ?? "").trim()))
-    .map(row => String(row[0]).replace(/⭕️/g, "").trim());
+    .map(row => String(row[0]).trim());
   list.replaceChildren(...[...new Set(rowTitles)].map(title => {
     const option = document.createElement("option");
     option.value = title;

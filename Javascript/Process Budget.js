@@ -26,7 +26,7 @@ const TABLE_SHAPES = {
   history:    { cols: 7, minRows: 1 },  // [0] column titles, then one row per week (newest first)
   search:     { cols: 4, minRows: 3 },  // [0]-[2] search summary
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
-  accounts:   { cols: 3, minRows: 1 },  // Other Accounts: [0] column titles, then [name, start, "default" | ""]
+  accounts:   { cols: 3, minRows: 1 },  // Other Accounts: [0] column titles, then [name, balance, "default" | ""]
   account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
   logs:       { cols: 8, minRows: 1 }   // [0] column titles, then [time, duration, action, 4 details, status]
 };
@@ -46,8 +46,6 @@ let calculatorEdited = false;
 let accountsEdited = false;
 let logsEdited = false;
 
-let bgColors = null;
-
 // Dates Data
 const today = createSafeMidnight(new Date());
 const yesterday = createSafeMidnight(new Date(today.getTime() - 86400000));
@@ -57,22 +55,6 @@ let gridStartDate = gridDates[0][0];
 let gridEndDate = gridDates[3][6];
 
 let nextFourStart = createSafeMidnight(new Date(gridEndDate.getTime() + 86400000));
-
-let equityYears = new Set();
-
-// Colors
-let todayBlueColor = "#c9daf8";
-let todayRedColor = "#cc0000";
-let normalRedColor = "#f4cccc";
-let updateTextColor = "#FF69B4";
-let updateBackColor = "#00FFFF";
-
-let darkColor = "#ff00ff";
-let lightColor = "#f3f3f3";
-
-let mediumColor = null;
-let normalMedium = "#1C4587";
-let llcMedium = "#674EA7";
 
 // DAVE
 let visibleUncommons = 0;
@@ -98,24 +80,20 @@ let systemEmojis = ["⛔️", "✅", "✴️", "❇️"];
 let mmddCache = new Map();
 let hadError = false;
 let notFound = false;
-let manualNotif = false;
-let negativeNotif = false;
 
 let recurringToDeleteIndexes = [];
-let trackerToDeleteIndexes = [];
 
 let uniquesCreated = 0;
 let weeksScrolled = 0;
 let deletedRecurrings = 0;
 let deletedUpcoming = 0;
 
-let isLLC = false;
-let isRefreshBudget = false;
 let isDailyUpdate = false;
 let lastDailyUpdate = null;
 let pendingProcessedDate = null; // Set by performDailyUpdate, saved after the data saves
-let cancellingTutorial = false;
-let consultDave = true;
+let dataRevision = null;         // The budget's revision this page holds (see saveChanges); null until it loads
+let budgetConflict = false;      // A save was refused: the budget was saved somewhere else since this page loaded
+let savingNow = false;
 
 // =====================================================================
 // #region META FUNCTIONS
@@ -148,14 +126,9 @@ async function loadWorkspace() {
       }
     });
 
-    // 2. CRITICAL FIX: Handle invalid/expired tokens specifically
+    // 2. The session ended (signed out everywhere, a new password, or it expired): sign out here too
     if (response.status === 401) {
-      console.error("Token expired or invalid. Clearing session...");
-      // You MUST remove the token, otherwise the login page will redirect you right back here
-      localStorage.removeItem('prismal_jwt');
-      localStorage.removeItem('prismal_username'); // Good practice to clear this too
-      
-      window.location.replace("/login.html");
+      signedOutElsewhere();
       return false;
     }
 
@@ -164,6 +137,7 @@ async function loadWorkspace() {
     }
 
     const data = await response.json();
+    dataRevision = Number.isInteger(data.revision) ? data.revision : null;
 
     // Helper function to safely extract and parse the database content string.
     // If stored content exists but can't be parsed, that table is locked from saving
@@ -239,10 +213,6 @@ async function loadWorkspace() {
   }
 }
 
-async function makeEdit(){
-  
-  await saveChanges();
-}
 //#endregion
 
 // =====================================================================
@@ -323,20 +293,11 @@ async function performDailyUpdate() {
         cell.text = writeRecurringToCell(cell.text, cell.date, recurringRows);
       }
 
-      // Every missed day: process equity, and turn recurring entries into temps
+      // Every missed day: turn recurring entries into temps
       if (isMissed) {
         let lines = cell.text.split("\n");
         for (let l = 1; l < lines.length; l++) {
           let parts = getParts(lines[l]);
-          let originalTitle = extractTitle(lines[l], false);
-
-          if (parseAmount(parts[1]) !== 0 && !systemEmojis.includes(parts[0])) {
-            let add = true;
-            let lineAmt = parseAmount(parts[1]);
-            let lineType = parts[0];
-            await processEquity(add, originalTitle, cell.date, lineAmt, lineType);
-          }
-
           if (parts[0].includes("✔️")) {
             let newSprite = getSpecialType(parts[0]) + "✔️";
             if (newSprite !== parts[0]) uniquesCreated++;
@@ -446,15 +407,8 @@ function getParsedRecurringRows() {
 
 // Write due recurring entries into one cell, using the same rules as writeRecurring
 function writeRecurringToCell(cellText, cellDate, recurringRows) {
-  // Same rule as recurringHits: a row is due if any row with its title + special type hits
-  let dueKeys = new Set();
   for (let row of recurringRows) {
-    if (recurringRowHits(row.parsed, cellDate)) dueKeys.add(row.parsed.cleanTitle + "|" + row.parsed.special);
-  }
-  if (dueKeys.size === 0) return cellText;
-
-  for (let row of recurringRows) {
-    if (!dueKeys.has(row.parsed.cleanTitle + "|" + row.parsed.special)) continue;
+    if (!recurringRowHits(row.parsed, cellDate)) continue;
 
     let cellLines = cellText.split("\n");
     let hasTemp = false;
@@ -462,20 +416,20 @@ function writeRecurringToCell(cellText, cellDate, recurringRows) {
     for (let l = 0; l < cellLines.length; l++) {
       let parts = getParts(cellLines[l]);
       if (extractTitle(cellLines[l]) !== row.parsed.cleanTitle) continue;
+      // Only an entry with the same refraction type affects it (a title can have one of each type)
+      if (getSpecialType(parts[0]) !== row.parsed.special) continue;
       // A temp (checkmark entry) blocks the recurring entry for this day
       if (parts[0].includes("✔️")) {
         hasTemp = true;
         break;
       }
       // A unique with the same special type absorbs the recurring amount
-      if (getSpecialType(parts[0]) === row.parsed.special) {
-        hasUnique = true;
-        let newAmt = row.amt + parseAmount(parts[1]);
-        let newSprite = parts[0] + "✔️";
-        cellLines[l] = newSprite + " " + formatMoney(newAmt) + " " + row.title;
-        cellText = cellLines.join("\n");
-        break;
-      }
+      hasUnique = true;
+      let newAmt = row.amt + parseAmount(parts[1]);
+      let newSprite = parts[0] + "✔️";
+      cellLines[l] = newSprite + " " + formatMoney(newAmt) + " " + row.title;
+      cellText = cellLines.join("\n");
+      break;
     }
     if (!hasTemp && !hasUnique) {
       cellText += `\n${row.sprite} ${formatMoney(row.amt)} ${row.title}`;
@@ -575,160 +529,6 @@ async function saveProcessedDate(dateString) {
   }
 }
 
-async function processEquity(add, title, date, amount, type) {
-  console.log("Processing equity...");
-  
-  // 1. Extract Category BEFORE modifying title with type/sprite
-  let category = isLLC && title.includes(":") ? title.split(":")[0].trim() : null;
-  if (!category) return false;
-
-  if (type === "") type = "❗️";
-    
-  // Determine incoming special type for accurate sprite matching
-  let incomingSpecial = type === "" ? null : getSpecialType(type); 
-  
-  // 2. Format title for table entry
-  let formattedTitle = type.trim() + " " + title;
-  let year = date.getFullYear();
-  let activeTabTitle = "C " + category;
-  
-  if (category === "C Revenue" || category === "Revenue") {
-    activeTabTitle = "C Revenue " + year;
-  } else if (category === "C Expenses" || category === "Expenses") {
-    activeTabTitle = "C Expenses " + year;
-  }
-  
-  // Retrieve the 2D array table from your workspace data map
-  let targetTable = getTableData(activeTabTitle);
-  if (!targetTable) {
-    console.log("Equity table not found: " + activeTabTitle + "; Category: " + category);
-    return false;
-  }
-
-  function editLLC(categ) {
-    accountsEdited = true; // Every equity change lives in accountsData, saved as one table
-    let c = categ.toLowerCase().trim().split(":")[0];
-    if (c === "eagle") {
-      eagleEdited = true;
-    }
-    else if (c === "sabian") {
-      sabianEdited = true;
-    }
-    else if (c === "llc assets") {
-      assetsEdited = true;
-    }
-    else if (c === "llc asset purchases") {
-      purchasesEdited = true;
-    }
-    else if (c === "revenue") {
-      revenueEdited = true;
-    }
-    else if (c === "expenses") {
-      expensesEdited = true;
-    }
-  }
-
-  // Row 4 in Sheets corresponds to index 3 in a 0-indexed JS Array
-  const DATA_START_INDEX = 3;
-
-  if (add) {
-    let insertIndex = DATA_START_INDEX;
-    let targetTime = date.getTime();
-    let found = false;
-    let exists = false;
-    let matchedOldSprite = ""; // Saves the old sprite for combining later
-
-    if (targetTable.length >= 4) {
-      findLoop:
-      for (let i = DATA_START_INDEX; i < targetTable.length; i++) {
-        let rowDate = new Date(targetTable[i][0]);
-        let rowTitle = String(targetTable[i][2] || "");
-        
-        // Extract the row's existing sprite and its special type
-        let oldSprite = rowTitle.split(" ")[0]; 
-        let existingSpecial = getSpecialType(oldSprite);
-
-        // Check that the date, the string, AND the special sprite types match
-        if (rowDate.getTime() === targetTime && 
-            cleanString(rowTitle) === cleanString(formattedTitle) && 
-            (!incomingSpecial || existingSpecial === incomingSpecial)) {
-          insertIndex = i;
-          exists = true;
-          matchedOldSprite = oldSprite;
-          break findLoop;
-        }
-
-        // Maintain chronological order (newest dates near the top)
-        if (!isNaN(rowDate.getTime()) && rowDate.getTime() < targetTime) {
-          insertIndex = i;
-          found = true;
-          break findLoop;
-        }
-      }
-
-      if (!found && !exists) {
-        insertIndex = targetTable.length;
-      }
-    }
-
-    if (exists) {
-      // Update cell 2 (Amount) and cell 3 (Title) directly in array
-      let oldAmt = parseAmount(targetTable[insertIndex][1]);
-      let finalAmt = oldAmt + amount;
-      targetTable[insertIndex][1] = formatMoney(finalAmt);
-            
-      // Combine sprites to preserve checkmarks/statuses
-      let combinedSprite = combineSprites(matchedOldSprite, type);
-      let finalTitle = combinedSprite.trim() + " " + title;
-      targetTable[insertIndex][2] = finalTitle; 
-            
-    } else {
-      // Insert new row directly into array at insertIndex
-      let newRow = [date, formatMoney(amount), formattedTitle];
-      targetTable.splice(insertIndex, 0, newRow);
-    }
-
-  } else {
-    // Handling Deletion
-    if (targetTable.length < 4) {
-      editLLC(category);
-      equityYears.add(year);
-      return true;
-    }
-
-    let indexToDelete = -1;
-    let targetTime = date.getTime();
-    
-    for (let i = DATA_START_INDEX; i < targetTable.length; i++) {
-      let rowDate = new Date(targetTable[i][0]);
-      let rowTitle = String(targetTable[i][2] || "").trim();
-      let rowAmt = parseAmount(targetTable[i][1]);
-      
-      let oldSprite = rowTitle.split(" ")[0];
-      let existingSpecial = getSpecialType(oldSprite);
-
-      if (!isNaN(rowDate.getTime()) && rowDate.getTime() === targetTime) {
-        if (cleanString(rowTitle) === cleanString(formattedTitle) && 
-           (!incomingSpecial || existingSpecial === incomingSpecial)) {
-          if (Math.abs(rowAmt) === Math.abs(amount)) {
-            indexToDelete = i;
-            break;
-          }
-        }
-      }
-    }
-
-    if (indexToDelete !== -1) {
-      targetTable.splice(indexToDelete, 1);
-    }
-  }
-
-  editLLC(category);
-  equityYears.add(year);
-  return true;
-}
-
-
 // =====================================================================
 // #region BUDGET LOGIC
 // =====================================================================
@@ -780,7 +580,7 @@ let changeLogStart = 0;
 
 /* ---------- Actions the page UI calls (each resolves to { ok, saved, notFound, message, ... }) ---------- */
 
-// New calendar entry. entry: { title, sprite, amount (signed number), date }
+// New calendar entry. entry: { title, sprite, amount (signed number), date }. Can be undone.
 function addCalendarEntry(entry) {
   return runBudgetAction("", () => unique({
     title: entry.title,
@@ -788,12 +588,30 @@ function addCalendarEntry(entry) {
     action: entry.amount > 0 ? "add" : "subtract",
     amount: String(Math.abs(entry.amount)),
     date: entry.date
-  }));
+  }), { label: `added ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${formatToMMDD(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
-// Change, move, or delete a calendar entry. change: { title, sprite, date, action, amount, moveDate }
+// Change, move, or delete a calendar entry. change: { title, sprite, date, action, amount, moveDate }.
+// Can be undone.
 function changeCalendarEntry(change) {
-  return runBudgetAction("", () => unique(change));
+  return runBudgetAction("", () => unique(change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+}
+
+// "deleted Coffee on 10/05", for Undo and Redo
+function describeEntryChange(change) {
+  const title = capitalize(String(change.title || "").trim());
+  const day = (date) => formatToMMDD(createSafeMidnight(date || today));
+  const action = String(change.action || "").toLowerCase();
+  const amount = Number(change.amount);
+  const amountChanged = action !== "delete" && String(change.amount ?? "").trim() !== "";
+  if (change.moveDate && day(change.moveDate) !== day(change.date)) {
+    return `moved ${title} from ${day(change.date)} to ${day(change.moveDate)}${amountChanged ? " and changed its amount" : ""}`;
+  }
+  if (action === "delete") return `deleted ${title} on ${day(change.date)}`;
+  if (action === "set" && amountChanged) return `set ${title} on ${day(change.date)} to ${formatMoney(amount)}`;
+  if (action === "add") return `added ${formatMoney(amount)} to ${title} on ${day(change.date)}`;
+  if (action === "subtract") return `took ${formatMoney(amount)} off ${title} on ${day(change.date)}`;
+  return `changed ${title} on ${day(change.date)}`;
 }
 
 // New or changed recurring entry (index = the row that was clicked, null from the New Entry panel)
@@ -825,8 +643,7 @@ function deleteBudgetRows(tableName, indexes) {
   return runBudgetAction(`🔧 Delete ${ROW_TABLES[tableName].name} Rows`, () => deleteTableRows(tableName, indexes));
 }
 
-// New account (index null, from edit mode) or change the tapped one. fields: { name, balance: number | null }
-// (null keeps a changed account's balance where it is; a new account starts at $0.00)
+// New account (index null, from edit mode) or rename the tapped one. fields: { name }
 function saveAccount(fields, index = null) {
   return runBudgetAction("", () => accountEntry(fields, index));
 }
@@ -858,7 +675,13 @@ async function applyQuickEntries(queue) {
   let added = 0;
   const failed = [];
   for (const quick of queue) {
-    const result = await runBudgetAction("", () => quickEntry(quick));
+    // Each can be undone on the calendar, like a New Entry
+    const entry = quick && quick.entry;
+    const date = entry ? createSafeMidnight(entry.date, true) : null;
+    const undo = entry && date && !isNaN(date.getTime())
+      ? { label: `quick entry ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${formatToMMDD(date)}`, dates: [date] }
+      : null;
+    const result = await runBudgetAction("", () => quickEntry(quick), undo);
     if (result.ok) added++;
     else failed.push({ quick, message: result.message });
   }
@@ -907,14 +730,15 @@ function historyHasDay(date) {
 
 /* ---------- Running a change ---------- */
 
-// Queue one change through the full budget flow
-function runBudgetAction(logType, change) {
-  const run = budgetQueue.then(() => processBudgetAction(logType, change));
+// Queue one change through the full budget flow. undo: { label, dates } makes it a step Undo can take
+// back (calendar and quick entries; see UNDO + REDO)
+function runBudgetAction(logType, change, undo = null) {
+  const run = budgetQueue.then(() => processBudgetAction(logType, change, undo));
   budgetQueue = run.catch(() => {});
   return run;
 }
 
-async function processBudgetAction(logType, change) {
+async function processBudgetAction(logType, change, undo = null) {
   if (!workspaceLoaded) return { ok: false, message: "Your budget hasn't finished loading yet." };
 
   // The page stayed open past midnight: reload so the daily update runs before any change
@@ -924,6 +748,7 @@ async function processBudgetAction(logType, change) {
   }
 
   const snapshot = snapshotTables();
+  const undoBefore = undo ? captureEntryDays(undo.dates) : null;
   let result = {};
 
   try {
@@ -931,9 +756,12 @@ async function processBudgetAction(logType, change) {
     stripRecurringEntries();
     result = change() || {};
     refreshBudgetData();
+    if (undo) result.newUndoStep = makeUndoStep(undo.label, undoBefore);
     finishChangeLog();
   } catch (err) {
     restoreTables(snapshot);
+    // A remembered change that can't be undone (or redone) anymore is dropped, so older ones still can be
+    if (err instanceof StaleHistoryError) dropHistoryStep(err.direction);
     if (err instanceof BudgetInputError) return { ok: false, message: err.message };
 
     // Unexpected failure: the data stays as it was, but the attempt is logged (in red)
@@ -946,6 +774,9 @@ async function processBudgetAction(logType, change) {
   }
 
   markChangedTables(snapshot);
+  if (result.newUndoStep) rememberUndoStep(result.newUndoStep);
+  if (result.historyStep) moveHistoryStep(result.historyStep.direction);
+  delete result.newUndoStep;
   // A quick entry leaves the API's queue in the same request that saves the table it landed in
   if (result.quickEntry) {
     BUDGET_TABLES[result.quickEntry.table].markEdited();
@@ -1034,10 +865,9 @@ function refreshBudgetData() {
   visibleUncommons = 0;
   visibleNegatives = 0;
   nextFourNegative = false;
-  manualNotif = false;
-  negativeNotif = false;
   recurringToDeleteIndexes = [];
 
+  normalizeFrequencies();
   upcomingEntriesMaintanence();
   writeRecurring();
   if (deleteExpiredReccurrings()) recurringEdited = true;
@@ -1045,6 +875,7 @@ function refreshBudgetData() {
   writeBudgetMath();
   commenceDave();
   updateTrackerTab();
+  updateAccountBalances();
 }
 
 /* ---------- Calendar entries (the old "Unique Entry" form) ---------- */
@@ -1121,9 +952,6 @@ function unique(entry) {
   if (dateMove.getTime() !== dateObj.getTime()) {
     moveIsExisting = !injectOrDefer("delete", dateMove, 0, title, sprite, moveOutData);
   }
-  // Process Equity: Remove Old Entries before merging/changing
-  if (isExisting && dateObj.getTime() < today.getTime()) processEquity(false, title, dateObj, outData.oldAmt, outData.oldSprite);
-  if (moveIsExisting && dateMove.getTime() < today.getTime()) processEquity(false, title, dateMove, moveOutData.oldAmt, moveOutData.oldSprite);
   // Combine existing hardcoded checks with virgin recurring checks
   let originalFound = isExisting || isOriginalVirginRecurring;
 
@@ -1194,7 +1022,6 @@ function unique(entry) {
       }
       // 7. Inject combined result back into target date
       injectOrDefer("set", dateMove, moveAmt, title, moveSprite);
-      if (dateMove.getTime() < today.getTime()) processEquity(true, title, dateMove, moveAmt, moveSprite);
       let gridStartMs = gridStartDate.getTime();
       if ((isExisting || moveIsExisting || !notFound) && (dateObj.getTime() < gridStartMs || dateMove.getTime() < gridStartMs)) {
         historyEdited = true;
@@ -1396,61 +1223,59 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
 }
 
 /* ---------- Recurring entries (the old "Create/Change A Recurring Entry" form) ---------- */
+// A title can have one recurring entry per refraction type (one Regular, one Hidden, and one Transfer),
+// the same way a day can have one entry per title and type: so it's always clear which recurring entry
+// a day's entry came from. Making a second one is refused; the existing one gets changed instead.
 
-// Create a recurring entry, or change the one with this title (and refraction type, when given).
-// Blank fields keep the existing entry's values.
-// fields: { title, sprite: "" | "✔️" | "✔️✖️" | "✔️⭕️", amount: number | null,
-//           frequency: string | "", startDate: Date | null, endDate: Date | "None" | null }
+const REFRACTION_NAMES = new Map([["❗️", "Regular"], ["✖️", "Hidden"], ["⭕️", "Transfer"]]);
+
+// The row (other than exceptIndex) with this title and refraction type, or -1
+function recurringTwin(title, special, exceptIndex = -1) {
+  let clean = cleanString(title);
+  return recurringData.findIndex((row, i) => i >= 2 && i !== exceptIndex && String(row[0]).trim() !== "-" &&
+    cleanString(row[0]) === clean && getSpecialType(String(row[5] || "")) === special);
+}
+
+function refuseRecurringTwin(title, sprite, exceptIndex = -1) {
+  let twin = recurringTwin(title, getSpecialType(sprite), exceptIndex);
+  if (twin === -1) return;
+  let type = REFRACTION_NAMES.get(getSpecialType(sprite));
+  throw new BudgetInputError(`There's already a ${type} recurring entry called ${recurringData[twin][0]}. Each title can have one of each refraction type, so tap that one in the list to change it.`);
+}
+
+// "Every 2 Weeks" as typed in the panel, checked and stored the standard way
+function readFrequency(text) {
+  let frequency = parseFrequency(text);
+  if (!frequency) throw new BudgetInputError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
+  return formatFrequency(frequency);
+}
+
+// Create a recurring entry (refused when one with its title and refraction type already exists).
+// fields: { title, sprite: "✔️" | "✔️✖️" | "✔️⭕️", amount: number, frequency: "Every 2 Weeks" (blank = every
+//           month), startDate: Date | null (today), endDate: Date | "None" | null }
 function recurring(fields) {
-  let rawTitle = String(fields.title || "").replace(/\s+/g, ' ').trim();
-  let title = capitalize(rawTitle);
+  let title = capitalize(String(fields.title || "").replace(/\s+/g, ' ').trim());
   if (!title) throw new BudgetInputError("Give the recurring entry a title.");
-  let sprite = String(fields.sprite || "").trim();
-  let frequency = String(fields.frequency || "").trim();
+  let sprite = String(fields.sprite || "").trim() || "✔️";
+  refuseRecurringTwin(title, sprite);
+  let frequency = readFrequency(fields.frequency || "Every Month");
   let hasAmount = typeof fields.amount === "number" && !isNaN(fields.amount);
-  formEntryRow[3] = (sprite || "✔️") + " " + title;
-
-  for (let i = 2; i < recurringData.length; i++) {
-    let row = recurringData[i];
-    let existingSprite = String(row[5] || "").trim();
-    // Match requires identical titles AND either no refraction type given or matching ones
-    if (row[0] === "-" || cleanString(row[0]) !== cleanString(title) || (sprite !== "" && sprite !== existingSprite)) continue;
-
-    if (frequency === "") frequency = row[3];
-    let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(row[2]);
-    let endDate = resolveEndDate(fields.endDate, row[4]);
-    let finalSprite = sprite || existingSprite || "✔️";
-
-    row[1] =formatMoney(hasAmount ? fields.amount : parseAmount(row[1]));
-    row[2] = formatToMMDDYYYY(startDate);
-    row[3] = frequency;
-    row[4] = endDate;
-    row[5] = finalSprite;
-
-    formEntryRow[2] = "✔️ Change Recurring";
-    formEntryRow[4] = frequency + ": " + row[2];
-    formEntryRow[5] = "Expiration: " + endDate;
-    formEntryRow[6] = "New Amount: " + (hasAmount ? formatMoney(fields.amount) : "None");
-    return {};
-  }
-
-  // Create New Recurring Entry
-  let finalSprite = sprite || "✔️";
-  if (frequency === "") frequency = "Monthly";
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(today);
   let endDate = resolveEndDate(fields.endDate, "None");
 
   let amount = formatMoney(hasAmount ? fields.amount : 0);
-  recurringData.push([title, amount, formatToMMDDYYYY(startDate), frequency, endDate, finalSprite]);
+  recurringData.push([title, amount, formatToMMDDYYYY(startDate), frequency, endDate, sprite]);
 
   formEntryRow[2] = "✔️ Create Recurring";
+  formEntryRow[3] = sprite + " " + title;
   formEntryRow[4] = frequency + ": " + formatToMMDDYYYY(startDate);
   formEntryRow[5] = "Expiration: " + endDate;
   formEntryRow[6] = "Amount: " + amount;
   return {};
 }
 
-// Change the recurring entry that was clicked (every field comes from the edit panel)
+// Change the recurring entry that was clicked (every field comes from the edit panel). A new title or
+// type can't match another recurring entry's.
 function editRecurringRow(index, fields) {
   let row = recurringData[index];
   if (!row || row[0] === "-" || !String(row[0]).trim()) {
@@ -1460,9 +1285,10 @@ function editRecurringRow(index, fields) {
   if (!title) throw new BudgetInputError("Give the recurring entry a title.");
   let hasAmount = typeof fields.amount === "number" && !isNaN(fields.amount);
   let sprite = String(fields.sprite || "").trim() || String(row[5] || "").trim() || "✔️";
+  refuseRecurringTwin(title, sprite, index);
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(row[2]);
   let endDate = resolveEndDate(fields.endDate ?? "None", row[4]);
-  let frequency = String(fields.frequency || "").trim() || row[3];
+  let frequency = readFrequency(String(fields.frequency || "").trim() || row[3]);
 
   row[0] = title;
   row[1] = formatMoney(hasAmount ? fields.amount : parseAmount(row[1]));
@@ -1491,27 +1317,38 @@ function resolveEndDate(endDate, current) {
 
 /* ---------- Tracker rows ---------- */
 
-// Create a tracker row, or change the clicked one (or the one with this title).
+// Create a tracker row, or change the clicked one. A title can have two rows: one that counts transfers
+// (⭕️ title prefix) and one that doesn't. A row that matches another's title and transfer setting is
+// refused, and Costs, Gains, and Undefined (which fill in by themselves) can't be made or renamed into.
 // fields: { title, aliases: [{ title, count: "all" | "costs" | "gains" }], tracksTransfers: boolean (⭕️ title prefix) }
 function trackerEntry(fields, index) {
   let baseTitle = capitalize(String(fields.title || "").replace(/⭕️/g, "").replace(/\s+/g, " ").trim());
   if (!baseTitle) throw new BudgetInputError("Give the tracker row a title.");
   let aliases = normalizeAliases(fields.aliases);
-  let fullTitle = (fields.tracksTransfers ? "⭕️" : "") + baseTitle;
+  let countsTransfers = !!fields.tracksTransfers;
+  let fullTitle = (countsTransfers ? "⭕️" : "") + baseTitle;
+  let isNew = index === null || index === undefined;
+  let row = isNew ? null : trackerData[index];
+  if (!isNew && (!row || String(row[0]).trim() === "-")) throw new BudgetInputError("That tracker row couldn't be found. Please try again.");
 
-  if (index === null || index === undefined) {
-    index = trackerData.findIndex((row, i) => i > 0 && String(row[0]).trim() !== "-" && cleanString(row[0]) === cleanString(baseTitle));
-    if (index === -1) index = null;
+  // Gains, Costs, and Undefined are filled in automatically
+  if (row && TRACKER_AUTO_ROWS.includes(cleanString(row[0]))) {
+    formEntryRow[3] = "Changed: " + row[0];
+    formEntryRow[4] = "Aliases: " + (describeAliases(row[4]) || "None");
+    return {};
+  }
+  if (TRACKER_AUTO_ROWS.includes(cleanString(baseTitle))) {
+    throw new BudgetInputError("Costs, Gains, and Undefined fill in by themselves, so pick another title.");
+  }
+  let twin = trackerData.findIndex((other, i) => i > 0 && other !== row && String(other[0]).trim() !== "-" &&
+    cleanString(other[0]) === cleanString(baseTitle) && String(other[0]).trim().startsWith("⭕️") === countsTransfers);
+  if (twin !== -1) {
+    throw new BudgetInputError(`There's already a tracker row called ${trackerData[twin][0]}${countsTransfers ? " (it counts transfers)" : ""}. Tap that one in the list to change it.`);
   }
 
-  if (index !== null) {
-    let row = trackerData[index];
-    if (!row || String(row[0]).trim() === "-") throw new BudgetInputError("That tracker row couldn't be found. Please try again.");
-    // Gains, Costs, and Undefined are filled in automatically
-    if (!TRACKER_AUTO_ROWS.includes(cleanString(row[0]))) {
-      row[0] = fullTitle;
-      row[4] = aliases;
-    }
+  if (row) {
+    row[0] = fullTitle;
+    row[4] = aliases;
     formEntryRow[3] = "Changed: " + row[0];
     formEntryRow[4] = "Aliases: " + (describeAliases(row[4]) || "None");
     return {};
@@ -1570,12 +1407,14 @@ function describeAliases(text) {
 /* ---------- Other Accounts ---------- */
 // Accounts outside the budget, like Savings. A Hidden or Transfer entry titled with an account's name
 // moves money into or out of it: the account gets the opposite of what the entry adds to the calendar
-// (a $100 cost puts $100 in the account, a $100 gain takes $100 out). An account's balance is its start
-// plus all of those changes, so changing, moving, or deleting one of its entries changes it too.
-// accountsData.list: [0] column titles, then [name, start (its balance before any of its entries),
-// "default" | ""]. The default account, Savings, is always there and can't be deleted.
+// (a $100 cost puts $100 in the account, a $100 gain takes $100 out). An account's balance is all of
+// those changes added up (there's no balance to type in: what's already in an account goes in as a
+// Hidden entry), so changing, moving, or deleting one of its entries changes it too.
+// accountsData.list: [0] column titles, then [name, balance today (filled in by updateAccountBalances, so
+// the Quick Entry page can show it), "default" | ""]. The default account, Savings, is always there and
+// can't be deleted.
 
-const ACCOUNTS_VERSION = 2;
+const ACCOUNTS_VERSION = 3;
 const DEFAULT_ACCOUNT = "Savings";
 const MAX_ACCOUNT_NAME = 60;
 
@@ -1595,9 +1434,14 @@ function accountRows() {
   return accounts;
 }
 
-// The accounts' names, in order (the account pickers list these)
-function otherAccountNames() {
-  return accountRows().map(account => account.name);
+// The accounts in order with today's balances, for the account pickers: [{ name, balance }]
+function otherAccounts() {
+  return accountRows().map(account => ({ name: account.name, balance: parseAmount(account.row[1]) }));
+}
+
+// Each account's balance today goes in its row (the Quick Entry page can't add up the budget itself)
+function updateAccountBalances() {
+  for (let summary of accountSummaries()) accountsData.list[summary.index][1] = formatMoney(summary.today);
 }
 
 // Clean account name -> its account (a Map, so names like "constructor" are just names)
@@ -1625,14 +1469,13 @@ function isMoveEntry(sprite, cleanTitle, accounts = accountTitleMap()) {
 
 // Each account's balance today and on the calendar's last day, with the entries that changed it (and
 // the ones on the calendar that will), newest first:
-// [{ index, name, isDefault, start, today, calendarEnd, entries: [{ date, change, sprite }] }]
+// [{ index, name, isDefault, today, calendarEnd, entries: [{ date, change, sprite }] }]
 function accountSummaries() {
   let accounts = accountTitleMap();
   let summaries = new Map(accountRows().map(account => [account.index, {
     index: account.index,
     name: account.name,
     isDefault: isDefaultAccount(account.row),
-    start: parseAmount(account.row[1]),
     today: 0,
     calendarEnd: 0,
     entries: []
@@ -1661,26 +1504,19 @@ function accountSummaries() {
   const round = (amount) => Math.round(amount * 100) / 100;
   return [...summaries.values()].map(summary => {
     summary.entries.sort((a, b) => b.date - a.date);
-    let throughToday = summary.entries.filter(entry => entry.date <= today).reduce((total, entry) => total + entry.change, 0);
-    let throughCalendar = summary.entries.reduce((total, entry) => total + entry.change, 0);
-    summary.today = round(summary.start + throughToday);
-    summary.calendarEnd = round(summary.start + throughCalendar);
+    summary.today = round(summary.entries.filter(entry => entry.date <= today).reduce((total, entry) => total + entry.change, 0));
+    summary.calendarEnd = round(summary.entries.reduce((total, entry) => total + entry.change, 0));
     return summary;
   });
 }
 
-// New account (index null) or change the tapped one. fields: { name, balance: number | null }.
-// Setting a balance sets the account's start so that its balance today is that amount (a new account
-// starts at $0.00). A new name goes on its entries and tracker aliases too, so they stay with it.
+// New account (index null) or rename the tapped one. fields: { name }. A new name goes on its entries
+// and tracker aliases too, so they stay with it. (Balances come from entries, so there's none to set.)
 function accountEntry(fields, index) {
   let name = capitalize(String(fields.name || "").replace(/\s+/g, " ").trim());
   let clean = cleanString(name);
   if (!clean) throw new BudgetInputError("Give the account a name, like Cash or Investments.");
   if (name.length > MAX_ACCOUNT_NAME) throw new BudgetInputError(`Account names can be up to ${MAX_ACCOUNT_NAME} characters.`);
-  let balance = fields.balance ?? null;
-  if (balance !== null && (typeof balance !== "number" || !Number.isFinite(balance))) {
-    throw new BudgetInputError("Enter the balance as a number, like 250.00.");
-  }
 
   let list = accountsData.list;
   let isNew = index === null || index === undefined;
@@ -1689,29 +1525,20 @@ function accountEntry(fields, index) {
   let taken = accountRows().find(account => account.clean === clean && account.row !== row);
   if (taken) throw new BudgetInputError(`You already have an account called ${taken.name}.`);
 
-  formEntryRow[5] = "";
-  if (isNew) {
-    row = [name, formatMoney(0), ""];
-    list.push(row);
-    if (balance === null) balance = 0;
-    formEntryRow[2] = "🏦 New Account";
-  } else {
-    let oldName = String(row[0]).trim();
-    if (cleanString(oldName) !== clean) {
-      renameAccountEntries(cleanString(oldName), name);
-      formEntryRow[5] = "Renamed From: " + oldName;
-    }
-    row[0] = name;
-    formEntryRow[2] = "🏦 Change Account";
-  }
-
-  let summary = accountSummaries().find(account => account.index === list.indexOf(row));
-  if (balance !== null) {
-    row[1] = formatMoney(balance - (summary.today - summary.start));
-    summary.today = balance;
-  }
   formEntryRow[3] = "Account: " + name;
-  formEntryRow[4] = "Balance: " + formatMoney(summary.today);
+  formEntryRow[4] = "";
+  if (isNew) {
+    list.push([name, formatMoney(0), ""]);
+    formEntryRow[2] = "🏦 New Account";
+    return {};
+  }
+  let oldName = String(row[0]).trim();
+  if (cleanString(oldName) !== clean) {
+    renameAccountEntries(cleanString(oldName), name);
+    formEntryRow[4] = "Renamed From: " + oldName;
+  }
+  row[0] = name;
+  formEntryRow[2] = "🏦 Change Account";
   return {};
 }
 
@@ -1731,7 +1558,7 @@ function renameAccountEntries(oldClean, newName) {
       lines[l] = `${parts[0]} ${parts[1]} ${newName}`;
       renamed = true;
     }
-    return renamed ? mergeSameEntries(lines).join("\n") : cellText;
+    return renamed ? combineSameEntries(lines).join("\n") : cellText;
   };
 
   for (let r = 0; r < 4; r++) {
@@ -1773,8 +1600,11 @@ function renameAccountEntries(oldClean, newName) {
   }
 }
 
-// One line per title and type on a day (a rename can make two the same): their amounts add together
-function mergeSameEntries(lines) {
+// A day has at most one entry per title and refraction type (so a title shows up at most three times:
+// Regular, Hidden, and Transfer). A new entry combines with the one that's there (see injectOrDefer);
+// this combines any that slipped in another way, like an account rename or older data. Amounts add
+// together, and the checkmark stays if either had one (like writeRecurring combining into a unique).
+function combineSameEntries(lines) {
   let kept = [lines[0]];
   let byKey = new Map();
   for (let l = 1; l < lines.length; l++) {
@@ -1783,7 +1613,7 @@ function mergeSameEntries(lines) {
       kept.push(lines[l]);
       continue;
     }
-    let key = parts[0] + "|" + extractTitle(lines[l]);
+    let key = getSpecialType(parts[0]) + "|" + extractTitle(lines[l]);
     if (!byKey.has(key)) {
       byKey.set(key, kept.length);
       kept.push(lines[l]);
@@ -1791,7 +1621,7 @@ function mergeSameEntries(lines) {
     }
     let at = byKey.get(key);
     let first = getParts(kept[at]);
-    kept[at] = `${first[0]} ${formatMoney(parseAmount(first[1]) + parseAmount(parts[1]))} ${first.slice(2).join(" ")}`;
+    kept[at] = `${combineSprites(first[0], parts[0])} ${formatMoney(parseAmount(first[1]) + parseAmount(parts[1]))} ${first.slice(2).join(" ")}`;
   }
   return kept;
 }
@@ -2024,14 +1854,21 @@ function searchTargets(terms) {
 
     // Tracker: the title is a tracker row. Find what the row counts: each of its aliases with its own
     // costs/gains setting (Costs and Gains count every cost or gain), and transfers if it counts them.
-    let index = trackerData.findIndex((row, i) => i > 0 && String(row[0]).trim() !== "-" && cleanString(row[0]) === cleanString(title));
-    if (index === -1) throw new BudgetInputError(`There's no tracker row called "${title}".`);
+    // A title can have a row that counts transfers (⭕️Food) and one that doesn't (Food): typing the ⭕️
+    // picks the first, and otherwise the one that doesn't is picked when there are both.
+    let wantsTransfers = title.startsWith("⭕️");
+    let matches = [];
+    trackerData.forEach((row, i) => {
+      if (i > 0 && String(row[0]).trim() !== "-" && cleanString(row[0]) === cleanString(title)) matches.push(i);
+    });
+    let index = matches.find(i => String(trackerData[i][0]).trim().startsWith("⭕️") === wantsTransfers) ?? matches[0];
+    if (index === undefined) throw new BudgetInputError(`There's no tracker row called "${title}".`);
     if (rowsFound.has(index)) continue;
     rowsFound.add(index);
 
     let row = trackerData[index];
     let rowType = cleanString(row[0]);
-    described.push(`the ${String(row[0]).replace(/⭕️/g, "").trim()} tracker row`);
+    described.push(`the ${String(row[0]).trim()} tracker row`);
     if (rowType === "costs" || rowType === "gains") {
       targets.push({ clean: null, count: rowType, withTransfers: false });
       continue;
@@ -2085,7 +1922,8 @@ function upcomingEntriesMaintanence() {
   // Keep what's left in date order (header stays on top)
   if (latestDay > gridEndDate && futureData.length > 1) {
     let header = futureData.shift();
-    futureData.sort((a, b) => (new Date(a[2]).getTime() || 0) - (new Date(b[2]).getTime() || 0));
+    const dayOf = (row) => createSafeMidnight(row[2], true).getTime() || 0;
+    futureData.sort((a, b) => dayOf(a) - dayOf(b));
     futureData.unshift(header);
   }
   upcomingEntries = futureData.slice(1)
@@ -2113,12 +1951,13 @@ function writeRecurring() {
       continue;
     }
     // If not expired, check if it should be entered into the visible budget
+    let parsed = parseRecurringRow(recurringData[i]);
     calendarChecks:
     for (let r = 3; r >= 0; r--) {
       for (let c = 6; c >= 0; c--) {
         let cellDate = gridDates[r][c];
         if (cellDate.getTime() < today.getTime()) break calendarChecks;
-        if (!recurringHits(title, cellDate, getSpecialType(sprite))) continue;
+        if (!recurringRowHits(parsed, cellDate)) continue;
 
         let cellLines = calendarData[r][c].split("\n");
         let hasTemp = false;
@@ -2126,23 +1965,21 @@ function writeRecurring() {
         entryChecks:
         for (let l = 0; l < cellLines.length; l++) {
           let parts = getParts(cellLines[l]);
-          let cleanLineTitle = extractTitle(cellLines[l]);
-          if (cleanLineTitle === cleanString(title)) {
-            if (parts[0].includes("✔️")) {
-              hasTemp = true;
-              break entryChecks;
-            }
-            let lineSpecial = getSpecialType(parts[0]);
-            let recurringSpecial = getSpecialType(sprite);
-            if (lineSpecial === recurringSpecial) {
-              hasUnique = true;
-              let newAmt = amt + parseAmount(parts[1]);
-              let newSprite = parts[0] + "✔️";
-              cellLines[l] = newSprite + " " + formatMoney(newAmt) + " " + title;
-              calendarData[r][c] = cellLines.join("\n");
-              break entryChecks;
-            }
+          // Only an entry with this title and refraction type affects it (a title can have one recurring
+          // entry of each type, and they land side by side)
+          if (extractTitle(cellLines[l]) !== cleanString(title) || getSpecialType(parts[0]) !== getSpecialType(sprite)) continue;
+          // A temp (checkmark entry) blocks it for the day
+          if (parts[0].includes("✔️")) {
+            hasTemp = true;
+            break entryChecks;
           }
+          // A unique entry takes in its amount
+          hasUnique = true;
+          let newAmt = amt + parseAmount(parts[1]);
+          let newSprite = parts[0] + "✔️";
+          cellLines[l] = newSprite + " " + formatMoney(newAmt) + " " + title;
+          calendarData[r][c] = cellLines.join("\n");
+          break entryChecks;
         }
         // Respect manual overrides; otherwise write the recurring entry as normal
         if (!hasTemp && !hasUnique) {
@@ -2203,7 +2040,7 @@ function organizeCellEntries() {
   }
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
-      let oldLines = calendarData[r][c].split("\n");
+      let oldLines = combineSameEntries(calendarData[r][c].split("\n"));
       let newLines = [];
       let cellArray = {
         uncategorized: [],
@@ -2259,7 +2096,6 @@ function writeBudgetMath() {
       let gains = 0;
       let costs = 0;
       let moneyMoves = 0;
-      let isToday = (formatToMMDD(gridDates[r][c]) === formatToMMDD(today));
       for (let l = 1; l < lines.length; l++) {
         let lineStr = lines[l].trim();
         let parts = getParts(lineStr);
@@ -2271,7 +2107,6 @@ function writeBudgetMath() {
           moneyMoves += lineAmt;
         } else if (lineAmt < 0) {
           costs += Math.abs(lineAmt);
-          if (isToday) manualNotif = true;
         } else {
           gains += lineAmt;
         }
@@ -2283,7 +2118,6 @@ function writeBudgetMath() {
       if (inBank < 0) {
         bankLine = `⛔️ ${formatMoney(inBank)} In Bank`;
         if (gridDates[r][c].getTime() >= today.getTime()) visibleNegatives++;
-        if (isToday) negativeNotif = true;
       } else {
         bankLine = `✅ ${formatMoney(inBank)} In Bank`;
       }
@@ -2312,8 +2146,9 @@ function writeBudgetMath() {
 }
 
 // The 28 days after the calendar: lowest balance (and when) and the balance on day 28.
-// Also counts uncommon recurring entries (3 month, 6 month, yearly) visible from today on.
+// Also counts uncommon recurring entries (every 3 months or less often) visible from today on.
 function getPredictionData(lastInBank) {
+  let recurringRows = getParsedRecurringRows();
   let visibleDay = createSafeMidnight(gridStartDate);
   let testDay = createSafeMidnight(nextFourStart);
   let todayTime = today.getTime();
@@ -2342,31 +2177,16 @@ function getPredictionData(lastInBank) {
     let currentTestTime = testDay.getTime();
     let currentVisibleTime = visibleDay.getTime();
 
-    for (let r = 2; r < recurringData.length; r++) {
-      let recurringTitle = cleanString(recurringData[r][0]);
-      if (!recurringTitle) continue;
-      let recurringAmt = parseAmount(recurringData[r][1]);
-      let recurringSprite = String(recurringData[r][5] || "");
-      let recurringSpecial = getSpecialType(recurringSprite);
-      let recurringFrequency = cleanString(recurringData[r][3]);
-
-      if (recurringFrequency === "3 month" || recurringFrequency === "6 month" || recurringFrequency === "yearly") {
-        if (currentVisibleTime >= todayTime && recurringHits(recurringData[r][0], visibleDay, recurringSpecial)) {
-          visibleUncommons++;
-        }
+    for (let row of recurringRows) {
+      if (isUncommonFrequency(row.parsed.frequency) && currentVisibleTime >= todayTime && recurringRowHits(row.parsed, visibleDay)) {
+        visibleUncommons++;
       }
-      if (recurringSprite.includes("✖️")) continue;
-      if (recurringHits(recurringTitle, testDay, recurringSpecial)) {
-        let hasNoOverride = true;
-        for (let f = 0; f < parsedFuture.length; f++) {
-          if (parsedFuture[f].time !== currentTestTime) continue;
-          if (parsedFuture[f].title !== recurringTitle) continue;
-          if (parsedFuture[f].sprite.includes("✔️") && parsedFuture[f].special === recurringSpecial) {
-            hasNoOverride = false;
-            break;
-          }
-        }
-        if (hasNoOverride) dayTotal += recurringAmt;
+      if (String(row.sprite || "").includes("✖️")) continue;
+      if (recurringRowHits(row.parsed, testDay)) {
+        // A Future Dates temp (✔️) with its title and type that day replaces it
+        let hasNoOverride = !parsedFuture.some(future => future.time === currentTestTime && future.title === row.parsed.cleanTitle &&
+          future.sprite.includes("✔️") && future.special === row.parsed.special);
+        if (hasNoOverride) dayTotal += row.amt;
       }
     }
 
@@ -2635,51 +2455,17 @@ function updateTrackerTab() {
   newRows[costIndex][4] = trackerRows[costIndex].aliases.join(", ");
   trackerData = [trackerData[0], ...newRows];
 
-  // Recurring summary: projected spending this year (on top of what's already spent) and per month.
-  // Like the spending so far, moves (like a transfer to savings) aren't spending.
-  for (let i = 2; i < recurringData.length; i++) {
-    let title = String(recurringData[i][0]).trim();
-    let amt = parseAmount(String(recurringData[i][1]));
-    let startDate = createSafeMidnight(recurringData[i][2], true);
-    let frequency = String(recurringData[i][3]).toLowerCase().trim();
-    let endDateVal = recurringData[i][4];
-    if (!title || title === "-" || isNaN(startDate.getTime()) || amt >= 0) continue;
-    if (isMoveEntry(String(recurringData[i][5] || ""), cleanString(title), accounts)) continue;
-
-    let endOfThisYear = createSafeMidnight(new Date(today.getFullYear(), 11, 31));
-    let effectiveEndDate = endOfThisYear;
-    if (endDateVal && String(endDateVal).trim() !== "None") {
-      let parsedEndDate = createSafeMidnight(endDateVal);
-      if (parsedEndDate < endOfThisYear) effectiveEndDate = parsedEndDate;
-    }
-    let effectiveStartDate = (startDate > today) ? startDate : today;
-    let activeDaysThisYear = getDayDifference(effectiveEndDate, effectiveStartDate) + 1;
-    if (activeDaysThisYear <= 0) continue;
-
-    if (frequency === "yearly") {
-      let expenseThisYearDate = createSafeMidnight((startDate.getMonth() + 1) + "/" + startDate.getDate() + "/" + today.getFullYear());
-      if (expenseThisYearDate >= today && expenseThisYearDate <= effectiveEndDate) {
-        yearly += amt;
-        monthly += amt / 12;
-      }
-    } else if (frequency === "weekly") {
-      yearly += (activeDaysThisYear / 7) * amt;
-      monthly += amt * 4;
-    } else if (frequency === "biweekly" || frequency === "bi-weekly") {
-      yearly += (activeDaysThisYear / 14) * amt;
-      monthly += amt * 2;
-    } else if (frequency === "semi-monthly") { // The 1st and 15th: twice a month
-      yearly += (activeDaysThisYear / 15.208) * amt;
-      monthly += amt * 2;
-    } else if (frequency === "3 month") {
-      yearly += (activeDaysThisYear / 91.25) * amt;
-      monthly += amt / 3;
-    } else if (frequency === "6 month") {
-      yearly += (activeDaysThisYear / 182.5) * amt;
-      monthly += amt / 6;
-    } else {
-      yearly += (activeDaysThisYear / 30.416) * amt;
-      monthly += amt;
+  // Recurring summary: about how much the recurring costs add up to each month, and Yearly: this year's
+  // spending so far (above) plus every recurring cost still to land this year. Today's already count
+  // as spent, so those start tomorrow. Like the spending so far, moves (like a transfer to savings)
+  // aren't spending.
+  let endOfThisYear = new Date(today.getFullYear(), 11, 31);
+  for (let row of getParsedRecurringRows()) {
+    if (row.amt >= 0 || isMoveEntry(String(row.sprite || ""), row.parsed.cleanTitle, accounts)) continue;
+    monthly += row.amt * timesPerMonth(row.parsed.frequency);
+    let lastDay = row.parsed.endDate && row.parsed.endDate < endOfThisYear ? row.parsed.endDate : endOfThisYear;
+    for (let day = addDays(today, 1); day <= lastDay; day = addDays(day, 1)) {
+      if (recurringRowHits(row.parsed, day)) yearly += row.amt;
     }
   }
   recurringData[0][5] = formatMoney(Math.round(yearly * 100) / 100);
@@ -2801,8 +2587,6 @@ function calculator(values) {
 // optional in Settings. It needs to know which days get a reminder, so after every change the
 // page sends it this plan (only when it changed).
 
-// Recurring frequencies the spreadsheet called "uncommon" (Dave and the ✔️ reminder count them)
-const UNCOMMON_FREQUENCIES = ["3 month", "6 month", "yearly"];
 const REMINDER_PLAN_KEY = "prismal_reminder_plan"; // The last plan this browser sent
 let reminderSync = Promise.resolve();
 
@@ -2818,7 +2602,7 @@ function buildReminderPlan() {
   let lastDay = addDays(gridEndDate, 28);
 
   // Uncommon recurring payments per day, through the end of the last day's 4-week calendar
-  let uncommonRows = recurringRows.filter(row => UNCOMMON_FREQUENCIES.includes(row.parsed.frequency));
+  let uncommonRows = recurringRows.filter(row => isUncommonFrequency(row.parsed.frequency));
   let countsEnd = addDays(lastDay, 27 - lastDay.getDay());
   let uncommonCounts = [];
   for (let day = today; day <= countsEnd; day = addDays(day, 1)) {
@@ -2893,7 +2677,20 @@ function currentTimeZone() {
 
 //#endregion
 
+// Save every table that changed. Each save carries the budget's revision this page holds, and the API
+// refuses one from an older copy (the budget was saved on another device or tab since): then nothing
+// more is sent, and the page reloads with the newest budget instead of saving over it.
 async function saveChanges() {
+  savingNow = true;
+  try {
+    return await saveChangedTables();
+  } finally {
+    savingNow = false;
+    if (budgetConflict) reloadForNewerBudget();
+  }
+}
+
+async function saveChangedTables() {
   console.log("Saving data changes...");
   // Grab the JWT token instead of the user ID
   const token = localStorage.getItem('prismal_jwt');
@@ -2921,17 +2718,17 @@ async function saveChanges() {
       if (critical) allSaved = false;
       return false;
     }
-    const ok = await postUpdate(endpoint, payload);
+    // Nothing more is sent once a save was refused (a newer copy elsewhere) or the session ended
+    const ok = !budgetConflict && !signingOut && await postUpdate(endpoint, payload);
     if (!ok && critical) allSaved = false;
     return ok;
   }
 
+  // (A 401 signs the page out: see budgetApi)
   async function postUpdate(endpoint, payload) {
-    const result = await budgetApi(endpoint, payload);
-    if (result.status === 401) {
-      // Token is likely expired or invalid, handle auto-logout here if desired
-      console.error("Session expired.");
-    }
+    const result = await budgetApi(endpoint, dataRevision === null ? payload : { ...payload, revision: dataRevision });
+    if (result.status === 409 && result.data && result.data.conflict) budgetConflict = true;
+    if (result.ok && result.data && Number.isInteger(result.data.revision)) dataRevision = result.data.revision;
     return result.ok;
   }
 
@@ -3002,6 +2799,7 @@ async function saveChanges() {
 
 // One request to the API with the login token: a POST of JSON when there's a payload, a GET otherwise.
 // Resolves to { ok, status, data } and never throws (status 0 = the server couldn't be reached).
+// A 401 means the session ended on the server, so the page signs out (see signedOutElsewhere).
 async function budgetApi(endpoint, payload) {
   const token = localStorage.getItem('prismal_jwt');
   if (!token) return { ok: false, status: 401, data: null };
@@ -3016,6 +2814,7 @@ async function budgetApi(endpoint, payload) {
     });
     let data = null;
     try { data = await res.json(); } catch (e) {}
+    if (res.status === 401) signedOutElsewhere();
     return { ok: res.ok, status: res.status, data };
   } catch (err) {
     console.error(`Failed to reach ${endpoint}:`, err);
@@ -3023,17 +2822,25 @@ async function budgetApi(endpoint, payload) {
   }
 }
 
+// The session ended on the server (Sign Out Everywhere, a new password on another device, or it ran
+// out), so this page signs out too instead of trying to save again and again. Nothing more is saved
+// (the server would refuse it), and the login page says why.
+let signingOut = false;
+function signedOutElsewhere() {
+  if (signingOut || window.PAGE === "quick") return;
+  signingOut = true;
+  workspaceLoaded = false;
+  if (typeof clearSignedInData === "function") clearSignedInData();
+  else ["prismal_jwt", "prismal_username", "prismal_last_activity"].forEach(key => { try { localStorage.removeItem(key); } catch (e) {} });
+  try { sessionStorage.setItem("prismal_signed_out", "expired"); } catch (e) {}
+  window.location.replace("/login.html");
+}
+
 //#endregion
 
 // =====================================================================
 // #region OTHER HELPERS
 // =====================================================================
-
-// An LLC equity table by its spreadsheet tab name (e.g. "C Revenue 2026"), or null
-function getTableData(tabName) {
-  let equity = accountsData && accountsData.equity;
-  return equity && Object.prototype.hasOwnProperty.call(equity, tabName) ? equity[tabName] : null;
-}
 
 // Rebuild a stored table as rows of strings, keeping EVERY row and column that was saved.
 // Accepts a 2D array (normal) or a flat array (chunked into shape.cols per row).
@@ -3065,10 +2872,12 @@ function normalizeApiTable(rawData, shape) {
   return rows;
 }
 
-// Rebuild the Other Accounts store: { version: 2, list, equity }
-//   list: [0] column titles, then [name, start, "default" | ""] (see OTHER ACCOUNTS). The default
-//         account, Savings, is added if it's missing.
-//   equity: the LLC version's equity tables, { tabName: table } (see processEquity), kept as stored.
+// Rebuild the Other Accounts store: { version: 3, list, equity }
+//   list: [0] column titles, then [name, balance today, "default" | ""] (see Other Accounts in BUDGET
+//         LOGIC). The default account, Savings, is added if it's missing. Version 2 kept a typed-in
+//         starting balance in [1]; balances now come only from entries, so that's dropped.
+//   equity: the spreadsheet's business-version (LLC) equity tables, { tabName: table }, kept as stored
+//           (the website doesn't change them).
 //           Before version 2, the whole store was these tables.
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
@@ -3076,7 +2885,7 @@ function normalizeApiAccounts(rawData) {
     try { parsed = JSON.parse(parsed); } catch (e) { parsed = {}; }
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) parsed = {};
-  let isCurrent = parsed.version === ACCOUNTS_VERSION;
+  let isCurrent = parsed.version === 2 || parsed.version === ACCOUNTS_VERSION;
 
   let storedEquity = isCurrent ? parsed.equity : parsed;
   let equity = {};
@@ -3088,33 +2897,14 @@ function normalizeApiAccounts(rawData) {
   }
 
   let list = normalizeApiTable(isCurrent ? parsed.list : [], TABLE_SHAPES.accounts);
-  list[0] = ["Account", "Start", "Default"];
+  if (parsed.version === 2) list.forEach((row, i) => { if (i > 0) row[1] = formatMoney(0); });
+  list[0] = ["Account", "Balance", "Default"];
   if (!list.some((row, i) => i > 0 && isDefaultAccount(row))) {
     let savings = list.findIndex((row, i) => i > 0 && cleanString(row[0]) === cleanString(DEFAULT_ACCOUNT));
     if (savings !== -1) list[savings][2] = "default";
     else list.splice(1, 0, [DEFAULT_ACCOUNT, formatMoney(0), "default"]);
   }
   return { version: ACCOUNTS_VERSION, list, equity };
-}
-
-function formatGrid(dbArray, rows, cols) {
-  const grid = [];
-  let index = 0;
-  
-  for (let r = 0; r < rows; r++) {
-    const row = [];
-    for (let c = 0; c < cols; c++) {
-      // Safely grab the content if it exists in the DB, otherwise default to ""
-      if (dbArray && dbArray[index]) {
-        row.push(dbArray[index].content || "");
-      } else {
-        row.push("");
-      }
-      index++;
-    }
-    grid.push(row);
-  }
-  return grid;
 }
 
 function normalizeApiGrid(rawData, rows, cols) {
@@ -3298,6 +3088,17 @@ function formatMoney(amount) {
 	return isNegative ? `-$${absAmt}` : `$${absAmt}`;
 }
 
+// An amount someone typed -> a number, or NaN when it isn't one. Dollar signs, spaces, and thousands
+// commas are ignored ("$1,234.50"). A comma before the last one or two digits is the decimal point, the
+// way phones in many countries type it: "4,50" is 4.50 (never 450), and so is "1.234,50" 1234.50.
+function readMoneyInput(text) {
+  let clean = String(text ?? "").replace(/[$\s]/g, "");
+  if (/^[+-]?\d{1,3}(\.\d{3})+,\d{1,2}$/.test(clean)) clean = clean.replace(/\./g, "").replace(",", ".");
+  else if (/^[+-]?\d+,\d{1,2}$/.test(clean)) clean = clean.replace(",", ".");
+  else clean = clean.replace(/,/g, "");
+  return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(clean) ? Number(clean) : NaN;
+}
+
 function parseAmount(val) {
 	if (!val) return 0;
 	let str = String(val)
@@ -3320,49 +3121,28 @@ function extractTitle(line, clean = true) {
 	return title;
 }
 
+// A title as it's compared: lowercase, single spaces, and only letters (in any language) and numbers, so
+// "Coffee", "coffee", and "COFFEE!" are one title while "Café", "Кофе", and "咖啡" stay themselves.
+// A title with no letters or numbers at all (like ☕) keeps its symbols, so different ones stay
+// different. The API's quick.js cleanTitle matches this. Cached: every change compares the same titles
+// thousands of times.
+const cleanCache = new Map();
 function cleanString(title) {
-	if (!title) return "";
-	title = String(title).toLowerCase().replace(/\s+/g, ' ').replace(/[^a-zA-Z0-9 ]/g, "").trim();
-	return title;
+  if (!title) return "";
+  const text = String(title);
+  let clean = cleanCache.get(text);
+  if (clean !== undefined) return clean;
+  const lower = text.normalize("NFKC").toLowerCase();
+  const tidy = (pattern) => lower.replace(pattern, "").replace(/\s+/g, " ").trim();
+  clean = tidy(/[^\p{L}\p{M}\p{N}\s]/gu) || tidy(/[^\p{L}\p{M}\p{N}\p{S}\s]/gu);
+  if (cleanCache.size >= 5000) cleanCache.clear();
+  cleanCache.set(text, clean);
+  return clean;
 }
 
-function extractAmountByTitle(cellString, targetTitle) {
-	let lines = String(cellString).split("\n");
-	targetTitle = cleanString(targetTitle);
-	for (let l = 0; l < lines.length; l++) {
-		if (extractTitle(lines[l]) === targetTitle) {
-			let amount = lines[l].split(" ")[1];
-			return parseAmount(amount);
-		}
-	}
-	return 0;
-}
-
-
-function padAndCleanArray(array, colCount) {
-	return array.map(row => {
-		let rawRow = Array.isArray(row) ? [...row] : [row];
-		if (rawRow.length < colCount) {
-			while (rawRow.length < colCount) {
-				rawRow.push("");
-			}
-		} else if (rawRow.length > colCount) {
-			rawRow = rawRow.slice(0, colCount);
-		}
-		return rawRow.map(cell => cell === null || cell === undefined ? "" : cell);
-	});
-}
-
-
+// Each word's first letter (in any language) capitalized: "coffee shop" -> "Coffee Shop", "école" -> "École"
 function capitalize(string) {
-	let parts = getParts(string);
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i].length > 0) {
-      // Finds the first letter in the word (a-z or A-Z) and capitalizes it
-      parts[i] = parts[i].replace(/[a-zA-Z]/, char => char.toUpperCase());
-    }
-  }
-  return parts.join(" ");
+  return getParts(string).map(word => word.replace(/\p{L}/u, char => char.toUpperCase())).join(" ");
 }
 
 function getSpecialType(emo) {
@@ -3404,7 +3184,8 @@ function recurringHits(title, date, targetSpecial) {
   return false;
 }
 
-// Parse a Recurring tab row into what the date checks need (null for separators/empty rows)
+// Parse a Recurring tab row into what the date checks need (null for separators/empty rows).
+// A frequency that can't be read lands monthly.
 function parseRecurringRow(item) {
   if (!item || item[0] === "-") return null;
   const rawEndDate = item[4];
@@ -3413,63 +3194,107 @@ function parseRecurringRow(item) {
     special: getSpecialType(item[5] || ""),
     startDate: createSafeMidnight(item[2]),
     endDate: (rawEndDate && rawEndDate !== "None") ? createSafeMidnight(rawEndDate) : null,
-    frequency: String(item[3]).toLowerCase().trim()
+    frequency: parseFrequency(item[3]) || { count: 1, unit: "months" }
   };
+}
+
+/* ---------- Recurring frequencies: every N days, weeks, or months ---------- */
+// Stored in a recurring row's [3] as "Every 2 Weeks", "Every Month", "Every 12 Months", ... counted from
+// the Start Date. The spreadsheet's names still read the same: Weekly, Biweekly, Monthly, 3 Month,
+// 6 Month, and Yearly are every 1 week, 2 weeks, 1 month, 3, 6, and 12 months. Its Semi-Monthly (the
+// 1st and 15th) has no every-N version, so a row that has it keeps it.
+
+const MAX_FREQUENCY_COUNT = 999;
+const FREQUENCY_UNIT_NAMES = new Map([["days", "Day"], ["weeks", "Week"], ["months", "Month"]]);
+const SPREADSHEET_FREQUENCIES = new Map([
+  ["weekly", { count: 1, unit: "weeks" }],
+  ["biweekly", { count: 2, unit: "weeks" }],
+  ["bi-weekly", { count: 2, unit: "weeks" }],
+  ["monthly", { count: 1, unit: "months" }],
+  ["3 month", { count: 3, unit: "months" }],
+  ["6 month", { count: 6, unit: "months" }],
+  ["yearly", { count: 12, unit: "months" }],
+  ["semi-monthly", { count: 1, unit: "semimonthly" }]
+]);
+
+// "Every 2 Weeks" (or "2 weeks", "every month", "Biweekly") -> { count: 2, unit: "weeks" }; null if unreadable
+function parseFrequency(text) {
+  let clean = String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (SPREADSHEET_FREQUENCIES.has(clean)) return { ...SPREADSHEET_FREQUENCIES.get(clean) };
+  let match = clean.match(/^(?:every )?(?:(\d+) )?(day|week|month)s?$/);
+  if (!match) return null;
+  let count = match[1] === undefined ? 1 : Number(match[1]);
+  if (!Number.isInteger(count) || count < 1 || count > MAX_FREQUENCY_COUNT) return null;
+  return { count, unit: match[2] + "s" };
+}
+
+// { count: 2, unit: "weeks" } -> "Every 2 Weeks" (how it's stored and shown); a count of 1 is "Every Week"
+function formatFrequency(frequency) {
+  if (frequency.unit === "semimonthly") return "Semi-Monthly";
+  let unit = FREQUENCY_UNIT_NAMES.get(frequency.unit) || "Month";
+  return frequency.count === 1 ? `Every ${unit}` : `Every ${frequency.count} ${unit}s`;
+}
+
+// The spreadsheet's frequency names are rewritten the new way ("Biweekly" becomes "Every 2 Weeks")
+function normalizeFrequencies() {
+  for (let i = 2; i < recurringData.length; i++) {
+    let row = recurringData[i];
+    if (!row || String(row[0]).trim() === "-") continue;
+    let frequency = parseFrequency(row[3]);
+    if (frequency) row[3] = formatFrequency(frequency);
+  }
+}
+
+// A stored frequency as people read it ("Biweekly" shows as "Every 2 Weeks")
+function describeFrequency(text) {
+  let frequency = parseFrequency(text);
+  return frequency ? formatFrequency(frequency) : String(text ?? "");
+}
+
+// About how many times a month it lands (the Recurring page's Monthly)
+function timesPerMonth(frequency) {
+  const daysPerMonth = 365.25 / 12;
+  if (frequency.unit === "days") return daysPerMonth / frequency.count;
+  if (frequency.unit === "weeks") return daysPerMonth / (7 * frequency.count);
+  if (frequency.unit === "semimonthly") return 2;
+  return 1 / frequency.count;
+}
+
+// "Uncommon" recurring entries land every 3 months or less often (like the spreadsheet's 3 Month,
+// 6 Month, and Yearly): Dave points them out, and they get a reminder
+function isUncommonFrequency(frequency) {
+  if (frequency.unit === "months") return frequency.count >= 3;
+  if (frequency.unit === "weeks") return frequency.count >= 13;
+  if (frequency.unit === "days") return frequency.count >= 90;
+  return false;
 }
 
 // Does this parsed recurring row land on date?
 function recurringRowHits(row, date) {
   if (date < row.startDate) return false;
   if (row.endDate && date > row.endDate) return false;
-
-  const targetYear = date.getFullYear();
-  const targetMonth = date.getMonth();
-  const targetDateNum = date.getDate();
-  const lastDayInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const { count, unit } = row.frequency;
   const startDate = row.startDate;
 
-  // Handles 31-day months rolling over to 30, AND Feb 29 rolling to Feb 28
-  const targetDayNumGrid = Math.min(startDate.getDate(), lastDayInMonth);
-
-  switch (row.frequency) {
-    case "yearly":
-      return targetMonth === startDate.getMonth() && targetDateNum === targetDayNumGrid;
-
-    case "weekly":
-    case "bi-weekly":
-    case "biweekly": {
-      const diffDaysGrid = getDayDifference(date, startDate);
-      const interval = row.frequency === "weekly" ? 7 : 14;
-      return diffDaysGrid >= 0 && diffDaysGrid % interval === 0;
+  switch (unit) {
+    case "days":
+    case "weeks": {
+      const days = getDayDifference(date, startDate);
+      return days >= 0 && days % (unit === "weeks" ? 7 * count : count) === 0;
     }
 
-    case "semi-monthly":
-      return targetDateNum === 1 || targetDateNum === 15;
+    case "semimonthly":
+      return date.getDate() === 1 || date.getDate() === 15;
 
-    case "3 month":
-    case "6 month": {
-      if (targetDateNum !== targetDayNumGrid) return false;
-      const monthDiff = (targetYear - startDate.getFullYear()) * 12 + targetMonth - startDate.getMonth();
-      const step = row.frequency === "3 month" ? 3 : 6;
-      return monthDiff >= 0 && monthDiff % step === 0;
-    }
-
-    default:
-      // Monthly
-      return targetDateNum === targetDayNumGrid;
-  }
-}
-
-function parseGridData(raw) {
-  if (typeof raw === 'string') {
-    try {
-      return JSON.parse(raw);
-    } catch (e) {
-      console.warn("Failed to parse grid string:", e);
-      return raw;
+    default: {
+      // Months: the Start Date's day of the month, or the month's last day when the month is shorter
+      // (the 31st lands on the 30th, Feb 29 on Feb 28)
+      const lastDayInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+      if (date.getDate() !== Math.min(startDate.getDate(), lastDayInMonth)) return false;
+      const monthDiff = (date.getFullYear() - startDate.getFullYear()) * 12 + date.getMonth() - startDate.getMonth();
+      return monthDiff >= 0 && monthDiff % count === 0;
     }
   }
-  return raw;
 }
 
 window.updateGridCell = async function(gridName, row, col, textValue) {
@@ -3680,7 +3505,284 @@ document.addEventListener('pointerout', (e) => {
 });
 // #endregion
 
+// =====================================================================
+// #region UNDO + REDO (calendar entries and quick entries)
+// =====================================================================
+// Each calendar change (New Entry, an entry's Set to / Add to / Move / Delete, the starting balance) and
+// each quick entry the budget adds can be undone, then redone. A change is remembered by the days it
+// touched: each day's own entries (unique entries and temps, never the lines the budget writes itself),
+// from before and after it. Undo puts a day's "before" entries back, but only while it still holds the
+// "after" ones, so it never erases anything changed since (it says so, and lets that step go, instead);
+// Redo is the same the other way. Everything else (In Bank, recurring entries, the tracker, account
+// balances) is worked out again from there, like after any change. Kept for this tab in sessionStorage
+// (so going to another page and back keeps it), up to 25 steps, and forgotten on sign-out.
+
+const MAX_UNDO_STEPS = 25;
+const OWN_ENTRY_SPRITES = ["❗️", "✖️", "⭕️"];
+
+// A step that can't be taken anymore, because a day it would change was changed since
+class StaleHistoryError extends BudgetInputError {
+  constructor(message, direction) {
+    super(message);
+    this.direction = direction;
+  }
+}
+
+const undoStorageKey = () => `prismal_undo_${localStorage.getItem("prismal_username") || ""}`;
+
+function readUndoHistory() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(undoStorageKey()) || "null");
+    if (stored && Array.isArray(stored.undo) && Array.isArray(stored.redo)) return stored;
+  } catch (e) {}
+  return { undo: [], redo: [] };
+}
+
+function writeUndoHistory(history) {
+  try { sessionStorage.setItem(undoStorageKey(), JSON.stringify(history)); } catch (e) {}
+}
+
+// What Undo and Redo would do now: { undo, redo }, each a label like "added Coffee (-$4.50) on 10/05", or null
+function undoInfo() {
+  const history = readUndoHistory();
+  return { undo: history.undo.at(-1)?.label ?? null, redo: history.redo.at(-1)?.label ?? null };
+}
+
+function undoCalendarChange() {
+  return runBudgetAction("↩️ Undo", () => stepThroughHistory("undo"));
+}
+
+function redoCalendarChange() {
+  return runBudgetAction("↪️ Redo", () => stepThroughHistory("redo"));
+}
+
+// Take the newest step back (undo) or forward again (redo), while every day it touched still holds what
+// it left there (undo) or what it found (redo)
+function stepThroughHistory(direction) {
+  const history = readUndoHistory();
+  const step = (direction === "undo" ? history.undo : history.redo).at(-1);
+  if (!step) throw new BudgetInputError(direction === "undo" ? "There's nothing to undo." : "There's nothing to redo.");
+  const from = direction === "undo" ? "after" : "before";
+  const to = direction === "undo" ? "before" : "after";
+  const changed = step.days.find(day => JSON.stringify(dayEntries(createSafeMidnight(day.date))) !== JSON.stringify(day[from]));
+  if (changed || (step.equity && JSON.stringify(accountsData?.equity ?? null) !== step.equity[from])) {
+    const what = changed ? formatToMMDD(createSafeMidnight(changed.date)) : "your Other Accounts";
+    throw new StaleHistoryError(`That (${step.label}) can't be ${direction === "undo" ? "undone" : "redone"} anymore, because ${what} changed since.`, direction);
+  }
+  for (const day of step.days) setDayEntries(createSafeMidnight(day.date), day[to]);
+  if (step.equity) accountsData.equity = JSON.parse(step.equity[to]);
+  formEntryRow[3] = step.label;
+  formEntryRow[4] = "Days: " + step.days.map(day => day.date).join(", ");
+  return { historyStep: { direction, label: step.label } };
+}
+
+// After a change that can be undone: remember it (and a new change means nothing to redo)
+function rememberUndoStep(step) {
+  const history = readUndoHistory();
+  history.undo.push(step);
+  if (history.undo.length > MAX_UNDO_STEPS) history.undo.splice(0, history.undo.length - MAX_UNDO_STEPS);
+  history.redo = [];
+  writeUndoHistory(history);
+}
+
+// After an undo the step can be redone, and after a redo, undone again
+function moveHistoryStep(direction) {
+  const history = readUndoHistory();
+  const [from, to] = direction === "undo" ? [history.undo, history.redo] : [history.redo, history.undo];
+  const step = from.pop();
+  if (step) to.push(step);
+  writeUndoHistory(history);
+}
+
+function dropHistoryStep(direction) {
+  const history = readUndoHistory();
+  (direction === "undo" ? history.undo : history.redo).pop();
+  writeUndoHistory(history);
+}
+
+// Before and after a change: each day's own entries. A step keeps only the days that changed.
+function captureEntryDays(dates) {
+  const days = [];
+  for (const date of dates) {
+    const day = createSafeMidnight(date);
+    if (isNaN(day.getTime())) continue;
+    const key = formatToMMDDYYYY(day);
+    if (!days.some(known => known.date === key)) days.push({ date: key, lines: dayEntries(day) });
+  }
+  return { days, equity: JSON.stringify(accountsData?.equity ?? null) };
+}
+
+function makeUndoStep(label, before) {
+  const after = captureEntryDays(before.days.map(day => createSafeMidnight(day.date)));
+  const days = before.days
+    .map((day, i) => ({ date: day.date, before: day.lines, after: after.days[i].lines }))
+    .filter(day => JSON.stringify(day.before) !== JSON.stringify(day.after));
+  // A day that isn't in the budget (before History starts) can't be put back
+  if (days.some(day => day.before === null || day.after === null)) return null;
+  const equity = before.equity !== after.equity ? { before: before.equity, after: after.equity } : null;
+  return days.length > 0 || equity ? { label, days, equity } : null;
+}
+
+// A day's own entry lines, in order, from the calendar, History, or Upcoming; null when the day isn't in
+// the budget at all
+function dayEntries(date) {
+  if (date >= gridStartDate && date <= gridEndDate) {
+    const spot = calendarSpot(date);
+    return spot ? ownEntryLines(calendarData[spot.r][spot.c]) : null;
+  }
+  if (date < gridStartDate) {
+    const spot = historySpot(date);
+    return spot ? ownEntryLines(historyData[spot.r][spot.c]) : null;
+  }
+  return futureData.slice(1).filter(row => isUpcomingOn(row, date)).map(row => `${String(row[3]).trim()} ${String(row[1]).trim()} ${String(row[0]).trim()}`);
+}
+
+// Put these entry lines on the day in place of its own ones (the rest is rebuilt by refreshBudgetData)
+function setDayEntries(date, lines) {
+  if (date >= gridStartDate && date <= gridEndDate) {
+    const spot = calendarSpot(date);
+    const cell = String(calendarData[spot.r][spot.c] ?? "").split("\n");
+    calendarData[spot.r][spot.c] = [cell[0] || formatToMMDD(date), ...cell.slice(1).filter(line => line.trim() && !isOwnEntryLine(line)), ...lines].join("\n");
+  } else if (date < gridStartDate) {
+    const spot = historySpot(date);
+    const cell = String(historyData[spot.r][spot.c] ?? "").split("\n");
+    historyData[spot.r][spot.c] = [cell[0], ...cell.slice(1).filter(line => line.trim() && !isOwnEntryLine(line)), ...lines].join("\n");
+  } else {
+    const kept = futureData.slice(1).filter(row => !isUpcomingOn(row, date));
+    const added = lines.map(line => {
+      const parts = getParts(line);
+      return [parts.slice(2).join(" "), parts[1], formatToMMDDYYYY(date), parts[0]];
+    });
+    futureData.splice(1, futureData.length - 1, ...kept, ...added);
+  }
+}
+
+function ownEntryLines(cellText) {
+  return String(cellText ?? "").split("\n").slice(1).map(line => line.trim()).filter(isOwnEntryLine);
+}
+
+function isOwnEntryLine(line) {
+  const text = String(line).trim();
+  return OWN_ENTRY_SPRITES.some(sprite => text.startsWith(sprite));
+}
+
+function isUpcomingOn(row, date) {
+  if (String(row[0] ?? "").trim() === "" || systemEmojis.includes(String(row[3] ?? "").trim())) return false;
+  const rowDate = createSafeMidnight(row[2], true);
+  return !isNaN(rowDate.getTime()) && rowDate.getTime() === date.getTime();
+}
+
+function calendarSpot(date) {
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (gridDates[r][c].getTime() === date.getTime()) return { r, c };
+    }
+  }
+  return null;
+}
+
+function historySpot(date) {
+  const target = formatToMMDDYYYY(date);
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 0; c < 7; c++) {
+      const header = String(historyData[r][c] ?? "").split("\n")[0].trim();
+      if (!header) continue;
+      if (header === target || createSafeMidnight(header, true).getTime() === date.getTime()) return { r, c };
+    }
+  }
+  return null;
+}
+
+//#endregion
+
+// =====================================================================
+// #region SAVING SAFELY (unsaved changes, and changes made on another device or tab)
+// =====================================================================
+
+// Tables changed here that the server doesn't have yet (Change Logs don't count)
+function hasUnsavedChanges() {
+  return calendarEdited || recurringEdited || trackerEdited || futureEdited || historyEdited || searchEdited || calculatorEdited || accountsEdited;
+}
+
+// A change the server couldn't get is sent again when the connection comes back, and every 30 seconds
+// until then (in line with other changes, never at the same time)
+function retryUnsavedChanges() {
+  if (!workspaceLoaded || budgetConflict || !hasUnsavedChanges()) return;
+  const run = budgetQueue.then(async () => {
+    if (!workspaceLoaded || !hasUnsavedChanges()) return;
+    if (!(await saveChanges())) return;
+    if (pendingProcessedDate && await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
+    if (typeof BudgetUI !== "undefined") BudgetUI.showToast("Your changes are saved now.");
+  });
+  budgetQueue = run.catch(() => {});
+}
+
+// This page's copy is out of date (the budget was saved on another device or tab), so it reloads
+// rather than save over the newer one. The page says why after it reloads.
+let reloadingBudget = false;
+function reloadForNewerBudget() {
+  if (reloadingBudget) return;
+  reloadingBudget = true;
+  workspaceLoaded = false; // Nothing more is saved, and leaving doesn't ask about unsaved changes
+  rememberBudgetNotice("conflict");
+  window.location.reload();
+}
+
+const BUDGET_NOTICES = {
+  conflict: ["Your budget was changed on another device or tab, so this page reloaded with the newest version. Your last change wasn't saved, so please make it again.", true],
+  refreshed: ["Your budget was changed on another device or tab, so this page refreshed to show it.", false]
+};
+
+function rememberBudgetNotice(kind) {
+  try { sessionStorage.setItem("prismal_budget_notice", kind); } catch (e) {}
+}
+
+function showRememberedBudgetNotice() {
+  let kind = null;
+  try {
+    kind = sessionStorage.getItem("prismal_budget_notice");
+    sessionStorage.removeItem("prismal_budget_notice");
+  } catch (e) {}
+  if (kind && BUDGET_NOTICES[kind] && typeof BudgetUI !== "undefined") BudgetUI.showToast(...BUDGET_NOTICES[kind]);
+}
+
+// Coming back to this page (another tab, or the phone woke up): if the budget was saved somewhere else
+// in the meantime, reload to show it. Not while something here is unsaved: that save is refused
+// anyway, and reloads then.
+let lastRevisionCheck = 0;
+async function checkForNewerBudget() {
+  if (document.visibilityState !== "visible" || !workspaceLoaded || dataRevision === null || savingNow || hasUnsavedChanges()) return;
+  if (Date.now() - lastRevisionCheck < 10000) return;
+  lastRevisionCheck = Date.now();
+  const result = await budgetApi("/api/data/revision");
+  if (!result.ok || !result.data || !Number.isInteger(result.data.revision)) return;
+  if (result.data.revision !== dataRevision && workspaceLoaded && !savingNow && !hasUnsavedChanges()) {
+    reloadingBudget = true;
+    workspaceLoaded = false;
+    rememberBudgetNotice("refreshed");
+    window.location.reload();
+  }
+}
+
+if (window.PAGE !== "quick") {
+  window.addEventListener("online", retryUnsavedChanges);
+  setInterval(retryUnsavedChanges, 30000);
+  window.addEventListener("offline", () => {
+    if (workspaceLoaded && typeof BudgetUI !== "undefined") BudgetUI.showToast("You're offline. Changes you make will be saved when you're back online.", true);
+  });
+  // Leaving with changes the server doesn't have yet asks first (the browser shows its own message)
+  window.addEventListener("beforeunload", (event) => {
+    if (!workspaceLoaded || !hasUnsavedChanges()) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+  document.addEventListener("visibilitychange", checkForNewerBudget);
+}
+
+//#endregion
+
 // Load (and daily-update) the workspace. Page scripts wait on this before rendering:
 //   window.workspaceReady.then(loaded => { if (loaded) render(); });
 // The Quick Entry page only borrows the helpers here: it has no login, so it never loads a budget.
 window.workspaceReady = window.PAGE === "quick" ? Promise.resolve(false) : loadWorkspace();
+window.workspaceReady.then(loaded => { if (loaded) showRememberedBudgetNotice(); });

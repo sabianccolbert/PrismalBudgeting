@@ -572,6 +572,9 @@ S.startEngine = function startEngine() {
   // Bail if this page has no canvas.
   if (!S.isCanvasReady) return;
 
+  // Reduced motion hides the canvas (stylesheet.css), so don't animate what nobody sees.
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
   // Read saved stars first (this also restores slider settings before the sliders bind).
   const SAVED = S.readSavedStarfield();
 

@@ -7,31 +7,16 @@
   /* ===============================
    * 0) SITE VERSION (bump per deploy)
    * =============================== */
-  const SITE_VERSION = "10.05.2026.B";
+  const SITE_VERSION = "10.06.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   /* ===============================
-   * 1) HTML CACHE BUSTER
-   * =============================== */
-  const storedVersion = localStorage.getItem("LOCAL_SITE_VERSION");
-
-  if (storedVersion !== SITE_VERSION) {
-    localStorage.setItem("LOCAL_SITE_VERSION", SITE_VERSION);
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('v', SITE_VERSION);
-    window.location.replace(currentUrl.toString());
-    return; 
-  }
-
-  function v(url){
-    const joiner = url.includes("?") ? "&" : "?";
-    return `${url}${joiner}v=${encodeURIComponent(SITE_VERSION)}`;
-  }
-
-  /* ===============================
-   *  2) PAGE DETECTION
+   *  1) PAGE DETECTION
    * =============================== */
   function getPageKey(){
+    // GitHub Pages shows 404.html at whatever address was asked for, so that page says what it is
+    if (document.documentElement.dataset.page === "notfound") return "notfound";
+
     let p = location.pathname.toLowerCase();
 
     if (p.endsWith("/")) p = p.slice(0, -1);
@@ -44,6 +29,7 @@
     if (p === "/privacy%20and%20terms") return "privacy";
     if (p === "/settings") return "settings";
     if (p === "/quick") return "quick";
+    if (p === "/how-it-works") return "guide";
 
     // Menu pages (folder: /menu/)
     if (p === "/menu" || p === "/menu/index") return "menu";
@@ -59,22 +45,60 @@
 
   window.PAGE = getPageKey();
 
+  // Pages that work without logging in (Quick Entry uses the key in its link instead; How It Works and
+  // the Not Found page are for anyone, search engines included)
+  const PUBLIC_PAGES = ["login", "privacy", "quick", "guide", "notfound"];
+  window.PUBLIC_PAGE = PUBLIC_PAGES.includes(PAGE);
+
+  /* ===============================
+   *  2) SITE DATA + HTML CACHE BUSTER
+   * =============================== */
+  // Signing in lives in this browser's storage. A browser that blocks site data throws on any use of it,
+  // so the pages that need it say how to fix that (stylesheet.css .noStorage) instead of breaking quietly.
+  let storage = null;
+  try {
+    storage = window.localStorage;
+    storage.getItem("LOCAL_SITE_VERSION");
+  } catch (e) {
+    storage = null;
+  }
+  if (!storage && (PAGE === "login" || !PUBLIC_PAGES.includes(PAGE))) {
+    document.documentElement.classList.add("noStorage");
+    return;
+  }
+
+  // A new version reloads the page once (with ?v=) so the browser fetches the new HTML too. The ?v= check
+  // stops a reload loop in a browser that doesn't keep what's stored.
+  if (storage && storage.getItem("LOCAL_SITE_VERSION") !== SITE_VERSION) {
+    try { storage.setItem("LOCAL_SITE_VERSION", SITE_VERSION); } catch (e) {}
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("v") !== SITE_VERSION) {
+      currentUrl.searchParams.set("v", SITE_VERSION);
+      window.location.replace(currentUrl.toString());
+      return;
+    }
+  }
+
+  function v(url){
+    const joiner = url.includes("?") ? "&" : "?";
+    return `${url}${joiner}v=${encodeURIComponent(SITE_VERSION)}`;
+  }
+
   /* ===============================
    *  3) AUTHENTICATION REDIRECT
    * =============================== */
-  const hostname = window.location.hostname;
-
-  // 1. Detect all local/dev environments
-  // Simplest mobile setup:
-  window.API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  // The local API while testing on this computer; the real one everywhere else (a Cloudflare tunnel too).
+  // (The test harnesses swap the local address by its exact text, quotes included.)
+  window.API_BASE_URL = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ? 'http://127.0.0.1:8787'
-    : 'https://prismal-budget-api.prismalbudget.workers.dev'; // Production API handles both live & tunnel requests // Production Cloudflare Worker
+    : "https://prismal-budget-api.prismalbudget.workers.dev";
 
-  const isLoggedIn = !!localStorage.getItem("prismal_jwt");
-  // The link in a password reset email (/login.html?reset=...) opens the login page even when signed in
-  const isResetLink = PAGE === "login" && new URLSearchParams(location.search).has("reset");
-  // Pages that work without logging in (Quick Entry uses the key in its link instead)
-  const PUBLIC_PAGES = ["login", "privacy", "quick"];
+  const isLoggedIn = !!(storage && storage.getItem("prismal_jwt"));
+  // The link in a password reset email (/login.html?reset=...) opens the login page even when signed in.
+  // Login.js moves the code into this tab's session storage, so a reload of that page still counts.
+  let hasResetCode = false;
+  try { hasResetCode = !!sessionStorage.getItem("prismal_reset_token"); } catch (e) {}
+  const isResetLink = PAGE === "login" && (new URLSearchParams(location.search).has("reset") || hasResetCode);
 
   // If they are not logged in, and not already on a page that works without it, redirect them.
   if (!isLoggedIn && !PUBLIC_PAGES.includes(PAGE)) {
@@ -89,13 +113,8 @@
   /* ===============================
    *  4) CSS mode flip
    * =============================== */
-  const html = document.documentElement;
+  document.documentElement.classList.add(PAGE === "home" ? "homeJs" : "otherJs");
 
-  if (PAGE === "home") {
-    html.classList.add("homeJs");
-  } else {
-    html.classList.add("otherJs");
-  }
   /* ===============================
    *  5) Append page scripts at END
    * =============================== */
@@ -124,12 +143,15 @@
     s.async = false;
     document.body.appendChild(s);
   }
-  
 
   function loadPageScripts(){
     // Quick Entry's link carries its key, so that page never loads analytics
     GLOBAL_SCRIPTS.filter(src => PAGE !== "quick" || !src.endsWith("/Analytics.js")).forEach(appendScript);
 
+    // Passkeys (Face ID, Touch ID, Windows Hello): signing in on the login page, managing them in Settings
+    if (PAGE === "login" || PAGE === "settings") {
+      appendScript("/Javascript/Passkeys.js");
+    }
     if (PAGE === "login") {
       appendScript("/Javascript/Login.js");
     }
@@ -147,15 +169,16 @@
       appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");
     }
   }
-  
+
   /* ===============================
    *  6) Add version badge
    * =============================== */
-  const badgeHTML = `<div id="versionBadge">v${SITE_VERSION}</div>`;
-
   function addVersionBadge(){
     if (document.getElementById("versionBadge")) return;
-    document.body.insertAdjacentHTML("beforeend", badgeHTML);
+    const badge = document.createElement("div");
+    badge.id = "versionBadge";
+    badge.textContent = `v${SITE_VERSION}`;
+    document.body.appendChild(badge);
   }
 
   /* ===============================
@@ -168,15 +191,15 @@
       fn();
     }
   }
-  
-  onDOMReady(() => {
-    const HTML = document.documentElement;
-    const BODY = document.body;
-    const CONTAINER = document.getElementById("transitionContainer");
 
-    HTML.style.overflowY = "hidden";
-    BODY.style.overflowY = "hidden";
-    CONTAINER.style.overflowY = "visible";
+  onDOMReady(() => {
+    // The page holds still until it has slid in (Layout.js gives scrolling back)
+    const CONTAINER = document.getElementById("transitionContainer");
+    if (CONTAINER) {
+      document.documentElement.style.overflowY = "hidden";
+      document.body.style.overflowY = "hidden";
+      CONTAINER.style.overflowY = "visible";
+    }
 
     loadPageScripts();
     addVersionBadge();

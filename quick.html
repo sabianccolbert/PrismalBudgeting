@@ -1,14 +1,16 @@
 <!DOCTYPE html>
 <html lang="en" class="noJs">
   <head>
+    <meta charset="UTF-8">
+    <!-- First, before anything loads: no request from this page says its address, which carries the key -->
+    <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/budgetStyle.css">
     <title>Prismal Budget - Quick Entry</title>
-    <meta charset="UTF-8">
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
     <meta name="robots" content="noindex, nofollow">
-    <meta name="referrer" content="no-referrer">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -33,12 +35,12 @@
     <div id="transitionContainer">
       <header>
         <div class="brand">
-          <img src="/Resources/Prismal.png" alt="Prismal Logo" class="brand-icon">
+          <img src="/Resources/Prismal.webp" alt="Prismal Logo" class="brand-icon">
           <h2 class="logo">Quick Entry</h2>
         </div>
         <nav class="navButtons">
           <a href="/">
-            <img src="/Resources/Home.png" alt="Home">
+            <img src="/Resources/Home.webp" alt="Home">
           </a>
         </nav>
       </header>
@@ -53,6 +55,11 @@
           </ul>
           <p class="panelHint">Then tap the new icon whenever you want to add an entry. No login needed.</p>
         </section>
+        <!-- Undo takes back an entry added here while it's still waiting to join the budget; Redo adds it again -->
+        <div id="quickUndo" class="undoButtons quickUndo" hidden>
+          <button id="quickUndoButton" class="budgetButton" type="button" disabled>↶ Undo</button>
+          <button id="quickRedoButton" class="budgetButton" type="button" disabled>↷ Redo</button>
+        </div>
         <div id="panelSlot"></div>
       </main>
     </div>

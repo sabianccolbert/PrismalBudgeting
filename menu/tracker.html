@@ -3,6 +3,7 @@
   <head>
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/budgetStyle.css">
     <title>Prismal Budget - Tracker</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
@@ -43,13 +44,13 @@
         </div>
         <nav class="navButtons">
           <a id="normalBack" href="back">
-            <img src="/Resources/Back.png" alt="Back">
+            <img src="/Resources/Back.webp" alt="Back">
           </a>
           <a href="/">
-            <img src="/Resources/Home.png" alt="Home">
+            <img src="/Resources/Home.webp" alt="Home">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.png" alt="Logout">
+            <img src="/Resources/Logout.webp" alt="Logout">
           </a>
         </nav>
       </header>
@@ -89,7 +90,10 @@
           </ul>
 
           <h4>Changing Rows</h4>
-          <p>Tap New Entry to add a row, or tap a row to change or delete it. Tap Edit to drag rows by their ≡ bar, add sections (+ Section), or check rows and delete them. Costs, Gains, and Undefined come back if you delete them.</p>
+          <ul>
+            <li>Tap New Entry to add a row, or tap a row to change or delete it. Tap Edit to drag rows by their ≡ bar, add sections (+ Section), or check rows and delete them. Costs, Gains, and Undefined come back if you delete them.</li>
+            <li>A title can have two rows: one that counts transfers (its title starts with ⭕️) and one that doesn't. If you add one that matches a title and transfer setting you already have, it says so, and you change the one that's there instead.</li>
+          </ul>
         </section>
       </main>
     </div>

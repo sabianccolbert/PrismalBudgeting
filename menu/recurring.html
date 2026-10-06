@@ -3,6 +3,7 @@
   <head>
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/budgetStyle.css">
     <title>Prismal Budget - Recurring Entries</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
@@ -43,13 +44,13 @@
         </div>
         <nav class="navButtons">
           <a id="normalBack" href="back">
-            <img src="/Resources/Back.png" alt="Back">
+            <img src="/Resources/Back.webp" alt="Back">
           </a>
           <a href="/">
-            <img src="/Resources/Home.png" alt="Home">
+            <img src="/Resources/Home.webp" alt="Home">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.png" alt="Logout">
+            <img src="/Resources/Logout.webp" alt="Logout">
           </a>
         </nav>
       </header>
@@ -68,17 +69,17 @@
 
           <h4>Adding And Changing</h4>
           <ul>
-            <li>Tap New Entry to add one. If you already have one with that title (and refraction type, if you picked one), it changes that one instead of making another, keeping anything you left alone.</li>
+            <li>Tap New Entry to add one, or tap a row to change it or delete it.</li>
+            <li>A title can have one recurring entry of each refraction type: one Regular, one Hidden, and one Transfer. If you add one that matches a title and type you already have, it says so, and you change the one that's there instead.</li>
             <li>For Hidden or Transfer, you can pick one of your Other Accounts, like Savings for a transfer into savings every payday. The account gets the opposite amount each time it lands (Help on the Other Accounts page has more).</li>
-            <li>Tap a row to change it or delete it.</li>
             <li>To change just one day, tap that day on the calendar, then tap the entry. That makes a temporary recurring entry (like ❗️✔️) for that day only.</li>
           </ul>
 
           <h4>When They Land</h4>
           <ul>
-            <li><strong>Weekly</strong> and <strong>Biweekly</strong> repeat every 1 or 2 weeks from the Start Date.</li>
-            <li><strong>Semi-Monthly</strong> lands on the 1st and 15th of every month.</li>
-            <li><strong>Monthly</strong>, <strong>3 Month</strong>, <strong>6 Month</strong>, and <strong>Yearly</strong> land on the Start Date's day of the month, or on the month's last day when the month is shorter.</li>
+            <li><strong>Frequency</strong> is a number and Days, Weeks, or Months, like every 2 weeks. It counts from the Start Date: every 2 weeks lands on the Start Date, then 14 days later, and so on.</li>
+            <li>Months land on the Start Date's day of the month, or on the month's last day when the month is shorter (an entry that starts on the 31st lands on the 30th in 30-day months). Every 12 months is once a year.</li>
+            <li>For something on the 1st and the 15th, add two monthly entries with different titles, like Paycheck 1st and Paycheck 15th. (Entries from before kept as Semi-Monthly still land on the 1st and 15th.)</li>
             <li><strong>End Date</strong> is the last day it can land on. Leave it blank to keep it going.</li>
           </ul>
 
@@ -86,7 +87,7 @@
           <p>Once a day passes, its recurring entries turn into unique entries (like ❗️✔️), so changing or deleting a recurring entry only changes today and later. Deleting one stops it from today on, and any days you changed for it keep their changes.</p>
 
           <h4>Monthly And Yearly</h4>
-          <p>At the top, Monthly is about how much your recurring costs add up to each month. Yearly is what you've spent so far this year, plus your recurring costs through the end of the year. Neither counts transfers or entries for your Other Accounts, since that money is still yours.</p>
+          <p>At the top, Monthly is about how much your recurring costs add up to each month (every 2 weeks counts as a little over twice a month). Yearly is what you've spent so far this year, plus every recurring cost still to land this year. Neither counts transfers or entries for your Other Accounts, since that money is still yours.</p>
 
           <h4>Edit</h4>
           <p>Tap Edit to drag rows by their ≡ bar, add sections (+ Section) to group your rows, or check rows and delete them.</p>

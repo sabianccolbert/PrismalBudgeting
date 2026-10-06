@@ -2,8 +2,11 @@
 // notification). Pick the reminder time, then turn on push notifications (per device) and/or a
 // calendar link for Google or Apple Calendar. Both are optional. Which days get a reminder comes
 // from the budget (buildReminderPlan in Process Budget.js); the API sends and serves them.
-// Then the account: change the email (needs the password), email a password reset link, or
-// delete the account (needs the password). Emails go out through Resend (see account.js in the API).
+// Then the account: change the email or the password (each needs the password), or email a password
+// reset link; passkeys (Face ID, Touch ID, Windows Hello: add or remove them, and turn passkey sign-in
+// on or off; see Passkeys.js); signed-in devices (turn off Quick Entry icons, Sign Out Everywhere);
+// your data and privacy (Download My Data, analytics on or off for this device); and deleting the
+// account (needs the password). Emails go out through Resend (see account.js in the API).
 
 // =====================================================================
 // #region SETUP
@@ -12,22 +15,29 @@
 let reminderSettings = null; // From the API: { time, timezone, calendarUrl, push: { available, publicKey, devices } }
 let pushSubscription = null; // This device's push subscription, while push is on here
 let timeSaveTimer = null;
-let account = null;          // From the API: { username, email, canEmail (reset emails are set up) }
+let account = null;          // From the API: { username, email, canEmail (reset emails are set up), quickIcons }
+let passkeyInfo = null;      // From the API: { on, userHandle, passkeys: [{ id, name, site, synced, createdAt, lastUsedAt }] }
+let passkeyLoadStatus = 0;   // The list's HTTP status, when it didn't load (404: the API doesn't have passkeys yet)
+let passkeyAdd = null;       // { options, at }: a password-checked challenge, kept so trying again starts right away
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";
 
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
-  const [reminders, accountResult] = await Promise.all([
+  const [reminders, accountResult, passkeyResult] = await Promise.all([
     loaded ? budgetApi("/api/notify/settings") : null,
-    budgetApi("/api/account")
+    budgetApi("/api/account"),
+    budgetApi("/api/passkey/list")
   ]);
   const accountLoaded = accountResult.ok && !!accountResult.data;
   if (accountLoaded) {
     account = accountResult.data;
+    if (passkeyResult.ok && passkeyResult.data) passkeyInfo = passkeyResult.data;
+    else passkeyLoadStatus = passkeyResult.status;
     wireAccount();
     renderAccount();
+    renderPasskeys();
     document.getElementById("accountView").hidden = false;
   }
 
@@ -302,11 +312,15 @@ async function copyCalendarLink() {
 //#endregion
 
 // =====================================================================
-// #region ACCOUNT (email, password reset link, delete account)
+// #region ACCOUNT (email, password, reset link, delete account)
 // =====================================================================
 
 function wireAccount() {
   document.getElementById("emailForm").addEventListener("submit", changeEmail);
+  document.getElementById("passwordForm").addEventListener("submit", changePassword);
+  document.getElementById("passkeyForm").addEventListener("submit", addPasskey);
+  document.getElementById("signOutEverywhereButton").addEventListener("click", signOutEverywhere);
+  document.getElementById("downloadDataButton").addEventListener("click", downloadMyData);
   document.getElementById("deleteForm").addEventListener("submit", deleteAccount);
 }
 
@@ -315,6 +329,7 @@ function renderAccount() {
     ? `Signed in as ${account.username}, with the email ${account.email}. Password reset links go there.`
     : `Signed in as ${account.username}. Your account doesn't have an email yet. Add one so you can reset your password if you forget it.`;
   document.getElementById("emailButton").textContent = account.email ? "Change Email" : "Add Email";
+  document.getElementById("passwordFormUsername").value = account.username;
 
   const status = document.getElementById("passwordStatus");
   const buttons = document.getElementById("passwordButtons");
@@ -324,9 +339,43 @@ function renderAccount() {
   } else if (!account.email) {
     status.textContent = "Add an email above first. That's where the reset link goes.";
   } else {
-    status.textContent = `Get a link at ${account.email} to choose a new password. It works once, for an hour. Changing your password signs you out on every device.`;
+    status.textContent = `Get a link at ${account.email} to choose a new password. It works once, for an hour. A reset signs you out on every device, and turns passkey sign-in off until you turn it back on.`;
     buttons.append(settingsButton("Email Me A Reset Link", "primary", sendResetLink));
   }
+  renderQuickIcons();
+  renderAnalytics();
+}
+
+// A new password: the other devices are signed out and Quick Entry icons stop; this one gets a new session
+async function changePassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const newPassword = document.getElementById("newPassword").value;
+  // The API's rule (passwords.js): 8 to 256 characters, any at all, an emoji counting as one
+  const length = [...newPassword.normalize("NFKC")].length;
+  if (length < 8 || length > 256) {
+    BudgetUI.showToast(length < 8 ? "Your new password must be at least 8 characters." : "Your new password can be at most 256 characters.", true);
+    return;
+  }
+  if (newPassword !== document.getElementById("newPasswordAgain").value) {
+    BudgetUI.showToast("The two new passwords don't match.", true);
+    return;
+  }
+  setFormBusy(form, true);
+  const result = await budgetApi("/api/account/password", { password: document.getElementById("currentPassword").value, newPassword });
+  setFormBusy(form, false);
+  if (!result.ok || !result.data || !result.data.token) {
+    BudgetUI.showToast(accountError(result, "Couldn't change your password. Please try again."), true);
+    return;
+  }
+  localStorage.setItem("prismal_jwt", result.data.token);
+  localStorage.setItem("prismal_last_activity", Date.now().toString());
+  const hadIcons = account.quickIcons > 0;
+  account.quickIcons = 0;
+  form.reset();
+  renderAccount();
+  const noted = account.email && account.canEmail ? " We emailed you a note about it." : "";
+  BudgetUI.showToast(`Password changed. Your other devices were signed out${hadIcons ? ", and your Quick Entry icons were turned off" : ""}.${noted}`);
 }
 
 async function changeEmail(event) {
@@ -377,9 +426,12 @@ async function deleteAccount(event) {
     BudgetUI.showToast(accountError(result, "Couldn't delete the account. Please try again."), true);
     return;
   }
-  // The account is gone: this device stops its push notifications and forgets the session
+  // The account is gone: this device stops its push notifications, stops offering the account's
+  // passkeys (where the browser supports it), and forgets the session (keeping its own choices, like
+  // analytics off)
   if (pushSubscription) await pushSubscription.unsubscribe().catch(() => {});
-  localStorage.clear();
+  if (passkeyInfo) Passkeys.syncList(passkeyInfo.userHandle, []);
+  clearSignedInData();
   window.location.replace("/login.html?deleted=1");
 }
 
@@ -392,6 +444,254 @@ function accountError(result, fallback) {
 
 function setFormBusy(form, busy) {
   form.querySelectorAll("input, button").forEach(control => { control.disabled = busy; });
+}
+
+//#endregion
+
+// =====================================================================
+// #region SIGNED-IN DEVICES (Quick Entry icons, Sign Out Everywhere)
+// =====================================================================
+
+function renderQuickIcons() {
+  const status = document.getElementById("quickIconStatus");
+  const buttons = document.getElementById("quickIconButtons");
+  buttons.replaceChildren();
+  const count = account.quickIcons || 0;
+  if (count === 0) {
+    status.textContent = "Quick Entry icons: none right now. The Quick Entry Icon button on Home makes one for a phone's home screen.";
+    return;
+  }
+  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, and see your Other Accounts' balances (for its account picker), but nothing else.`;
+  buttons.append(settingsButton(count === 1 ? "Turn Off The Icon" : "Turn Off Icons", "danger", turnOffQuickIcons));
+}
+
+async function turnOffQuickIcons(event) {
+  const count = account.quickIcons;
+  if (!window.confirm(`Turn off ${count === 1 ? "your Quick Entry icon" : `all ${count} of your Quick Entry icons`}? ${count === 1 ? "It stops" : "They stop"} working right away (entries already made with ${count === 1 ? "it" : "them"} still get added). You can make a new one on Home.`)) return;
+  event.currentTarget.disabled = true;
+  const result = await budgetApi("/api/quick/off", {});
+  if (result.ok && result.data) {
+    account.quickIcons = 0;
+    BudgetUI.showToast(count === 1 ? "Your Quick Entry icon is off." : "Your Quick Entry icons are off.");
+  } else {
+    BudgetUI.showToast(accountError(result, "Couldn't turn off the icons. Please try again."), true);
+  }
+  renderQuickIcons();
+}
+
+// Every device and browser (this one too) is signed out, and Quick Entry icons stop
+async function signOutEverywhere(event) {
+  if (!window.confirm("Sign out every device and browser, this one too? Your Quick Entry icons will stop working, and you'll sign in again here.")) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  const result = await budgetApi("/api/account/sign-out-everywhere", {});
+  if (!result.ok) {
+    button.disabled = false;
+    BudgetUI.showToast(accountError(result, "Couldn't sign out everywhere. Please try again."), true);
+    return;
+  }
+  clearSignedInData();
+  try { sessionStorage.setItem("prismal_signed_out", "everywhere"); } catch (e) {} // The login page says so
+  window.location.replace("/login.html");
+}
+
+//#endregion
+
+// =====================================================================
+// #region YOUR DATA AND PRIVACY (Download My Data, analytics on this device)
+// =====================================================================
+
+// Everything stored for the account, saved as a JSON file
+async function downloadMyData(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  const result = await budgetApi("/api/account/export");
+  button.disabled = false;
+  if (!result.ok || !result.data) {
+    BudgetUI.showToast(accountError(result, "Couldn't get your data. Please try again."), true);
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" }));
+  link.download = `prismal-budget-${account.username.replace(/[^\p{L}\p{N}._-]+/gu, "-")}-${formatToYMD(today)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  BudgetUI.showToast("Your data is downloading.");
+}
+
+// Google Analytics loads only when this device hasn't turned it off and the browser doesn't ask sites
+// not to track it (see Analytics.js)
+function renderAnalytics() {
+  const status = document.getElementById("analyticsStatus");
+  const buttons = document.getElementById("analyticsButtons");
+  buttons.replaceChildren();
+  let deviceOff = false;
+  try { deviceOff = localStorage.getItem("prismal_analytics") === "off"; } catch (e) {}
+  const browserSaysNo = navigator.globalPrivacyControl === true || navigator.doNotTrack === "1" || window.doNotTrack === "1";
+  if (browserSaysNo) {
+    status.textContent = "Off: this browser asks sites not to track it (Global Privacy Control or Do Not Track), so Google Analytics never loads here.";
+  } else if (deviceOff) {
+    status.textContent = "Off for this device. Google Analytics doesn't load here.";
+    buttons.append(settingsButton("Turn On", "primary", () => setAnalytics(true)));
+  } else {
+    status.textContent = "On. Google Analytics counts page visits, which helps improve Prismal Budget. It never sees your budget, and links' private codes are left out. You can turn it off for this device.";
+    buttons.append(settingsButton("Turn Off", "danger", () => setAnalytics(false)));
+  }
+}
+
+function setAnalytics(on) {
+  try {
+    if (on) localStorage.removeItem("prismal_analytics");
+    else localStorage.setItem("prismal_analytics", "off");
+  } catch (e) {}
+  // Off stops it on this page right away; on starts with the next page
+  if (!on && window.ANALYTICS_ID) window[`ga-disable-${window.ANALYTICS_ID}`] = true;
+  BudgetUI.showToast(on ? "Analytics is on for this device, starting with the next page." : "Analytics is off for this device.");
+  renderAnalytics();
+}
+
+//#endregion
+
+// =====================================================================
+// #region PASSKEYS (Face ID, Touch ID, Windows Hello)
+// =====================================================================
+
+// On or off, the account's passkeys, and the form that adds one. Off keeps the passkeys but they
+// can't sign in. With none yet, adding the first one is what turns it on.
+function renderPasskeys() {
+  const status = document.getElementById("passkeyStatus");
+  const buttons = document.getElementById("passkeyButtons");
+  const list = document.getElementById("passkeyList");
+  const form = document.getElementById("passkeyForm");
+  buttons.replaceChildren();
+  list.replaceChildren();
+  if (!passkeyInfo) {
+    status.textContent = passkeyLoadStatus === 404
+      ? "Passkeys aren't set up on the server yet."
+      : "Couldn't load your passkeys. Please refresh to try again.";
+    list.hidden = true;
+    form.hidden = true;
+    return;
+  }
+
+  const count = passkeyInfo.passkeys.length;
+  if (passkeyInfo.on) {
+    status.textContent = "On. Sign in with any passkey below instead of typing your password. Your password keeps working too.";
+    buttons.append(settingsButton("Turn Off", "danger", () => turnPasskeys(false)));
+  } else if (count > 0) {
+    status.textContent = "Off. Your passkeys are kept, but they can't sign you in until you turn this back on. Resetting your password turns it off too, so first make sure each passkey below is yours.";
+    buttons.append(settingsButton("Turn On", "primary", () => turnPasskeys(true)));
+  } else {
+    status.textContent = "Off. Turn it on to sign in with Face ID, Touch ID, Windows Hello, a fingerprint, or your device's PIN instead of typing your password. Your password keeps working too, and your face or fingerprint never leaves your device.";
+  }
+
+  list.hidden = count === 0;
+  passkeyInfo.passkeys.forEach(passkey => list.append(passkeyItem(passkey)));
+
+  form.hidden = false;
+  const hint = document.getElementById("passkeyFormHint");
+  document.getElementById("passkeyFields").hidden = !Passkeys.usable;
+  if (!Passkeys.usable) {
+    hint.textContent = Passkeys.onIpAddress
+      ? Passkeys.IP_ADDRESS_TEXT
+      : "This browser can't make passkeys. Try a newer browser, or add one from another device.";
+    return;
+  }
+  hint.textContent = count === 0
+    ? "Turning it on makes a passkey for this device: enter your password, then confirm with your face, fingerprint, or PIN when your device asks."
+    : "Add a passkey for another device or password manager: enter your password, then confirm with your face, fingerprint, or PIN when your device asks.";
+  document.getElementById("passkeyAddButton").textContent = count === 0 ? "Turn On" : "Add Passkey";
+  const nameInput = document.getElementById("passkeyName");
+  if (!nameInput.value) nameInput.value = Passkeys.deviceName();
+}
+
+// One passkey: its name, when it was added and last used, and Remove
+function passkeyItem(passkey) {
+  const item = BudgetUI.element("li", "passkeyItem");
+  const about = BudgetUI.element("div", "passkeyAbout");
+  const details = [`Added ${formatDay(passkey.createdAt)}`, passkey.lastUsedAt ? `last used ${formatDay(passkey.lastUsedAt)}` : "not used yet"];
+  if (passkey.synced) details.push("synced across your devices");
+  if (passkey.site !== location.hostname) details.push(`made on ${passkey.site}`); // Only works there
+  about.append(BudgetUI.element("strong", "", passkey.name), BudgetUI.element("span", "panelHint", details.join(" · ")));
+  item.append(about, settingsButton("Remove", "danger", () => removePasskey(passkey)));
+  return item;
+}
+
+// The form: check the password, have the device make a passkey, then save it
+async function addPasskey(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = document.getElementById("passkeyAddButton").textContent;
+  const name = document.getElementById("passkeyName").value.trim() || Passkeys.deviceName();
+  // A challenge already checked against the password starts the device's check right away (Safari
+  // wants that to happen right after the tap), so trying again doesn't wait on the server
+  if (!passkeyAdd || Date.now() - passkeyAdd.at >= Passkeys.FRESH_MS) {
+    setFormBusy(form, true);
+    const result = await budgetApi("/api/passkey/add/options", { password: document.getElementById("passkeyPassword").value });
+    setFormBusy(form, false);
+    if (!result.ok || !result.data || !result.data.options) {
+      BudgetUI.showToast(accountError(result, "Couldn't start adding the passkey. Please try again."), true);
+      return;
+    }
+    passkeyAdd = { options: result.data.options, at: Date.now() };
+  }
+
+  let credential;
+  try {
+    credential = await navigator.credentials.create({ publicKey: Passkeys.addRequest(passkeyAdd.options) });
+  } catch (error) {
+    if (error.name === "InvalidStateError") passkeyAdd = null;
+    const message = Passkeys.problem(error, true);
+    if (message) BudgetUI.showToast(error.name === "NotAllowedError" ? `${message} Press ${button} to try again.` : message, true);
+    return;
+  }
+  passkeyAdd = null;
+  setFormBusy(form, true);
+  const result = await budgetApi("/api/passkey/add", { name, credential: Passkeys.addAnswer(credential) });
+  setFormBusy(form, false);
+  if (!result.ok || !result.data) {
+    BudgetUI.showToast(accountError(result, "Couldn't add the passkey. Please try again."), true);
+    return;
+  }
+  passkeyInfo = result.data;
+  form.reset();
+  renderPasskeys();
+  // The API emails the account a note whenever a passkey is added
+  const noted = account.email && account.canEmail ? " We emailed you a note about it." : "";
+  BudgetUI.showToast(`Passkey added: ${passkeyInfo.added}. Passkey sign-in is on.${noted}`);
+}
+
+async function turnPasskeys(on) {
+  document.querySelectorAll("#passkeyButtons button").forEach(button => { button.disabled = true; });
+  const result = await budgetApi("/api/passkey/turn", { on });
+  if (result.ok && result.data) {
+    passkeyInfo = result.data;
+    BudgetUI.showToast(on ? "Passkey sign-in is on." : "Passkey sign-in is off. Your passkeys are kept for when you turn it back on.");
+  } else {
+    BudgetUI.showToast(accountError(result, "Couldn't change passkey sign-in. Please try again."), true);
+  }
+  renderPasskeys();
+}
+
+async function removePasskey(passkey) {
+  if (!window.confirm(`Remove the passkey "${passkey.name}"? It won't be able to sign in anymore. To clear it off the device too, delete it in that device's passwords (or passkeys) settings.`)) return;
+  document.querySelectorAll("#passkeyList button").forEach(button => { button.disabled = true; });
+  const result = await budgetApi("/api/passkey/remove", { id: passkey.id });
+  if (result.ok && result.data) {
+    passkeyInfo = result.data;
+    Passkeys.syncList(passkeyInfo.userHandle, passkeyInfo.passkeys); // Browsers that support it stop offering it
+    BudgetUI.showToast(`Passkey removed: ${passkey.name}.`);
+  } else {
+    BudgetUI.showToast(accountError(result, "Couldn't remove the passkey. Please try again."), true);
+  }
+  renderPasskeys();
+}
+
+// A stored time (ms) -> "Oct 5, 2026"
+function formatDay(time) {
+  return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 //#endregion

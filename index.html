@@ -3,6 +3,7 @@
   <head>
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/budgetStyle.css">
     <title>Prismal Budget - Home</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
@@ -39,24 +40,50 @@
       
       <header>
         <div class="brand">
-          <img src="/Resources/Prismal.png" alt="Prismal Logo" class="brand-icon">
+          <img src="/Resources/Prismal.webp" alt="Prismal Logo" class="brand-icon">
           <h2 class="logo">Prismal Budget</h2>
         </div>
         
         <nav class="navButtons">
           <a href="/menu">
-            <img src="/Resources/Menu.png" alt="Menu">
+            <img src="/Resources/Menu.webp" alt="Menu">
           </a>
           <a href="/settings.html">
-            <img src="/Resources/Settings.png" alt="Settings">
+            <img src="/Resources/Settings.webp" alt="Settings">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.png" alt="Logout">
+            <img src="/Resources/Logout.webp" alt="Logout">
           </a>
         </nav>
       </header>
       <hr>
       <main>
+        <!-- A new budget's first steps: Calendar Page.js shows this until they're done or it's hidden -->
+        <section id="gettingStarted" class="budgetCard gettingStarted" aria-labelledby="gettingStartedTitle" hidden>
+          <button id="gettingStartedHide" type="button" class="panelClose" aria-label="Hide getting started">×</button>
+          <h3 id="gettingStartedTitle">Welcome! Three Steps To Get Started</h3>
+          <ol class="startSteps">
+            <li id="startBalanceStep">
+              <strong>Your starting balance.</strong> What's in your bank account right now, after today's purchases so far? From here on, add only what's still to come.
+              <form id="startBalanceForm" class="startForm" autocomplete="off">
+                <input id="startBalance" type="text" inputmode="decimal" placeholder="Bank, like 1500.00" aria-label="Money in your bank account now">
+                <input id="startSavings" type="text" inputmode="decimal" placeholder="Savings (optional)" aria-label="Money in savings now (optional)">
+                <button type="submit" class="budgetButton primary">Set</button>
+              </form>
+              <p id="startBalanceDone" class="panelHint" hidden></p>
+            </li>
+            <li id="startRecurringStep">
+              <strong>Your recurring entries.</strong> Add your paychecks, rent, and bills once, and they fill in every day they land on.
+              <div class="panelButtons"><a class="budgetButton" href="/menu/recurring.html">Add Recurring Entries</a></div>
+            </li>
+            <li>
+              <strong>A daily reminder (optional).</strong> Get a heads-up on days that need a look, as a notification or on your calendar.
+              <div class="panelButtons"><a class="budgetButton" href="/settings.html">Set Up Reminders</a></div>
+            </li>
+          </ol>
+          <p class="panelHint">Want the details? <a href="/how-it-works.html">How Prismal Budget Works</a> explains everything.</p>
+        </section>
+
         <section class="searchBar" aria-label="Search entries">
           <form id="searchForm" autocomplete="off">
             <!-- Titles to search for, one per line, each with its own All / Costs / Gains / Tracker
@@ -104,6 +131,11 @@
         </section>
 
         <div class="calendarToolbar">
+          <!-- Undo and Redo: calendar entries and quick entries (Calendar Page.js; the steps are in Process Budget.js) -->
+          <div class="undoButtons">
+            <button id="undoButton" class="budgetButton" type="button" disabled aria-label="Undo">↶ Undo</button>
+            <button id="redoButton" class="budgetButton" type="button" disabled aria-label="Redo">↷ Redo</button>
+          </div>
           <!-- Button images: Resources/Quick Entry.png and Resources/New Entry.png (see their .pngdummy files) -->
           <button id="quickEntryButton" class="imageButton" type="button"><img src="/Resources/Quick Entry.png" alt="Quick Entry Icon"></button>
           <button id="addEntryButton" class="imageButton" type="button"><img src="/Resources/New Entry.png" alt="New Entry"></button>
@@ -160,12 +192,29 @@
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Home Help</h3>
 
+          <h4>Getting Started</h4>
+          <p>A new budget starts at $0, so the Welcome card at the top asks what's in your bank account now (and, if you like, in savings). Your bank balance goes on today as a ⭕️ Starting Balance entry, and savings as a ✖️ Hidden entry for your Savings account, so you can change them like any entry. Then add your paychecks and bills on Recurring Entries. The card goes away once both are done, or tap × to hide it.</p>
+
+          <h4>Undo And Redo</h4>
+          <ul>
+            <li><strong>↶ Undo</strong> (above the calendar, or Ctrl+Z / ⌘Z) takes back your last change to the calendar's entries: a New Entry, Set to, Add to it, Move to, Delete, the starting balance, or a quick entry from your home screen icon. <strong>↷ Redo</strong> (Ctrl+Shift+Z / ⌘⇧Z, or Ctrl+Y) puts it back. On a computer, point at a button to see what it will do; either way, a note says what it did.</li>
+            <li>It only covers calendar entries, not recurring entries, the tracker, or your accounts. It remembers up to 25 changes while this tab is open, and forgets them when you sign out.</li>
+            <li>If a day was changed some other way since (like on another device), that step can't be undone anymore, so it tells you and skips it instead of erasing the newer change.</li>
+          </ul>
+
+          <h4>Saving</h4>
+          <ul>
+            <li>Every change saves right away. If the connection drops, the change waits and saves as soon as it's back, and leaving the page before then asks first.</li>
+            <li>If you change your budget on another device or in another tab, this page reloads to show it, so an older copy never saves over newer changes. If that happens in the middle of a change, it tells you to make that change again.</li>
+          </ul>
+
           <h4>The Calendar</h4>
           <ul>
             <li>Your calendar shows four weeks, starting with this one. Each day shows its In Bank balance, its Gains and Costs, and then its entries.</li>
             <li>✅ In Bank is what will be in your account at the end of that day. It turns ⛔️, and the day turns red, when it goes below $0.</li>
             <li>Tap New Entry to add an entry. Tap a day to zoom in on it, then tap one of its entries to change its amount, move it to another day, or delete it. On a computer, you can also hold the mouse button down and slide across the days to magnify them.</li>
-            <li>While a date box is waiting for a date, tapping a day on the calendar fills it in.</li>
+            <li>Boxes like New Entry float over the page, so nothing under them moves. To close one, tap × or press Escape.</li>
+            <li>While a date box is waiting for a date, tapping a day on the calendar fills it in. If the box you're in covers the day you want, tap 📅 next to the date: the box steps aside until you tap a day, then comes back with that date.</li>
             <li>When a week is over, it moves to History.</li>
           </ul>
 
@@ -177,7 +226,8 @@
             <li>To search for more than one title, press Enter (or tap + Add Title) to start the next line, and pick that line's own buttons. Tap × to take a line out.</li>
             <li>Tap Search, or press Enter on an empty line, to search. Leave the title blank to find everything (or every cost, or every gain).</li>
             <li>From and To are optional: a blank From searches from the beginning, and a blank To searches to the end. You can tap days on the calendar to fill them in. To include recurring entries after the calendar, pick a To date after it (up to two years ahead).</li>
-            <li>Results are newest first, with a total of the ones that are checked. ⭕️ Transfers and entries for your Other Accounts start unchecked, since they aren't really costs or gains, unless you searched a tracker row that counts transfers.</li>
+            <li>A title can have two tracker rows, one that counts transfers (like ⭕️Food) and one that doesn't (Food). Type the ⭕️ to search the first; otherwise Search uses the one that doesn't.</li>
+            <li>Results float just under the search bar, newest first, with a total of the ones that are checked. ⭕️ Transfers and entries for your Other Accounts start unchecked, since they aren't really costs or gains, unless you searched a tracker row that counts transfers. Tap × to close them.</li>
           </ul>
 
           <h4>Entry Types</h4>
@@ -186,7 +236,7 @@
             <li><strong>Recurring entries</strong> (✔️ ✔️✖️ ✔️⭕️) always start with a checkmark. They come from your Recurring Entries page (like paychecks and bills), and are added for you on today and every day after. Once a day passes, its recurring entries turn into unique entries, so later changes to a recurring entry never change days that already happened.</li>
             <li><strong>Unique entries</strong> (❗️ ✖️ ⭕️ ❗️✔️ ✖️✔️ ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
             <li><strong>Temporary recurring entries</strong> (❗️✔️ ✖️✔️ ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
-            <li>Adding an entry with the same title and refraction type as one already on that day adds the two together.</li>
+            <li>Adding an entry with the same title and refraction type as one already on that day adds the two together. So a day has at most three entries with the same title: one Regular, one Hidden, and one Transfer.</li>
           </ul>
 
           <h4>Refraction Types</h4>
@@ -199,11 +249,12 @@
           </ul>
 
           <h4>Other Accounts</h4>
-          <p>When you pick Hidden or Transfer for a new entry, you can also pick one of your Other Accounts, like Savings. The entry is titled with the account's name, and the account gets the opposite amount: a cost on your calendar adds to the account, and a gain takes from it.</p>
+          <p>When you pick Hidden or Transfer for a new entry, you can also pick one of your Other Accounts, like Savings. The list shows each account's balance today. The entry is titled with the account's name, and the account gets the opposite amount: a cost on your calendar adds to the account, and a gain takes from it.</p>
           <ul>
             <li>Moving $100 into savings: a $100 Transfer cost, with Savings picked. In Bank goes down $100, and Savings goes up $100.</li>
             <li>Taking $200 out of savings: a $200 Transfer gain, with Savings picked. In Bank goes up $200, and Savings goes down $200.</li>
             <li>Putting $50 in cash into savings: a $50 Hidden cost, with Savings picked. In Bank stays the same, and Savings goes up $50.</li>
+            <li>An account's balance is only ever its entries added up. To put in what's already in an account (like the $3,000 already in your savings), add a $3,000 Hidden cost with that account picked.</li>
           </ul>
           <p>Since the money is still yours, these entries aren't costs or gains: the tracker treats them like transfers. Other Accounts (in the Menu) shows each account's balance.</p>
 
@@ -218,12 +269,12 @@
           <h4>Lowest In Bank, Dave, And Upcoming</h4>
           <ul>
             <li><strong>Lowest in bank after today</strong> is the lowest In Bank from today through the 28 days after the calendar.</li>
-            <li><strong>Dave</strong> looks over your budget and lets you know what to keep in mind: days that go below $0, going below $0 in the 28 days after the calendar, uncommon recurring entries (every 3 months, 6 months, or year) on the calendar, and Upcoming entries. Dave also has a new affirmation for you every day.</li>
+            <li><strong>Dave</strong> looks over your budget and lets you know what to keep in mind: days that go below $0, going below $0 in the 28 days after the calendar, uncommon recurring entries (ones that land every 3 months or less often) on the calendar, and Upcoming entries. Dave also has a new affirmation for you every day.</li>
             <li><strong>Upcoming</strong> lists entries dated after the calendar. Each one moves onto the calendar when its day shows up.</li>
           </ul>
 
           <h4>Quick Entry Icon</h4>
-          <p>The Quick Entry Icon button puts an icon on your phone's home screen that opens a New Entry form, with no login needed. The icon can only add entries. It never sees your budget, just the names of your Other Accounts (so you can pick one). Its entries show up here the next time you open Prismal Budget. If your password changes, the icon stops working.</p>
+          <p>The Quick Entry Icon button puts an icon on your phone's home screen that opens a New Entry form, with no login needed. The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one). Its entries show up here the next time you open Prismal Budget. If your password changes, the icon stops working, and you can turn icons off anytime in Settings.</p>
         </section>
       </main>
     </div>

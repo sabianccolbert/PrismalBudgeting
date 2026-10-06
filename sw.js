@@ -20,10 +20,15 @@ self.addEventListener("push", (event) => {
   }));
 });
 
-// Tapping the notification brings up the budget: an open tab if there is one, otherwise a new one
+// Tapping the notification brings up the budget: an open tab if there is one, otherwise a new one. Only
+// pages on this site: a notification can't send anyone somewhere else.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin);
+  let target = new URL("/", self.location.origin);
+  try {
+    const asked = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin);
+    if (asked.origin === self.location.origin) target = asked;
+  } catch (err) {}
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const open = windows.find(client => new URL(client.url).origin === target.origin && "focus" in client);

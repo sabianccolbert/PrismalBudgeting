@@ -30,13 +30,16 @@ const BudgetUI = (() => {
   let currentPanel = null;
   const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // Open a panel. size "large" goes into the page's #panelSlot (right above the calendar/table),
-  // "small" floats next to its origin. build(form, panel) adds the fields and buttons.
-  // closable: false leaves out the × and Escape (for a page that is just the panel, like Quick Entry).
-  function openPanel({ origin, size = "large", title, build, closable = true }) {
+  // Open a panel. "large" panels float over the top of the screen: nothing on the page moves, and the
+  // page under them can still be scrolled and tapped (like a calendar day for a date field). "small"
+  // floats next to its origin. inline: true puts a large one in the page's #panelSlot instead, for a page
+  // that is just the panel (Quick Entry). build(form, panel) adds the fields and buttons.
+  // closable: false leaves out the × and Escape.
+  function openPanel({ origin, size = "large", title, build, closable = true, inline = false }) {
     closePanel(true);
 
-    const panel = element("section", `budgetPanel ${size}`);
+    const floating = size === "large" && !inline;
+    const panel = element("section", `budgetPanel ${size}${floating ? " floating" : ""}`);
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", title);
 
@@ -82,14 +85,16 @@ const BudgetUI = (() => {
     form.insertBefore(error, form.querySelector(".panelButtons"));
     closeButton.addEventListener("click", () => closePanel());
 
-    if (size === "large") {
+    // Floating panels go in <body>: the page's #transitionContainer is transformed, which would make a
+    // fixed-position panel scroll with the page
+    if (inline) {
       (document.getElementById("panelSlot") || document.querySelector("main") || document.body).appendChild(panel);
     } else {
       document.body.appendChild(panel);
-      positionNear(panel, origin);
+      if (size === "small") positionNear(panel, origin);
     }
     animateFromOrigin(panel, origin);
-    if (size === "large") panel.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    if (inline) panel.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
 
     // Date fields fill from calendar taps right away (no keyboard needed on phones)
     const firstDate = form.querySelector("input.dateInput");
@@ -107,6 +112,7 @@ const BudgetUI = (() => {
     const api = currentPanel;
     if (!api) return;
     currentPanel = null;
+    if (pickingPanel === api.panel) stopPicking();
     if (pickTarget && api.panel.contains(pickTarget)) setPickTarget(null);
 
     const panel = api.panel;
@@ -179,12 +185,15 @@ const BudgetUI = (() => {
 
   function warnIfUnsaved(result) {
     if (result && result.ok && result.saved === false) {
-      showToast("Couldn't reach the server, so that change isn't saved yet. It'll retry with your next change.", true);
+      showToast("Couldn't reach the server, so that change isn't saved yet. It'll be saved as soon as the connection comes back (leaving the page before then asks first).", true);
     }
   }
 
+  // Escape brings back a panel that stepped aside for picking a day, or closes it
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && currentPanel && currentPanel.closable) closePanel();
+    if (event.key !== "Escape") return;
+    if (pickingPanel) stopPicking();
+    else if (currentPanel && currentPanel.closable) closePanel();
   });
 
   //#endregion
@@ -254,9 +263,8 @@ const BudgetUI = (() => {
       input,
       setSign,
       value() {
-        const text = input.value.replace(/[$,\s]/g, "");
-        if (text === "") return null;
-        const number = Number(text);
+        if (input.value.trim() === "") return null;
+        const number = readMoneyInput(input.value); // "4,50" is 4.50 (see Process Budget.js)
         return Number.isFinite(number) ? sign * Math.abs(number) : NaN;
       }
     };
@@ -273,17 +281,21 @@ const BudgetUI = (() => {
   // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked.
   // An entry changes an account when it's titled with the account's name, so picking one fills in the
   // title (and typing an account's name picks it). The account gets the opposite of the entry's amount.
-  // accounts: names in order. title, amount: the form's textField and amountField.
+  // accounts: in order, [{ name, balance }] (each shows its balance today), or just names.
+  // title, amount: the form's textField and amountField.
   function accountField({ accounts = [], title, amount }) {
+    const list = accounts.map(account => (typeof account === "string" ? { name: account, balance: null } : account));
     const select = element("select", "selectInput accountSelect");
     select.appendChild(new Option("None", ""));
-    for (const name of accounts) select.appendChild(new Option(name, name));
+    for (const { name, balance } of list) {
+      select.appendChild(new Option(typeof balance === "number" ? `${name} (${formatMoney(balance)})` : name, name));
+    }
     const wrapper = field("Other Account", select, { optional: true });
     const hint = element("span", "panelHint");
     wrapper.appendChild(hint);
     wrapper.hidden = true;
 
-    const accountTitled = (text) => accounts.find(name => cleanString(name) === cleanString(text)) || "";
+    const accountTitled = (text) => list.find(account => cleanString(account.name) === cleanString(text))?.name || "";
     function describe() {
       const name = select.value;
       const value = amount.value();
@@ -315,7 +327,7 @@ const BudgetUI = (() => {
       select,
       // Shown for Hidden and Transfer (when there are accounts to pick)
       setVisible(visible) {
-        wrapper.hidden = !visible || accounts.length === 0;
+        wrapper.hidden = !visible || list.length === 0;
         select.value = accountTitled(title.input.value);
         describe();
       },
@@ -325,7 +337,9 @@ const BudgetUI = (() => {
 
   const isAccountType = (key) => key === "✖️" || key === "⭕️";
 
-  // Date field. value(): Date, null when blank, undefined when it isn't a real date.
+  // Date field. value(): Date, null when blank, undefined when it isn't a real date. With the calendar
+  // on the page, 📅 moves the panel aside until a day is tapped (any day the panel doesn't cover can be
+  // tapped right away too).
   function dateField({ label = "Date", date = null, optional = false } = {}) {
     const input = element("input", "dateInput");
     input.type = "text";
@@ -333,9 +347,19 @@ const BudgetUI = (() => {
     input.placeholder = "MM/DD/YYYY";
     if (date) input.value = formatToMMDDYYYY(date);
     input.addEventListener("focus", () => setPickTarget(input));
-    const hint = hasCalendar() ? "Type a date, or tap a day on the calendar." : "";
+    let control = input;
+    if (hasCalendar()) {
+      const pick = element("button", "budgetButton pickDay", "📅");
+      pick.type = "button";
+      pick.title = "Pick a day on the calendar";
+      pick.setAttribute("aria-label", `Pick the ${label.toLowerCase()} on the calendar`);
+      pick.addEventListener("click", () => startPicking(input, label));
+      control = element("div", "dateRow");
+      control.append(input, pick);
+    }
+    const hint = hasCalendar() ? "Type a date, or tap 📅 and then a day on the calendar." : "";
     return {
-      el: field(label, input, { optional, hint }),
+      el: field(label, control, { optional, hint }),
       input,
       touched: () => input.dataset.touched === "1",
       value() {
@@ -343,6 +367,40 @@ const BudgetUI = (() => {
         if (!text) return null;
         const parsed = parseTypedDate(text);
         return isNaN(parsed.getTime()) ? undefined : parsed;
+      }
+    };
+  }
+
+  // How often a recurring entry lands: "Every [number] [Days / Weeks / Months]". value(): the stored text
+  // ("Every 2 Weeks"), or null when the number isn't a whole number from 1 to 999. A row with the
+  // spreadsheet's Semi-Monthly keeps it as an extra choice (the 1st and 15th have no every-N version).
+  const FREQUENCY_UNITS = [{ key: "days", label: "Days" }, { key: "weeks", label: "Weeks" }, { key: "months", label: "Months" }];
+
+  function frequencyField({ value = "Every Month" } = {}) {
+    const current = parseFrequency(value) || { count: 1, unit: "months" };
+    const count = element("input", "frequencyCount");
+    count.type = "text";
+    count.inputMode = "numeric";
+    count.value = String(current.count);
+    count.setAttribute("aria-label", "How many days, weeks, or months");
+    const unit = element("select", "selectInput frequencyUnit");
+    for (const option of FREQUENCY_UNITS) unit.appendChild(new Option(option.label, option.key));
+    if (current.unit === "semimonthly") unit.appendChild(new Option("1st and 15th", "semimonthly"));
+    unit.value = current.unit;
+    unit.setAttribute("aria-label", "Days, weeks, or months");
+    const showUnit = () => { count.disabled = unit.value === "semimonthly"; };
+    unit.addEventListener("change", showUnit);
+    showUnit();
+
+    const row = element("div", "frequencyRow");
+    row.append(element("span", "frequencyEvery", "Every"), count, unit);
+    return {
+      el: field("Frequency", row, { hint: "Like every 2 weeks, every month, or every 12 months for once a year." }),
+      value() {
+        if (unit.value === "semimonthly") return "Semi-Monthly";
+        const number = Number(count.value.trim());
+        if (!Number.isInteger(number) || number < 1 || number > MAX_FREQUENCY_COUNT) return null;
+        return formatFrequency({ count: number, unit: unit.value });
       }
     };
   }
@@ -591,6 +649,37 @@ const BudgetUI = (() => {
   let pickTarget = null;
   const hasCalendar = () => !!document.querySelector(".elastic-table");
 
+  // 📅 next to a date field: its panel steps aside (hidden, not closed) and a banner asks for a day,
+  // until a day is tapped (or Cancel / Escape). Floating panels can cover part of the calendar, so this
+  // is how every day stays reachable.
+  let pickingPanel = null;
+  let pickBanner = null;
+
+  function startPicking(input, label) {
+    setPickTarget(input);
+    if (!pickTarget) return;
+    stopPicking();
+    pickingPanel = input.closest(".budgetPanel");
+    if (pickingPanel) pickingPanel.classList.add("isPicking");
+    if (!pickBanner) {
+      pickBanner = element("div", "pickBanner");
+      pickBanner.setAttribute("role", "status");
+      const cancel = element("button", "budgetButton", "Cancel");
+      cancel.type = "button";
+      cancel.addEventListener("click", stopPicking);
+      pickBanner.append(element("span", "pickBannerText"), cancel);
+      document.body.appendChild(pickBanner);
+    }
+    pickBanner.querySelector(".pickBannerText").textContent = `Tap a day on the calendar for ${label}.`;
+    pickBanner.hidden = false;
+  }
+
+  function stopPicking() {
+    if (pickingPanel) pickingPanel.classList.remove("isPicking");
+    pickingPanel = null;
+    if (pickBanner) pickBanner.hidden = true;
+  }
+
   function setPickTarget(input) {
     if (pickTarget) pickTarget.classList.remove("isPickTarget");
     pickTarget = input && input.isConnected && !input.closest(".isClosing") ? input : null;
@@ -618,6 +707,7 @@ const BudgetUI = (() => {
     // e.g. search From -> To
     const next = input.dataset.nextPick && document.getElementById(input.dataset.nextPick);
     if (next && !next.value.trim()) setPickTarget(next);
+    stopPicking(); // A panel that stepped aside comes back with the date in it
     return true;
   }
 
@@ -661,10 +751,17 @@ const BudgetUI = (() => {
     return el;
   }
 
+  // Notes at the bottom of the screen. Two at once stack (newest at the bottom) instead of one covering
+  // the other.
+  let toastStack = null;
   function showToast(message, isWarning = false) {
+    if (!toastStack || !toastStack.isConnected) {
+      toastStack = element("div", "toastStack");
+      document.body.appendChild(toastStack);
+    }
     const toast = element("div", `budgetToast${isWarning ? " warning" : ""}`, message);
     toast.setAttribute("role", "status");
-    document.body.appendChild(toast);
+    toastStack.appendChild(toast);
     setTimeout(() => toast.classList.add("leaving"), 4500);
     setTimeout(() => toast.remove(), 5000);
   }
@@ -687,6 +784,7 @@ const BudgetUI = (() => {
     dateField,
     selectField,
     checkboxField,
+    frequencyField,
     accountField,
     isAccountType,
     termList,

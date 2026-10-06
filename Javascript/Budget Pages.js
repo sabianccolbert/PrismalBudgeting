@@ -19,8 +19,6 @@ const PAGE_RENDERERS = {
   accounts: renderAccountsPage
 };
 
-const FREQUENCIES = ["Weekly", "Biweekly", "Semi-Monthly", "Monthly", "3 Month", "6 Month", "Yearly"];
-
 let editMode = false;          // Recurring/Tracker edit mode
 let selectedRows = new Set();  // Row indexes checked for deletion in edit mode
 
@@ -51,7 +49,7 @@ function renderCurrentPage() {
 // =====================================================================
 
 // Recurring tab: [0] summary row, [1] column titles, then
-// [title, amount, start MM/DD/YYYY, frequency, end date or "None", type emoji]
+// [title, amount, start MM/DD/YYYY, frequency ("Every 2 Weeks"), end date or "None", type emoji]
 // Separator rows: ["-", category title, "", "", "", "-"]
 function renderRecurringPage(view) {
   renderToolbar("recurring", (origin) => openRecurringPanel(origin, null));
@@ -83,7 +81,7 @@ function renderRecurringPage(view) {
       tr.appendChild(cell(row[0], "titleCell"));
       tr.appendChild(cell(row[1], "amountCell"));
       tr.appendChild(cell(row[2]));
-      tr.appendChild(cell(row[3]));
+      tr.appendChild(cell(describeFrequency(row[3])));
       tr.appendChild(cell(row[4]));
     },
     onEntryClick: (index, origin) => openRecurringPanel(origin, index)
@@ -152,9 +150,9 @@ function renderTrackerPage(view) {
   view.appendChild(wrapScroll(tableEl));
 }
 
-// Other Accounts: [0] column titles, then [name, start, "default" | ""] (see OTHER ACCOUNTS in Process
-// Budget.js). Balances come from each account's start and its entries (Hidden and Transfer entries
-// titled with its name): today, and on the calendar's last day. Savings can't be deleted.
+// Other Accounts: [0] column titles, then [name, balance, "default" | ""] (see Other Accounts in Process
+// Budget.js). Balances come from each account's entries (Hidden and Transfer entries titled with its
+// name): today, and on the calendar's last day. Savings can't be deleted.
 function renderAccountsPage(view) {
   renderToolbar("accounts", (origin) => openAccountPanel(origin, null), { newLabel: "New Account", newInEditMode: true });
   view.replaceChildren();
@@ -177,7 +175,7 @@ function renderAccountsPage(view) {
     onEntryClick: (index, origin) => openAccountPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
-  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", "Tap an account to rename it or set its balance."));
+  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", "Balances come from each account's Hidden and Transfer entries. Tap an account to see them or rename it."));
 }
 
 // Change Logs (the spreadsheet's "Form Entries" tab), newest first:
@@ -304,8 +302,9 @@ function calculatorForm(inputs) {
     error.hidden = true;
     const values = {};
     for (const field of CALCULATOR_INPUTS) {
-      const text = fields[field.key].value.replace(/[$,%\s]/g, "").replace(/[x×]$/i, "");
-      const number = text === "" ? 0 : Number(text);
+      // "$25", "7.65%", "1.5×", or "12,50" (a decimal comma) all read as numbers
+      const text = fields[field.key].value.replace(/%/g, "").replace(/[x×]\s*$/i, "").trim();
+      const number = text === "" ? 0 : readMoneyInput(text);
       if (!Number.isFinite(number) || number < 0) {
         error.textContent = `${field.label} needs to be a number (0 or more).`;
         error.hidden = false;
@@ -605,8 +604,8 @@ function rowOrder(body) {
 // #region PANELS
 // =====================================================================
 
-// New recurring entry (index null) or change the tapped one. A new entry whose title (and
-// refraction type, when picked) already exists changes that entry, keeping anything left alone.
+// New recurring entry (index null) or change the tapped one. A title can have one recurring entry per
+// refraction type, so one that matches an existing title and type is refused with a message saying so.
 function openRecurringPanel(origin, index) {
   const existing = index === null ? null : recurringData[index];
   BudgetUI.openPanel({
@@ -615,23 +614,20 @@ function openRecurringPanel(origin, index) {
     title: existing ? "Change Recurring Entry" : "New Recurring Entry",
     build(form, panel) {
       const existingEnd = existing && String(existing[4]).trim().toLowerCase() !== "none" ? parseTypedDate(existing[4]) : null;
-      const frequencies = existing && !FREQUENCIES.includes(existing[3]) ? [...FREQUENCIES, existing[3]] : FREQUENCIES;
 
       const title = BudgetUI.textField({ label: "Title", value: existing ? existing[0] : "", placeholder: "Rent, paycheck, phone..." });
       const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : null });
-      const frequency = BudgetUI.selectField({ label: "Frequency", options: frequencies, value: existing ? existing[3] : "Monthly" });
+      const frequency = BudgetUI.frequencyField({ value: existing ? existing[3] : "Every Month" });
       const start = BudgetUI.dateField({ label: "Start Date", date: existing ? parseTypedDate(existing[2]) : today });
       const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : null, optional: true });
       // Hidden and Transfer entries can move money into or out of an Other Account (like a savings transfer)
-      const account = BudgetUI.accountField({ accounts: otherAccountNames(), title, amount });
+      const account = BudgetUI.accountField({ accounts: otherAccounts(), title, amount });
       const refraction = BudgetUI.refractionField({
-        value: existing ? getSpecialType(existing[5]) : "",
-        allowAuto: !existing,
+        value: existing ? getSpecialType(existing[5]) : "❗️",
+        allowAuto: false,
         onChange: (key) => account.setVisible(BudgetUI.isAccountType(key))
       });
       account.setVisible(BudgetUI.isAccountType(refraction.value()));
-      let frequencyTouched = false;
-      frequency.input.addEventListener("change", () => { frequencyTouched = true; });
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteEntry }, { label: "Cancel", onClick: () => panel.close() }]
@@ -645,17 +641,10 @@ function openRecurringPanel(origin, index) {
         if (Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
         if (!existing && fields.amount === null) return panel.setError("Enter an amount, like 12.50.");
         if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError("That date isn't a real day. Use MM/DD/YYYY.");
-        const refractionValue = refraction.value();
-        fields.sprite = refractionValue ? BudgetUI.RECURRING_SPRITES[refractionValue] : "";
-
-        if (existing) {
-          fields.frequency = frequency.value();
-          fields.endDate = fields.endDate || "None";
-        } else {
-          // Left alone = keep whatever a same-title entry already has (new entries get the defaults)
-          fields.frequency = frequencyTouched ? frequency.value() : "";
-          if (!start.touched()) fields.startDate = null;
-        }
+        fields.frequency = frequency.value();
+        if (!fields.frequency) return panel.setError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
+        fields.sprite = BudgetUI.RECURRING_SPRITES[refraction.value()];
+        fields.endDate = fields.endDate || "None";
         BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
       });
 
@@ -707,9 +696,8 @@ function openTrackerPanel(origin, index) {
   });
 }
 
-// New account (index null, from edit mode) or change the tapped one: its name and today's balance,
-// and the entries that changed it. Setting the balance makes today's balance that amount; entries
-// keep changing it from there.
+// New account (index null, from edit mode) or rename the tapped one, with its balance and the entries
+// that changed it. Balances come only from entries (there's no balance to type in).
 function openAccountPanel(origin, index) {
   const existing = index === null ? null : accountsData.list[index];
   const summary = existing ? accountSummaries().find(account => account.index === index) : null;
@@ -720,16 +708,16 @@ function openAccountPanel(origin, index) {
     title: existing ? "Change Account" : "New Account",
     build(form, panel) {
       const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Cash, investments, HSA..." });
-      const balance = BudgetUI.textField({
-        label: "Balance",
-        value: summary ? summary.today.toFixed(2) : "",
-        placeholder: "0.00",
-        optional: !existing,
-        hint: existing ? "What's in it today. Change it any time to match the real account." : "What's in it today."
-      });
-      balance.input.inputMode = "decimal";
-
-      const fields = [name.el, balance.el];
+      const fields = [name.el];
+      const howToSet = "To put what's already in the account here, add a Hidden entry for it on the calendar: a cost of that amount, with this account picked under Other Account.";
+      if (summary) {
+        const balance = BudgetUI.element("p", "panelText accountBalance", formatMoney(summary.today));
+        if (summary.today < 0) balance.classList.add("negative");
+        if (summary.today > 0) balance.classList.add("positive");
+        fields.push(BudgetUI.field("Balance today", balance, { hint: `It comes from this account's entries. ${howToSet}` }));
+      } else {
+        fields.push(BudgetUI.element("p", "panelHint", `It starts at $0.00, and its entries add up to its balance. ${howToSet}`));
+      }
       if (isDefault) fields.push(BudgetUI.element("p", "panelHint", `${existing[0]} is your default account, so it can't be deleted.`));
       if (summary) fields.push(accountEntriesField(summary));
       const buttons = existing
@@ -740,10 +728,7 @@ function openAccountPanel(origin, index) {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         if (!name.value()) return panel.setError("Give the account a name.");
-        const typed = balance.input.value.replace(/[$,\s]/g, "");
-        const amount = typed === "" ? null : Number(typed); // Blank keeps the balance (a new account starts at $0.00)
-        if (amount !== null && !Number.isFinite(amount)) return panel.setError("Enter the balance as a number, like 250.00.");
-        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), balance: amount }, index));
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value() }, index));
       });
 
       function deleteAccount() {
