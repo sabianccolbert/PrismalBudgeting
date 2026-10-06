@@ -3,9 +3,9 @@
 <html lang="en">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="stylesheet" href="/stylesheet.css?v=10.06.2026.A">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css">
+    <link rel="stylesheet" href="/budgetStyle.css?v=10.06.2026.A">
     <title>How Prismal Budget Works: Pages, Features, Rules, and Data</title>
     <meta name="description" content="A complete guide to Prismal Budget, the calendar-based budget that projects your bank balance for every day of the next four weeks: every page, every feature, how the math works, and how the data is stored.">
     <meta charset="UTF-8">
@@ -600,6 +600,7 @@
               <li>Test stand-ins for D1 must also return <code>meta.last_row_id</code> (a queued quick entry's <code>id</code>). Tests against <code>wrangler dev</code> reach the real Have I Been Pwned, so their passwords can't be common ones.</li>
               <li>Requests to the API with the login token go through <code>budgetApi</code>; a 401 means the session ended, and <code>signedOutElsewhere</code> signs the page out. Saving stops after a 401 or a 409.</li>
               <li>Images: a header icon that changes needs a new 384×384 WebP copy next to its PNG (the pages use the WebP). <code>New Entry.png</code>, <code>Quick Entry.png</code>, <code>Help.png</code>, and <code>Dave.webp</code> aren't made yet (see their <code>.pngdummy</code> and <code>.webpdummy</code> notes); until they are, their buttons show their words.</li>
+              <li><strong>Releasing:</strong> bump <code>SITE_VERSION</code> in <code>Boot.js</code> with every release, by finding and replacing the old version everywhere in the site: the pages' stylesheet links carry it too (<code>/stylesheet.css?v=…</code>), as does this page's "Last updated". Pages and <code>Boot.js</code> are never cached, but other files are (CSS, images, and fonts for up to 4 hours), so a file that changes needs a new address: scripts and stylesheets get it from the version, and a changed image or font needs a new file name.</li>
               <li>Update <code>sitemap.xml</code>'s <code>lastmod</code> when a public page changes.</li>
               <li>When a feature changes, update this page and the page's Help.</li>
             </ul>

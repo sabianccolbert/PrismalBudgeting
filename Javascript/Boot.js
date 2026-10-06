@@ -7,6 +7,8 @@
   /* ===============================
    * 0) SITE VERSION (bump per deploy)
    * =============================== */
+  // A new version makes every browser get the new files. The pages' stylesheet links carry it too
+  // (/stylesheet.css?v=...), so when bumping it, find and replace the old version everywhere in the site.
   const SITE_VERSION = "10.06.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
