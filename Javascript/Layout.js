@@ -1,7 +1,7 @@
 // thank heavens for chatGPT <3
-// Layout + page transitions controller for StayingOutsideTheBox.
-// This file owns navigation animations, bfcache hygiene, and touch-safe tap handling.
-// Starfield is treated as a “passenger” that we freeze/save during transitions.
+// Layout + page transitions for Prismal Budget.
+// This file owns navigation animations, bfcache hygiene, touch-safe tap handling, floating Help, the
+// footer, and signing out. Starfield is treated as a "passenger" that we freeze/save during transitions.
 
 /*======================================================================
  *  MENU
@@ -10,16 +10,15 @@
  *     - Transition guard flags
  *     - Timer hygiene for bfcache
  *     - Starfield freeze/save hooks
- *     - DOM helpers
+ *     - Slide timing (read from the CSS)
  *     - Navigation type detection
  *     - Referrer analysis for back button behavior (menu vs homepage vs internal)
  *
  *  2) SCROLL OWNERSHIP (DOCUMENT IS SCROLLER)
- *     - Helpers to lock/unlock document scroll (optional)
+ *     - Helpers to lock/unlock document scroll
  *
  *  3) PAGE LOAD (SLIDE-IN + BACK BUTTON)
- *     - Apply slide duration
- *     - Trigger slide-in
+ *     - Trigger slide-in (on load, or sooner if something is slow to load)
  *     - Decide back button visibility + stored back URL
  *
  *  4) BACK/FORWARD CACHE (PAGESHOW)
@@ -30,9 +29,8 @@
  *     - Freeze+save near the end
  *     - Navigate on transitionend (with timeout fallback)
  *
- *  6) NAV FIXES (CLICK + TOUCH TAP VS SWIPE)
- *     - Click-to-navigate with animation (desktop + keyboard + accessibility)
- *     - Touch tap-to-navigate with animation
+ *  6) LINKS (CLICK + TOUCH TAP VS SWIPE), SIGNING OUT, HELP, MISSING IMAGES
+ *     - One click listener for every link (ones added later too)
  *     - Swipe-to-scroll remains native
  *====================================================================*/
 
@@ -51,13 +49,6 @@ let IS_TRANSITION_ACTIVE = false; // True while slide-out is in progress
 // Used only for freeze/save/resizing helpers.
 var S = window.STARFIELD; // Local pointer to global STARFIELD (may be null on some pages)
 
-/* GROUP: Audio (disabled) */
-// Optional “crunch” sound. Left disabled for now.
-//const CRUNCH_SOUND = new Audio("/Resources/Crunch.mp3");
-//CRUNCH_SOUND.preload = "auto";
-//CRUNCH_SOUND.load();
-//CRUNCH_SOUND.volume = 0.25;
-
 /* GROUP: Pending transition timers */
 // bfcache can resurrect timers if they were scheduled before leaving.
 // We store handles so we can cancel them safely on pagehide/pageshow.
@@ -66,7 +57,7 @@ let NAVIGATE_AFTER_SLIDE_TIMEOUT_ID = null;  // setTimeout handle: fallback navi
 
 /* GROUP: Timer hygiene */
 // Cancel any pending transition timers and reset handles.
-// Prevents “ghost navigations” after bfcache restores.
+// Prevents "ghost navigations" after bfcache restores.
 function clearPendingTransitionTimers() {
   if (SAVE_BEFORE_LEAVE_TIMEOUT_ID) clearTimeout(SAVE_BEFORE_LEAVE_TIMEOUT_ID);
   if (NAVIGATE_AFTER_SLIDE_TIMEOUT_ID) clearTimeout(NAVIGATE_AFTER_SLIDE_TIMEOUT_ID);
@@ -77,12 +68,12 @@ function clearPendingTransitionTimers() {
 
 /* GROUP: Starfield freeze + save */
 // Freeze starfield motion and persist the latest state.
-// Called when leaving or backgrounding so the canvas doesn’t drift while hidden.
+// Called when leaving or backgrounding so the canvas doesn't drift while hidden.
 function freezeAndSaveStarfield() {
   S = window.STARFIELD; // Re-alias in case Setup loads after this file on some pages
   if (!S) return;
 
-  S.isFrozen = true;
+  if (typeof S.setFrozen === "function") S.setFrozen(true);
 
   if (typeof S.saveStarfieldToStorage === "function") {
     S.saveStarfieldToStorage();
@@ -91,7 +82,7 @@ function freezeAndSaveStarfield() {
 
 /* GROUP: Leave/return lifecycle */
 // pagehide fires for real navigations and for bfcache entries.
-// This is the most reliable “we are leaving” hook across browsers.
+// This is the most reliable "we are leaving" hook across browsers.
 window.addEventListener("pagehide", () => {
   clearPendingTransitionTimers();
   freezeAndSaveStarfield();
@@ -106,7 +97,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     freezeAndSaveStarfield();
   } else if (document.visibilityState === "visible") {
-    S.isFrozen = false;
+    if (typeof S.setFrozen === "function") S.setFrozen(false);
   }
 });
 
@@ -115,14 +106,14 @@ document.addEventListener("visibilitychange", () => {
 // This container receives slide-in/out classes in CSS.
 const getTransitionContainer = () => document.getElementById("transitionContainer");
 
-// Determine whether this page appears to be the homepage.
-// Used to decide longer animation timing.
-const isHomepage = () => !!document.querySelector("#menuButton");
-const isPolicypage = () => !!document.querySelector("#policyBack");
-const is404page = () => !!document.querySelector("#controller");
-
-// Match CSS expectations: homepage is a longer slide than inner pages.
-const getSlideDurationSeconds = () => (isHomepage() ? 1.2 : 0.6);
+/* GROUP: Slide timing */
+// How long the container's slide takes, straight from the CSS (stylesheet.css section 11), so the two
+// never disagree. 0 when there's no slide (reduced motion), and then nothing waits for one.
+function getSlideDurationSeconds() {
+  const CONTAINER = getTransitionContainer();
+  if (!CONTAINER) return 0;
+  return parseFloat(getComputedStyle(CONTAINER).transitionDuration) || 0;
+}
 
 /* GROUP: Navigation type detection */
 // Detect whether this page was restored via back/forward (often bfcache).
@@ -146,7 +137,7 @@ function getReferrerInfo() {
   let IS_INTERNAL_REFERRER = false; // True if referrer is same-origin
   let CAME_FROM_MENU_PAGE = false;  // True if referrer path matches /menu
   let CAME_FROM_HOME_PAGE = false;  // True if referrer path matches homepage (/ or /index.html)
-  let CAME_FROM_LOGIN_PAGE = false;  // True if referrer path matches login page (/ or /login.html)
+  let CAME_FROM_LOGIN_PAGE = false; // True if referrer path matches the login page
 
   if (!REFERRER) return { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE, CAME_FROM_LOGIN_PAGE };
 
@@ -167,16 +158,26 @@ function getReferrerInfo() {
       REFERRER_PATH === "/index.html" ||
       REFERRER_PATH === "/index.htm";
 
-      
     CAME_FROM_LOGIN_PAGE =
       REFERRER_PATH === "/login" ||
       REFERRER_PATH === "/login/" ||
-      REFERRER_PATH.endsWith("/login/index.html") ||
       REFERRER_PATH === "/login.html" ||
       REFERRER_PATH === "/login.htm";
   } catch {}
 
   return { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE, CAME_FROM_LOGIN_PAGE };
+}
+
+// Storage can be blocked (the browser's cookies and site data setting); these never throw
+function readStored(KEY) {
+  try { return localStorage.getItem(KEY); } catch { return null; }
+}
+
+function writeStored(KEY, VALUE) {
+  try {
+    if (VALUE === null) localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, VALUE);
+  } catch {}
 }
 
 /* #endregion 1) GLOBAL STATE + HELPERS */
@@ -190,12 +191,10 @@ function getReferrerInfo() {
 /* GROUP: Lock scroll during transitions */
 // We lock both html and body for maximum cross-browser reliability.
 function disableDocumentScroll() {
-  const HTML = document.documentElement;
-  const BODY = document.body;
   const CONTAINER = getTransitionContainer();
 
-  HTML.style.overflowY = "hidden";
-  BODY.style.overflowY = "hidden";
+  document.documentElement.style.overflowY = "hidden";
+  document.body.style.overflowY = "hidden";
 
   if (CONTAINER) CONTAINER.style.overflowY = "visible";
 }
@@ -203,12 +202,10 @@ function disableDocumentScroll() {
 /* GROUP: Restore scroll after transitions/load */
 // Put scroll back on the document.
 function enableDocumentScroll() {
-  const HTML = document.documentElement;
-  const BODY = document.body;
   const CONTAINER = getTransitionContainer();
 
-  HTML.style.overflowY = "auto";
-  BODY.style.overflowY = "visible";
+  document.documentElement.style.overflowY = "auto";
+  document.body.style.overflowY = "visible";
   if (CONTAINER) CONTAINER.style.overflowY = "hidden";
 }
 
@@ -220,22 +217,35 @@ function enableDocumentScroll() {
  * #region 3) PAGE LOAD (SLIDE-IN + BACK BUTTON)
  *====================================================================*/
 
-/* GROUP: Load-time animation setup */
-// Run slide-in setup and back-button logic after all resources finish loading.
-// Using "load" ensures fonts/images/layout are settled before slide-in begins.
-window.addEventListener("load", () => {
+/* GROUP: Slide in */
+// The page slides in once everything has loaded, so images and fonts are settled first. A page still
+// waiting on something slow (a big image on a weak connection) slides in anyway after a moment.
+const SLIDE_IN_AT_THE_LATEST_MS = 1500;
+let HAS_SLID_IN = false;
+
+function slideIn() {
+  if (HAS_SLID_IN) return;
+  HAS_SLID_IN = true;
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
-  document.documentElement.style.setProperty(
-    "--SLIDE_DURATION",
-    `${getSlideDurationSeconds()}s`
-  );
-
   requestAnimationFrame(() => {
     CONTAINER.classList.add("ready");
+    // Scrolling comes back when the slide ends (section 6), right away with no slide (reduced motion),
+    // and in any case once the slide's time is up (in case its end never comes, like an interrupted slide)
+    const DURATION_MS = getSlideDurationSeconds() * 1000;
+    if (DURATION_MS === 0) enableDocumentScroll();
+    else setTimeout(() => { if (!IS_TRANSITION_ACTIVE) enableDocumentScroll(); }, DURATION_MS + 200);
   });
+}
 
-  /* GROUP: Back button logic (supports multiple pages) */
+window.addEventListener("load", () => {
+  slideIn();
+  setUpBackButton();
+});
+setTimeout(slideIn, SLIDE_IN_AT_THE_LATEST_MS);
+
+/* GROUP: Back button logic (supports multiple pages) */
+function setUpBackButton() {
   const { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE, CAME_FROM_LOGIN_PAGE } = getReferrerInfo();
 
   // Some pages may have different back buttons; use whichever exists.
@@ -254,14 +264,14 @@ window.addEventListener("load", () => {
   // If internal referrer exists, show back and store it for "back" keyword navigation.
   if (IS_INTERNAL_REFERRER && REFERRER) {
     BACK_LINK.style.display = "block";
-    localStorage.setItem("homepageBackUrl", REFERRER);
+    writeStored("homepageBackUrl", REFERRER);
     return;
   }
 
   // External/unknown referrer: hide and clear stored back URL.
   BACK_LINK.style.display = "none";
-  localStorage.removeItem("homepageBackUrl");
-});
+  writeStored("homepageBackUrl", null);
+}
 
 /* #endregion 3) PAGE LOAD (SLIDE-IN + BACK BUTTON) */
 
@@ -277,12 +287,9 @@ window.addEventListener("load", () => {
 window.addEventListener("pageshow", (EVENT) => {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
-  
-  const isLoggedIn = !!localStorage.getItem("prismal_jwt");
-  const isPublicPage = location.pathname.toLowerCase().includes("login") || 
-                       location.pathname.toLowerCase().includes("privacy");
 
-  if (!isLoggedIn && !isPublicPage) {
+  // Back to a signed-in page after signing out (it came back from the back/forward cache): go to login
+  if (!readStored("prismal_jwt") && !window.PUBLIC_PAGE) {
     window.location.replace("/login.html");
     return;
   }
@@ -290,13 +297,14 @@ window.addEventListener("pageshow", (EVENT) => {
   clearPendingTransitionTimers();
 
   S = window.STARFIELD;
-  if (S) S.isFrozen = false;
+  if (S && typeof S.setFrozen === "function") S.setFrozen(false);
 
   if (!isBackForwardNavigation(EVENT)) return;
 
   CONTAINER.classList.remove("slide-out");
   CONTAINER.classList.add("ready");
   IS_TRANSITION_ACTIVE = false;
+  enableDocumentScroll();
 
   CONTAINER.scrollTop = 0;
 });
@@ -313,32 +321,33 @@ window.addEventListener("pageshow", (EVENT) => {
 // Animate slide-out, then navigate after the animation duration.
 // URL may be a real href or the special keyword "back".
 function transitionTo(URL, useReplace = false) {
-  window.transitionTo = transitionTo;
   if (IS_TRANSITION_ACTIVE) return;
   if (!URL) return;
+
+  /* GROUP: "back" keyword support */
+  if (URL === "back") {
+    URL = readStored("homepageBackUrl") || "/";
+  }
+
+  const LEAVE = () => {
+    IS_TRANSITION_ACTIVE = false; // safety unlock (in case navigation is blocked)
+    if (useReplace) window.location.replace(URL);
+    else window.location.href = URL;
+  };
+
+  const CONTAINER = getTransitionContainer();
+  const DURATION_MS = getSlideDurationSeconds() * 1000;
+
+  /* GROUP: Nothing to animate (no container, or reduced motion) */
+  if (!CONTAINER || DURATION_MS === 0) {
+    freezeAndSaveStarfield();
+    LEAVE();
+    return;
+  }
 
   clearPendingTransitionTimers();
   IS_TRANSITION_ACTIVE = true;
   disableDocumentScroll();
-
-  const CONTAINER = getTransitionContainer();
-
-  /* GROUP: "back" keyword support */
-  if (URL === "back") {
-    const STORED_BACK_URL = localStorage.getItem("homepageBackUrl");
-    if (!STORED_BACK_URL) {
-      IS_TRANSITION_ACTIVE = false;
-      return;
-    }
-    URL = STORED_BACK_URL;
-  }
-
-  /* GROUP: No container fallback */
-  if (!CONTAINER) {
-    location.href = URL;
-    IS_TRANSITION_ACTIVE = false; // safety unlock (in case navigation is blocked)
-    return;
-  }
 
   /* GROUP: Slide distance computation (supports different scroll owners) */
   const CONTAINER_SCROLL = CONTAINER.scrollTop || 0;
@@ -353,8 +362,6 @@ function transitionTo(URL, useReplace = false) {
   CONTAINER.classList.add("slide-out");
 
   /* GROUP: Navigate when the container's own transform transition ends */
-  const DURATION_MS = getSlideDurationSeconds() * 1000;
-
   const onDone = (EVENT) => {
     // Only accept the container's transform finishing,
     // not random child transitions bubbling up.
@@ -362,12 +369,7 @@ function transitionTo(URL, useReplace = false) {
 
     CONTAINER.removeEventListener("transitionend", onDone);
     clearPendingTransitionTimers();
-    IS_TRANSITION_ACTIVE = false;
-    if (useReplace) {
-        window.location.replace(URL);
-    } else {
-        window.location.href = URL;
-    }
+    LEAVE();
   };
 
   CONTAINER.addEventListener("transitionend", onDone);
@@ -387,119 +389,119 @@ function transitionTo(URL, useReplace = false) {
 
 
 /*======================================================================
- * #region 6) NAV FIXES (CLICK + TOUCH TAP VS SWIPE)
+ * #region 6) LINKS, SIGNING OUT, HELP, MISSING IMAGES
  *====================================================================*/
 
 /* GROUP: Small DOM utility */
-// Toggle an element’s hidden state by id.
+// Toggle an element's hidden state by id. Returns the element (null if there isn't one).
 function toggleElement(ELEMENT_ID) {
-  if (!ELEMENT_ID) return;
+  if (!ELEMENT_ID) return null;
   const ELEMENT = document.getElementById(ELEMENT_ID);
   if (ELEMENT) ELEMENT.hidden = !ELEMENT.hidden;
+  return ELEMENT;
 }
 
-/* GROUP: Click/touch navigation with swipe detection */
-// We use pointer events to detect swipe vs tap on touch.
-// We use click events to *actually* cancel href and run transitions across all inputs.
-function wirePointerNavigation(SELECTOR = "a") {
-  const NAV_ITEMS = document.querySelectorAll(SELECTOR);
-  if (!NAV_ITEMS.length) return;
+/* GROUP: Touch tap vs swipe */
+// A touch that moved more than a tap (a scroll that happened to end on a link) doesn't follow the link.
+// Listening on the document covers every link, including ones added later.
+let TOUCH = null; // { id, x, y, moved } for the touch in progress
 
-  NAV_ITEMS.forEach((ELEMENT) => {
-    let START_X = 0;
-    let START_Y = 0;
-    let DID_MOVE = false;
-    let ACTIVE_POINTER_ID = null;
+document.addEventListener("pointerdown", (EVENT) => {
+  TOUCH = EVENT.pointerType === "touch" ? { id: EVENT.pointerId, x: EVENT.clientX, y: EVENT.clientY, moved: false } : null;
+}, { capture: true, passive: true });
 
-    /* GROUP: Pointer down (touch only) */
-    ELEMENT.addEventListener("pointerdown", (EVENT) => {
-      if (EVENT.pointerType !== "touch") return;
+document.addEventListener("pointermove", (EVENT) => {
+  if (!TOUCH || EVENT.pointerId !== TOUCH.id || TOUCH.moved) return;
+  if (Math.hypot(EVENT.clientX - TOUCH.x, EVENT.clientY - TOUCH.y) > 10) TOUCH.moved = true;
+}, { capture: true, passive: true });
 
-      ACTIVE_POINTER_ID = EVENT.pointerId;
-      DID_MOVE = false;
+/* GROUP: Click (all inputs) */
+// Links within the site slide the page out first. Everything else behaves like any link: other sites,
+// other apps (mail, phone, calendars), new tabs and downloads, links opened with a modifier key or the
+// middle button, and a spot on this same page (like How It Works' contents, which just scrolls there).
+document.addEventListener("click", (EVENT) => {
+  const LINK = EVENT.target.closest?.("a[href]");
+  if (!LINK || EVENT.defaultPrevented) return;
+  const HREF = LINK.getAttribute("href");
 
-      START_X = EVENT.clientX;
-      START_Y = EVENT.clientY;
+  // Touch swipe that ended on the link: don't navigate
+  if (TOUCH && TOUCH.moved) {
+    EVENT.preventDefault();
+    return;
+  }
 
-      try { ELEMENT.setPointerCapture(ACTIVE_POINTER_ID); } catch {}
-    }, { passive: true });
-
-    /* GROUP: Pointer move (touch only) */
-    ELEMENT.addEventListener("pointermove", (EVENT) => {
-      if (EVENT.pointerId !== ACTIVE_POINTER_ID) return;
-
-      if (Math.hypot(EVENT.clientX - START_X, EVENT.clientY - START_Y) > 10) {
-        DID_MOVE = true;
-      }
-    }, { passive: true });
-
-    /* GROUP: Pointer up (touch only) */
-    // We *do not* navigate here. We only classify swipe vs tap.
-    ELEMENT.addEventListener("pointerup", (EVENT) => {
-      if (EVENT.pointerId !== ACTIVE_POINTER_ID) return;
-
-      try { ELEMENT.releasePointerCapture(ACTIVE_POINTER_ID); } catch {}
-      ACTIVE_POINTER_ID = null;
-
-      if (DID_MOVE) {
-        try { ELEMENT.blur(); } catch {}
-      }
-    }, { passive: true });
-
-    /* GROUP: Click (all inputs) */
-    // This is the true "href kill switch" + transition entry point.
-ELEMENT.addEventListener("click", (EVENT) => {
-  const HREF = ELEMENT.getAttribute("href");
-  if (!HREF) return;
-
-  // Touch swipe? don't navigate.
-if (DID_MOVE) return;
-DID_MOVE = false;
-
-  // Special keyword support
+  // Special keywords
   if (HREF === "back") {
     EVENT.preventDefault();
     transitionTo("back");
     return;
   }
-
   if (HREF === "logout") {
     EVENT.preventDefault();
-    localStorage.clear();
-    transitionTo("/login.html", true);
+    signOut();
     return;
   }
 
-  // System handlers (don't animate these)
-  if (
-    HREF.startsWith("mailto:") ||
-    HREF.startsWith("tel:") ||
-    HREF.startsWith("sms:")
-  ) {
-    // Let browser handle it normally
-    return;
-  }
+  if (EVENT.button !== 0 || EVENT.metaKey || EVENT.ctrlKey || EVENT.shiftKey || EVENT.altKey) return;
+  if (LINK.target === "_blank" || LINK.hasAttribute("download")) return;
 
-  // Let new-tab / downloads behave normally
-  if (ELEMENT.target === "_blank" || ELEMENT.hasAttribute("download")) return;
-
-  // Let true external http(s) links behave normally
-  const IS_HTTP = /^https?:\/\//i.test(HREF);
-  const IS_EXTERNAL = IS_HTTP && !HREF.startsWith(location.origin);
-  if (IS_EXTERNAL) return;
+  let TARGET;
+  try { TARGET = new URL(HREF, location.href); } catch { return; }
+  if (TARGET.origin !== location.origin || !/^https?:$/.test(TARGET.protocol)) return;
+  if (TARGET.pathname === location.pathname && TARGET.search === location.search && TARGET.hash) return;
 
   // Everything else: we own navigation timing
   EVENT.preventDefault();
-  transitionTo(HREF);
-}, { passive: false });
+  transitionTo(TARGET.href);
+});
 
-    /* GROUP: Pointer cancel */
-    ELEMENT.addEventListener("pointercancel", () => {
-      ACTIVE_POINTER_ID = null;
-      try { ELEMENT.blur(); } catch {}
-    }, { passive: true });
-  });
+/* GROUP: Signing out */
+// Signing out (or deleting the account) forgets everything this browser kept for the account, including
+// this tab's Undo history, but keeps the device's own choices: the site version, and whether analytics
+// is off here
+const DEVICE_SETTINGS = ["LOCAL_SITE_VERSION", "prismal_analytics"];
+function clearSignedInData() {
+  try {
+    Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));
+    Object.keys(sessionStorage).filter(KEY => KEY.startsWith("prismal_undo_")).forEach(KEY => sessionStorage.removeItem(KEY));
+  } catch {}
 }
+
+// Signing out ends the session on the server too, so its token stops working everywhere, even a copy.
+// keepalive lets the request finish while the page moves on.
+function endServerSession() {
+  const TOKEN = readStored("prismal_jwt");
+  if (!TOKEN || !window.API_BASE_URL) return;
+  try {
+    fetch(`${window.API_BASE_URL}/api/logout`, { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, keepalive: true }).catch(() => {});
+  } catch {}
+}
+
+// Logout. A change that hasn't reached the server yet (offline) would be lost, so that asks first. Once
+// it's decided, nothing more is saved and leaving doesn't ask again.
+function signOut() {
+  const HAS_UNSAVED = typeof hasUnsavedChanges === "function" && typeof workspaceLoaded !== "undefined" && workspaceLoaded && hasUnsavedChanges();
+  if (HAS_UNSAVED && !window.confirm("Some of your changes haven't been saved yet (they'll save once you're back online). Sign out anyway and lose them?")) return;
+  if (typeof workspaceLoaded !== "undefined") workspaceLoaded = false;
+  endServerSession();
+  clearSignedInData();
+  transitionTo("/login.html", true);
+}
+
+/* GROUP: Missing images */
+// An image that's missing or fails to load shows its words (its alt text) instead of a broken-image
+// icon, so a button still says what it does.
+function showMissingImage(IMG) {
+  if (!IMG.alt || !IMG.isConnected) return;
+  const STAND_IN = document.createElement("span");
+  STAND_IN.className = `${IMG.className} missingImage`.trim();
+  STAND_IN.textContent = IMG.alt;
+  IMG.replaceWith(STAND_IN);
+}
+
+document.addEventListener("error", (EVENT) => {
+  if (EVENT.target instanceof HTMLImageElement) showMissingImage(EVENT.target);
+}, true);
 
 /* GROUP: Wire after DOM is ready */
 function onDOMReady(fn) {
@@ -509,23 +511,85 @@ function onDOMReady(fn) {
     fn();
   }
 }
-// Attach navigation overrides once elements exist in the DOM.
+/* GROUP: Floating help */
+// A page's Help (a .helpView section, opened by its data-toggle button) floats over the page instead of
+// pushing it around: × , Escape, or a tap outside closes it. It moves into <body> because the page's
+// #transitionContainer is transformed, which would make a fixed-position section scroll with the page.
+let OPEN_HELP = null;
+const HELP_BACKDROP = document.createElement("div");
+HELP_BACKDROP.className = "overlayBackdrop";
+HELP_BACKDROP.hidden = true;
+
+function setupFloatingHelp(BUTTON, HELP) {
+  document.body.append(HELP_BACKDROP, HELP);
+  HELP.setAttribute("role", "dialog");
+  HELP.setAttribute("aria-modal", "true");
+  const CLOSE = document.createElement("button");
+  CLOSE.type = "button";
+  CLOSE.className = "panelClose helpClose";
+  CLOSE.textContent = "×";
+  CLOSE.setAttribute("aria-label", "Close help");
+  CLOSE.addEventListener("click", () => closeHelp());
+  HELP.prepend(CLOSE);
+  HELP.helpButton = BUTTON;
+}
+
+function openHelp(HELP) {
+  OPEN_HELP = HELP;
+  HELP.hidden = false;
+  HELP_BACKDROP.hidden = false;
+  HELP.scrollTop = 0;
+  HELP.helpButton.setAttribute("aria-expanded", "true");
+  HELP.querySelector(".helpClose").focus({ preventScroll: true });
+}
+
+function closeHelp() {
+  if (!OPEN_HELP) return;
+  const HELP = OPEN_HELP;
+  OPEN_HELP = null;
+  HELP.hidden = true;
+  HELP_BACKDROP.hidden = true;
+  HELP.helpButton.setAttribute("aria-expanded", "false");
+  HELP.helpButton.focus({ preventScroll: true });
+}
+
+HELP_BACKDROP.addEventListener("click", () => closeHelp());
+// Capture, so Escape closes the help and nothing under it (like an open panel)
+window.addEventListener("keydown", (EVENT) => {
+  if (EVENT.key !== "Escape" || !OPEN_HELP) return;
+  EVENT.stopImmediatePropagation();
+  closeHelp();
+}, true);
+
 onDOMReady(() => {
+  // Buttons that show/hide a section; a page's Help floats over the page
   document.querySelectorAll("button[data-toggle]").forEach((btn) => {
+    const TARGET = document.getElementById(btn.getAttribute("data-toggle"));
+    if (TARGET && TARGET.classList.contains("helpView")) {
+      setupFloatingHelp(btn, TARGET);
+      btn.addEventListener("click", () => (TARGET.hidden ? openHelp(TARGET) : closeHelp()));
+      return;
+    }
     btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-toggle");
-      toggleElement(id);
+      const ELEMENT = toggleElement(btn.getAttribute("data-toggle"));
+      if (ELEMENT) btn.setAttribute("aria-expanded", String(!ELEMENT.hidden));
     });
   });
   injectGlobalFooter();
-  wirePointerNavigation();
+  // Images that already failed before this script ran
+  document.querySelectorAll("img").forEach((IMG) => {
+    if (IMG.complete && IMG.naturalWidth === 0 && IMG.getAttribute("src")) showMissingImage(IMG);
+  });
   const CONTAINER = getTransitionContainer();
-  if (CONTAINER){
-    CONTAINER.addEventListener("transitionend", enableDocumentScroll);
+  if (CONTAINER) {
+    // The slide-in finished: the document scrolls again
+    CONTAINER.addEventListener("transitionend", (EVENT) => {
+      if (EVENT.target === CONTAINER && !IS_TRANSITION_ACTIVE) enableDocumentScroll();
+    });
   }
 });
 
-/* #endregion 6) NAV FIXES (CLICK + TOUCH TAP VS SWIPE) */
+/* #endregion 6) LINKS, SIGNING OUT, HELP, MISSING IMAGES */
 
 
 
@@ -534,8 +598,6 @@ onDOMReady(() => {
  *====================================================================*/
 
 function injectGlobalFooter() {
-  //if (is404page() || isPolicypage() || isHomepage()) return;
-
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
 
@@ -548,13 +610,16 @@ function injectGlobalFooter() {
   FOOTER.innerHTML = `
     <hr>
         <p>Prismal Budget™ and its logo are trademarked</p>
-        <p>Contact: 
+        <p>Contact:
         <a href="mailto:sabian.c.colbert@gmail.com">
           Sabian.C.Colbert&#8203;@Gmail.com
         </a>
         </p>
         <a href="/privacy and terms.html">
           Privacy Policy & Terms of Use
+        </a>
+        <a href="/how-it-works.html">
+          How Prismal Budget Works
         </a>
   `;
 

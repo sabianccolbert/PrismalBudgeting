@@ -45,6 +45,7 @@
   top: 0;
   left: 0;
   display: flex;
+  flex-direction: column; /* One element per line (date, system lines, entries) */
   align-items: flex-start;
   justify-content: flex-start;
   will-change: transform;
@@ -110,6 +111,18 @@
   z-index: 1;
 }
 
+/* Anchor the first column so it zooms to the right */
+.elastic-table td:first-child,
+.elastic-table td:first-child .cell-content {
+  transform-origin: left center;
+}
+
+/* Anchor the last column so it zooms to the left */
+.elastic-table td:last-child,
+.elastic-table td:last-child .cell-content {
+  transform-origin: right center;
+}
+
 .cell-action-btn {
   position: absolute;
   top: 2px;
@@ -130,7 +143,7 @@
   font-family: sans-serif;
   cursor: pointer;
   z-index: 5;
-  
+
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -140,4 +153,1541 @@
 .elastic-table td.is-editing .cell-action-btn {
   opacity: 1;
   visibility: visible;
+}
+
+/*========================================*
+ *  MENU DATA PAGES (Recurring, History, Tracker, ...)
+ *========================================*
+ *  Same look as the calendar: deep indigo panels fading to transparent
+ *  over the starfield, light gray text, red glow accents.
+ */
+
+:root {
+  --PANEL_DEEP: rgba(15, 0, 80, 0.85);   /* Calendar cell gradient start */
+  --PANEL_SOFT: rgba(15, 0, 80, 0.35);
+  --PANEL_DARK: rgba(0, 0, 0, 0.55);
+  --PANEL_LINE: rgba(189, 189, 189, 0.15);
+  --PANEL_BORDER: rgba(189, 189, 189, 0.35);
+  --PANEL_RADIUS: 14px;
+  --NEGATIVE_TEXT: #ff6b6b;
+  --POSITIVE_TEXT: #5ee39a;              /* Positive entries */
+  --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
+}
+
+/* Page links on the Menu page */
+.menuLinks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vmin;
+  margin: 4vmin auto;
+}
+
+.menuLinks a {
+  font-size: 6vmin;
+}
+
+/* Status + empty states */
+.dataStatus,
+.dataEmpty {
+  font-size: 4vmin;
+  opacity: 0.8;
+  margin: 4vmin auto;
+}
+
+.dataSummary {
+  font-size: 3.5vmin;
+  margin: 1vmin auto 3vmin;
+  text-shadow: var(--SHADOW);
+}
+
+/* A quiet tip under a table */
+.dataHint {
+  margin: -2vmin auto 3vmin;
+  font-size: var(--UI_TEXT);
+  opacity: 0.7;
+}
+
+/* Horizontal scroll for wide tables (phones) */
+.dataScroll {
+  width: 94vw;
+  max-width: 100%;
+  margin: 0 auto 4vmin;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Base data table */
+.dataTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0.4vmin;
+  font-size: clamp(10px, 2.4vmin, 18px);
+  text-align: left;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.dataTable th {
+  padding: 1.2vmin 1.5vmin;
+  font-size: clamp(12px, 3.2vmin, 26px);
+  font-weight: normal;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--BASE_COLOR);
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), var(--PANEL_SOFT));
+  border-bottom: 2px solid var(--LINK_LIGHT);
+  box-shadow: 0 6px 12px -8px rgba(200, 0, 0, 0.9);
+}
+
+.dataTable td {
+  padding: 0.8vmin 1.5vmin;
+  vertical-align: top;
+  background: var(--PANEL_DARK);
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+/* First-column titles get the deep panel, like the spreadsheet's colored title column */
+.dataTable .titleCell {
+  text-align: right;
+  white-space: nowrap;
+  background: linear-gradient(to left, var(--PANEL_DEEP), var(--PANEL_SOFT));
+}
+
+.dataTable .typeCell {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.dataTable .amountCell {
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dataTable .amountCell.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.dataTable .amountCell.positive {
+  color: var(--POSITIVE_TEXT);
+}
+
+.dataTable .aliasCell {
+  min-width: 30vmin;
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+/* Category separator rows */
+.dataTable .categoryRow td {
+  text-align: center;
+  font-size: 1.2em;
+  padding: 1vmin;
+  background: linear-gradient(to right, transparent, var(--PANEL_DEEP), transparent);
+  border-bottom: none;
+  text-shadow: var(--SHADOW);
+}
+
+/* History: 7 day columns of multi-line cells, styled like the calendar */
+.historyTable {
+  table-layout: fixed;
+  min-width: 640px;
+}
+
+.historyTable .historyCell {
+  white-space: pre-line;
+  font-size: clamp(9px, 1.8vmin, 14px);
+  line-height: 1.35;
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), transparent);
+  border-bottom: none;
+  overflow-wrap: anywhere;
+}
+
+/* Change Logs */
+.logsTable .timeCell {
+  white-space: nowrap;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+
+.logsTable .actionCell {
+  white-space: nowrap;
+}
+
+.logsTable .detailsCell {
+  white-space: pre-line;
+  font-size: 0.9em;
+}
+
+.logsTable tr.errorRow td {
+  background: rgba(120, 0, 20, 0.6);
+}
+
+.logsTable tr.notFoundRow td {
+  background: rgba(90, 40, 0, 0.5);
+}
+
+/*========================================*
+ *  ENTRY LINES (calendar, history, panels)
+ *========================================*/
+
+.lineDate {
+  font-weight: bold;
+}
+
+.lineEntry.positive,
+.positive {
+  color: var(--POSITIVE_TEXT);
+}
+
+.lineSystem.negative,
+.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+/* Calendar days: today glows, negative days turn red (like the spreadsheet's cell colors) */
+.elastic-table td.isToday .cell-content {
+  box-shadow: inset 0 0 0 1px rgba(201, 218, 248, 0.9), 0 0 10px rgba(120, 160, 255, 0.6);
+}
+
+.elastic-table td.isNegative .cell-content {
+  background: linear-gradient(to bottom, rgb(95, 0, 20), transparent);
+}
+
+.elastic-table td.isToday.isNegative .cell-content {
+  background: linear-gradient(to bottom, rgb(170, 0, 0), transparent);
+}
+
+/* Entries are tappable once their day is zoomed */
+.elastic-table td.is-editing .lineEntry {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+  margin: 0 -2px;
+}
+
+.elastic-table td.is-editing .lineEntry:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Date picking: tap a day to fill the waiting date field */
+body.datePicking .elastic-table {
+  outline: 2px dashed rgba(238, 0, 0, 0.55);
+  outline-offset: 6px;
+  border-radius: 6px;
+}
+
+body.datePicking .elastic-table td {
+  cursor: crosshair;
+}
+
+.elastic-table td.pickedFlash .cell-content {
+  animation: pickedFlash 0.7s ease-out;
+}
+
+@keyframes pickedFlash {
+  from { box-shadow: 0 0 0 3px var(--LINK_LIGHT), 0 0 22px var(--LINK_LIGHT); }
+  to   { box-shadow: 0 0 0 0 transparent; }
+}
+
+/*========================================*
+ *  BUTTONS (panels, toolbars, search)
+ *========================================*/
+
+.budgetButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  margin: 0;
+  padding: 0.45em 1.1em;
+  font-size: var(--UI_TEXT);
+  border-width: 2px;
+  white-space: nowrap;
+}
+
+.budgetButton.primary {
+  border-color: var(--LINK_LIGHT);
+}
+
+.budgetButton.danger {
+  color: var(--NEGATIVE_TEXT);
+  border-color: var(--NEGATIVE_TEXT);
+}
+
+.budgetButton:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Image buttons show their alt text until the image is added */
+.imageButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.35em 1.1em;
+  font-size: var(--UI_TEXT);
+  border-width: 2px;
+}
+
+.imageButton img {
+  width: auto;
+  height: auto;
+  max-height: 7vmin;
+  min-height: 1.2em;
+  border-radius: 0;
+  object-fit: contain;
+  color: var(--BASE_COLOR);
+  font: inherit;
+}
+
+/*========================================*
+ *  PANELS (new entry, entry options, recurring, tracker, sections)
+ *========================================*/
+
+.budgetPanel {
+  box-sizing: border-box;
+  color: var(--BASE_COLOR);
+  text-align: left;
+  font-size: var(--UI_TEXT);
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(10, 0, 50, 0.92));
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: var(--PANEL_RADIUS);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 18px rgba(200, 0, 0, 0.25);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetPanel.large {
+  width: min(94vw, 560px);
+  margin: 2vmin auto 3vmin;
+}
+
+/* Large panels float over the top of the screen (the page under them doesn't move). A tall one
+   scrolls inside itself. */
+.budgetPanel.large.floating {
+  position: fixed;
+  z-index: 1300;
+  top: max(2vh, env(safe-area-inset-top, 0px));
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  max-height: 96vh;
+  max-height: calc(100dvh - 2 * max(2vh, env(safe-area-inset-top, 0px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+}
+
+.budgetPanel.small {
+  position: absolute;
+  z-index: 1300;
+  width: min(88vw, 340px);
+  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+}
+
+/* Stepped aside while a day is picked on the calendar (📅) */
+.budgetPanel.isPicking {
+  visibility: hidden;
+}
+
+.pickBanner {
+  position: fixed;
+  z-index: 1600;
+  top: max(2vh, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  width: max-content;
+  max-width: 92vw;
+  padding: 0.5em 0.6em 0.5em 1em;
+  font-size: var(--UI_TEXT);
+  color: var(--BASE_COLOR);
+  background: rgba(10, 0, 50, 0.97);
+  border: 2px solid var(--LINK_LIGHT);
+  border-radius: 9999px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6), 0 0 14px rgba(200, 0, 0, 0.45);
+}
+
+/* A date box with its 📅 button */
+.dateRow {
+  display: flex;
+  gap: 0.5em;
+}
+
+.budgetPanel .dateRow input {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.pickDay {
+  flex: 0 0 auto;
+  padding: 0.3em 0.7em;
+}
+
+/* Recurring frequency: Every [number] [Days / Weeks / Months] */
+.frequencyRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.budgetPanel .frequencyRow .frequencyCount {
+  flex: 0 0 4.5em;
+  width: 4.5em;
+  text-align: center;
+}
+
+.budgetPanel .frequencyRow .frequencyUnit {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* An account's balance in its panel */
+.accountBalance {
+  font-size: 1.4em;
+  font-variant-numeric: tabular-nums;
+}
+
+.budgetPanel.isBusy {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+.budgetPanel.isClosing {
+  pointer-events: none;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1em;
+  padding: 0.8em 1em 0.2em;
+}
+
+.panelHeader h3 {
+  margin: 0;
+  font-size: 1.25em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.panelClose {
+  display: inline-block;
+  margin: 0;
+  padding: 0 0.25em;
+  border: none;
+  background: none;
+  font-size: 1.6em;
+  line-height: 1;
+  color: var(--BASE_COLOR);
+}
+
+.panelClose:hover {
+  box-shadow: none;
+}
+
+.panelBody {
+  align-items: stretch;
+  gap: 0.75em;
+  padding: 0.6em 1em 1em;
+  box-sizing: border-box;
+}
+
+.panelField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+
+.fieldLabel {
+  font-size: 0.85em;
+  opacity: 0.9;
+}
+
+.fieldLabel .optional,
+.panelHint {
+  opacity: 0.65;
+  font-size: 0.85em;
+}
+
+.budgetPanel input[type="text"],
+.budgetPanel textarea,
+.budgetPanel select,
+.searchBar input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0.5em 0.8em;
+  font-family: 'Main Font', sans-serif;
+  font-size: var(--UI_TEXT);
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetPanel textarea {
+  resize: vertical;
+}
+
+.budgetPanel input[type="text"]:hover,
+.budgetPanel input[type="text"]:focus,
+.budgetPanel textarea:hover,
+.budgetPanel textarea:focus,
+.budgetPanel select:focus,
+.searchBar input:hover,
+.searchBar input:focus {
+  transform: none;
+  text-shadow: none;
+  border-color: var(--LINK_LIGHT);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+  outline: none;
+}
+
+.budgetPanel input:disabled,
+.budgetPanel textarea:disabled {
+  opacity: 0.6;
+}
+
+.budgetPanel input.positive {
+  color: var(--POSITIVE_TEXT);
+}
+
+.budgetPanel select option {
+  background: #0a0032;
+}
+
+/* The date field a calendar tap will fill */
+input.dateInput.isPickTarget {
+  border-color: var(--LINK_LIGHT);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+}
+
+.amountRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+
+.amountRow input {
+  flex: 1 1 8em;
+  width: auto;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.segmented .budgetButton {
+  padding: 0.35em 0.85em;
+  font-size: 0.9em;
+}
+
+.segmented .budgetButton[aria-checked="true"] {
+  color: #fff;
+  border-color: var(--LINK_LIGHT);
+  background: rgba(200, 0, 0, 0.28);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.6);
+}
+
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin: 0;
+  font-size: 1em;
+  color: var(--BASE_COLOR);
+}
+
+/* Title lists (tracker aliases, the search bar): a title box, its buttons, and × on each line */
+.termList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+/* Each line in its own box, so its buttons clearly go with its title when the line wraps */
+.termRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em 0.5em;
+  padding: 0.45em 0.5em;
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.budgetPanel .termRow .termInput {
+  flex: 1 1 9em;
+  width: auto;
+}
+
+.termRow .segmented {
+  flex: 0 0 auto;
+}
+
+.termRemove {
+  margin-left: auto;
+}
+
+.budgetButton.termAdd {
+  margin-top: 0.5em;
+  padding: 0.25em 0.9em;
+  font-size: calc(var(--UI_TEXT) * 0.9);
+}
+
+/* Other Account picker (New Entry and Recurring, for Hidden and Transfer) */
+.budgetPanel select.accountSelect {
+  width: auto;
+  min-width: 12em;
+  max-width: 100%;
+  align-self: flex-start;
+}
+
+.panelEntry {
+  padding: 0.45em 0.7em;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 1.05em;
+}
+
+.panelError {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--NEGATIVE_TEXT);
+}
+
+/* Paragraphs in a panel (the global p is much bigger) */
+.panelText {
+  margin: 0;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.panelButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5em;
+  margin-top: 0.2em;
+}
+
+/* Toasts (e.g. a change that couldn't be saved yet), stacked at the bottom so two at once are both readable */
+.toastStack {
+  position: fixed;
+  left: 50%;
+  bottom: 4vh;
+  z-index: 2000;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6em;
+  width: max-content;
+  max-width: 90vw;
+  font-size: var(--UI_TEXT);
+  pointer-events: none;
+}
+
+.budgetToast {
+  max-width: 90vw;
+  box-sizing: border-box;
+  pointer-events: auto;
+  padding: 0.7em 1.2em;
+  font-size: var(--UI_TEXT);
+  color: var(--BASE_COLOR);
+  background: rgba(10, 0, 50, 0.95);
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: var(--PANEL_RADIUS);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  transition: opacity 0.5s ease;
+}
+
+.budgetToast.warning {
+  border-color: var(--NEGATIVE_TEXT);
+}
+
+.budgetToast.leaving {
+  opacity: 0;
+}
+
+/*========================================*
+ *  HOME PAGE: GETTING STARTED, SEARCH BAR, INFO ROW, TOOLBAR
+ *========================================*/
+
+/* A new budget's first steps (shown until they're done, or hidden with ×) */
+.budgetCard.gettingStarted {
+  position: relative;
+  width: min(94vw, 1100px);
+  margin: 1vmin auto 2vmin;
+}
+
+.gettingStarted .panelClose {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+}
+
+.gettingStarted h3 {
+  padding-right: 2em; /* Room for × */
+}
+
+.startSteps {
+  margin: 0 0 0.6em;
+  padding-left: 1.4em;
+  line-height: 1.5;
+}
+
+.startSteps li {
+  margin: 0 0 1em;
+}
+
+.startSteps li.done > strong::before {
+  content: "✅ ";
+}
+
+.startSteps .panelButtons {
+  justify-content: flex-start;
+  margin-top: 0.4em;
+}
+
+/* The global form centers a column; these fields sit in a row that wraps on phones */
+.startForm {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+  margin-top: 0.5em;
+}
+
+.budgetCard .startForm input[type="text"] {
+  flex: 1 1 11em;
+  width: auto;
+  min-width: 0;
+}
+
+.searchBar {
+  position: relative;
+  z-index: 30;
+  width: min(94vw, 1100px);
+  margin: 1vmin auto 0;
+}
+
+.searchBar form {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1vmin;
+}
+
+.searchBar input {
+  flex: 1 1 9em;
+  width: auto;
+  border-radius: 9999px;
+  padding: 0.45em 1em;
+}
+
+/* The titles to search for: one line each, with All / Costs / Gains / Tracker and × */
+.searchTerms {
+  flex: 1 1 100%;
+  font-size: var(--UI_TEXT);
+}
+
+.searchTerms .termList {
+  gap: 1vmin;
+}
+
+/* A single line sits right on the bar; once there are more, each gets its own box */
+.searchTerms .termRow {
+  justify-content: center;
+  gap: 1vmin;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.searchTerms .termList:has(.termRow + .termRow) .termRow {
+  padding: 0.45em 0.5em;
+  border: 1px solid var(--PANEL_LINE);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.searchBar .termInput {
+  flex: 3 1 16em;
+}
+
+.searchTerms .segmented {
+  justify-content: center;
+}
+
+.searchTerms .termRemove {
+  margin-left: 0;
+}
+
+/* + Add Title, From, To, and Search stay together when the bar wraps (on phones, they wrap under each other) */
+.searchDates {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  flex: 1 1 100%;
+  gap: 1vmin;
+}
+
+.searchDates input {
+  flex: 0 1 12em;
+}
+
+.searchDates .budgetButton.termAdd {
+  margin-top: 0;
+  padding: 0.45em 1em;
+}
+
+/* Results float just under the search bar, over the page (nothing under them moves) */
+.searchResults {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 1vmin;
+  padding: 0.8em 1em;
+  text-align: left;
+  font-size: var(--UI_TEXT);
+  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: var(--PANEL_RADIUS);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.7), 0 0 16px rgba(200, 0, 0, 0.25);
+}
+
+.searchHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1em;
+}
+
+.searchSummary,
+.searchTotal,
+.searchMessage {
+  margin: 0 0 0.5em;
+  font-size: var(--UI_TEXT);
+}
+
+.searchTotal {
+  font-size: 0.95em;
+}
+
+.searchScroll {
+  width: 100%;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.searchTable th:first-child,
+.searchTable td:first-child {
+  width: 2em;
+  text-align: center;
+}
+
+.infoRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr) minmax(0, 1.4fr);
+  gap: 1.5vmin;
+  width: min(94vw, 1100px);
+  margin: 2vmin auto;
+  text-align: left;
+  font-size: clamp(12px, 2.3vmin, 17px);
+}
+
+.infoCard {
+  padding: 0.9em 1em;
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.15));
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: var(--PANEL_RADIUS);
+}
+
+.infoLabel {
+  display: block;
+  margin-bottom: 0.3em;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.lowestAmount {
+  font-size: 2em;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+}
+
+.daveCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9em;
+}
+
+/* Room for Dave's picture (shows the alt text until there is one) */
+.daveImage {
+  flex-shrink: 0;
+  width: 12vmin;
+  height: 12vmin;
+  min-width: 52px;
+  min-height: 52px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--PANEL_BORDER);
+  color: var(--BASE_COLOR);
+  font-size: 0.8em;
+  text-align: center;
+  overflow: hidden;
+}
+
+.daveMessage {
+  margin: 0;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.upcomingList {
+  max-height: 9.5em;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.upcomingItem {
+  display: flex;
+  gap: 0.6em;
+  padding: 0.2em 0;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.upcomingDate {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.upcomingEmpty {
+  opacity: 0.7;
+}
+
+.calendarToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1.2vmin;
+  width: 90vw;
+  margin: 0 auto 1.5vmin;
+}
+
+/* Undo and Redo sit at the left; the image buttons stay at the right */
+.undoButtons {
+  display: flex;
+  gap: 1.2vmin;
+  margin-right: auto;
+}
+
+/* The Quick Entry page's: just above its form, lined up with it (.budgetPanel.large's width) */
+.undoButtons.quickUndo {
+  justify-content: flex-start;
+  width: min(94vw, 560px);
+  margin: 0 auto -0.5vmin;
+}
+
+/* Recurring/Tracker toolbar */
+.tableToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.2vmin;
+  margin: 1vmin auto 2vmin;
+}
+
+.tableToolbar:empty {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .infoRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*========================================*
+ *  RECURRING / TRACKER EDIT MODE
+ *========================================*/
+
+.dataTable tr.clickable {
+  cursor: pointer;
+}
+
+.dataTable tr.clickable:hover td {
+  filter: brightness(1.3);
+}
+
+.dataTable tr.selected td {
+  background: rgba(200, 0, 0, 0.22);
+}
+
+.dataTable .moveBar {
+  width: 2.4em;
+  text-align: center;
+  font-size: 1.3em;
+  cursor: grab;
+  touch-action: none; /* Dragging the bar never scrolls the page */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dataTable .selectCell {
+  width: 2.2em;
+  text-align: center;
+}
+
+/* A row that can't be deleted (Savings on Other Accounts) */
+.dataTable .lockedRow {
+  opacity: 0.7;
+}
+
+/* Other Accounts: a narrower table, centered */
+.dataTable.accountsTable {
+  width: min(100%, 720px);
+  margin: 0 auto;
+}
+
+/* An account's entries, in its panel */
+.accountEntries {
+  max-height: 15em;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.accountEntry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 0.9em;
+  padding: 0.25em 0;
+  border-bottom: 1px solid var(--PANEL_LINE);
+  font-variant-numeric: tabular-nums;
+}
+
+.accountEntryDate {
+  opacity: 0.75;
+}
+
+.accountEntryAmount {
+  min-width: 6.5em;
+}
+
+.accountEntryType {
+  opacity: 0.85;
+}
+
+.accountEntry.upcomingChange {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.sectionInsertRow td {
+  padding: 0;
+  text-align: center;
+  background: none;
+  border: none;
+}
+
+.sectionButton {
+  margin: 0.15em auto;
+  padding: 0.1em 0.9em;
+  font-size: 0.8em;
+  opacity: 0.55;
+}
+
+.sectionButton:hover {
+  opacity: 1;
+}
+
+/* Hidden but still taking space, so rows don't jump when a drag starts */
+.isDragging .sectionInsertRow {
+  visibility: hidden;
+}
+
+.isDragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dataTable tr.dragRow td {
+  background: rgba(200, 0, 0, 0.3);
+  box-shadow: 0 0 14px rgba(200, 0, 0, 0.6);
+}
+
+.dataTable tr.dragRow .moveBar {
+  cursor: grabbing;
+}
+
+/*========================================*
+ *  CARDS (Paycheck Calculator, Settings)
+ *========================================*/
+
+/* Rounded content cards, same look as the home page's info row */
+.budgetCard {
+  box-sizing: border-box;
+  width: min(94vw, 760px);
+  margin: 0 auto 2.5vmin;
+  padding: 1em 1.2em;
+  text-align: left;
+  font-size: var(--UI_TEXT);
+  color: var(--BASE_COLOR);
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.15));
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: var(--PANEL_RADIUS);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetCard h3 {
+  margin: 0 0 0.6em;
+  font-size: 1.3em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.budgetCard p {
+  margin: 0 0 0.6em;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+/* Inputs inside cards (the global input style is a big centered pill) */
+.budgetCard input[type="text"],
+.budgetCard input[type="time"],
+.budgetCard input[type="email"],
+.budgetCard input[type="password"] {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0.5em 0.8em;
+  font-family: 'Main Font', sans-serif;
+  font-size: var(--UI_TEXT);
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.budgetCard input[type="text"]:hover,
+.budgetCard input[type="text"]:focus,
+.budgetCard input[type="time"]:hover,
+.budgetCard input[type="time"]:focus,
+.budgetCard input[type="email"]:hover,
+.budgetCard input[type="email"]:focus,
+.budgetCard input[type="password"]:hover,
+.budgetCard input[type="password"]:focus {
+  transform: none;
+  text-shadow: none;
+  border-color: var(--LINK_LIGHT);
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+  outline: none;
+}
+
+.budgetCard .panelButtons {
+  justify-content: flex-start;
+}
+
+/* Links that look like buttons (open calendar apps) */
+a.budgetButton {
+  margin: 0;
+  padding: 0.45em 1.1em;
+  color: var(--BASE_COLOR);
+  border: 2px solid var(--BASE_COLOR);
+  border-radius: 9999px;
+  text-decoration: none;
+  line-height: normal;
+}
+
+a.budgetButton:hover {
+  transform: scale(1.05);
+  color: var(--LINK_LIGHT);
+  border-color: var(--LINK_LIGHT);
+  box-shadow: var(--SHADOW);
+}
+
+/* Settings */
+.settingsList {
+  margin: 0 0 1em;
+  padding: 0;
+  list-style: none;
+  line-height: 1.7;
+}
+
+/* Wrapped lines line up after the emoji */
+.settingsList li {
+  padding-left: 1.6em;
+  text-indent: -1.6em;
+}
+
+.settingsField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  margin: 0 0 0.4em;
+  font-size: 1em; /* The global label is much bigger */
+}
+
+.budgetCard .settingsField .timeInput {
+  width: auto;
+  min-width: 10em;
+  align-self: flex-start;
+}
+
+.budgetCard .linkInput {
+  margin-bottom: 0.8em;
+  font-size: 0.85em;
+}
+
+/* Account forms (the global form centers everything) */
+.settingsForm {
+  align-items: stretch;
+}
+
+.settingsForm .panelButtons {
+  margin-top: 0.6em;
+}
+
+/* A second part of a Settings card (like "Forgot It?" under Change Password) */
+.budgetCard .settingsSubheading {
+  margin: 1.4em 0 0.4em;
+  padding-top: 1em;
+  font-size: 1.05em;
+  font-weight: normal;
+  border-top: 1px solid var(--PANEL_LINE);
+}
+
+/* Passkeys: each one's name and dates, with Remove beside it */
+.passkeyList {
+  margin: 0.8em 0 1em;
+  padding: 0;
+  list-style: none;
+}
+
+.passkeyItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em 1em;
+  padding: 0.6em 0;
+  border-top: 1px solid var(--PANEL_BORDER);
+}
+
+.passkeyItem:last-child {
+  border-bottom: 1px solid var(--PANEL_BORDER);
+}
+
+.passkeyAbout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Help: the Help button at the bottom of a page opens the page's help, floating over a dimmed page */
+.helpButton {
+  margin-top: 5vmin;
+}
+
+.budgetCard.helpView {
+  position: fixed;
+  z-index: 1500;
+  top: max(3vh, env(safe-area-inset-top, 0px));
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  max-height: 94vh;
+  max-height: calc(100dvh - 2 * max(3vh, env(safe-area-inset-top, 0px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  line-height: 1.45;
+  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+  border-color: var(--PANEL_BORDER);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.7), 0 0 18px rgba(200, 0, 0, 0.25);
+}
+
+/* Stays at the top right while the help scrolls */
+.helpClose {
+  position: sticky;
+  top: 0;
+  float: right;
+  margin: -0.3em -0.4em 0 0.5em;
+}
+
+.overlayBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.helpView h4 {
+  margin: 1.2em 0 0.4em;
+  font-size: 1.1em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.helpView ul,
+.helpView ol {
+  margin: 0 0 0.8em;
+  padding-left: 1.4em;
+}
+
+.helpView li {
+  margin-bottom: 0.4em;
+}
+
+.helpView li > ol {
+  margin: 0.4em 0 0;
+}
+
+/* Paycheck Calculator */
+.paycheckResults {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5vmin;
+  width: min(94vw, 760px);
+  margin: 1vmin auto 2.5vmin;
+  text-align: left;
+  font-size: clamp(12px, 2.3vmin, 17px);
+}
+
+.paycheckAmount {
+  font-size: 1.8em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+}
+
+.takeHome .paycheckAmount {
+  font-size: 2.3em;
+}
+
+.breakdownList {
+  margin: 0;
+}
+
+.breakdownRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 0.25em 0;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.breakdownRow dt,
+.breakdownRow dd {
+  margin: 0;
+}
+
+.breakdownRow dd {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdownRow.total {
+  font-weight: bold;
+  border-bottom-color: var(--PANEL_BORDER);
+}
+
+.calculatorForm {
+  align-items: stretch; /* The global form centers everything */
+}
+
+.calculatorSection {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14em), 1fr));
+  gap: 0.7em 1em;
+  margin: 0 0 0.8em;
+  padding: 0.6em 0.9em 0.9em;
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.calculatorSection legend {
+  padding: 0 0.4em;
+  font-size: 1.05em;
+}
+
+.unitInput {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.budgetCard .unitInput input[type="text"] {
+  padding-right: 3.6em;
+  font-variant-numeric: tabular-nums;
+}
+
+.inputUnit {
+  position: absolute;
+  right: 0.8em;
+  font-size: 0.85em;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .paycheckResults {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*========================================*
+ *  HOW IT WORKS (how-it-works.html): a long reference page, readable without JavaScript
+ *========================================*/
+
+.guide {
+  display: block; /* The global article is a centered flex column, which would shrink the Contents box */
+  box-sizing: border-box;
+  width: min(94vw, 920px);
+  margin: 0 auto 4vmin;
+  text-align: left;
+  font-size: var(--UI_TEXT);
+  line-height: 1.55;
+  color: var(--BASE_COLOR);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.guide > section,
+.guide > nav {
+  margin: 0 0 2.5vmin;
+  padding: 1em 1.3em;
+  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.35));
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: var(--PANEL_RADIUS);
+}
+
+.guide h2 {
+  margin: 0 0 0.6em;
+  font-size: 1.45em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.guide h3 {
+  margin: 1.2em 0 0.4em;
+  font-size: 1.15em;
+  font-weight: normal;
+  text-shadow: var(--SHADOW);
+}
+
+.guide p {
+  margin: 0 0 0.75em;
+  font-size: 1em;
+}
+
+.guide ul,
+.guide ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.4em;
+}
+
+.guide li {
+  margin-bottom: 0.35em;
+}
+
+.guide a {
+  display: inline;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.guide code {
+  padding: 0.05em 0.3em;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.92em;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+}
+
+.guide pre {
+  overflow-x: auto;
+  margin: 0 0 0.9em;
+  padding: 0.7em 0.9em;
+  font-size: 0.9em;
+  line-height: 1.4;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
+}
+
+.guide pre code {
+  padding: 0;
+  background: none;
+}
+
+.guide .tableScroll {
+  overflow-x: auto;
+  margin: 0 0 1em;
+}
+
+.guide table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.guide th,
+.guide td {
+  padding: 0.4em 0.6em;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.guide th {
+  font-weight: normal;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.guide dt {
+  margin-top: 0.7em;
+  font-weight: bold;
+}
+
+.guide dd {
+  margin: 0.15em 0 0 1.2em;
+}
+
+.guideUpdated {
+  opacity: 0.75;
+}
+
+@media (min-width: 760px) {
+  .guide .toc ol {
+    columns: 2;
+    column-gap: 2.5em;
+  }
 }

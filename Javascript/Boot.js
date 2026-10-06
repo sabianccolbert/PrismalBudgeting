@@ -1,34 +1,22 @@
 (function boot(){
   "use strict";
 
+  // JavaScript is on: drop the "turn on JavaScript" fallback first, so redirects below never show it
+  document.documentElement.classList.remove("noJs");
+
   /* ===============================
    * 0) SITE VERSION (bump per deploy)
    * =============================== */
-  const SITE_VERSION = "10.03.2026.A";
+  const SITE_VERSION = "10.06.2026.A";
   window.SITE_VERSION = SITE_VERSION;
-
-  /* ===============================
-   * 0.5) HTML CACHE BUSTER
-   * =============================== */
-  const storedVersion = localStorage.getItem("LOCAL_SITE_VERSION");
-
-  if (storedVersion !== SITE_VERSION) {
-    localStorage.setItem("LOCAL_SITE_VERSION", SITE_VERSION);
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('v', SITE_VERSION);
-    window.location.replace(currentUrl.toString());
-    return; 
-  }
-
-  function v(url){
-    const joiner = url.includes("?") ? "&" : "?";
-    return `${url}${joiner}v=${encodeURIComponent(SITE_VERSION)}`;
-  }
 
   /* ===============================
    *  1) PAGE DETECTION
    * =============================== */
   function getPageKey(){
+    // GitHub Pages shows 404.html at whatever address was asked for, so that page says what it is
+    if (document.documentElement.dataset.page === "notfound") return "notfound";
+
     let p = location.pathname.toLowerCase();
 
     if (p.endsWith("/")) p = p.slice(0, -1);
@@ -39,62 +27,115 @@
     if (p === "/404") return "notfound";
     if (p === "/login") return "login";
     if (p === "/privacy%20and%20terms") return "privacy";
+    if (p === "/settings") return "settings";
+    if (p === "/quick") return "quick";
+    if (p === "/how-it-works") return "guide";
+
+    // Menu pages (folder: /menu/)
+    if (p === "/menu" || p === "/menu/index") return "menu";
+    if (p === "/menu/recurring") return "recurring";
+    if (p === "/menu/history") return "history";
+    if (p === "/menu/accounts") return "accounts";
+    if (p === "/menu/tracker") return "tracker";
+    if (p === "/menu/calculator") return "calculator";
+    if (p === "/menu/logs") return "logs";
 
     return "generic";
   }
 
   window.PAGE = getPageKey();
 
+  // Pages that work without logging in (Quick Entry uses the key in its link instead; How It Works and
+  // the Not Found page are for anyone, search engines included)
+  const PUBLIC_PAGES = ["login", "privacy", "quick", "guide", "notfound"];
+  window.PUBLIC_PAGE = PUBLIC_PAGES.includes(PAGE);
+
   /* ===============================
-   *  1.5) AUTHENTICATION REDIRECT
+   *  2) SITE DATA + HTML CACHE BUSTER
    * =============================== */
-  const hostname = window.location.hostname;
+  // Signing in lives in this browser's storage. A browser that blocks site data throws on any use of it,
+  // so the pages that need it say how to fix that (stylesheet.css .noStorage) instead of breaking quietly.
+  let storage = null;
+  try {
+    storage = window.localStorage;
+    storage.getItem("LOCAL_SITE_VERSION");
+  } catch (e) {
+    storage = null;
+  }
+  if (!storage && (PAGE === "login" || !PUBLIC_PAGES.includes(PAGE))) {
+    document.documentElement.classList.add("noStorage");
+    return;
+  }
 
-  // 1. Detect all local/dev environments
-  // Simplest mobile setup:
-  window.API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  // A new version reloads the page once (with ?v=) so the browser fetches the new HTML too. The ?v= check
+  // stops a reload loop in a browser that doesn't keep what's stored.
+  if (storage && storage.getItem("LOCAL_SITE_VERSION") !== SITE_VERSION) {
+    try { storage.setItem("LOCAL_SITE_VERSION", SITE_VERSION); } catch (e) {}
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("v") !== SITE_VERSION) {
+      currentUrl.searchParams.set("v", SITE_VERSION);
+      window.location.replace(currentUrl.toString());
+      return;
+    }
+  }
+
+  function v(url){
+    const joiner = url.includes("?") ? "&" : "?";
+    return `${url}${joiner}v=${encodeURIComponent(SITE_VERSION)}`;
+  }
+
+  /* ===============================
+   *  3) AUTHENTICATION REDIRECT
+   * =============================== */
+  // The local API while testing on this computer; the real one everywhere else (a Cloudflare tunnel too).
+  // (The test harnesses swap the local address by its exact text, quotes included.)
+  window.API_BASE_URL = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ? 'http://127.0.0.1:8787'
-    : 'https://prismal-budget-api.prismalbudget.workers.dev'; // Production API handles both live & tunnel requests // Production Cloudflare Worker
+    : "https://prismal-budget-api.prismalbudget.workers.dev";
 
-  const isLoggedIn = !!localStorage.getItem("prismal_jwt");
-  
-  // If they are not logged in, and not already on the login page, redirect them.
-  if (!isLoggedIn && PAGE !== "login" && PAGE !== "privacy") {
+  const isLoggedIn = !!(storage && storage.getItem("prismal_jwt"));
+  // The link in a password reset email (/login.html?reset=...) opens the login page even when signed in.
+  // Login.js moves the code into this tab's session storage, so a reload of that page still counts.
+  let hasResetCode = false;
+  try { hasResetCode = !!sessionStorage.getItem("prismal_reset_token"); } catch (e) {}
+  const isResetLink = PAGE === "login" && (new URLSearchParams(location.search).has("reset") || hasResetCode);
+
+  // If they are not logged in, and not already on a page that works without it, redirect them.
+  if (!isLoggedIn && !PUBLIC_PAGES.includes(PAGE)) {
     window.location.replace("/login.html");
     return;
   }
-  if (isLoggedIn && PAGE === "login") {
+  if (isLoggedIn && PAGE === "login" && !isResetLink) {
     window.location.replace("/index.html");
     return;
   }
 
   /* ===============================
-   *  3) CSS mode flip
+   *  4) CSS mode flip
    * =============================== */
-  const html = document.documentElement;
-  html.classList.remove("noJs");
-
-  if (PAGE === "home") {
-    html.classList.add("homeJs");
-  } else {
-    html.classList.add("otherJs");
-  }
-  
-  /* ===============================
-   *  4) Inject versioned CSS
-   * =============================== */
-  //dont need, javascript is required so inline css links are used document.write(`<link rel="stylesheet" href="${v("/stylesheet.css")}">`);
+  document.documentElement.classList.add(PAGE === "home" ? "homeJs" : "otherJs");
 
   /* ===============================
    *  5) Append page scripts at END
    * =============================== */
+  // Starfield Setup starts the worker (Active Starfield.js) itself, so Active isn't listed here.
+  // Setup must come before Keyboard and Layout, which use window.STARFIELD.
   const GLOBAL_SCRIPTS = [
     "/Javascript/Starfield Setup.js",
-    "/Javascript/Active Starfield.js",
     "/Javascript/Layout.js",
     "/Javascript/Keyboard Starfield.js",
     "/Javascript/Analytics.js"
   ];
+
+  // Quick Entry borrows the budget helpers and New Entry form without loading a budget (see Quick Entry.js)
+  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "tracker", "calculator", "logs", "settings", "quick"];
+
+  // The script that draws each budget page (the menu data pages share Budget Pages.js)
+  const PAGE_SCRIPTS = {
+    home: "/Javascript/Calendar Page.js",
+    settings: "/Javascript/Settings Page.js",
+    quick: "/Javascript/Quick Entry.js"
+  };
 
   function appendScript(src){
     const s = document.createElement("script");
@@ -102,33 +143,42 @@
     s.async = false;
     document.body.appendChild(s);
   }
-  
 
   function loadPageScripts(){
-    GLOBAL_SCRIPTS.forEach(appendScript);
+    // Quick Entry's link carries its key, so that page never loads analytics
+    GLOBAL_SCRIPTS.filter(src => PAGE !== "quick" || !src.endsWith("/Analytics.js")).forEach(appendScript);
 
+    // Passkeys (Face ID, Touch ID, Windows Hello): signing in on the login page, managing them in Settings
+    if (PAGE === "login" || PAGE === "settings") {
+      appendScript("/Javascript/Passkeys.js");
+    }
     if (PAGE === "login") {
       appendScript("/Javascript/Login.js");
     }
-    else{
-      appendScript("/Javascript/Session.js");
+    else if (!PUBLIC_PAGES.includes(PAGE)) {
+      appendScript("/Javascript/Session.js"); // Sends signed-out visitors to login, so public pages skip it
     }
     if (PAGE === "notfound") {
       appendScript("/Javascript/Debug.js");
     }
-    if (PAGE === "home") {
+    // Every page that shows budget data loads + saves it through Process Budget,
+    // then draws itself: the calendar page, settings, or the menu data pages
+    if (BUDGET_PAGES.includes(PAGE)) {
       appendScript("/Javascript/Process Budget.js");
+      appendScript("/Javascript/Budget UI.js");
+      appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");
     }
   }
-  
+
   /* ===============================
    *  6) Add version badge
    * =============================== */
-  const badgeHTML = `<div id="versionBadge">v${SITE_VERSION}</div>`;
-
   function addVersionBadge(){
     if (document.getElementById("versionBadge")) return;
-    document.body.insertAdjacentHTML("beforeend", badgeHTML);
+    const badge = document.createElement("div");
+    badge.id = "versionBadge";
+    badge.textContent = `v${SITE_VERSION}`;
+    document.body.appendChild(badge);
   }
 
   /* ===============================
@@ -141,15 +191,16 @@
       fn();
     }
   }
-  
-  onDOMReady(() => {
-    const HTML = document.documentElement;
-    const BODY = document.body;
-    const CONTAINER = document.getElementById("transitionContainer");
 
-    HTML.style.overflowY = "hidden";
-    BODY.style.overflowY = "hidden";
-    CONTAINER.style.overflowY = "visible";
+  onDOMReady(() => {
+    // The page holds still until it has slid in (Layout.js gives scrolling back)
+    const CONTAINER = document.getElementById("transitionContainer");
+    if (CONTAINER) {
+      document.documentElement.style.overflowY = "hidden";
+      document.body.style.overflowY = "hidden";
+      CONTAINER.style.overflowY = "visible";
+    }
+
     loadPageScripts();
     addVersionBadge();
   });

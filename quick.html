@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <meta charset="UTF-8">
+    <!-- First, before anything loads: no request from this page says its address, which carries the key -->
+    <meta name="referrer" content="no-referrer">
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css">
+    <title>Prismal Budget - Quick Entry</title>
+    <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Quick Entry" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+    <!-- No Web App Manifest on purpose: phones would save the manifest's start page instead of this
+         page's link (which carries the key) when it's added to the home screen -->
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp" alt="Prismal Logo" class="brand-icon">
+          <h2 class="logo">Quick Entry</h2>
+        </div>
+        <nav class="navButtons">
+          <a href="/">
+            <img src="/Resources/Home.webp" alt="Home">
+          </a>
+        </nav>
+      </header>
+      <hr>
+      <main>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <section id="setupCard" class="budgetCard settingsCard" aria-labelledby="setupHeading" hidden>
+          <h3 id="setupHeading">Add This Page To Your Home Screen</h3>
+          <ul class="settingsList">
+            <li>📱 On iPhone or iPad: tap Share, then Add to Home Screen.</li>
+            <li>🤖 On Android: tap ⋮, then Add to Home screen.</li>
+          </ul>
+          <p class="panelHint">Then tap the new icon whenever you want to add an entry. No login needed.</p>
+        </section>
+        <!-- Undo takes back an entry added here while it's still waiting to join the budget; Redo adds it again -->
+        <div id="quickUndo" class="undoButtons quickUndo" hidden>
+          <button id="quickUndoButton" class="budgetButton" type="button" disabled>↶ Undo</button>
+          <button id="quickRedoButton" class="budgetButton" type="button" disabled>↷ Redo</button>
+        </div>
+        <div id="panelSlot"></div>
+      </main>
+    </div>
+  </body>
+</html>

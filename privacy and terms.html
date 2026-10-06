@@ -3,6 +3,7 @@
   <head>
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
     <title>Prismal Budget - Privacy Policy & Terms of Use</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -38,17 +39,17 @@
       <header>
       <div class="stacked">
         <h1>Privacy Policy & Terms of Use</h1>
-        <h2>Effective Date: January 1, 2026</h2>
+        <h2>Effective Date: October 6, 2026</h2>
       </div>
       <nav class="navButtons">
         <a id="normalBack" href="back">
-          <img src="/Resources/Back.png" alt="Back">
+          <img src="/Resources/Back.webp" alt="Back">
         </a>
         <a href="/">
-          <img src="/Resources/Home.png" alt="Home">
+          <img src="/Resources/Home.webp" alt="Home">
         </a>
         <a id="logoutButton" href="logout">
-          <img src="/Resources/Logout.png" alt="Logout">
+          <img src="/Resources/Logout.webp" alt="Logout">
         </a>
       </nav>
     </header>
@@ -57,7 +58,7 @@
       <h3>Privacy Policy</h3>
     
       <p>
-  <strong>Effective Date: September 22, 2026</strong><br><br>
+  <strong>Effective Date: October 6, 2026</strong><br><br>
   This Privacy Policy explains how Sabian Colbert (“we”, “us”, “our”) collects, uses, and protects your information when you use the Prismal Budget website and services (the “Site”). If you do not agree with this Policy, please do not use the Site.
 </p>
 
@@ -67,17 +68,27 @@
 
 <p><strong>A) Information You Provide directly</strong></p>
 <p>
-  When you create an account, we collect the credentials you provide. We store your budget and finance data, as well as your passwords (which are securely hashed), in our Cloudflare SQL database. 
+  When you create an account, we collect the username, password, and email address you provide, and we record when you agreed to this Privacy Policy and the Terms of Use. We store your account details and your budget and finance data (such as your entries, recurring payments, history, and change logs) in our Cloudflare SQL database. We never store your password itself, only a protected one-way form of it (see Section 5). You can sign in with your username or your email address. We use your email address to send you account emails, such as password reset links and security notices.
 </p>
 
-<p><strong>B) Connected Financial Data (via Plaid)</strong></p>
+<p><strong>B) Passkeys (Face ID, Touch ID, Windows Hello)</strong></p>
 <p>
-  To help you track your finances, we use Plaid Inc. (“Plaid”) to connect your Prismal Budget account with your bank accounts. By using our service, you grant us and Plaid the right, power, and authority to act on your behalf to access and transmit your personal and financial information from the relevant financial institution. Your financial data transmitted through Plaid is also subject to Plaid’s Privacy Policy, available at <a href="https://plaid.com/legal" target="_blank">plaid.com/legal</a>.
+  Passkey sign-in is optional. If you turn it on, your device (or the password manager it uses, such as iCloud Keychain, Google Password Manager, or Windows Hello) makes a passkey for the Site, and we store the passkey's public key and ID, the name you give it, the site address it was made on, when it was added and last used, whether your device reports it as synced, and a sign-in counter. We also store a random ID for your account that your devices keep with its passkeys, and whether you chose to turn passkey sign-in on or off (so we only ask you once). The private part of a passkey never leaves your device or password manager. Your face, fingerprint, or device PIN is checked only by your device: <strong>we never receive, see, or store any biometric data</strong>, only a yes from your device that the check passed. Your device or password manager keeps the passkey along with your username (so it can show which account it's for), and those companies handle it under their own privacy policies.
 </p>
 
-<p><strong>C) Analytics & Advertising Data</strong></p>
+<p><strong>C) Reminders, Notifications & Quick Entry</strong></p>
 <p>
-  We use third-party services, including Google AdSense, to monetize the Site. These services may collect general device and browser information, approximate location (derived from IP address), and site usage events. 
+  If you turn on daily reminders, we store your reminder time, your time zone, and which days your budget needs a reminder. If you turn on push notifications, we store the push address your browser gives us for that device (provided by your browser's push service, such as Apple, Google, or Mozilla). If you turn on a calendar link, we store the private code in that link. If you set up a Quick Entry home screen icon, we store a scrambled (hashed) copy of its key, along with the entries you make with it until they're added to your budget.
+</p>
+
+<p><strong>D) Analytics & Advertising Data</strong></p>
+<p>
+  We use Google Analytics to understand how the Site is used, and third-party services, including Google AdSense, to monetize the Site. These services may collect general device and browser information, approximate location (derived from IP address), and site usage events. Google Analytics never sees your budget, and the page addresses we send it leave out everything after the page's name, such as the private code in a password reset link. It doesn't load at all if your browser sends a Global Privacy Control or Do Not Track signal, or if you turn analytics off for your device in Settings.
+</p>
+
+<p><strong>E) Sign-Ins & Security Records</strong></p>
+<p>
+  Each time you sign in, we keep a record of that sign-in (a random ID, and when it started and when it ends) so that signing out ends it on our side too. Each one is deleted when you sign out, when it ends after 24 hours, or when you change your password or sign out everywhere. To protect accounts from password guessing and the Site from spam, we also briefly count failed sign-ins, wrong passwords entered in Settings, new accounts, sign-ups and email changes with a username or email that's already taken, password reset requests, Quick Entry and password reset links that don't work, and test notifications. When a count is for a network, we store a scrambled (hashed) form of the IP address it came from, never the address itself. Each of these counts is deleted within about an hour.
 </p>
 
 <hr class="divider">
@@ -91,6 +102,9 @@
   • Google's use of advertising cookies enables it and its partners to serve ads to you based on your visit to our Site and/or other sites on the Internet.<br>
   • You may opt out of personalized advertising by visiting <a href="https://myadcenter.google.com/" target="_blank">Google Ads Settings</a>. Alternatively, you can opt out of a third-party vendor's use of cookies for personalized advertising by visiting <a href="https://www.aboutads.info" target="_blank">www.aboutads.info</a>.
 </p>
+<p>
+  <strong>Storage in your browser:</strong> The Site itself doesn't set cookies. It keeps your sign-in (a signed token that stops working within 24 hours) and a few conveniences, like your Undo history (only in the open tab) and whether you've hidden the Getting Started card, in your browser's storage on your device. Signing out removes them, except your device's own choices (whether analytics is off, and which version of the Site it has).
+</p>
 
 <hr class="divider">
 
@@ -99,7 +113,9 @@
 <p>
   • operate and improve the Prismal Budget platform<br>
   • securely sync and display your personal budget data<br>
-  • troubleshoot issues, prevent fraud, and maintain security<br>
+  • sign you in with your password or a passkey<br>
+  • send account emails (such as password reset links, and security notices when your password or email changes or a passkey is added) and the reminders you turn on<br>
+  • troubleshoot issues, prevent fraud, and maintain security (like limiting password guesses)<br>
   • serve relevant advertisements to support the Site
 </p>
 <p>
@@ -110,21 +126,30 @@
 
 <h4>4) Sharing & Third Parties</h4>
 <p>
-  We share information with service providers only as needed to operate the Site. This includes our database infrastructure provider (Cloudflare), our financial data connector (Plaid), and our advertising partner (Google AdSense). These third parties process data according to their own terms and privacy policies.
+  We share information with service providers only as needed to operate the Site. This includes our website host (GitHub Pages), our server and database infrastructure provider (Cloudflare), our email delivery provider (Resend), which receives your email address and the contents of the emails we send you, your browser's push notification service (such as Apple, Google, or Mozilla) if you turn on push notifications, our analytics provider (Google Analytics), and our advertising partner (Google AdSense). These third parties process data according to their own terms and privacy policies.
+</p>
+<p>
+  When you pick a new password, our server checks it against Have I Been Pwned's list of passwords exposed in data breaches. It sends only the first 5 characters of a scrambled (SHA-1 hashed) form of the password, which hundreds of different passwords share, so the service never receives your password, your username, your email address, or your IP address.
 </p>
 
 <hr class="divider">
 
 <h4>5) Security & Data Retention</h4>
 <p>
-  Your financial data and account credentials are saved using modern cloud infrastructure (Cloudflare). Passwords are cryptographically hashed and are never stored in plain text. While we use reasonable administrative and technical safeguards to protect your information, no method of transmission or storage is 100% secure. We retain your data as long as your account is active or as needed for legitimate business purposes.
+  Your financial data and account credentials are saved using modern cloud infrastructure (Cloudflare). Passwords are never stored in plain text: we keep only a one-way hash made with PBKDF2-SHA256 (100,000 rounds), a random salt for each password, and a secret key kept apart from the database, so a copy of the database alone can't be used to work out anyone's password. New passwords that have shown up in data breaches are refused. Each sign-in lasts at most 24 hours, and signing out ends it on our server too. Password reset links work only once and expire after one hour. Like Quick Entry keys, they're stored only in hashed form. Passkeys are checked with public-key cryptography: we store only their public keys, which can't be used to sign in, and a passkey only works on this Site. Adding a passkey requires your password and sends a security notice to your email. Repeated wrong passwords are blocked for a while. Changing your password in Settings signs out your other devices and stops your Quick Entry icons; resetting it with an emailed link signs you out on every device, stops your Quick Entry icons, and turns passkey sign-in off until you turn it back on in Settings. Sign Out Everywhere, in Settings, signs out every device at once. While we use reasonable administrative and technical safeguards to protect your information, no method of transmission or storage is 100% secure. We retain your data as long as your account is active or as needed for legitimate business purposes. When you delete your account, we delete it and all of its data from our database right away, though copies may remain in our database provider's backups for up to 30 days.
 </p>
 
 <hr class="divider">
 
 <h4>6) Your Choices</h4>
 <p>
-  • <strong>Account Data:</strong> You may update or delete your budget data by managing your account settings on the Site.<br>
+  • <strong>Account Data:</strong> You may update or delete your budget data on the Site. In Settings, you can change your email address or password, or delete your account and all of its data at any time.<br>
+  • <strong>Download Your Data:</strong> In Settings, Download My Data gives you a copy of everything stored for your account (your budget, settings, and account details) as a JSON file, at any time. Passwords, keys, and private link codes are left out.<br>
+  • <strong>Analytics:</strong> In Settings, you can turn Google Analytics off (or back on) for your device. Browsers that send a Global Privacy Control or Do Not Track signal never load it.<br>
+  • <strong>Signed-In Devices:</strong> In Settings, you can sign out every device at once, or turn off your Quick Entry icons.<br>
+  • <strong>Passkeys:</strong> In Settings, you can turn passkey sign-in on or off at any time, add passkeys, or remove them. Removing a passkey deletes it from our database (you can also delete it from your device or password manager), and deleting your account deletes all of its passkeys.<br>
+  • <strong>Reminders:</strong> You can turn push notifications and the calendar link on or off in Settings.<br>
+  • <strong>Quick Entry:</strong> A Quick Entry icon can only add entries to your budget. It can't see your budget, only your Other Accounts and their balances (so you can pick one). To stop all of your Quick Entry icons from working, turn them off in Settings or change your password.<br>
   • <strong>Advertising:</strong> You can block or delete cookies through your browser settings, or use the opt-out links provided in Section 2.
 </p>
 
@@ -187,7 +212,7 @@
 
           <h4>5) Third-Party Services</h4>
           <p>
-            Our Site relies on third-party integrations (such as Plaid for banking connections). We do not control and are not responsible for the uptime, accuracy, or practices of these third-party services.
+            Our Site relies on third-party integrations (such as Cloudflare for our servers and Resend for account emails). We do not control and are not responsible for the uptime, accuracy, or practices of these third-party services.
           </p>
 
           <hr class="divider">

@@ -1,0 +1,8 @@
+# Prismal Budget
+
+> Prismal Budget (https://prismalbudget.org) is a web budgeting app built around a four-week calendar. Each day lists its entries (costs and gains), and the budget projects "In Bank", the money in your budget's bank account at the end of every day, so negative days show up before they happen. Recurring entries fill themselves in; a tracker adds up spending by category; Other Accounts (like Savings) track money outside the budget's account.
+
+## Docs
+
+- [How Prismal Budget Works](https://prismalbudget.org/how-it-works.html): the complete guide. Every page and feature, the budget math, entry formats and refraction types (Regular, Hidden, Transfer), recurring frequencies, the daily update, Other Accounts, the tracker, search, Quick Entry, undo and redo, reminders, passkey sign-in (Face ID, Touch ID, Windows Hello), security (username and password rules, how passwords are stored, sessions, sign-in limits, signing out everywhere), data storage and protection against overwriting changes made on another device, downloading your data, the API, and design decisions.
+- [Privacy Policy & Terms of Use](https://prismalbudget.org/privacy%20and%20terms.html): what is collected and how it's used.

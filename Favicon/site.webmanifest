@@ -1,7 +1,24 @@
 {
+  "id": "/",
   "name": "Prismal Budget",
   "short_name": "Prismal",
+  "description": "A calendar-based budget that projects your bank balance for every day of the next four weeks.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
+    {
+      "src": "/Favicon/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/Favicon/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/Favicon/web-app-manifest-192x192.png",
       "sizes": "192x192",

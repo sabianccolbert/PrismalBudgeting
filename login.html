@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html lang="en" class="noJs">
   <head>
+    <meta charset="UTF-8">
+    <!-- First, before anything loads: no request from this page says its address (a reset link's carries
+         its code until Login.js takes it out) -->
+    <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
     <title>Prismal Budget - Login</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
-    <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -37,29 +41,54 @@
     <div id="transitionContainer">
       <header>
         <div class="brand">
-          <img src="/Resources/Prismal.png" alt="Prismal Logo" class="brand-icon">
+          <img src="/Resources/Prismal.webp" alt="Prismal Logo" class="brand-icon">
           <h2 class="logo">Sign In To Prismal Budget</h2>
         </div>
       </header>
       <main>
         <article>
+          <!-- Login.js shows the groups each mode needs: login, create, forgot, reset -->
           <form id="auth-form">
-            <label for="username">Username</label>
-            <input type="text" id="username" required autocomplete="username">
-      
-            <label for="password">Password</label>
-            <input type="password" id="password" required autocomplete="current-password">
-      
-            <!-- Starts hidden with the .hidden class -->
+            <p id="form-hint" class="formHint hidden"></p>
+
+            <div id="username-group">
+              <label for="username" id="username-label">Username or Email</label>
+              <!-- "webauthn": browsers with passkey autofill list the site's passkeys here -->
+              <input type="text" id="username" required autocomplete="username webauthn">
+            </div>
+
+            <div id="email-group" class="hidden">
+              <label for="email">Email</label>
+              <input type="email" id="email" required autocomplete="email" disabled>
+            </div>
+
+            <div id="password-group">
+              <label for="password" id="password-label">Password</label>
+              <input type="password" id="password" required autocomplete="current-password">
+            </div>
+
             <div id="verify-password-group" class="hidden">
               <label for="verify-password">Verify Password</label>
-              <input type="password" id="verify-password" autocomplete="new-password">
+              <input type="password" id="verify-password" required autocomplete="new-password" disabled>
             </div>
-      
-            <p id="status-message"></p>
-      
+
+            <label id="terms-group" class="termsField hidden">
+              <input type="checkbox" id="agree-terms" required disabled>
+              <span>I agree to the <a href="/privacy and terms.html" target="_blank">Privacy Policy & Terms of Use</a></span>
+            </label>
+
+            <!-- Login: make a passkey for this device right after signing in (Login.js names its check, like Face ID) -->
+            <label id="passkey-group" class="termsField hidden">
+              <input type="checkbox" id="turn-on-passkey" disabled>
+              <span id="passkey-label">Turn on passkey sign-in</span>
+            </label>
+
+            <p id="status-message" role="status"></p>
+
             <button type="submit" id="primary-action-btn">Login</button>
+            <button type="button" id="passkey-btn" class="hidden">Sign In With A Passkey</button>
             <button type="button" id="toggle-mode-btn">New Account?</button>
+            <button type="button" id="forgot-btn" class="textButton">Forgot Password?</button>
           </form>
         </article>
       </main>

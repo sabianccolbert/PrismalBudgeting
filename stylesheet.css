@@ -109,12 +109,26 @@
  */
 
 /*---------- Root document ----------*/
+/* The site's font, Bpmf Huninn (SIL Open Font License), in two parts so a page only downloads what it
+   shows: its Latin letters, numbers, Greek, and symbols (24 KB, every page; the pages preload it), and
+   its Chinese, Japanese, and Bopomofo characters (1.8 MB, only when a page has one, like an entry titled
+   in Chinese). Both come from BpmfHuninn-Regular.ttf, which no page loads anymore. */
 @font-face {
   font-family: "Main Font";
-  src: url("BpmfHuninn-Regular.ttf") format("truetype");
+  src: url("/Fonts/MainFont-Latin.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0000-02FF, U+0370-03FF, U+2000-27BF;
+}
+
+@font-face {
+  font-family: "Main Font";
+  src: url("/Fonts/MainFont-More.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-31FF, U+3300-33FF, U+4E00-9FFF, U+F000-F5FF, U+FE30-FE52, U+FF00-FFEF, U+2546E, U+2AE5A;
 }
 
 html {
@@ -157,7 +171,7 @@ body {
 
   /* Step 6: base typography */
   text-align: center;
-  font-family: 'Main Font';
+  font-family: 'Main Font', sans-serif; /* Letters the font doesn't have (like ñ) use a plain sans-serif */
   font-size: 7vmin;
   color: var(--BASE_COLOR);
   user-select: none;
@@ -311,8 +325,8 @@ article {
   margin: 0 auto 3vmin;
 }
 
-/* Hide blocks via [hidden] (chapters, etc.) */
-article[hidden] {
+/* Hide anything with [hidden] (chapters, etc.), even elements given a display (like inputs) */
+[hidden] {
   /* Step 3: hard-hide for safety */
   display: none !important;
 }
@@ -508,7 +522,7 @@ button {
 
   /* Step 4: typography */
   color: var(--BASE_COLOR);
-  font-family: 'Main Font';
+  font-family: 'Main Font', sans-serif;
   font-size: 5vmin;
 
   /* Step 8: smooth transitions */
@@ -667,7 +681,7 @@ header .stacked h2 {
  *        .ready     -> resting position (translateY(0))
  *        .slide-out -> leaving position (translateY(var(--SLIDE_DISTANCE)))
  *   3) html has either .homeJs or .otherJs depending on page type
- *   4) .noJs disables all transforms for graceful fallback
+ *   4) .noJs (JavaScript is off) hides the page and asks for JavaScript instead
  */
 
 /* Homepage: slides DOWN into view, OUT up */
@@ -699,10 +713,29 @@ header .stacked h2 {
   transform: translateY(var(--SLIDE_DISTANCE));
 }
 
-/* No javascript fallback */
-.noJs #transitionContainer {
-  transform: translateY(0) !important;
-  transition: none !important;
+/* No javascript fallback: nothing works without it, so the page only asks for it. The same goes for a
+   browser that blocks site data (Boot.js adds .noStorage): signing in needs it. */
+.noJs #transitionContainer,
+.noStorage #transitionContainer {
+  display: none;
+}
+
+.noJs body::before {
+  content: "Prismal Budget needs JavaScript to work. Please turn on JavaScript in your browser's settings, then reload this page.";
+}
+
+.noStorage body::before {
+  content: "Prismal Budget needs to keep a little data in your browser (that's how it keeps you signed in), and this browser is blocking it. Allow cookies and site data for this site in your browser's settings, then reload this page.";
+}
+
+.noJs body::before,
+.noStorage body::before {
+  margin: auto;
+  padding: 6vmin;
+  max-width: 80vw;
+  font-size: clamp(18px, 5vmin, 40px);
+  line-height: 1.4;
+  text-shadow: 0 0 10px rgb(0, 0, 0);
 }
 
 /* #endregion 11) SLIDE-IN PAGE TRANSITION SYSTEM */
@@ -723,25 +756,32 @@ header .stacked h2 {
     display: none; /* disable animated starfield */
   }
 
-  #transitionContainer {
-    transform: translateY(0);
+  /* As specific as the slide rules above (and after them), so these win: the page just appears.
+     Layout.js turns scrolling back on without waiting for a slide to end. */
+  .homeJs #transitionContainer,
+  .otherJs #transitionContainer,
+  .homeJs #transitionContainer.ready,
+  .otherJs #transitionContainer.ready,
+  .homeJs #transitionContainer.slide-out,
+  .otherJs #transitionContainer.slide-out {
+    transform: none;
     transition: none;
   }
 }
 
 /* #endregion 12) REDUCED-MOTION ACCESSIBILITY */
 
-#homepageBack {
-display:none;
-}
-
-#policyBack{
-  display:none;
-  }
-
-#YouTube {
-padding:1vmin;
-height:28vmin;
+/* An image that couldn't load (Layout.js) shows its words instead, in the same spot and size */
+.missingImage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: max(12px, 2.4vmin);
+  line-height: 1.1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 #versionBadge {
@@ -812,4 +852,83 @@ input:focus {
 }
 .hidden {
   display: none !important;
+}
+
+/* The last minute before an idle sign-out (Session.js). Here, not in budgetStyle.css: every signed-in
+   page shows it, and the 404 page doesn't load budgetStyle.css. */
+.idleWarning {
+  position: fixed;
+  top: max(2vh, env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 2100;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(92vw, 560px);
+  padding: 0.7em 1.2em;
+  font-size: clamp(13px, 2.6vmin, 18px);
+  line-height: 1.4;
+  text-align: center;
+  color: var(--BASE_COLOR);
+  background: rgba(10, 0, 50, 0.97);
+  border: 2px solid var(--LINK_LIGHT);
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 14px rgba(200, 0, 0, 0.35);
+}
+
+/* Checkboxes (the input style above hides native controls). A set size: em would follow the input
+   style's 5vmin text, which made them huge on big screens. */
+input[type="checkbox"] {
+  -webkit-appearance: checkbox;
+  appearance: auto;
+  display: inline-block;
+  flex-shrink: 0;
+  width: clamp(16px, 2.2vmin, 20px);
+  height: clamp(16px, 2.2vmin, 20px);
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-size: inherit;
+  accent-color: var(--LINK_LIGHT);
+  cursor: pointer;
+}
+
+input[type="checkbox"]:hover,
+input[type="checkbox"]:focus {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Create account: agree to the Privacy Policy & Terms of Use */
+.termsField {
+  display: flex;
+  align-items: center;
+  gap: 2vmin;
+  max-width: 80vw;
+  margin: 1vmin auto 2vmin;
+  font-size: 4vmin;
+  text-align: left;
+}
+
+.termsField a {
+  padding-bottom: 0;
+}
+
+/* Login page instructions (forgot password, new password) */
+.formHint {
+  max-width: 80vw;
+  margin: 2vmin auto;
+  font-size: 4.5vmin;
+}
+
+/* A button that reads like a link (Forgot Password?) */
+.textButton {
+  margin-top: 2vmin;
+  padding: 0.3em 0.8em;
+  border: none;
+  font-size: 4vmin;
+}
+
+.textButton:hover {
+  box-shadow: none;
 }

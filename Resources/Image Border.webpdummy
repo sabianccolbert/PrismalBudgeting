@@ -1,0 +1,3 @@
+Placeholder for Image Border.webp: the ring frame stylesheet.css draws around an image wrapped in
+an element with the imgBorder class. No page uses that class yet, so nothing loads it for now.
+Replace this file with Image Border.webp.

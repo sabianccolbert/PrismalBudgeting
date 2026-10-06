@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<!-- No "noJs" class here: this page is readable without JavaScript (search engines and AI crawlers often don't run it) -->
+<html lang="en">
+  <head>
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css">
+    <title>How Prismal Budget Works: Pages, Features, Rules, and Data</title>
+    <meta name="description" content="A complete guide to Prismal Budget, the calendar-based budget that projects your bank balance for every day of the next four weeks: every page, every feature, how the math works, and how the data is stored.">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+    <link rel="canonical" href="https://prismalbudget.org/how-it-works.html">
+
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="How Prismal Budget Works">
+    <meta property="og:description" content="Every page, feature, rule, and data format of Prismal Budget, the calendar-based budget.">
+    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://prismalbudget.org/how-it-works.html">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      "headline": "How Prismal Budget Works",
+      "description": "A complete guide to Prismal Budget: every page, every feature, how the budget math works, and how the data is stored.",
+      "url": "https://prismalbudget.org/how-it-works.html",
+      "dateModified": "2026-10-05",
+      "inLanguage": "en",
+      "about": {
+        "@type": "WebApplication",
+        "name": "Prismal Budget",
+        "url": "https://prismalbudget.org",
+        "applicationCategory": "FinanceApplication",
+        "operatingSystem": "Any (runs in a web browser)",
+        "description": "A calendar-based budget that projects your bank balance for every day of the next four weeks."
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="stacked">
+          <h1>How Prismal Budget Works</h1>
+          <h2>Pages, features, rules, and data</h2>
+        </div>
+        <nav class="navButtons">
+          <a id="normalBack" href="back">
+            <img src="/Resources/Back.webp" alt="Back">
+          </a>
+          <a href="/">
+            <img src="/Resources/Home.webp" alt="Home">
+          </a>
+        </nav>
+      </header>
+      <hr>
+      <main>
+        <article class="guide">
+
+          <section id="overview" aria-labelledby="overviewTitle">
+            <h2 id="overviewTitle">What Prismal Budget Is</h2>
+            <p>Prismal Budget (<a href="https://prismalbudget.org">prismalbudget.org</a>) is a web budgeting app built around a four-week calendar. Every day on the calendar lists that day's entries (costs and gains), and the budget adds them up into <strong>In Bank</strong>: how much money will be in your budget's bank account at the end of each day. Recurring entries like paychecks and bills fill themselves in, so you can see days where your balance would go negative before they happen, and the lowest your balance gets in the 28 days after the calendar.</p>
+            <p>This page explains every page, feature, rule, and data format in detail. It's written to be read by people, by AI assistants, and by search engines, so it uses plain words, exact formats, and examples. Prismal Budget started as a Google Sheets budget; the website keeps its ideas (like refraction types, temporary recurring entries, and tracker aliases), but some rules changed on purpose, and this page describes the website as it works now.</p>
+            <p class="guideUpdated">Last updated: October 6, 2026 (site version 10.06.2026.A).</p>
+          </section>
+
+          <nav class="toc" aria-labelledby="tocTitle">
+            <h2 id="tocTitle">Contents</h2>
+            <ol>
+              <li><a href="#pages">The pages</a></li>
+              <li><a href="#entries">Entries and refraction types</a></li>
+              <li><a href="#calendar">The calendar and the budget math</a></li>
+              <li><a href="#recurring">Recurring entries</a></li>
+              <li><a href="#daily-update">The daily update</a></li>
+              <li><a href="#other-accounts">Other Accounts (like Savings)</a></li>
+              <li><a href="#tracker">The tracker</a></li>
+              <li><a href="#search">Search</a></li>
+              <li><a href="#quick-entry">Quick Entry (home screen icon)</a></li>
+              <li><a href="#calculator">Paycheck Calculator</a></li>
+              <li><a href="#change-logs">Change Logs</a></li>
+              <li><a href="#reminders">Daily reminders</a></li>
+              <li><a href="#account-security">Accounts, sign-in, and security</a></li>
+              <li><a href="#storage">How the data is stored</a></li>
+              <li><a href="#architecture">How the website is built</a></li>
+              <li><a href="#api">API reference</a></li>
+              <li><a href="#decisions">Why it works this way</a></li>
+              <li><a href="#developers">Notes for developers and AI assistants</a></li>
+              <li><a href="#glossary">Glossary</a></li>
+            </ol>
+          </nav>
+
+          <section id="pages" aria-labelledby="pagesTitle">
+            <h2 id="pagesTitle">1. The Pages</h2>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>Page</th><th>Address</th><th>Sign-in</th><th>What it's for</th></tr></thead>
+                <tbody>
+                  <tr><td>Login</td><td><code>/login.html</code></td><td>Public</td><td>Sign in (with the username or email and the password, or a passkey), create an account, Forgot Password, the form a password reset link opens, and the one-time question about passkey sign-in.</td></tr>
+                  <tr><td>Home</td><td><code>/</code> (<code>/index.html</code>)</td><td>Required</td><td>The Getting Started card (new budgets), the calendar, Search, Lowest in bank after today, Dave, Upcoming, New Entry, and the Quick Entry Icon button.</td></tr>
+                  <tr><td>Menu</td><td><code>/menu/</code></td><td>Required</td><td>Links to the pages below.</td></tr>
+                  <tr><td>Recurring Entries</td><td><code>/menu/recurring.html</code></td><td>Required</td><td>Paychecks, bills, and anything else that repeats.</td></tr>
+                  <tr><td>History</td><td><code>/menu/history.html</code></td><td>Required</td><td>Every past week, newest first.</td></tr>
+                  <tr><td>Other Accounts</td><td><code>/menu/accounts.html</code></td><td>Required</td><td>Accounts outside the budget, like Savings, with their balances.</td></tr>
+                  <tr><td>Tracker</td><td><code>/menu/tracker.html</code></td><td>Required</td><td>Spending and income by category over the last 4 weeks, 3 months, and 365 days.</td></tr>
+                  <tr><td>Paycheck Calculator</td><td><code>/menu/calculator.html</code></td><td>Required</td><td>Works out take-home pay from hours, pay rate, deductions, and taxes.</td></tr>
+                  <tr><td>Change Logs</td><td><code>/menu/logs.html</code></td><td>Required</td><td>A record of every change to the budget.</td></tr>
+                  <tr><td>Settings</td><td><code>/settings.html</code></td><td>Required</td><td>Daily reminders (push notifications and a calendar link), email, password (change it, or email a reset link), passkeys, signed-in devices (Quick Entry icons, Sign Out Everywhere), your data and privacy (Download My Data, analytics on this device), and deleting the account.</td></tr>
+                  <tr><td>Quick Entry</td><td><code>/quick.html?key=…</code></td><td>Its key</td><td>A New Entry form for a phone's home screen, with no login.</td></tr>
+                  <tr><td>Privacy Policy &amp; Terms of Use</td><td><code>/privacy and terms.html</code></td><td>Public</td><td>The policy and terms.</td></tr>
+                  <tr><td>How It Works</td><td><code>/how-it-works.html</code></td><td>Public</td><td>This page.</td></tr>
+                  <tr><td>Not Found (404)</td><td>any other address</td><td>Public</td><td>Shown for missing pages; it also has the starfield background's settings.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Things Every Page Shares</h3>
+            <ul>
+              <li><strong>Header:</strong> the page title and image buttons (Back, Home, Menu, Settings, Logout, depending on the page).</li>
+              <li><strong>Animated starfield background</strong> and <strong>page transitions:</strong> pages slide in and out instead of flashing. The starfield's stars carry over from page to page.</li>
+              <li><strong>Footer:</strong> trademark note, contact, Privacy Policy &amp; Terms of Use, and How Prismal Budget Works.</li>
+              <li><strong>Help button</strong> at the very bottom of Home, Other Accounts, Recurring Entries, Tracker, History, and Paycheck Calculator. It opens that page's help in a box that floats over a dimmed page; ×, Escape, or tapping outside closes it.</li>
+              <li><strong>Floating boxes:</strong> boxes like New Entry, an entry's options, and the panels for recurring entries, tracker rows, and accounts float over the page, so nothing under them moves. Search results float just under the search bar.</li>
+              <li><strong>Without JavaScript,</strong> pages other than this one only ask you to turn it on, since nothing works without it. The same goes for a browser that blocks site data (cookies and site data turned off): signing in is kept there, so the login and budget pages say how to allow it, while this page, the Privacy Policy, Quick Entry, and Not Found still work.</li>
+              <li><strong>Less motion:</strong> when the device asks for reduced motion, pages appear without sliding, links go right away, and the starfield doesn't run.</li>
+              <li><strong>Notes</strong> (like "Undone: …") show at the bottom of the screen for a few seconds; two at once stack instead of covering each other.</li>
+              <li><strong>Missing images</strong> show their words instead of a broken-image icon, so a button still says what it does.</li>
+              <li><strong>Links</strong> within the site slide the page out first. Links to a spot on the same page (like this page's Contents) just scroll there, and links opened in a new tab (Ctrl or ⌘ click, or the middle button) open there as usual.</li>
+              <li><strong>Idle sign-out warning:</strong> on signed-in pages, the last minute before the 15-minute idle sign-out shows a notice counting down; any tap, key, or scroll keeps you signed in. A page left in the background just signs out when it's opened again, and the login page then says why.</li>
+              <li><strong>Saving safely:</strong> every change saves right away. If the server can't be reached, the change is kept on the page and sent again when the connection comes back (and every 30 seconds until then), and leaving the page before then asks first. If the budget was saved on another device or tab since the page loaded, the page reloads with the newest budget instead of saving over it (see <a href="#architecture">How the website is built</a>).</li>
+            </ul>
+
+            <h3>Login</h3>
+            <ul>
+              <li><strong>Create an account:</strong> a username (5 to 30 characters, and any characters you can see work: letters in any language, numbers, symbols, emoji, and spaces), an email address, a password of at least 8 characters (any characters, typed twice), and agreeing to the Privacy Policy &amp; Terms of Use. Usernames and passwords follow the rules in <a href="#account-security">Accounts, sign-in, and security</a>; in short, "Sam" and "sam" are the same username, and a password known from data breaches is refused.</li>
+              <li><strong>Signing in:</strong> the username (in any capitals) or the account's email, and the password. Wrong passwords are limited (see <a href="#account-security">security</a>).</li>
+              <li><strong>Forgot Password:</strong> enter the account's email and a one-time reset link is emailed (it works for an hour). The page says the same thing whether or not an account uses that email.</li>
+              <li><strong>Reset form:</strong> the emailed link opens <code>/login.html?reset=…</code> to choose a new password, which signs out every device and turns passkey sign-in off. The page takes the code out of its address right away and keeps it only in that tab (<code>sessionStorage</code>) until the new password is saved, so it doesn't stay in the browser's history or reach analytics.</li>
+              <li><strong>Sign In With A Passkey:</strong> signs in with Face ID, Touch ID, Windows Hello, a fingerprint, or the device's PIN, with no username or password to type (see <a href="#passkeys">Passkeys</a>). Browsers with passkey autofill also list the site's passkeys under the username box.</li>
+              <li><strong>Turn on passkey sign-in:</strong> a checkbox under the password, named for the device (like "(Face ID or Touch ID)" on an iPhone or "(Windows Hello)" on Windows). When it's checked, signing in with the password makes a passkey for this device right away.</li>
+              <li><strong>The passkey question:</strong> after a password sign-in, an account that hasn't answered yet is asked once, "Turn On Passkey Sign-In?" (Yes, Turn It On, or No Thanks).</li>
+              <li>The checkbox, the passkey button, and the question only show in browsers that can use passkeys.</li>
+              <li>Signing in keeps you signed in for up to 24 hours, but 15 minutes without activity signs you out. Logout (and the idle sign-out) also ends the session on the server, so its sign-in stops working everywhere, even if a copy of it was kept. After a sign-out the site did (15 idle minutes, a session that ended, or Sign Out Everywhere), the login page says why.</li>
+            </ul>
+
+            <h3>Home</h3>
+            <ul>
+              <li><strong>Getting Started:</strong> a new budget starts at $0, so a Welcome card at the top walks through three steps: the starting balance (what's in the bank now, after today's purchases so far, and optionally what's in savings), recurring entries (a link to Recurring Entries), and a daily reminder (a link to Settings). Setting the starting balance adds a <code>⭕️</code> Transfer titled "Starting Balance" on today (it changes In Bank without counting as a gain) and, for savings, a <code>✖️</code> Hidden cost titled with the default account's name (it puts the money in that account without changing In Bank). Both are ordinary entries that can be changed. The card goes away once the starting balance (or any History) and a recurring entry are there, or when it's hidden with × (remembered per account on that device).</li>
+              <li><strong>Search bar</strong> (see <a href="#search">Search</a>).</li>
+              <li><strong>Lowest in bank after today:</strong> the lowest In Bank from today through the 28 days after the calendar.</li>
+              <li><strong>Dave:</strong> a character who reads your budget and says what to keep in mind (see <a href="#calendar">the calendar</a>), with a new affirmation every day.</li>
+              <li><strong>Upcoming:</strong> entries dated after the calendar.</li>
+              <li><strong>Undo</strong> and <strong>Redo</strong> buttons, the <strong>Quick Entry Icon</strong> and <strong>New Entry</strong> buttons, then the four-week calendar.</li>
+              <li><strong>Undo and Redo</strong> take back calendar changes and quick entries the budget added, newest first, then put them back. They cover New Entry; an entry's Set to, Add to it, Move to, and Delete; the starting balance; and quick entries. Each button says what it would do (like "Undo: added Coffee (-$4.50) on 10/05"), and a note says what was undone or redone. On a computer, Ctrl+Z (⌘Z on a Mac) undoes, and Ctrl+Shift+Z (⌘⇧Z) or Ctrl+Y redoes, except while typing in a box or with a box open. Undo never erases anything changed since: if a day it would change was changed some other way in the meantime (like on another device), it says so and lets that step go, and the one before it is next. Each tab remembers its last 25 steps while it's open (going to another page and back keeps them), and signing out forgets them. Every undo and redo is in the Change Logs.</li>
+              <li>Tap a day to zoom in on it, then tap an entry to change its amount (Set to, or Add to it), move it to another day, or delete it. On a computer, holding the mouse button and sliding across days magnifies them.</li>
+              <li><strong>Picking dates:</strong> while a date box is waiting, tapping a day on the calendar fills it in. 📅 next to a date box hides its box until you tap a day (so every day can be reached even when the box covers part of the calendar), then brings it back with that date. Cancel or Escape brings it back without a date.</li>
+            </ul>
+
+            <h3>Recurring Entries, History, Other Accounts, Tracker</h3>
+            <p>These pages show their data as tables. Recurring Entries and Tracker have <strong>New Entry</strong> and <strong>Edit</strong> buttons: tap a row to change or delete it; Edit shows a ≡ bar to drag rows into order, + Section buttons to add section headings between rows, and checkboxes to delete rows. Other Accounts has only <strong>Edit</strong>, which adds accounts (New Account), drags them into order, and deletes them. Each page is described in its own section below.</p>
+
+            <h3>Settings</h3>
+            <ul>
+              <li><strong>Daily Reminder:</strong> the time of day, and the time zone it uses (see <a href="#reminders">Daily reminders</a>).</li>
+              <li><strong>Push Notifications:</strong> turn on or off for this device, and send a test.</li>
+              <li><strong>Calendar Link:</strong> a private link for Google Calendar, Apple Calendar, or other calendar apps; it can be copied, replaced with a new one, or turned off.</li>
+              <li><strong>Email:</strong> add or change it (needs the password). The new address gets a note, and the old one gets a security notice.</li>
+              <li><strong>Passkeys (Face ID, Touch ID, Windows Hello):</strong> turn passkey sign-in On or Off for the account; see each passkey (its name, when it was added and last used, and whether it's synced) and remove it; or add one for this or another device (needs the password). With no passkeys yet, adding the first one (the Turn On button) is what turns it on. See <a href="#passkeys">Passkeys</a>.</li>
+              <li><strong>Password:</strong> change it with the current password and the new one (typed twice; at least 8 characters, any characters, not the current one, and not one known from data breaches). It signs out every other device and turns off Quick Entry icons; this device stays signed in, and a security notice is emailed. "Forgot It?" emails a one-time reset link to the account's email instead.</li>
+              <li><strong>Signed-In Devices:</strong> how many Quick Entry icons work, with Turn Off Icons (they stop at once; entries already made with them are still added), and <strong>Sign Out Everywhere</strong>, which signs out every device and browser (this one too) and turns off the icons, for a lost phone or a computer that isn't yours.</li>
+              <li><strong>Your Data And Privacy:</strong> <strong>Download My Data</strong> saves everything stored for the account as a JSON file, including when each signed-in device signed in (passwords, keys, session IDs, and private link codes are left out), and <strong>Analytics On This Device</strong> turns Google Analytics off or on for that device (it's always off in browsers that send Global Privacy Control or Do Not Track).</li>
+              <li><strong>Delete Account:</strong> needs the password and a confirmation; it deletes the account and every bit of its data.</li>
+            </ul>
+          </section>
+
+          <section id="entries" aria-labelledby="entriesTitle">
+            <h2 id="entriesTitle">2. Entries And Refraction Types</h2>
+            <p>An entry is one line of text: an emoji (its "sprite"), an amount, and a title, separated by spaces.</p>
+<pre><code>❗️ -$6.50 Coffee
+✔️ $1200.00 Paycheck
+⭕️ -$100.00 Savings</code></pre>
+            <p>Costs are negative and gains are positive. Amounts are written like <code>-$1234.56</code> (no thousands commas). When you type one, a $ and thousands commas are fine, and a comma before the last one or two digits is a decimal point, the way phones in many countries type it: <code>4,50</code> is $4.50, and <code>1.234,50</code> is $1234.50.</p>
+            <p>Titles are compared without regard to capital letters, extra spaces, or punctuation, so "Coffee", "coffee", and "COFFEE!" are the same title. Titles can be in any language: letters and numbers in any script count, so "Кофе" and "Чай" are two titles, and full-width letters match their plain forms. A title with no letters or numbers at all (like ☕) keeps its symbols, so ☕ and 🍔 are different titles. New titles get each word's first letter capitalized, in any language ("école" becomes "École"). Other Accounts' names follow the same rules.</p>
+
+            <h3>Refraction Types</h3>
+            <p>An entry's refraction type says how it affects the budget:</p>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>Type</th><th>Emoji</th><th>Changes In Bank?</th><th>In the day's Gains / Costs lines?</th><th>Counted by the tracker?</th><th>Example</th></tr></thead>
+                <tbody>
+                  <tr><td>Regular</td><td>❗️</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Groceries, a paycheck</td></tr>
+                  <tr><td>Hidden</td><td>✖️</td><td>No</td><td>No</td><td>Yes (unless it's for an Other Account)</td><td>Spending cash</td></tr>
+                  <tr><td>Transfer</td><td>⭕️</td><td>Yes</td><td>No</td><td>Only by rows set to count transfers (and Undefined)</td><td>Depositing cash, moving money to savings</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>A new entry can also be <strong>Auto</strong>: it takes the type of an entry with the same title already on that day, or Regular if there isn't one.</p>
+
+            <h3>Recurring, Unique, And Temporary Entries</h3>
+            <ul>
+              <li><strong>Recurring entries</strong> (<code>✔️</code>, <code>✔️✖️</code>, <code>✔️⭕️</code>) start with a checkmark. They come from the Recurring Entries page and are written onto today and every later day they land on.</li>
+              <li><strong>Unique entries</strong> (<code>❗️</code>, <code>✖️</code>, <code>⭕️</code>) are ones you add or change yourself.</li>
+              <li><strong>Temporary recurring entries</strong> ("temps": <code>❗️✔️</code>, <code>✖️✔️</code>, <code>⭕️✔️</code>) are unique entries made from a recurring entry, with the checkmark second. A recurring entry becomes a temp when its day passes, or when it's changed on the calendar for that day only. A temp keeps the recurring entry from being written again on its day (for its refraction type). Moving or deleting a recurring entry's day leaves a <code>$0.00</code> temp behind as a "blocker" for the same reason.</li>
+            </ul>
+
+            <h3>One Entry Per Title And Type, Per Day</h3>
+            <p>A day has at most one entry for each title and refraction type, so a title can appear at most three times on a day: once as Regular, once as Hidden, and once as Transfer. Adding an entry that matches one already there adds the two amounts together. Recurring entries landing on a day with a matching unique entry are added into it too (it becomes a temp). If matching entries ever end up on the same day another way (like renaming an account to a title already on that day), they're combined the next time the budget refreshes.</p>
+
+            <h3>Changing An Entry</h3>
+            <p>Tapping an entry on a zoomed day offers: <strong>Set to</strong> a new amount, <strong>Add to it</strong>, <strong>Move to</strong> another day (it combines with a matching entry there), and <strong>Delete</strong>. If the entry is for an Other Account, its options say so.</p>
+          </section>
+
+          <section id="calendar" aria-labelledby="calendarTitle">
+            <h2 id="calendarTitle">3. The Calendar And The Budget Math</h2>
+            <p>The calendar always shows four weeks, Sunday through Saturday, starting with the current week. Each day's cell is text:</p>
+<pre><code>10/05
+✅ $1528.50 In Bank
+❇️ $45.00 Gains
+✴️ -$6.50 Costs
+❗️ -$6.50 Coffee
+❗️ $45.00 Sold Lamp</code></pre>
+            <ul>
+              <li>The first line is the date (MM/DD).</li>
+              <li><strong>In Bank</strong> (<code>✅</code>, or <code>⛔️</code> below $0): what will be in the budget's account at the end of that day.</li>
+              <li><strong>Gains</strong> (<code>❇️</code>) and <strong>Costs</strong> (<code>✴️</code>): that day's Regular gains and costs added up (shown only when not $0). Hidden entries and transfers are left out.</li>
+              <li>Then the entries, grouped by kind (unique, temps, hidden, transfers, recurring) and in title order within each group.</li>
+              <li>Today is highlighted. A day turns red when its In Bank is below $0.</li>
+            </ul>
+
+            <h3>How In Bank Is Worked Out</h3>
+            <p>In Bank is a running total. It starts from the In Bank of the last day in History (the most recent Saturday), or $0 for a new budget. Each day: In Bank = the day before's In Bank + that day's Regular gains − Regular costs + transfers. Hidden entries never change it. It's worked out again after every change, so it's always up to date.</p>
+
+            <h3>The Last Day's Extra Lines</h3>
+            <p>The calendar's last day has two more lines, right under its In Bank, looking at the 28 days after the calendar (recurring entries and Upcoming entries, but not Hidden ones):</p>
+            <ul>
+              <li><code>✅ $812.40 Lowest: 11/14</code>: the lowest In Bank in those 28 days, and the day it happens.</li>
+              <li><code>✅ $1650.00 Day 28 In Bank</code>: In Bank on the 28th day.</li>
+            </ul>
+            <p>If the lowest is below $0, the line shows <code>⛔️</code> and the last day turns red too.</p>
+
+            <h3>Dave</h3>
+            <p>Dave's message starts with a greeting (it changes daily), then lists what needs attention, then gives the day's affirmation. Dave mentions:</p>
+            <ul>
+              <li>days on the calendar from today on whose In Bank is below $0;</li>
+              <li>going below $0 in the 28 days after the calendar;</li>
+              <li>uncommon recurring payments (ones that land every 3 months or less often) on the calendar from today on;</li>
+              <li>how many Upcoming entries there are.</li>
+            </ul>
+            <p>If there's nothing to mention, Dave says everything looks fine. A budget with no recurring entries yet gets a welcome instead of a greeting.</p>
+
+            <h3>Upcoming (Future Dates)</h3>
+            <p>An entry dated after the calendar waits in Upcoming, in date order. When its day joins the calendar, it moves onto that day (combining with a matching entry there). The 28-day lines and Lowest in bank after today count Upcoming entries.</p>
+          </section>
+
+          <section id="recurring" aria-labelledby="recurringTitle">
+            <h2 id="recurringTitle">4. Recurring Entries</h2>
+            <p>Each recurring entry has a title, an amount, a Start Date, a frequency, an optional End Date, and a refraction type (shown as <code>✔️</code> Regular, <code>✔️✖️</code> Hidden, or <code>✔️⭕️</code> Transfer). Hidden and Transfer ones can be for an <a href="#other-accounts">Other Account</a>, like a transfer into Savings every payday.</p>
+
+            <h3>Frequency: Every N Days, Weeks, Or Months</h3>
+            <ul>
+              <li>Frequency is a whole number from 1 to 999 and a unit: Days, Weeks, or Months. It's stored and shown like "Every Day", "Every 2 Weeks", "Every Month", or "Every 12 Months".</li>
+              <li>It counts from the Start Date. Every 2 weeks lands on the Start Date, then every 14 days. Every 6 days lands every 6th day.</li>
+              <li>Months land on the Start Date's day of the month, or the month's last day when the month is shorter: an entry starting on the 31st lands on the 30th in 30-day months and on February 28 (29 in leap years). Every 12 months is once a year.</li>
+              <li>It never lands before its Start Date or after its End Date. No End Date means it keeps going.</li>
+              <li>The spreadsheet's names still work: Weekly, Biweekly, Monthly, 3 Month, 6 Month, and Yearly are every 1 week, 2 weeks, 1 month, 3 months, 6 months, and 12 months, and get rewritten that way. The spreadsheet's Semi-Monthly (the 1st and the 15th) has no every-N version, so entries that already have it keep landing on the 1st and 15th. For something new on the 1st and 15th, make two monthly entries with different titles, like "Paycheck 1st" and "Paycheck 15th".</li>
+              <li><strong>Uncommon</strong> recurring entries are ones that land every 3 months or less often (every 3+ months, 13+ weeks, or 90+ days). Dave and the daily reminders point them out.</li>
+            </ul>
+
+            <h3>One Per Title And Type</h3>
+            <p>A title can have one recurring entry of each refraction type: one Regular, one Hidden, and one Transfer. Adding one (or changing one) to match a title and type that already exists is refused with a message saying the entry already exists, so the existing one gets changed instead. This keeps it clear which recurring entry a day's entry came from.</p>
+
+            <h3>On The Calendar</h3>
+            <ul>
+              <li>Recurring entries are written onto today and every later day of the calendar they land on. Their amount counts in In Bank like any entry of their type.</li>
+              <li>Once a day passes, its recurring entries become temps (<code>❗️✔️</code> and so on), so later changes to a recurring entry never change days that already happened.</li>
+              <li>Changing a recurring entry on the calendar changes only that day (it becomes a temp). Moving or deleting it leaves a <code>$0.00</code> blocker on its day.</li>
+              <li>Deleting a recurring entry ends it yesterday: it stops from today on, its temps from today on become plain unique entries, and days that passed keep theirs.</li>
+            </ul>
+
+            <h3>Monthly And Yearly</h3>
+            <p>The top of the Recurring Entries page shows:</p>
+            <ul>
+              <li><strong>Monthly:</strong> about how much the recurring costs add up to each month (every 2 weeks counts as about 2.17 times a month, every week about 4.35, every 3 months a third).</li>
+              <li><strong>Yearly:</strong> what was spent so far this year (costs on past days and today), plus every recurring cost still to land from tomorrow through December 31.</li>
+            </ul>
+            <p>Neither counts gains, transfers, or entries for Other Accounts, since that money is still yours.</p>
+          </section>
+
+          <section id="daily-update" aria-labelledby="dailyTitle">
+            <h2 id="dailyTitle">5. The Daily Update</h2>
+            <p>The first time the budget opens on a new day, it brings everything up to date, no matter how many days were missed, in one pass:</p>
+            <ol>
+              <li>Days that joined the calendar while you were away get their Upcoming entries, then their recurring entries.</li>
+              <li>Every day that passed has its recurring entries turned into temps.</li>
+              <li>In Bank keeps going from the last known balance.</li>
+              <li>Every week before the current week moves to History (newest on top), and the calendar becomes the current four weeks.</li>
+              <li>The change is logged as "🕛 Daily Update", and the date it's done through is saved only after the data itself is saved, so a failed save simply happens again next time.</li>
+            </ol>
+            <p>A brand-new budget starts today, with nothing to catch up. If the page stays open past midnight, the next change reloads it so the daily update runs first.</p>
+          </section>
+
+          <section id="other-accounts" aria-labelledby="accountsTitle">
+            <h2 id="accountsTitle">6. Other Accounts (Like Savings)</h2>
+            <p>Other Accounts keeps track of money outside the budget's bank account, like savings, cash, or investments.</p>
+            <ul>
+              <li><strong>Linking:</strong> a Hidden or Transfer entry titled with an account's name moves money into or out of that account. When you pick Hidden or Transfer for a new entry (on the calendar, in Recurring Entries, or with the Quick Entry icon), an <strong>Other Account</strong> list appears, showing each account's balance today; picking one titles the entry with the account's name, and typing an account's name picks it.</li>
+              <li><strong>Opposite amounts:</strong> the account gets the opposite of the entry's amount. A $100 cost puts $100 into the account; a $100 gain takes $100 out of it.</li>
+              <li><strong>Transfer vs Hidden:</strong> a Transfer moves money between the budget's account and the other account, so In Bank changes too (moving $100 into savings: In Bank −$100, Savings +$100). A Hidden entry doesn't change In Bank (putting $50 cash into savings: Savings +$50).</li>
+              <li><strong>Balances come only from entries:</strong> an account's balance is the opposite of all its entries added up, through today. There's no balance to type in. To record what's already in an account (like $3,000 in savings), add a Hidden cost of that amount with the account picked.</li>
+              <li>The page shows each account's balance today, and on the calendar's last day ("By MM/DD", counting the entries still to come on the calendar). Tapping an account shows its latest and upcoming entries and lets you rename it.</li>
+              <li><strong>Savings</strong> is there by default and can't be deleted (it shows a 🔒 in Edit), but it can be renamed.</li>
+              <li><strong>Renaming</strong> an account renames its entries (on the calendar, in History, Upcoming, and Recurring) and the tracker aliases for it, so they stay with it.</li>
+              <li><strong>Deleting</strong> an account leaves its entries where they are; they just stop changing an account.</li>
+              <li>Since the money is still yours, entries for an account aren't costs or gains: the tracker, Search, and the Monthly and Yearly totals treat them like transfers.</li>
+            </ul>
+          </section>
+
+          <section id="tracker" aria-labelledby="trackerTitle">
+            <h2 id="trackerTitle">7. The Tracker</h2>
+            <p>The tracker adds up entries by category over the <strong>last 4 weeks</strong> (today and the 27 days before), <strong>last 3 months</strong> (90 days), and <strong>last 365 days</strong>. It counts today and every earlier day, from the calendar and History.</p>
+            <ul>
+              <li><strong>Rows and aliases:</strong> each row counts the entries its aliases point to. An alias is an entry title, set to count All of its amounts, only its Costs, or only its Gains. If several rows have the same alias, each counts it.</li>
+              <li><strong>Transfers:</strong> rows leave out transfers (and entries for Other Accounts) unless "Also count ⭕️ Transfers" is on; such a row's title starts with ⭕️.</li>
+              <li><strong>Costs</strong> and <strong>Gains</strong> rows fill in by themselves with every cost and every gain, except transfers and entries for Other Accounts.</li>
+              <li><strong>Undefined</strong> fills in by itself with the titles no other row fully counts (including transfers), and adds them up. A title stays there if a row only counts its costs (or gains) and it has the other kind too, or if it's a transfer and the row doesn't count transfers.</li>
+              <li><strong>One row per title and transfer setting:</strong> a title can have one row that counts transfers and one that doesn't. Adding (or changing a row into) a match for one that exists is refused with a message, and Costs, Gains, and Undefined can't be used as titles.</li>
+              <li>Stored aliases look like <code>rent-, paycheck+, atm</code>: a <code>-</code> ending counts only costs, <code>+</code> only gains, and no ending counts all. The panel shows each alias on its own line with All / Costs / Gains buttons, and the table shows them in words, like "rent (costs)".</li>
+            </ul>
+          </section>
+
+          <section id="search" aria-labelledby="searchTitle">
+            <h2 id="searchTitle">8. Search</h2>
+            <p>The search bar finds entries by title in History, the calendar, Upcoming, and (when the To date is after the calendar) recurring entries projected up to two years ahead.</p>
+            <ul>
+              <li>Each title is its own line, with its own buttons: <strong>All</strong> (every entry with that title), <strong>Costs</strong> (only its costs), <strong>Gains</strong> (only its gains), or <strong>Tracker</strong> (the title is a tracker row: find what that row counts, each alias with its own All, Costs, or Gains setting).</li>
+              <li>Enter (or + Add Title) starts the next line; × takes a line out. Enter on an empty line, or the Search button, searches.</li>
+              <li>With no titles, the first line's buttons decide: everything, every cost, or every gain.</li>
+              <li>A title can have two tracker rows (one counting transfers, like ⭕️Food, and one not). Typing the ⭕️ picks that one; otherwise the one that doesn't count transfers is used. The suggestions list every row.</li>
+              <li>From and To are optional (blank means from the start, or to the end). Days on the calendar can be tapped to fill them.</li>
+              <li>Results are newest first, each with a checkbox, and a total of the checked ones. Transfers and entries for Other Accounts start unchecked (they aren't really costs or gains), unless a tracker row that counts transfers found them.</li>
+              <li>Typing a title the spreadsheet's way picks its button: <code>rent-</code> picks Costs, <code>rent+</code> Gains, and <code>food=</code> Tracker.</li>
+            </ul>
+          </section>
+
+          <section id="quick-entry" aria-labelledby="quickTitle">
+            <h2 id="quickTitle">9. Quick Entry (Home Screen Icon)</h2>
+            <p>The Quick Entry Icon button (on Home) sets up an icon for a phone's home screen that opens a New Entry form with no login.</p>
+            <ul>
+              <li>Setting it up makes a random 256-bit key, and the page opens at <code>/quick.html?key=…</code> to be added to the home screen. Only a scrambled (SHA-256 hashed) copy of the key is stored. An account can have 10 icons; making an 11th stops the oldest one.</li>
+              <li>The key can only add entries to a waiting list, take back ones it added that are still waiting, and see the account's Other Accounts with their balances (for the account picker). It can't see anything else in the budget. The balances are as of the last time the budget was open, with the icon's own waiting entries counted in.</li>
+              <li><strong>Undo and Redo on the Quick Entry page:</strong> after adding an entry, Undo takes back the newest one added there while it's still waiting (only the icon that added an entry can take it back), and Redo adds it again. Once the budget has added it, the page says to undo it on the calendar instead, where it's an ordinary Undo step ("quick entry Tea (-$3.00) on 10/05"). The page forgets its Undo list when it's closed.</li>
+              <li>Up to 100 entries can wait. The next time the budget opens, each is added like a New Entry (to History if it's dated in the past, to Upcoming if it's after the calendar). Each one leaves the waiting list in the same database transaction that saves the table it was added to, so none are lost or added twice. One that can't be added (like a date before History begins) is dropped, and a message says why.</li>
+              <li>A key stops working when the password is changed or reset, on Sign Out Everywhere, when Settings turns the icons off, or when the account is deleted. Settings shows how many icons work.</li>
+              <li><strong>Why the key is in the link:</strong> it's what lets the icon skip logging in, and iPhones only save a home screen icon's address (not anything stored in the browser). So the key is protected in other ways: it's too long to guess, tries with keys that don't work are limited per network (30 in 15 minutes), it's sent to the server in the request body (never in an address), it can only add entries, and changing the password stops it.</li>
+              <li>The page isn't linked anywhere, is kept out of search engines, loads no analytics, never sends its address to other sites (<code>no-referrer</code>), and isn't tied to the web app manifest (so iPhones save its own link, key included).</li>
+            </ul>
+          </section>
+
+          <section id="calculator" aria-labelledby="calculatorTitle">
+            <h2 id="calculatorTitle">10. Paycheck Calculator</h2>
+            <p>The calculator works out a paycheck's take-home pay. Its 17 inputs come in four groups, and each calculation's inputs are saved to start the next one.</p>
+            <ul>
+              <li><strong>Earnings:</strong> Base Pay ($/hr), Regular Hours, Overtime Multiplier (1.5× to start) and Hours, Premium Multiplier (2× to start) and Hours, Taxable Allowances.</li>
+              <li><strong>Pre-tax Deductions:</strong> Medical (a percentage and a fixed amount), Retirement (a percentage and a fixed amount).</li>
+              <li><strong>Taxes:</strong> FICA (7.65% to start), Federal, and State percentages.</li>
+              <li><strong>Post-tax:</strong> Deductions (a percentage and a fixed amount), Non-taxable Reimbursements.</li>
+            </ul>
+            <p>The math, rounded to cents at each step like payroll software: Gross = regular pay + overtime pay + premium pay + taxable allowances. Pre-tax medical lowers the pay that FICA and income taxes are figured on; pre-tax retirement lowers only the income-tax pay. FICA is figured on the FICA pay, and federal and state taxes on the income-tax pay. Take home = income-tax pay − taxes − post-tax deductions + non-taxable reimbursements. The page shows Take Home, Taxes, and Gross, and how it adds up.</p>
+          </section>
+
+          <section id="change-logs" aria-labelledby="logsTitle">
+            <h2 id="logsTitle">11. Change Logs</h2>
+            <p>Every change is logged, newest first: the time, how long it took, the action (like "❗️ Create Unique", "✔️ Create Recurring", "🔧 Tracker Entries", "🏦 New Account", "🔎 Search", "🧮 Calculator", "↩️ Undo", "↪️ Redo", or "🕛 Daily Update"), and up to four details (an undo or redo says what it took back or put back, and which days). A change that couldn't be made is logged in red as an Error (and nothing was changed); one that didn't find its entry is marked Not Found. The newest 1,000 are kept.</p>
+          </section>
+
+          <section id="reminders" aria-labelledby="remindersTitle">
+            <h2 id="remindersTitle">12. Daily Reminders</h2>
+            <p>On days the budget needs a look, a "🗓️ Check Budget" reminder can arrive at a chosen time (8:00 AM to start, in the device's time zone). A day needs one when:</p>
+            <ul>
+              <li><code>⛔️</code> its In Bank is below $0;</li>
+              <li><code>✔️</code> an uncommon recurring payment lands between that day and the end of its four-week calendar;</li>
+              <li><code>❗️</code> it has a cost.</li>
+            </ul>
+            <p>The website works out which days need one (from today through the 28 days after the calendar) and sends that list to the server whenever it changes. Reminders arrive two optional ways:</p>
+            <ul>
+              <li><strong>Push notifications</strong> on each device that turns them on (up to 10 devices). The server checks every 5 minutes and sends any that are due. On iPhone and iPad, the site has to be added to the Home Screen first.</li>
+              <li><strong>A calendar link</strong> (an <code>.ics</code> feed with a private code) for Google Calendar, Apple Calendar, or most calendar apps. Each reminder is a 30-minute event with an alert.</li>
+            </ul>
+          </section>
+
+          <section id="account-security" aria-labelledby="securityTitle">
+            <h2 id="securityTitle">13. Accounts, Sign-In, And Security</h2>
+            <ul>
+              <li><strong>Usernames:</strong> 5 to 30 characters, counted the way a person would (an accented letter, or an emoji, even one made of several joined emoji, is one). Any characters you can see work: letters in any language, numbers, symbols, emoji, @, and spaces (extra spaces are tidied). Characters you can't see, or that change which way text runs, are refused, because they could make one username pass for another: control and formatting characters (like zero-width spaces, soft hyphens, and direction marks and overrides), the ones Unicode says to show as nothing (like the Hangul filler), and the blank Braille pattern. The joiners, variation selectors, and tags inside emoji (and some languages' letters) are fine. Two usernames are the same one when they match without regard to capital letters, compatibility forms (like full-width letters), or the invisible joiners and selectors inside emoji, so "Sam", "sam", and "ＳＡＭ" can't all exist. The server keeps that form as <code>username_key</code>, with a unique index.</li>
+              <li><strong>Signing in</strong> works with the username (in any capitals) or the account's email. A username can have an @, so a name that's one account's email and another account's username is checked against both (the email's account first), and the password decides.</li>
+              <li><strong>Passwords:</strong> at least 8 characters and at most 256, and any characters work (spaces, symbols, emoji, other languages). They're counted as Unicode characters after normalizing (NFKC), so the same password typed on another keyboard or device still matches. A new password (making an account, changing it, or resetting it) that has shown up in data breaches is refused: the server asks Have I Been Pwned's Pwned Passwords range API with only the first 5 characters of the password's SHA-1 hash (k-anonymity, with padding), so the password never leaves the server. If that service can't be reached within 3 seconds, the password is allowed.</li>
+              <li><strong>How passwords are stored:</strong> never as the password. The server first keys it with a secret kept outside the database (the "pepper": HMAC-SHA256 with <code>PASSWORD_PEPPER</code>), then runs PBKDF2-HMAC-SHA256 with 100,000 rounds (the most Cloudflare Workers allow) and a random 16-byte salt for each password, stored as <code>pbkdf2-sha256-pepper$100000$&lt;salt&gt;$&lt;hash&gt;</code>. A stolen copy of the database alone can't be used to guess passwords (the pepper isn't in it), and two accounts with the same password get different hashes. Checks compare in constant time, and an unknown username takes as long to answer as a wrong password. A password stored the older way (PBKDF2 without the pepper) still signs in, and is stored the new way right then.</li>
+              <li><strong>Sessions:</strong> signing in (with the password or a passkey) starts a session on the server (a random ID, and when it started and ends) and returns a signed token for it (a JWT, HS256, good for 24 hours) that holds the session's ID. Every request checks the token's signature and header (only HS256, never "none"), that it hasn't expired, that its session still exists, that the account still exists, and that it came after the last password change. Logout ends the session on the server, so a copied token stops working too; a password change or reset, and Sign Out Everywhere, end every session. An account keeps its newest 20 sessions (the oldest signs out), and the 5-minute scheduled job deletes expired ones. Without its signing key and pepper, the server signs nobody in.</li>
+              <li>On the website, 15 minutes without activity signs you out, with a counting-down notice in the last minute. A session that ended on the server (Sign Out Everywhere or a new password on another device) signs the page out at its next request, instead of the page trying to save again and again, and the login page says why. Logout with a change that hasn't reached the server yet (offline) asks first.</li>
+              <li><strong>Limits on guessing and spam</strong> (counted in a time window, then forgotten):
+                <ul>
+                  <li>Signing in: 10 wrong passwords for one account from one network, then that network waits 15 minutes for that account; 50 for one account from anywhere in an hour; and 30 from one network for any accounts in 15 minutes. The right password clears the account's count.</li>
+                  <li>Settings (changing the email or password, adding a passkey, deleting the account): 10 wrong passwords in 15 minutes.</li>
+                  <li>New accounts: 10 from one network in an hour. Reset emails: 10 requests from one network in 15 minutes (plus one per account every 2 minutes).</li>
+                  <li>Sign-ups (and email changes in Settings) refused because the username or email is already taken: 20 from one network in an hour. Those have to say when an email is in use, so this keeps anyone from checking a list of emails for accounts (Forgot Password never says either way).</li>
+                  <li>Quick Entry keys and password reset links that don't work: 30 from one network in 15 minutes. Test notifications: 10 per account in 15 minutes.</li>
+                  <li>A network is known by Cloudflare's <code>CF-Connecting-IP</code>, which a visitor can't set (<code>X-Forwarded-For</code> isn't trusted, since anyone can send one).</li>
+                  <li>Networks are keyed by a scrambled (hashed) form of the IP address, never the address itself, and the counts are deleted within about an hour.</li>
+                </ul>
+              </li>
+              <li>Password reset links work once, for an hour; each is 256 random bits, and only a hash of each is stored. The new password follows the same rules. Resetting the password signs out every device, stops every Quick Entry icon, and turns passkey sign-in off.</li>
+              <li>Changing the password in Settings (with the current one) signs out every other device and stops every Quick Entry icon; that device gets a new session. Sign Out Everywhere signs out every device, that one too, and stops the icons.</li>
+              <li>Security notices: a password change is reported to the account's email, an email change is reported to both the new address and the old one (with the new address partly hidden), and so is a new passkey (to the account's email). Emails are sent through Resend.</li>
+              <li>Changing the email or password, adding a passkey, or deleting the account needs the password. Deleting the account deletes all of its data, passkeys included.</li>
+              <li><strong>Analytics:</strong> Google Analytics loads only when the device hasn't turned it off in Settings and the browser doesn't send Global Privacy Control or Do Not Track. The page addresses it gets leave out the <code>?query</code> and <code>#hash</code>, so private codes in links (like a reset link's) never reach it. It never sees budget data.</li>
+              <li><strong>The API's answers:</strong> browsers may call it only from the website's own address (and, for testing, <code>localhost</code>, <code>127.0.0.1</code>, or a Cloudflare tunnel), matched exactly. Sign-in uses a token sent with each request, never a cookie, so another site can't act for a signed-in person. Every answer also says not to cache it, not to guess its type, not to show it in a frame, and not to send a referrer, with a Content-Security-Policy that lets nothing in it run. Request bodies must be JSON objects; a budget part over about 1.9 MB is refused (413), and the daily update's date must be a real date. An unexpected error answers only "Something went wrong on the server" (500); the details stay in the server's logs.</li>
+              <li><strong>On the website,</strong> everything a person typed (entries, titles, account and passkey names, usernames) is shown as text, never as HTML, so it can't run as code. Emails escape it too. Pages with a secret in their address (Quick Entry's key, a reset link's code) never send their address to other sites (<code>no-referrer</code>), the reset code is taken out of the address right away, and push notifications only open pages on the site itself.</li>
+            </ul>
+
+            <h3 id="passkeys">Passkeys (Face ID, Touch ID, Windows Hello)</h3>
+            <p>A passkey signs you in with your face, your fingerprint, or your device's PIN instead of your password. It's the web standard (WebAuthn) behind "sign in with Face ID", and it works with Face ID and Touch ID on Apple devices, Windows Hello, Android's fingerprint or face unlock, password managers, and security keys. Passkeys are optional, and the password keeps working either way, so a lost phone never locks anyone out.</p>
+            <ul>
+              <li><strong>The account's setting:</strong> passkey sign-in is unset, on (yes), or off (no) for each account. It starts unset.</li>
+              <li><strong>Asked once:</strong> after a password sign-in, an account that's still unset is asked "Turn On Passkey Sign-In?" Yes makes a passkey for that device and sets it to on; No Thanks sets it to off. Once it's on or off, it isn't asked again, on any device. Leaving without answering means it's asked again next time. Browsers that can't make passkeys skip the question (the setting stays unset).</li>
+              <li><strong>Turning it on before signing in:</strong> checking <em>Turn on passkey sign-in</em> on the login page means yes, so signing in with the password makes the passkey right away (if that's cancelled, the question shows so it can be tried again).</li>
+              <li><strong>Turning it on or off in Settings:</strong> On and Off apply to the whole account. Off keeps the passkeys, but none of them can sign in until it's turned back on. Turn On needs at least one passkey; with none, the Turn On button adds one. Adding a passkey always turns it on.</li>
+              <li><strong>Making one:</strong> the password is checked, then the device asks for the face, fingerprint, or PIN and saves the passkey (often in iCloud Keychain, Google Password Manager, or Windows Hello, which may sync it to the person's other devices). Each passkey gets a name, like "iPhone" or "Windows", that can be changed when adding it. An account can have up to 20, and a device that already has one of the account's passkeys says so instead of making another.</li>
+              <li><strong>Signing in:</strong> <em>Sign In With A Passkey</em>, or picking a passkey under the username box. The passkey says whose it is, so no username is needed.</li>
+              <li><strong>What's stored:</strong> for each passkey, its public key, its ID, its name, the site it was made on, when it was added and last used, whether the device said it's synced, and a sign-in counter; for the account, the setting and a random ID that devices keep with its passkeys (it isn't the username or anything else about the person). The private key never leaves the device or password manager, and faces, fingerprints, and PINs never leave the device: the site never receives them.</li>
+              <li><strong>Checks on every sign-in:</strong> a one-time challenge signed by the server, which expires (10 minutes for signing in, 5 for adding) and works only once; the site's address, so a passkey only works on the site it was made on and a look-alike site can't use it; that the device checked the face, fingerprint, or PIN; the passkey's signature (ES256, Ed25519, or RS256 keys); and its counter, since a counter that goes backwards means the passkey may have been copied. Only "none" attestation is asked for, so which company made the device isn't checked or stored.</li>
+              <li><strong>Removing:</strong> Remove in Settings deletes a passkey from the server, so it can't sign in. Browsers that support it are told to stop offering it, and it can also be deleted in the device's password settings. A removed passkey that's still on a device gets "That passkey isn't on any account anymore".</li>
+              <li><strong>A password reset turns it off,</strong> so a passkey someone else added stops working too. The owner checks the list in Settings, removes any that aren't theirs, and turns it back on.</li>
+            </ul>
+          </section>
+
+          <section id="storage" aria-labelledby="storageTitle">
+            <h2 id="storageTitle">14. How The Data Is Stored</h2>
+            <p>Data lives in a Cloudflare D1 (SQLite) database. Each part of a budget is one table, holding one row per user whose content is the whole part as JSON text. When something changes, only the parts that changed are saved, each in one piece. If a part's stored copy can't be read when the budget opens, it's never overwritten, so it can still be recovered.</p>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>Table</th><th>Holds</th><th>Format</th></tr></thead>
+                <tbody>
+                  <tr><td><code>calendar</code></td><td>The four weeks</td><td>4 rows × 7 days of cell text (see <a href="#calendar">the calendar</a>).</td></tr>
+                  <tr><td><code>history</code></td><td>Past weeks</td><td>Row 0: day names; then one row per week (newest first), each 7 cells: <code>MM/DD/YYYY</code>, the In Bank line, then entries.</td></tr>
+                  <tr><td><code>recurring</code></td><td>Recurring entries</td><td>Row 0: Monthly and Yearly; row 1: column titles; then <code>[title, amount, start MM/DD/YYYY, frequency, end date or "None", type emoji]</code>. A section heading is <code>["-", heading, "", "", "", "-"]</code>.</td></tr>
+                  <tr><td><code>tracker</code></td><td>Tracker rows</td><td>Row 0: column titles; then <code>[title, last 4 weeks, last 3 months, last 365 days, aliases]</code>. A section heading is <code>["-", heading, "", "", "-"]</code>.</td></tr>
+                  <tr><td><code>future</code></td><td>Upcoming</td><td>Row 0: column titles; then <code>[title, amount, date MM/DD/YYYY, type emoji]</code>.</td></tr>
+                  <tr><td><code>accounts</code></td><td>Other Accounts</td><td><code>{ "version": 3, "list": [[column titles], [name, balance today, "default" or ""], …], "equity": {…} }</code>. The balance is filled in from the entries (for Quick Entry); "default" marks Savings. <code>equity</code> keeps the spreadsheet's business-version tables.</td></tr>
+                  <tr><td><code>calculator</code></td><td>Paycheck Calculator</td><td>Rows of <code>[label, value]</code>: rows 0–2 the last results, rows 4–20 the last inputs.</td></tr>
+                  <tr><td><code>logs</code></td><td>Change Logs</td><td>Row 0: column titles; then <code>[time, how long, action, 4 details, status]</code>, newest first.</td></tr>
+                  <tr><td><code>search</code></td><td>(unused)</td><td>Kept from the spreadsheet's Search tab.</td></tr>
+                  <tr><td><code>users</code></td><td>Accounts</td><td>Username; <code>username_key</code> (the form that decides whether two usernames are the same one; unique); the password hash (<code>pbkdf2-sha256-pepper$100000$&lt;salt&gt;$&lt;hash&gt;</code>, with the salt also in its own <code>salt</code> column, from the older format); email; when the terms were agreed to; a session version (it goes up when the password changes, and on Sign Out Everywhere); the passkey setting (<code>passkeys_on</code>: empty until asked, then 1 for on or 0 for off); and the random ID the account's passkeys carry.</td></tr>
+                  <tr><td><code>sessions</code></td><td>Signed-in devices</td><td>One row per session: a random ID (also in its sign-in token), the account, and when it started and ends. Deleted on logout, when it ends (24 hours), when the password changes or is reset, on Sign Out Everywhere, and past an account's newest 20.</td></tr>
+                  <tr><td><code>data_revisions</code></td><td>Saving safely</td><td>One number per account that goes up with every saved budget table. Saves send the number their page has, and one from an older copy is refused (see <a href="#architecture">How the website is built</a>).</td></tr>
+                  <tr><td><code>rate_limits</code></td><td>Limits</td><td>A key (like an account, or a scrambled network), a count, and when the window ends. Deleted when the window ends (the 5-minute scheduled job clears any left).</td></tr>
+                  <tr><td><code>passkeys</code></td><td>Passkeys</td><td>One row per passkey: its ID, the account, the site it was made on, its public key (a JWK) and key type, its sign-in counter, how the browser reaches it, its name, whether it's synced, and when it was added and last used.</td></tr>
+                  <tr><td><code>passkey_used_challenges</code></td><td>Passkey sign-ins</td><td>Each sign-in challenge that was used, until it would expire, so it can't be used twice. Challenges aren't stored before then: each one is signed by the server.</td></tr>
+                  <tr><td><code>user_settings</code></td><td>The daily update</td><td>The last day the daily update was done through.</td></tr>
+                  <tr><td><code>notify_settings</code>, <code>push_subscriptions</code></td><td>Reminders</td><td>Reminder time, time zone, the days that need one, the calendar link's code; each device's push address.</td></tr>
+                  <tr><td><code>password_resets</code></td><td>Reset links</td><td>A hash of each link, and when it expires.</td></tr>
+                  <tr><td><code>quick_keys</code>, <code>quick_entries</code></td><td>Quick Entry</td><td>A hash of each icon's key; the entries waiting to be added, each with the hash of the key that added it (<code>key_hash</code>), so only that icon can take it back.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="architecture" aria-labelledby="architectureTitle">
+            <h2 id="architectureTitle">15. How The Website Is Built</h2>
+            <ul>
+              <li><strong>The website</strong> is plain HTML, CSS, and JavaScript with no build step, hosted on GitHub Pages at prismalbudget.org.</li>
+              <li><strong>The budget's logic runs in the browser.</strong> When the budget opens, the website loads every table, runs the daily update, and works out everything that's computed (In Bank, the 28-day lines, Dave, the tracker, account balances). Every change goes through one function that runs changes one at a time, takes a snapshot first (and puts it back if anything fails, so half-made changes are never saved), refreshes the computed parts, logs the change, saves the tables that changed, and tells the page to redraw.</li>
+              <li><strong>The server</strong> is a Cloudflare Worker (an API) with a D1 database. It handles accounts, sign-in (passwords and passkeys), storing tables, Quick Entry, reminders and cleaning up expired records (a scheduled job every 5 minutes), and email (through Resend). It doesn't do budget math.</li>
+              <li><strong>Saving safely:</strong> each account's budget has a revision number that goes up with every saved table. The page keeps the number it loaded (and each save's new one), and sends it with every save. The server writes a table only when the number still matches, all in one transaction; otherwise nothing is written, the reply is 409, and the page reloads with the newest budget and says the last change needs to be made again. A page that comes back into view (another tab, a phone waking up) checks the number and reloads when the budget changed elsewhere. A save that couldn't reach the server stays marked, is sent again when the connection comes back (and every 30 seconds), and leaving before then asks first.</li>
+              <li><strong>Undo and Redo:</strong> a calendar change or quick entry gives <code>runBudgetAction</code> an undo label and the days it touches. Before and after the change, it keeps each of those days' own entry lines (<code>❗️</code>, <code>✖️</code>, <code>⭕️</code>, and temps; never the lines the budget writes itself), plus the Other Accounts' <code>equity</code> tables if the change touched them, and only the days that changed become the step. Undo puts each day's "before" lines back, but only while every one of those days still holds its "after" lines (Redo is the same the other way); then everything computed is rebuilt like after any change, and it's saved and logged like one. A step that no longer matches is refused and dropped. Steps are kept per tab in <code>sessionStorage</code> (<code>prismal_undo_&lt;username&gt;</code>), 25 at most, and cleared on sign-out. The Quick Entry page keeps its own list in memory and takes entries back with <code>/api/quick/unqueue</code>.</li>
+              <li><strong>Loading and updates:</strong> every page starts with <code>Boot.js</code>, which works out which page it is, sends signed-out visitors to the login page (except on public pages), and loads that page's scripts. GitHub Pages shows <code>404.html</code> at any missing address, so that page marks itself (<code>data-page="notfound"</code>) to be recognized. When the site version changes, it reloads once (with <code>?v=</code>) so every browser gets the new files, and never twice, even in a browser that doesn't keep what's stored. A browser that blocks site data gets a message saying how to allow it instead of a blank page.</li>
+              <li><strong>Speed:</strong> the site's font, Bpmf Huninn, comes in two parts made from <code>BpmfHuninn-Regular.ttf</code> (which no page loads): its Latin letters, numbers, Greek, and symbols (<code>Fonts/MainFont-Latin.woff2</code>, 24 KB, preloaded by every page) and its Chinese, Japanese, and Bopomofo characters (<code>Fonts/MainFont-More.woff2</code>, 1.8 MB), which a browser only downloads for a page that shows one of them (CSS <code>unicode-range</code>). The header images are 384×384 WebP copies (about 15 to 32 KB each) of the 1024×1024 PNGs in <code>Resources/</code>. Google Analytics loads after the page has, so it never holds the page up, and pages slide in when they've loaded (or after 1.5 seconds at most). The server makes its tables once per Worker instance instead of on every request.</li>
+            </ul>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>Script</th><th>What it does</th></tr></thead>
+                <tbody>
+                  <tr><td><code>Boot.js</code></td><td>Page detection, sign-in redirects, loading scripts, the site version.</td></tr>
+                  <tr><td><code>Layout.js</code></td><td>Page transitions, the back button, floating Help, the footer, and signing out (it ends the session on the server, forgets the tab's Undo steps, and keeps the device's own choices, like analytics off).</td></tr>
+                  <tr><td><code>Session.js</code></td><td>Signs out after 15 minutes without activity (ending the session on the server too), with a counting-down notice in the last minute.</td></tr>
+                  <tr><td><code>Login.js</code></td><td>The login page's modes: sign in (password, passkey, and passkey autofill), create, forgot, reset (the link's code moves out of the address into the tab's <code>sessionStorage</code>), and the question about turning on passkey sign-in. It checks the username and password rules before sending (the server checks them again).</td></tr>
+                  <tr><td><code>Passkeys.js</code></td><td>Passkey helpers for the login page and Settings: whether the browser can use passkeys, what the device calls its check (like Face ID), and turning the API's options and the device's answers into each other's formats.</td></tr>
+                  <tr><td><code>Process Budget.js</code></td><td>The budget engine: loading, the daily update, every change, Undo and Redo, the math, Dave, the tracker, Search, Other Accounts, the calculator, reminders, saving (with the revision check, retries, and the warning before leaving).</td></tr>
+                  <tr><td><code>Budget UI.js</code></td><td>Shared pieces: floating panels, fields (amount, date with 📅, refraction type, account picker, frequency, title lists), toasts.</td></tr>
+                  <tr><td><code>Calendar Page.js</code></td><td>The home page: the Getting Started card, calendar, search bar and results, info row, entry panels, Undo and Redo (buttons and shortcuts), Quick Entry setup.</td></tr>
+                  <tr><td><code>Budget Pages.js</code></td><td>Recurring Entries, History, Other Accounts, Tracker, Paycheck Calculator, Change Logs.</td></tr>
+                  <tr><td><code>Settings Page.js</code></td><td>Reminders, push notifications, calendar link, email, password (change it or email a reset link), passkeys, Quick Entry icons, Sign Out Everywhere, Download My Data, analytics on this device, delete account.</td></tr>
+                  <tr><td><code>Quick Entry.js</code></td><td>The Quick Entry page, and its Undo and Redo.</td></tr>
+                  <tr><td><code>Starfield Setup.js</code>, <code>Active Starfield.js</code>, <code>Keyboard Starfield.js</code></td><td>The animated starfield (it runs in a background worker, and keys nudge the stars).</td></tr>
+                  <tr><td><code>Analytics.js</code></td><td>Google Analytics (not on the Quick Entry page): skipped when the device turned it off or the browser sends Global Privacy Control or Do Not Track, and given page addresses without their <code>?query</code> or <code>#hash</code>.</td></tr>
+                  <tr><td><code>Debug.js</code></td><td>The starfield settings on the Not Found page.</td></tr>
+                  <tr><td><code>sw.js</code></td><td>The service worker that shows push notifications (tapping one only opens pages on the site itself).</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>For search engines, <code>robots.txt</code> points to <code>sitemap.xml</code>, which lists the public pages (Home, this page, Login, and the Privacy Policy); the signed-in pages are left out, and the Quick Entry page keeps itself out with a <code>noindex</code> tag. The web app manifest (<code>Favicon/site.webmanifest</code>) makes an installed app open Home.</p>
+          </section>
+
+          <section id="api" aria-labelledby="apiTitle">
+            <h2 id="apiTitle">16. API Reference</h2>
+            <p>The API is at <code>https://prismal-budget-api.prismalbudget.workers.dev</code>. Requests and replies are JSON. Signed-in routes need an <code>Authorization: Bearer &lt;token&gt;</code> header for a session that's still open. Routes that check the password in Settings answer 429 after 10 wrong passwords in 15 minutes. Routes that set a new password answer 400 when it breaks the rules or is known from data breaches. Without its <code>JWT_SECRET</code> or <code>PASSWORD_PEPPER</code>, the server answers 503 to anything that signs in or sets a password, and an unexpected error is a 500 with no details.</p>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>Route</th><th>Sign-in</th><th>What it does</th></tr></thead>
+                <tbody>
+                  <tr><td><code>POST /api/register</code></td><td>No</td><td>Create an account: username (5 to 30 characters you can see), password (8 to 256 characters, not from data breaches), email, agreedToTerms. 429 after 10 new accounts from one network in an hour, or 20 tries with a username or email that's taken.</td></tr>
+                  <tr><td><code>POST /api/login</code></td><td>No</td><td><code>{ username, password }</code>, where username can also be the account's email; starts a session and returns its token, and <code>passkeysOn</code> (the account's passkey setting: true, false, or null while it hasn't been asked). 429 while a wrong-password limit is reached.</td></tr>
+                  <tr><td><code>POST /api/passkey/login/options</code></td><td>No</td><td>A sign-in challenge for the browser, and the site's ID.</td></tr>
+                  <tr><td><code>POST /api/passkey/login</code></td><td>No</td><td>The device's signed answer: <code>{ id, response: { clientDataJSON, authenticatorData, signature, userHandle } }</code> (base64url). Returns a token, like <code>/api/login</code>.</td></tr>
+                  <tr><td><code>POST /api/password/forgot</code></td><td>No</td><td>Email a reset link to an account's email. 429 after 10 requests from one network in 15 minutes.</td></tr>
+                  <tr><td><code>POST /api/password/reset</code></td><td>No</td><td>A reset link's token and a new password (also ends every session and turns passkey sign-in off). 429 after 30 links that don't work from one network in 15 minutes.</td></tr>
+                  <tr><td><code>POST /api/quick/check</code></td><td>Key</td><td>Is a Quick Entry key still good: the username, how many entries are waiting, and the accounts with balances. A key that doesn't work is 401, and 30 of those from one network in 15 minutes make that network wait (429); this goes for every Quick Entry route with a key.</td></tr>
+                  <tr><td><code>POST /api/quick/entry</code></td><td>Key</td><td>Add an entry to the waiting list: title, type (auto, regular, hidden, transfer), amount, date. Returns how many are waiting, and the entry's <code>id</code> (for Undo).</td></tr>
+                  <tr><td><code>POST /api/quick/unqueue</code></td><td>Key</td><td><code>{ key, id }</code>: take back an entry this key added, while it's still waiting (Undo on the Quick Entry page). 404 <code>{ joined: true }</code> once the budget has added it (or for another key's entry).</td></tr>
+                  <tr><td><code>GET /calendar/&lt;code&gt;.ics</code></td><td>Its code</td><td>The reminders calendar feed.</td></tr>
+                  <tr><td><code>POST /api/logout</code></td><td>Yes</td><td>End this session on the server, so its token stops working everywhere (Logout and the idle sign-out call it).</td></tr>
+                  <tr><td><code>GET /api/data/load</code></td><td>Yes</td><td>Every table, the last daily update date, the waiting quick entries, and the budget's <code>revision</code>.</td></tr>
+                  <tr><td><code>POST /api/data/update-&lt;table&gt;</code></td><td>Yes</td><td>Save one table whole (calendar, recurring, tracker, future, history, search, calculator, accounts, logs): <code>{ data, revision, quickEntriesDone }</code>. Returns the new <code>revision</code>, or 409 <code>{ conflict: true }</code> without writing anything when <code>revision</code> is from an older copy.</td></tr>
+                  <tr><td><code>GET /api/data/revision</code></td><td>Yes</td><td>The budget's current revision (pages check it when they come back into view).</td></tr>
+                  <tr><td><code>POST /api/data/save_date</code></td><td>Yes</td><td>Save the day the daily update is done through.</td></tr>
+                  <tr><td><code>GET /api/account</code></td><td>Yes</td><td>Username, email, whether emails can be sent, and how many Quick Entry icons work (<code>quickIcons</code>).</td></tr>
+                  <tr><td><code>POST /api/account/email</code></td><td>Yes</td><td>Change the email (needs the password). 409 when another account uses it; 429 after 20 of those (with sign-ups' taken usernames and emails) from one network in an hour.</td></tr>
+                  <tr><td><code>POST /api/account/password</code></td><td>Yes</td><td><code>{ password, newPassword }</code>: a new password. Signs out every other device and stops Quick Entry icons; returns a new token for this device.</td></tr>
+                  <tr><td><code>POST /api/account/password-reset</code></td><td>Yes</td><td>Email a reset link.</td></tr>
+                  <tr><td><code>POST /api/account/sign-out-everywhere</code></td><td>Yes</td><td>Sign out every device (this one too) and stop Quick Entry icons.</td></tr>
+                  <tr><td><code>GET /api/account/export</code></td><td>Yes</td><td>Download My Data: the account, every budget table (as data, not JSON text), reminders, Quick Entry icons and waiting entries, passkeys, and signed-in sessions (when each started and ends), with no secrets.</td></tr>
+                  <tr><td><code>POST /api/account/delete</code></td><td>Yes</td><td>Delete the account and its data (needs the password).</td></tr>
+                  <tr><td><code>GET /api/passkey/list</code></td><td>Yes</td><td>Whether passkey sign-in is on, the account's passkeys, and its passkey ID.</td></tr>
+                  <tr><td><code>POST /api/passkey/add/options</code></td><td>Yes</td><td>Check the password; returns what the browser needs to make a passkey.</td></tr>
+                  <tr><td><code>POST /api/passkey/add</code></td><td>Yes</td><td>Save the device's new passkey and its name, and turn passkey sign-in on.</td></tr>
+                  <tr><td><code>POST /api/passkey/remove</code></td><td>Yes</td><td>Remove a passkey.</td></tr>
+                  <tr><td><code>POST /api/passkey/turn</code></td><td>Yes</td><td>Turn passkey sign-in on or off (<code>{ on }</code>); the login page's No Thanks uses it too.</td></tr>
+                  <tr><td><code>POST /api/quick/key</code></td><td>Yes</td><td>Make a Quick Entry key.</td></tr>
+                  <tr><td><code>POST /api/quick/dismiss</code></td><td>Yes</td><td>Drop waiting quick entries that couldn't be added.</td></tr>
+                  <tr><td><code>POST /api/quick/off</code></td><td>Yes</td><td>Turn off every Quick Entry icon (entries already waiting are still added).</td></tr>
+                  <tr><td><code>GET</code> / <code>POST /api/notify/settings</code></td><td>Yes</td><td>Reminder time and time zone.</td></tr>
+                  <tr><td><code>POST /api/notify/plan</code></td><td>Yes</td><td>The days that need a reminder.</td></tr>
+                  <tr><td><code>POST /api/notify/push/subscribe</code>, <code>/unsubscribe</code>, <code>/test</code></td><td>Yes</td><td>Push notifications for a device. The push address has to be a browser push service's (Google FCM, Mozilla, Apple, or Microsoft), and tests are limited to 10 per account in 15 minutes.</td></tr>
+                  <tr><td><code>POST /api/notify/calendar</code></td><td>Yes</td><td>Turn the calendar link on, make a new one, or turn it off.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="decisions" aria-labelledby="decisionsTitle">
+            <h2 id="decisionsTitle">17. Why It Works This Way</h2>
+            <ul>
+              <li><strong>A calendar instead of categories first:</strong> knowing which day the balance dips is what keeps you from overdrafting; the tracker covers categories.</li>
+              <li><strong>Entries are lines of text:</strong> it's how the original spreadsheet worked, it's easy to read and store, and a day's whole story is in one cell.</li>
+              <li><strong>Refraction types:</strong> not every dollar that moves is spending. Hidden covers money outside the budget's account; Transfer covers money that only changes places.</li>
+              <li><strong>One entry per title and type per day, one recurring entry per title and type, one tracker row per title and transfer setting:</strong> there's never a question of which one a change, a temp, or a search means.</li>
+              <li><strong>Temps and blockers:</strong> changing one day of a recurring entry shouldn't change every day, and days that passed should never change.</li>
+              <li><strong>Accounts are linked by title:</strong> no extra field to keep in sync. Moving, combining, or deleting an entry, or a recurring entry landing, carries the link along automatically. Balances come only from entries so there's one source of truth.</li>
+              <li><strong>Budget math in the browser:</strong> changes feel instant, the server stays simple and cheap, and the math lives in one place.</li>
+              <li><strong>Whole tables saved at once, with a snapshot before every change:</strong> a change either fully happens or doesn't happen at all.</li>
+              <li><strong>The Quick Entry key can only add:</strong> a phone left unlocked can't be used to read the budget.</li>
+              <li><strong>Passkeys next to the password, not instead of it:</strong> a lost or replaced phone never locks anyone out, and the emailed reset link stays the way back in. Passkeys can't be phished or reused on another site, and nothing about a face or fingerprint ever reaches the server.</li>
+              <li><strong>The passkey question is asked once per account:</strong> people aren't asked on every device or every sign-in, and Settings can change the answer anytime.</li>
+              <li><strong>A revision check instead of "last save wins":</strong> each table is saved whole, so a page holding an older copy (another device, or a tab left open) could quietly erase changes made elsewhere. Refusing that save and reloading costs one redo at worst, and never loses data.</li>
+              <li><strong>A starting balance as an ordinary entry:</strong> it shows on the calendar and can be changed or deleted like anything else, instead of being a hidden number. A Transfer changes In Bank without counting as income.</li>
+              <li><strong>Usernames with any characters you can see, but no invisible ones:</strong> people can use their name in any language, or an emoji. Characters you can't see, or that flip which way text runs, could make two different usernames look the same, so they're refused, and look-alike forms count as the same username.</li>
+              <li><strong>Length and a breach check instead of "one number and one symbol":</strong> rules like that make passwords harder to remember without making them much harder to guess. Refusing passwords attackers already have on their lists does more, and any characters (even a whole sentence) are welcome.</li>
+              <li><strong>A pepper on top of the salt:</strong> Cloudflare Workers allow at most 100,000 PBKDF2 rounds, fewer than OWASP suggests (600,000), so passwords are also keyed with a secret kept outside the database. Someone with a copy of the database but not the pepper can't test a single guess.</li>
+              <li><strong>Sessions on the server, with signed tokens:</strong> the signed token proves who's asking on every request, and the session row behind it means Logout, a password change, and Sign Out Everywhere end it right away, even for a copy of the token.</li>
+              <li><strong>Undo by day, and only while the day still matches:</strong> each part of the budget is saved whole, so putting back an old copy of a whole table could erase changes made since. Putting back only the entries on the days a change touched, and only while those days are as it left them, can't.</li>
+              <li><strong>Limits keyed by a scrambled network, per account, and overall:</strong> guessing a password stays slow from many networks too, while one person's wrong guesses on another network don't lock the owner out; IP addresses are never stored.</li>
+              <li><strong>Analytics with the private parts left out:</strong> page addresses without their <code>?query</code>, nothing about the budget, and off for anyone whose browser asks or who turns it off.</li>
+              <li><strong>Floating boxes:</strong> the page never jumps around while you work.</li>
+            </ul>
+          </section>
+
+          <section id="developers" aria-labelledby="developersTitle">
+            <h2 id="developersTitle">18. Notes For Developers And AI Assistants</h2>
+            <ul>
+              <li>The engine is <code>Javascript/Process Budget.js</code>. The page calls these, and each runs through <code>runBudgetAction</code> (queued, snapshot and rollback, refresh, log, save, then a <code>budget:updated</code> event): <code>addCalendarEntry</code>, <code>changeCalendarEntry</code>, <code>saveRecurringEntry</code>, <code>saveTrackerEntry</code>, <code>saveAccount</code>, <code>moveBudgetRows</code>, <code>addCategoryRow</code>, <code>renameCategoryRow</code>, <code>deleteBudgetRows</code>, <code>searchBudget</code>, and <code>savePaycheck</code>. Results look like <code>{ ok, saved, notFound, message }</code>; a <code>BudgetInputError</code> becomes a message for the person instead of an error.</li>
+              <li><code>refreshBudgetData</code> rebuilds everything computed, in order: frequencies rewritten the new way, Upcoming moved onto the calendar, recurring entries written, expired ones removed, each day's entries combined and sorted, In Bank and the 28-day lines, Dave, the tracker and the recurring summary, then account balances.</li>
+              <li>Rules to keep: one entry per title and refraction type per day; one recurring entry per title and refraction type; one tracker row per title and transfer setting; an entry is for an Other Account when it's Hidden or Transfer and titled with the account's name, and the account gets the opposite amount; Hidden entries never change In Bank; titles compare with <code>cleanString</code> (lowercase letters and numbers in any language, and single spaces; symbols only when there are no letters or numbers), and the API's <code>cleanTitle</code> in <code>src/quick.js</code> has to match it. Typed amounts go through <code>readMoneyInput</code> (which reads a decimal comma).</li>
+              <li>Frequencies parse with <code>parseFrequency</code> and are written with <code>formatFrequency</code>; a recurring entry lands when <code>recurringRowHits</code> says so.</li>
+              <li>Lookups keyed by titles use <code>Map</code>, never plain objects, so titles like "constructor" or "__proto__" are just titles.</li>
+              <li>Passkeys are <code>Javascript/Passkeys.js</code> (with <code>Login.js</code> and <code>Settings Page.js</code>) on the site and <code>src/passkey.js</code> in the API, with no libraries: a small CBOR reader and WebCrypto check the passkeys. Browsers only allow passkeys on a web address, so test at <code>http://localhost:…</code>, not <code>127.0.0.1</code>; passkeys made there only work there.</li>
+              <li>Saves go through <code>saveChanges</code>, which sends the page's <code>dataRevision</code> with each table and takes the new one back. A 409 sets <code>budgetConflict</code>, stops the rest of the saves, and reloads with a notice. Test stand-ins for D1 must report <code>meta.changes</code> like D1 does, since the API checks the revision update's <code>meta.changes</code>.</li>
+              <li>The API's limits are in <code>src/limits.js</code> (<code>LIMITS</code>), and signed-in password checks go through <code>passwordProblem</code> in <code>src/account.js</code>, which applies them.</li>
+              <li><strong><code>PASSWORD_PEPPER</code> is a required Worker secret</strong> (32+ characters), like <code>JWT_SECRET</code>: <code>npx wrangler secret put PASSWORD_PEPPER</code>, plus a <code>PASSWORD_PEPPER=…</code> line in <code>.dev.vars</code> for <code>wrangler dev</code>. Never change or lose it: every stored password depends on it, and a different one makes every password stop matching (everyone would need a reset link). Without it, signing in and setting passwords answer 503 ("Passwords aren't set up on the server yet.").</li>
+              <li>Passwords are <code>src/passwords.js</code> (<code>passwordRuleProblem</code>, <code>leakedPasswordProblem</code>, <code>hashNewPassword</code>, <code>checkPassword</code>). Usernames, sign-in lookups, and sessions are in <code>src/account.js</code> (<code>readUsername</code>, <code>usernameKey</code>, <code>findLoginUsers</code>, <code>createSession</code>, <code>endSessions</code>, <code>findSessionUser</code>). <code>Login.js</code> and <code>Settings Page.js</code> check the same rules before sending, so keep them in step.</li>
+              <li>Undo: a change that should be undoable passes <code>{ label, dates }</code> as <code>runBudgetAction</code>'s third argument (see <code>addCalendarEntry</code>, <code>changeCalendarEntry</code>, and <code>applyQuickEntries</code>). <code>undoCalendarChange</code> and <code>redoCalendarChange</code> take a step, and <code>undoInfo()</code> says what each button would do.</li>
+              <li>Test stand-ins for D1 must also return <code>meta.last_row_id</code> (a queued quick entry's <code>id</code>). Tests against <code>wrangler dev</code> reach the real Have I Been Pwned, so their passwords can't be common ones.</li>
+              <li>Requests to the API with the login token go through <code>budgetApi</code>; a 401 means the session ended, and <code>signedOutElsewhere</code> signs the page out. Saving stops after a 401 or a 409.</li>
+              <li>Images: a header icon that changes needs a new 384×384 WebP copy next to its PNG (the pages use the WebP). <code>New Entry.png</code>, <code>Quick Entry.png</code>, <code>Help.png</code>, and <code>Dave.webp</code> aren't made yet (see their <code>.pngdummy</code> and <code>.webpdummy</code> notes); until they are, their buttons show their words.</li>
+              <li>Update <code>sitemap.xml</code>'s <code>lastmod</code> when a public page changes.</li>
+              <li>When a feature changes, update this page and the page's Help.</li>
+            </ul>
+          </section>
+
+          <section id="glossary" aria-labelledby="glossaryTitle">
+            <h2 id="glossaryTitle">19. Glossary</h2>
+            <dl>
+              <dt>In Bank</dt>
+              <dd>The money in the budget's bank account at the end of a day, worked out from the last History balance and each day's entries.</dd>
+              <dt>Entry</dt>
+              <dd>One line on a day: an emoji, an amount, and a title, like <code>❗️ -$6.50 Coffee</code>.</dd>
+              <dt>Refraction type</dt>
+              <dd>How an entry affects the budget: Regular (❗️), Hidden (✖️), or Transfer (⭕️).</dd>
+              <dt>Recurring entry</dt>
+              <dd>An entry that repeats every N days, weeks, or months, written onto the calendar for you; it starts with ✔️.</dd>
+              <dt>Unique entry</dt>
+              <dd>An entry you added or changed yourself.</dd>
+              <dt>Temporary recurring entry (temp)</dt>
+              <dd>A unique entry made from a recurring entry on one day (❗️✔️, ✖️✔️, ⭕️✔️). It keeps the recurring entry of its type from being written again that day.</dd>
+              <dt>Blocker</dt>
+              <dd>A <code>$0.00</code> temp left when a recurring entry's day is moved or deleted.</dd>
+              <dt>Upcoming (Future Dates)</dt>
+              <dd>Entries dated after the calendar, waiting for their day to join it.</dd>
+              <dt>History</dt>
+              <dd>Past weeks, kept as they were, newest first.</dd>
+              <dt>Move</dt>
+              <dd>A transfer, or an entry for an Other Account: money changing places without being gained or spent.</dd>
+              <dt>Other Account</dt>
+              <dd>An account outside the budget's bank account, like Savings. Its balance is the opposite of its entries added up.</dd>
+              <dt>Tracker row and alias</dt>
+              <dd>A category in the tracker, and an entry title it counts (all of the amounts, only costs, or only gains).</dd>
+              <dt>Undefined</dt>
+              <dd>The tracker row that collects titles no other row fully counts.</dd>
+              <dt>Uncommon recurring payment</dt>
+              <dd>A recurring entry that lands every 3 months or less often.</dd>
+              <dt>Daily update</dt>
+              <dd>The catch-up that runs the first time the budget opens on a new day.</dd>
+              <dt>Dave</dt>
+              <dd>The character on the home page who says what to keep in mind, with a daily affirmation.</dd>
+              <dt>Starting Balance</dt>
+              <dd>A new budget's first entry: a <code>⭕️</code> Transfer on the day it's set up, holding what was in the bank then.</dd>
+              <dt>Revision</dt>
+              <dd>A number that goes up with every saved budget table. A save from a page with an older number is refused, so it can't overwrite newer changes.</dd>
+              <dt>Passkey</dt>
+              <dd>A sign-in key a device makes for Prismal Budget and unlocks with a face, fingerprint, or PIN (Face ID, Touch ID, Windows Hello). The server keeps only its public half.</dd>
+              <dt>Quick Entry key</dt>
+              <dd>The secret in a home screen icon's link that lets it add entries (and take back ones still waiting), and nothing else, without logging in.</dd>
+              <dt>Session</dt>
+              <dd>One signed-in device or browser: a row on the server and a signed token that names it, good for up to 24 hours. Logout ends it.</dd>
+              <dt>Pepper</dt>
+              <dd>A secret the server mixes into every password before hashing it, kept outside the database, so the database alone can't be used to guess passwords.</dd>
+              <dt>Undo step</dt>
+              <dd>One change Undo can take back: the days it touched, with each day's own entries from before and after it.</dd>
+              <dt>Change Log</dt>
+              <dd>The record of every change to the budget.</dd>
+            </dl>
+          </section>
+
+        </article>
+      </main>
+    </div>
+  </body>
+</html>

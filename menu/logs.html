@@ -3,19 +3,21 @@
   <head>
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css">
-    <title>Prismal Budget - Menu</title>
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css">
+    <title>Prismal Budget - Change Logs</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Prismal - Menu" />
+    <meta name="apple-mobile-web-app-title" content="Prismal Logs" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Budget - Menu">
+    <meta property="og:title" content="Prismal Budget - Change Logs">
     <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
@@ -35,30 +37,29 @@
   <body>
     <canvas id="constellations"></canvas>
     <div id="transitionContainer">
-      
       <header>
         <div class="stacked">
-          <h1>Menu</h1>
+          <h1>Change Logs</h1>
           <h2>Prismal Budget</h2>
         </div>
         <nav class="navButtons">
           <a id="normalBack" href="back">
-            <img src="/Resources/Back.png" alt="Back">
+            <img src="/Resources/Back.webp" alt="Back">
           </a>
           <a href="/">
-            <img src="/Resources/Home.png" alt="Home">
+            <img src="/Resources/Home.webp" alt="Home">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.png" alt="Logout">
+            <img src="/Resources/Logout.webp" alt="Logout">
           </a>
         </nav>
       </header>
       <hr>
       <main>
-        sds
-        sdsd
-        sds
-        sdsd
+        <div id="pageToolbar" class="tableToolbar"></div>
+        <div id="panelSlot"></div>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <div id="dataView"></div>
       </main>
     </div>
   </body>

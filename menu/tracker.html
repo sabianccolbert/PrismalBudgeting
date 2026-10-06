@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css">
+    <title>Prismal Budget - Tracker</title>
+    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal Tracker" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Budget - Tracker">
+    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://prismalbudget.org">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="stacked">
+          <h1>Tracker</h1>
+          <h2>Prismal Budget</h2>
+        </div>
+        <nav class="navButtons">
+          <a id="normalBack" href="back">
+            <img src="/Resources/Back.webp" alt="Back">
+          </a>
+          <a href="/">
+            <img src="/Resources/Home.webp" alt="Home">
+          </a>
+          <a id="logoutButton" href="logout">
+            <img src="/Resources/Logout.webp" alt="Logout">
+          </a>
+        </nav>
+      </header>
+      <hr>
+      <main>
+        <div id="pageToolbar" class="tableToolbar"></div>
+        <div id="panelSlot"></div>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <div id="dataView"></div>
+
+        <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Tracker Help</h3>
+          <p>The tracker adds up your entries over the last 4 weeks, 3 months, and 365 days. It counts today and every day before it, from the calendar and History, so an entry counts as soon as its day comes.</p>
+
+          <h4>Rows And Aliases</h4>
+          <ul>
+            <li>Each row counts the entries its aliases point to. An alias is an entry title, set to count <strong>All</strong> of its amounts, only its <strong>Costs</strong>, or only its <strong>Gains</strong>.</li>
+            <li>In a row's panel, each alias has its own line: type the entry title, then pick All, Costs, or Gains. Typing a comma (or pressing Enter) starts the next one.</li>
+            <li>Rows leave out ⭕️ Transfers, since most transfers aren't real costs or gains. Turn on Also count ⭕️ Transfers for a row that should count them (its title then starts with ⭕️).</li>
+            <li>✖️ Hidden entries count like any other entry.</li>
+            <li>Entries for your Other Accounts (like a transfer into Savings) only move money between your own accounts, so they count like transfers, even when they're Hidden.</li>
+            <li>If more than one row has the same alias, each of those rows counts it.</li>
+            <li>To see the entries behind a row, search for its title with its Tracker button on the home page.</li>
+          </ul>
+
+          <h4>Costs, Gains, And Undefined</h4>
+          <ul>
+            <li><strong>Costs</strong> and <strong>Gains</strong> add up every cost and every gain, except transfers and entries for your Other Accounts. They fill in by themselves.</li>
+            <li><strong>Undefined</strong> lists the entry titles that no row counts yet, and adds them up. If you add an alias to a row but Undefined still lists it, one of two things is happening:
+              <ol>
+                <li>The alias only counts Costs or only Gains, so entries of the other kind aren't counted yet. For example, if an alias for John counts Gains, costs titled John are still undefined.</li>
+                <li>Some of those entries are ⭕️ Transfers (or entries for your Other Accounts), and the row doesn't count transfers. Turn on Also count ⭕️ Transfers for that row.</li>
+              </ol>
+            </li>
+          </ul>
+
+          <h4>Changing Rows</h4>
+          <ul>
+            <li>Tap New Entry to add a row, or tap a row to change or delete it. Tap Edit to drag rows by their ≡ bar, add sections (+ Section), or check rows and delete them. Costs, Gains, and Undefined come back if you delete them.</li>
+            <li>A title can have two rows: one that counts transfers (its title starts with ⭕️) and one that doesn't. If you add one that matches a title and transfer setting you already have, it says so, and you change the one that's there instead.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

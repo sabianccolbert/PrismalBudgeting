@@ -1,0 +1,4 @@
+Placeholder for New Entry.png: the New Entry button on the home page, just above the calendar.
+It shows up to about 75 pixels tall, so a transparent PNG around 256 pixels tall is plenty
+(the nav icons are 1024x1024, which is more than a button this size needs).
+Replace this file with New Entry.png.
