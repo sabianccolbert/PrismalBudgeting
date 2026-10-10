@@ -457,9 +457,9 @@ document.addEventListener("click", (EVENT) => {
 
 /* GROUP: Signing out */
 // Signing out (or deleting the account) forgets everything this browser kept for the account, including
-// this tab's Undo history, but keeps the device's own choices: the site version, and whether analytics
-// is off here
-const DEVICE_SETTINGS = ["LOCAL_SITE_VERSION", "prismal_analytics"];
+// this tab's Undo history, but keeps the device's own choices: whether analytics is off here, and its
+// date format
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));
@@ -502,6 +502,13 @@ function showMissingImage(IMG) {
 document.addEventListener("error", (EVENT) => {
   if (EVENT.target instanceof HTMLImageElement) showMissingImage(EVENT.target);
 }, true);
+
+/* GROUP: Logout only when signed in */
+// Public pages (like the Privacy Policy) can be read signed out, and then there's nothing to log out of
+function hideLogoutWhenSignedOut() {
+  const LOGOUT = document.getElementById("logoutButton");
+  if (LOGOUT) LOGOUT.hidden = !readStored("prismal_jwt");
+}
 
 /* GROUP: Wire after DOM is ready */
 function onDOMReady(fn) {
@@ -576,6 +583,7 @@ onDOMReady(() => {
     });
   });
   injectGlobalFooter();
+  hideLogoutWhenSignedOut();
   // Images that already failed before this script ran
   document.querySelectorAll("img").forEach((IMG) => {
     if (IMG.complete && IMG.naturalWidth === 0 && IMG.getAttribute("src")) showMissingImage(IMG);
@@ -609,7 +617,7 @@ function injectGlobalFooter() {
 
   FOOTER.innerHTML = `
     <hr>
-        <p>Prismal Budget™ and its logo are trademarked</p>
+        <p><span translate="no">Prismal Budget™</span> and its logo are trademarked</p>
         <p>Contact:
         <a href="mailto:sabian.c.colbert@gmail.com">
           Sabian.C.Colbert&#8203;@Gmail.com

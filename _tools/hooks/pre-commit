@@ -1,0 +1,4 @@
+#!/bin/sh
+# Refuses a commit whose fingerprints (?v=) don't match its files, so browsers never keep an old copy of a
+# changed file (see _tools/stamp.mjs). Turned on for this repository with: git config core.hooksPath _tools/hooks
+exec node _tools/stamp.mjs --check

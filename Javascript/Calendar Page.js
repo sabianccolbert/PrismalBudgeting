@@ -1,4 +1,4 @@
-// Calendar Page: the home page. Search bar and results, "Lowest in bank after today", Dave,
+// Calendar Page: the home page. "Lowest in bank after today", Dave,
 // Upcoming, the calendar's day cells, and the new-entry / entry-options panels.
 // Zooming a day is handled in Process Budget.js (LAYOUT FUNCTIONS); tapping an entry inside a
 // zoomed day opens its options here.
@@ -7,15 +7,13 @@
 // #region SETUP
 // =====================================================================
 
-// The search bar works right away (a search before the budget loads says it's still loading)
-wireSearch();
-
 window.workspaceReady.then((loaded) => {
   if (!loaded) {
     const dave = document.getElementById("daveMessage");
     if (dave) dave.textContent = "Couldn't load your budget data. Please refresh to try again.";
     return;
   }
+  startDaveVisit(); // Dave's tip for this visit, if there is one (Process Budget.js DAVE'S TIPS)
   renderHome();
   wireCalendar();
   wireGettingStarted();
@@ -32,7 +30,6 @@ function renderHome() {
   renderGettingStarted();
   renderCalendar();
   renderInfoRow();
-  fillTrackerRowTitles();
   renderUndoButtons();
 }
 
@@ -89,7 +86,7 @@ async function takeHistoryStep(direction) {
 // #region GETTING STARTED (a new budget's first steps)
 // =====================================================================
 // A new budget starts at $0, so its first step says what's in the bank: a ⭕️ Transfer titled Starting
-// Balance on today (it changes In Bank, but isn't a gain), and for savings a ✖️ Hidden cost titled with
+// Balance on today (it changes In Bank, but isn't a gain), and for savings a ✖️ Hidden gain titled with
 // the default account's name (it puts the money in that account without changing In Bank). The card
 // shows until the starting balance and a recurring entry are there, or it's hidden with ×.
 
@@ -149,7 +146,7 @@ async function setStartingBalance(event) {
   const savingsAccount = accountRows().find(account => isDefaultAccount(account.row))?.name || otherAccounts()[0]?.name;
   let result = await addCalendarEntry({ title: STARTING_BALANCE, sprite: "⭕️", amount: balance, date: today });
   if (result.ok && savings > 0 && savingsAccount) {
-    result = await addCalendarEntry({ title: savingsAccount, sprite: "✖️", amount: -savings, date: today });
+    result = await addCalendarEntry({ title: savingsAccount, sprite: "✖️", amount: savings, date: today });
   }
   form.querySelectorAll("input, button").forEach(control => { control.disabled = false; });
   if (!result.ok) return BudgetUI.showToast(result.message || "Couldn't set the starting balance. Please try again.", true);
@@ -176,7 +173,8 @@ function renderCalendar() {
 
     const fragment = document.createDocumentFragment();
     String(calendarData[r][c] ?? "").split("\n").forEach((line, l) => {
-      if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(line, l));
+      // The first line is the day, shown in this device's date format
+      if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(gridDates[r][c]) : line, l));
     });
 
     // Closes the zoomed day (handled in Process Budget.js)
@@ -233,8 +231,7 @@ function renderInfoRow() {
     lowest.classList.toggle("negative", lowestInBank < 0);
   }
 
-  const dave = document.getElementById("daveMessage");
-  if (dave) dave.textContent = daveMessage;
+  renderDave();
 
   const list = document.getElementById("upcomingList");
   if (!list) return;
@@ -244,13 +241,28 @@ function renderInfoRow() {
     return;
   }
   for (const upcoming of upcomingEntries) {
-    const item = BudgetUI.element("li", "upcomingItem");
-    item.appendChild(BudgetUI.element("span", "upcomingDate", formatToMMDDYYYY(upcoming.date)));
+    const item = BudgetUI.noTranslate(BudgetUI.element("li", "upcomingItem"));
+    item.appendChild(BudgetUI.element("span", "upcomingDate", showDate(upcoming.date)));
     const entry = BudgetUI.element("span", "upcomingEntry", `${upcoming.sprite} ${formatMoney(upcoming.amount)} ${upcoming.title}`);
     if (upcoming.amount > 0) entry.classList.add("positive");
     item.appendChild(entry);
     list.appendChild(item);
   }
+}
+
+// Dave's tip, highlighted, while it has its 10 minutes (see DAVE'S TIPS in Process Budget.js); otherwise his
+// everyday message. When the tip's time is up on an open page, he goes back to the everyday one.
+let daveTipTimer = 0;
+function renderDave() {
+  const dave = document.getElementById("daveMessage");
+  if (!dave) return;
+  const tip = currentDaveTip();
+  dave.textContent = tip ? tip.text : daveMessage;
+  dave.closest(".daveCard")?.classList.toggle("daveTip", !!tip);
+  const label = document.getElementById("daveTipLabel");
+  if (label) label.hidden = !tip;
+  clearTimeout(daveTipTimer);
+  if (tip) daveTipTimer = setTimeout(renderDave, Math.max(0, tip.until - Date.now()) + 100);
 }
 
 //#endregion
@@ -296,7 +308,7 @@ function openQuickEntrySetup(origin) {
       const text = (line) => BudgetUI.element("p", "panelText", line);
       form.append(
         text("Put an icon on your phone's home screen that opens a New Entry form, with no login needed."),
-        text("The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, or you turn icons off in Settings, it stops working."),
+        text("The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, or you turn icons off in Settings, it stops working."),
         text("On the next page, add it to your home screen: on iPhone, tap Share, then Add to Home Screen. On Android, tap ⋮, then Add to Home screen."),
         BudgetUI.buttonRow([
           { label: "Set It Up", kind: "primary", type: "submit" },
@@ -335,13 +347,15 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
   BudgetUI.openPanel({
     origin: lineEl,
     size: "small",
-    title: `${formatToMMDD(date)} Entry`,
+    title: `${showDay(date)} Entry`,
     build(form, panel) {
       const display = BudgetUI.renderEntryLine(line, lineIndex);
       display.classList.add("panelEntry");
-      // An entry for an Other Account changes it by the opposite amount
+      // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own
       const account = linkedAccount(parts[0], cleanString(title));
-      const accountNote = account ? BudgetUI.element("p", "panelHint", `${account.name} (Other Accounts) changes by the opposite of this entry's amount.`) : null;
+      const accountNote = account ? BudgetUI.element("p", "panelHint", refraction === "⭕️"
+        ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
+        : `${account.name} (Other Accounts) changes by this entry's amount, and In Bank doesn't.`) : null;
 
       let mode = "set";
       const amount = BudgetUI.amountField({ label: "Amount", amount: currentAmount });
@@ -367,7 +381,7 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
         const newAmount = amount.value();
         const move = moveTo.value();
         if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
-        if (move === undefined) return panel.setError("That date isn't a real day. Use MM/DD/YYYY.");
+        if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
 
         const change = { title, sprite: refraction, date, action: "set", amount: "" };
         const amountChanged = newAmount !== null && (mode === "set" ? newAmount !== currentAmount : newAmount !== 0);
@@ -382,173 +396,11 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
       });
 
       function deleteEntry() {
-        if (!window.confirm(`Delete ${title} on ${formatToMMDD(date)}?`)) return;
+        if (!window.confirm(`Delete ${title} on ${showDay(date)}?`)) return;
         BudgetUI.submit(panel, () => changeCalendarEntry({ title, sprite: refraction, date, action: "delete" }));
       }
     }
   });
-}
-
-//#endregion
-
-// =====================================================================
-// #region SEARCH
-// =====================================================================
-
-// A list of titles, one per line, each with its own buttons (Enter adds the next line, and Enter on an
-// empty line searches), and optional From / To dates
-function wireSearch() {
-  const form = document.getElementById("searchForm");
-  const slot = document.getElementById("searchTerms");
-  if (!form || !slot) return;
-  // What each title finds (the spreadsheet typed rent-, rent+ and car stuff= instead, which still pick
-  // these): All, Costs, Gains, or Tracker (the title is a tracker row: find what it counts)
-  const searchButtons = [
-    { key: "all", label: "All" },
-    { key: "costs", label: "Costs" },
-    { key: "gains", label: "Gains" },
-    { key: "category", label: "Tracker" }
-  ];
-  for (const id of ["searchFrom", "searchTo"]) {
-    document.getElementById(id)?.addEventListener("focus", (event) => BudgetUI.setPickTarget(event.target));
-  }
-
-  const submitButton = form.querySelector("button[type=submit]");
-  const typedEarly = slot.querySelector("input")?.value || ""; // Typed before this script loaded
-  const terms = BudgetUI.termList({
-    items: [{ title: typedEarly, mode: "all" }],
-    options: searchButtons,
-    endings: { "-": "costs", "+": "gains", "=": "category" },
-    label: "Titles to search for",
-    lineLabel: "Title",
-    addLabel: "+ Add Title",
-    // Tracker looks for tracker rows by title, so those get suggested
-    placeholder: (mode) => (mode === "category" ? "Tracker row, like Food" : "Title, like rent"),
-    suggestions: (mode) => (mode === "category" ? "trackerRowTitles" : null),
-    onEnterEmpty: () => submitButton.click()
-  });
-  // The page has a first line already (so nothing moves while the page loads); the working list
-  // looks the same
-  slot.replaceChildren(terms.lines);
-  const pageAddButton = document.getElementById("searchAdd");
-  terms.addButton.id = "searchAdd";
-  if (pageAddButton) pageAddButton.replaceWith(terms.addButton);
-  else form.querySelector(".searchDates")?.prepend(terms.addButton);
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    submitButton.disabled = true;
-    const result = await searchBudget({
-      terms: terms.items().map(({ title, mode }) => ({ title, match: mode })),
-      from: document.getElementById("searchFrom").value,
-      to: document.getElementById("searchTo").value
-    });
-    submitButton.disabled = false;
-    BudgetUI.setPickTarget(null);
-    BudgetUI.warnIfUnsaved(result);
-    if (!result.ok) return showSearchMessage(result.message);
-    renderSearchResults(result.search);
-  });
-}
-
-function showSearchMessage(message) {
-  const container = document.getElementById("searchResults");
-  container.replaceChildren(BudgetUI.element("p", "searchMessage", message));
-  container.hidden = false;
-}
-
-// Suggestions for a search title's Tracker button: the tracker's row titles (a row that counts
-// transfers keeps its ⭕️, since a title can have one of each)
-function fillTrackerRowTitles() {
-  const list = document.getElementById("trackerRowTitles");
-  if (!list) return;
-  const rowTitles = trackerData.slice(1)
-    .filter(row => !["", "-"].includes(String(row[0] ?? "").trim()))
-    .map(row => String(row[0]).trim());
-  list.replaceChildren(...[...new Set(rowTitles)].map(title => {
-    const option = document.createElement("option");
-    option.value = title;
-    return option;
-  }));
-}
-
-// Results: newest first, each with a checkbox and a running total of the checked amounts, like the
-// spreadsheet's Search tab. Transfers (and entries for Other Accounts) start unchecked, unless a tracker
-// row that counts transfers found them.
-function renderSearchResults({ results, from, to, searchingFor }) {
-  const container = document.getElementById("searchResults");
-  container.replaceChildren();
-  container.hidden = false;
-
-  const header = BudgetUI.element("div", "searchHeader");
-  header.appendChild(BudgetUI.element("p", "searchSummary", `Searching from ${from} to ${to} for: ${searchingFor}`));
-  const closeButton = BudgetUI.element("button", "panelClose", "×");
-  closeButton.type = "button";
-  closeButton.setAttribute("aria-label", "Close search results");
-  closeButton.addEventListener("click", () => {
-    container.hidden = true;
-    container.replaceChildren();
-  });
-  header.appendChild(closeButton);
-  container.appendChild(header);
-
-  if (results.length === 0) {
-    container.appendChild(BudgetUI.element("p", "searchMessage", "No entries found."));
-    return;
-  }
-
-  const total = BudgetUI.element("p", "searchTotal");
-  container.appendChild(total);
-
-  const tableEl = document.createElement("table");
-  tableEl.className = "dataTable searchTable";
-  const headRow = tableEl.createTHead().insertRow();
-  const masterCell = document.createElement("th");
-  const master = document.createElement("input");
-  master.type = "checkbox";
-  master.setAttribute("aria-label", "Check all");
-  masterCell.appendChild(master);
-  headRow.appendChild(masterCell);
-  for (const label of ["Date", "Amount", "Entry"]) headRow.appendChild(BudgetUI.element("th", "", label));
-
-  const body = tableEl.createTBody();
-  const checkboxes = results.map(result => {
-    const tr = body.insertRow();
-    const checkCell = tr.insertCell();
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = result.checked;
-    checkbox.dataset.amount = result.amount;
-    checkbox.setAttribute("aria-label", `Count ${result.title}`);
-    checkCell.appendChild(checkbox);
-    tr.appendChild(BudgetUI.element("td", "", formatToMMDDYYYY(result.date)));
-    const amountCell = BudgetUI.element("td", "amountCell", formatMoney(result.amount));
-    if (result.amount > 0) amountCell.classList.add("positive");
-    if (result.amount < 0) amountCell.classList.add("negative");
-    tr.appendChild(amountCell);
-    tr.appendChild(BudgetUI.element("td", "", `${result.sprite} ${result.title}`));
-    return checkbox;
-  });
-
-  const updateTotal = () => {
-    const checked = checkboxes.filter(box => box.checked);
-    const sum = checked.reduce((runningTotal, box) => runningTotal + Number(box.dataset.amount), 0);
-    total.textContent = `${results.length} found · ${checked.length} checked · Total: ${formatMoney(sum)}`;
-    total.classList.toggle("positive", sum > 0);
-    total.classList.toggle("negative", sum < 0);
-    master.checked = checked.length === checkboxes.length;
-    master.indeterminate = checked.length > 0 && checked.length < checkboxes.length;
-  };
-  body.addEventListener("change", updateTotal);
-  master.addEventListener("change", () => {
-    checkboxes.forEach(box => { box.checked = master.checked; });
-    updateTotal();
-  });
-  updateTotal();
-
-  const scroll = BudgetUI.element("div", "dataScroll searchScroll");
-  scroll.appendChild(tableEl);
-  container.appendChild(scroll);
 }
 
 //#endregion

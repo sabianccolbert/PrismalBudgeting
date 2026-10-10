@@ -45,7 +45,7 @@
         object-fit: cover;
 
         /* Matches the number input "pill" styling */
-        background-image: url("/Resources/Button Border.webp");
+        background-image: url("/Resources/Button Border.webp?v=");
         background-size: 110% 110%;
         background-position: center;
         background-repeat: no-repeat;
@@ -153,7 +153,7 @@
         font-family: 'New Rocker';
         color: inherit;
 
-        background-image: url("/Resources/Button Border.webp");
+        background-image: url("/Resources/Button Border.webp?v=");
         background-size: 110% 110%;
         background-position: center;
         background-repeat: no-repeat;

@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=10.06.2026.A">
-    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=10.06.2026.A">
+    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=e02be993e2">
     <title>Prismal Budget - Recurring Entries</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -40,17 +40,17 @@
       <header>
         <div class="stacked">
           <h1>Recurring Entries</h1>
-          <h2>Prismal Budget</h2>
+          <h2 translate="no">Prismal Budget</h2>
         </div>
         <nav class="navButtons">
           <a id="normalBack" href="back">
-            <img src="/Resources/Back.webp" alt="Back">
+            <img src="/Resources/Back.webp?v=e8de49845b" alt="Back">
           </a>
           <a href="/">
-            <img src="/Resources/Home.webp" alt="Home">
+            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.webp" alt="Logout">
+            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
           </a>
         </nav>
       </header>
@@ -62,7 +62,7 @@
         <div id="dataView"></div>
 
         <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
-        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png?v=" alt="Help" loading="lazy" decoding="async"></button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Recurring Entries Help</h3>
           <p>Recurring entries are added to your calendar for you, like paychecks and bills, on every day they land on from today on. They start with a checkmark: ✔️ Regular, ✔️✖️ Hidden, or ✔️⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
@@ -71,7 +71,8 @@
           <ul>
             <li>Tap New Entry to add one, or tap a row to change it or delete it.</li>
             <li>A title can have one recurring entry of each refraction type: one Regular, one Hidden, and one Transfer. If you add one that matches a title and type you already have, it says so, and you change the one that's there instead.</li>
-            <li>For Hidden or Transfer, you can pick one of your Other Accounts, like Savings for a transfer into savings every payday. The account gets the opposite amount each time it lands (Help on the Other Accounts page has more).</li>
+            <li>For Hidden or Transfer, you can pick one of your Other Accounts, like Savings for a transfer into savings every payday. Each time it lands, a Transfer gives the account the opposite amount (a Transfer cost adds to it), and a Hidden entry its own amount (a Hidden cost takes from it). Help on the Other Accounts page has more.</li>
+            <li>The little ? next to Refraction Type shows what each type does.</li>
             <li>To change just one day, tap that day on the calendar, then tap the entry. That makes a temporary recurring entry (like ❗️✔️) for that day only.</li>
           </ul>
 
@@ -81,13 +82,14 @@
             <li>Months land on the Start Date's day of the month, or on the month's last day when the month is shorter (an entry that starts on the 31st lands on the 30th in 30-day months). Every 12 months is once a year.</li>
             <li>For something on the 1st and the 15th, add two monthly entries with different titles, like Paycheck 1st and Paycheck 15th. (Entries from before kept as Semi-Monthly still land on the 1st and 15th.)</li>
             <li><strong>End Date</strong> is the last day it can land on. Leave it blank to keep it going.</li>
+            <li>Moving the End Date earlier turns any days you changed after it (from today on, like ❗️✔️) into plain unique entries, since there's nothing left for them to hold back; a $0.00 one goes away.</li>
           </ul>
 
           <h4>Days That Already Passed</h4>
           <p>Once a day passes, its recurring entries turn into unique entries (like ❗️✔️), so changing or deleting a recurring entry only changes today and later. Deleting one stops it from today on, and any days you changed for it keep their changes.</p>
 
           <h4>Monthly And Yearly</h4>
-          <p>At the top, Monthly is about how much your recurring costs add up to each month (every 2 weeks counts as a little over twice a month). Yearly is what you've spent so far this year, plus every recurring cost still to land this year. Neither counts transfers or entries for your Other Accounts, since that money is still yours.</p>
+          <p>At the top, Monthly is about how much your recurring costs add up to each month (every 2 weeks counts as a little over twice a month). Yearly is what you've spent so far this year, plus every recurring cost still to land this year. Neither counts ⭕️ Transfers, since that money is still yours (✖️ Hidden costs count, like any cost).</p>
 
           <h4>Edit</h4>
           <p>Tap Edit to drag rows by their ≡ bar, add sections (+ Section) to group your rows, or check rows and delete them.</p>

@@ -23,6 +23,8 @@ let passkeyAdd = null;       // { options, at }: a password-checked challenge, k
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";
 
+wireDateFormat(); // This device's choice, so it works before (and without) the server
+
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
   const [reminders, accountResult, passkeyResult] = await Promise.all([
@@ -111,6 +113,43 @@ function formatTime12(hhmm) {
 //#endregion
 
 // =====================================================================
+// #region LANGUAGE AND DATES (this device)
+// =====================================================================
+// Translating is the browser's own (the card says how). The date format is this device's own (from its
+// language and region) unless one is picked here; it's kept on this device, even after signing out, and
+// decides how dates show and how typed ones are read (see "Dates people see and type" in Process Budget.js).
+
+function wireDateFormat() {
+  const select = document.getElementById("dateFormat");
+  if (!select) return;
+  let picked = "";
+  try { picked = localStorage.getItem(DATE_FORMAT_KEY) || ""; } catch (e) {}
+  select.append(
+    new Option(`This device's own (${DATE_FORMATS[deviceDateFormat()].pattern})`, ""),
+    ...Object.entries(DATE_FORMATS).map(([key, format]) => new Option(format.pattern, key))
+  );
+  select.value = Object.prototype.hasOwnProperty.call(DATE_FORMATS, picked) ? picked : "";
+  renderDateFormatNote();
+  select.addEventListener("change", () => {
+    try {
+      if (select.value) localStorage.setItem(DATE_FORMAT_KEY, select.value);
+      else localStorage.removeItem(DATE_FORMAT_KEY);
+    } catch (e) {
+      BudgetUI.showToast("This browser isn't keeping site data, so the date format can't be saved.", true);
+    }
+    renderDateFormatNote();
+    BudgetUI.showToast(`Dates show like ${showDate(new Date(2026, 9, 5))} now.`);
+  });
+}
+
+function renderDateFormatNote() {
+  document.getElementById("dateFormatNote").textContent =
+    `October 5, 2026 shows as ${showDate(new Date(2026, 9, 5))}, and dates you type are read the same way (${DATE_FORMATS.ymd.pattern} always works too).`;
+}
+
+//#endregion
+
+// =====================================================================
 // #region PUSH NOTIFICATIONS (this device)
 // =====================================================================
 
@@ -149,35 +188,35 @@ async function refreshPushState() {
   renderPush();
 }
 
+// On or off for this device, always with a Turn On / Turn Off button. Where push can't work here (the server
+// isn't set up, the browser can't, an iPhone not opened from its Home Screen, or notifications are blocked),
+// the status says why, and so does Turn On.
 function renderPush() {
   const status = document.getElementById("pushStatus");
   const buttons = document.getElementById("pushButtons");
   buttons.replaceChildren();
 
-  if (!reminderSettings.push.available) {
-    status.textContent = "Push notifications aren't set up on the server yet.";
-    return;
-  }
-  if (!pushSupported()) {
-    status.textContent = needsHomeScreen()
-      ? "On iPhone and iPad, add Prismal Budget to your Home Screen first (tap Share, then Add to Home Screen), then open it from there to turn these on."
-      : "This browser doesn't support push notifications.";
-    return;
-  }
-
   const otherDevices = reminderSettings.push.devices - (pushSubscription ? 1 : 0);
   const others = otherDevices > 0 ? ` They're also on for ${otherDevices} other device${otherDevices > 1 ? "s" : ""}.` : "";
   if (pushSubscription) {
     status.textContent = "On for this device. You'll get a notification at your reminder time on days that need one." + others;
-    buttons.append(settingsButton("Send Test", "", sendTestPush), settingsButton("Turn Off", "danger", turnOffPush));
+    buttons.append(settingsButton("Turn Off", "danger", turnOffPush), settingsButton("Send Test", "", sendTestPush));
     return;
   }
-  if (Notification.permission === "denied") {
-    status.textContent = PUSH_BLOCKED_TEXT + others;
-    return;
+  const blocked = pushBlockedReason();
+  status.textContent = (blocked ? `Off for this device. ${blocked}` : "Off for this device.") + others;
+  buttons.append(settingsButton("Turn On", "primary", blocked ? () => BudgetUI.showToast(blocked, true) : turnOnPush));
+}
+
+// Why push can't be turned on here, or "" when it can
+function pushBlockedReason() {
+  if (!reminderSettings.push.available) return "Push notifications aren't set up on the server yet.";
+  if (!pushSupported()) {
+    return needsHomeScreen()
+      ? "On iPhone and iPad, add Prismal Budget to your Home Screen first (tap Share, then Add to Home Screen), then open it from there to turn these on."
+      : "This browser doesn't support push notifications.";
   }
-  status.textContent = "Off for this device." + others;
-  buttons.append(settingsButton("Turn On", "primary", turnOnPush));
+  return Notification.permission === "denied" ? PUSH_BLOCKED_TEXT : "";
 }
 
 async function turnOnPush(event) {
@@ -458,10 +497,10 @@ function renderQuickIcons() {
   buttons.replaceChildren();
   const count = account.quickIcons || 0;
   if (count === 0) {
-    status.textContent = "Quick Entry icons: none right now. The Quick Entry Icon button on Home makes one for a phone's home screen.";
+    status.textContent = "Quick Entry icons: none right now. The Quick Entry button on Home makes one for a phone's home screen.";
     return;
   }
-  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, and see your Other Accounts' balances (for its account picker), but nothing else.`;
+  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see your Other Accounts' balances (for its account picker), and keep your prisms, but nothing else.`;
   buttons.append(settingsButton(count === 1 ? "Turn Off The Icon" : "Turn Off Icons", "danger", turnOffQuickIcons));
 }
 

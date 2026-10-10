@@ -558,11 +558,9 @@ function onDOMReady(fn) {
 // Absolute path: a relative one would resolve against the page URL, not /Javascript/.
 S.engineScriptUrl = "/Javascript/Active Starfield.js";
 
-// Add the site version so deploys bust the cache (matches Boot.js).
+// The engine's address with its fingerprint (Boot.js), so a changed engine reaches browsers right away
 S.getVersionedUrl = function getVersionedUrl(URL) {
-  const VERSION = window.SITE_VERSION || "dev";
-  const JOINER = URL.includes("?") ? "&" : "?";
-  return `${URL}${JOINER}v=${encodeURIComponent(VERSION)}`;
+  return typeof window.assetUrl === "function" ? window.assetUrl(URL) : URL;
 };
 
 /* GROUP: Start the engine */
@@ -578,11 +576,12 @@ S.startEngine = function startEngine() {
   // Read saved stars first (this also restores slider settings before the sliders bind).
   const SAVED = S.readSavedStarfield();
 
-  // Everything the engine needs to begin.
+  // Everything the engine needs to begin (the canvas's size: see canvasBox, in section 5).
+  const CANVAS_BOX = S.canvasBox();
   const INIT_MESSAGE = {
     type: "INIT",
-    width: window.innerWidth || 0,
-    height: window.innerHeight || 0,
+    width: Math.round(CANVAS_BOX.width),
+    height: Math.round(CANVAS_BOX.height),
     settings: { ...S.interactionSettings },
     saved: SAVED,
     wantsDebug: Object.values(S.debugReadouts).some(Boolean)
@@ -650,9 +649,19 @@ S.toEngineTimeMs = function toEngineTimeMs(EVENT_TIMESTAMP) {
   return performance.timeOrigin + EVENT_TIMESTAMP;
 };
 
-// Forward one pointer sample to the engine.
+// The canvas's size and spot, in the same page coordinates pointer events use. Not innerWidth/innerHeight:
+// while a phone is pinch-zoomed, Safari shrinks those to the zoomed-in part, so the stars were laid out
+// for a smaller screen and a tap's burst landed away from the finger.
+S.canvasBox = function canvasBox() {
+  const BOX = S.constellationCanvas && S.constellationCanvas.getBoundingClientRect();
+  if (BOX && BOX.width && BOX.height) return BOX;
+  return { left: 0, top: 0, width: document.documentElement.clientWidth || window.innerWidth || 0, height: window.innerHeight || 0 };
+};
+
+// Forward one pointer sample to the engine, relative to the canvas.
 S.sendPointer = function sendPointer(TYPE, X, Y, EVENT_TIMESTAMP) {
-  S.sendToEngine({ type: TYPE, x: X, y: Y, time: S.toEngineTimeMs(EVENT_TIMESTAMP) });
+  const BOX = S.canvasBox();
+  S.sendToEngine({ type: TYPE, x: X - BOX.left, y: Y - BOX.top, time: S.toEngineTimeMs(EVENT_TIMESTAMP) });
 };
 
 /* GROUP: Event listeners */
@@ -691,12 +700,13 @@ window.addEventListener(
 );
 
 /* GROUP: Resize */
-// The engine resizes the canvas backing store; it just needs the new viewport size.
+// The engine resizes the canvas backing store; it just needs the canvas's new size (see canvasBox).
 window.addEventListener("resize", () => {
+  const BOX = S.canvasBox();
   S.sendToEngine({
     type: "RESIZE",
-    width: window.innerWidth || 0,
-    height: window.innerHeight || 0
+    width: Math.round(BOX.width),
+    height: Math.round(BOX.height)
   });
 });
 
