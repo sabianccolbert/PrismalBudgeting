@@ -1,0 +1,2 @@
+# The pre-commit hook is a shell script: Windows line endings would break it (see _tools/stamp.mjs)
+_tools/hooks/* text eol=lf
