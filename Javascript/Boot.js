@@ -5,12 +5,50 @@
   document.documentElement.classList.remove("noJs");
 
   /* ===============================
-   * 0) SITE VERSION (bump per deploy)
+   * 0) VERSIONS
    * =============================== */
-  // A new version makes every browser get the new files. The pages' stylesheet links carry it too
-  // (/stylesheet.css?v=...), so when bumping it, find and replace the old version everywhere in the site.
-  const SITE_VERSION = "10.06.2026.A";
+  // The release's name, shown in the corner (and in How It Works). Change it with each release.
+  const SITE_VERSION = "10.10.2026.A";
   window.SITE_VERSION = SITE_VERSION;
+
+  // How updates reach browsers without making them download everything again:
+  //   - Pages and this file are always checked for a newer copy (Cloudflare sends them with
+  //     Cache-Control: no-cache), which costs a quick "nothing changed" answer when there's nothing new.
+  //   - Every other file's address carries its fingerprint (?v=, a short hash of its contents), so browsers
+  //     keep their saved copy until the file really changes, and the new address gets the new copy right away.
+  // The fingerprints are written by `node _tools/stamp.mjs` (pages' and stylesheets' links, and this list of
+  // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
+  // <stamp:files> (written by _tools/stamp.mjs)
+  const FILE_VERSIONS = {
+    "/Javascript/Active Starfield.js": "2803600ede",
+    "/Javascript/Analytics.js": "dac605ae19",
+    "/Javascript/Budget Pages.js": "434888ec2b",
+    "/Javascript/Budget Search.js": "61e70de7c5",
+    "/Javascript/Budget UI.js": "d5687c9081",
+    "/Javascript/Calendar Page.js": "4d04a01de9",
+    "/Javascript/Debug.js": "3c205d5fa0",
+    "/Javascript/Keyboard Starfield.js": "2b28e8ba7c",
+    "/Javascript/Layout.js": "4b7f954329",
+    "/Javascript/Login.js": "cb5b2c6e2e",
+    "/Javascript/Passkeys.js": "a2905991dd",
+    "/Javascript/Process Budget.js": "07d9b0fb2e",
+    "/Javascript/Quick Entry.js": "0894737feb",
+    "/Javascript/Session.js": "ff5a8f1a97",
+    "/Javascript/Settings Page.js": "3606ca67a2",
+    "/Javascript/Sheet Import.js": "59aab8b637",
+    "/Javascript/Sprites.js": "4c4e2d66b8",
+    "/Javascript/Starfield Setup.js": "65f71b67e6",
+    "/Resources/Sprites/Hidden.webp": "2827d5c983",
+    "/Resources/Sprites/Recurring.webp": "4f494bda3d",
+    "/Resources/Sprites/Regular.webp": "6d52ba4e84",
+    "/Resources/Sprites/Transfer.webp": "8ac57c50be"
+  };
+  // </stamp:files>
+
+  // A file's address with its fingerprint ("/Javascript/Layout.js?v=1a2b3c4d5e"), for scripts and images
+  window.assetUrl = function assetUrl(path) {
+    return FILE_VERSIONS[path] ? `${path}?v=${FILE_VERSIONS[path]}` : path;
+  };
 
   /* ===============================
    *  1) PAGE DETECTION
@@ -53,14 +91,14 @@
   window.PUBLIC_PAGE = PUBLIC_PAGES.includes(PAGE);
 
   /* ===============================
-   *  2) SITE DATA + HTML CACHE BUSTER
+   *  2) SITE DATA
    * =============================== */
   // Signing in lives in this browser's storage. A browser that blocks site data throws on any use of it,
   // so the pages that need it say how to fix that (stylesheet.css .noStorage) instead of breaking quietly.
   let storage = null;
   try {
     storage = window.localStorage;
-    storage.getItem("LOCAL_SITE_VERSION");
+    storage.getItem("prismal_jwt");
   } catch (e) {
     storage = null;
   }
@@ -69,22 +107,15 @@
     return;
   }
 
-  // A new version reloads the page once (with ?v=) so the browser fetches the new HTML too. The ?v= check
-  // stops a reload loop in a browser that doesn't keep what's stored.
-  if (storage && storage.getItem("LOCAL_SITE_VERSION") !== SITE_VERSION) {
-    try { storage.setItem("LOCAL_SITE_VERSION", SITE_VERSION); } catch (e) {}
-    const currentUrl = new URL(window.location.href);
-    if (currentUrl.searchParams.get("v") !== SITE_VERSION) {
-      currentUrl.searchParams.set("v", SITE_VERSION);
-      window.location.replace(currentUrl.toString());
-      return;
-    }
+  // Before October 2026, every release reloaded each page once with ?v= added to its address. Pages are
+  // always fresh now, so that's taken back out of the address (old bookmarks keep working), and the
+  // version those releases kept here is forgotten.
+  if (new URLSearchParams(location.search).has("v")) {
+    const cleanUrl = new URL(location.href);
+    cleanUrl.searchParams.delete("v");
+    history.replaceState(history.state, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
   }
-
-  function v(url){
-    const joiner = url.includes("?") ? "&" : "?";
-    return `${url}${joiner}v=${encodeURIComponent(SITE_VERSION)}`;
-  }
+  try { if (storage) storage.removeItem("LOCAL_SITE_VERSION"); } catch (e) {}
 
   /* ===============================
    *  3) AUTHENTICATION REDIRECT
@@ -121,8 +152,10 @@
    *  5) Append page scripts at END
    * =============================== */
   // Starfield Setup starts the worker (Active Starfield.js) itself, so Active isn't listed here.
-  // Setup must come before Keyboard and Layout, which use window.STARFIELD.
+  // Setup must come before Keyboard and Layout, which use window.STARFIELD. Sprites goes first, so the
+  // ❗️ ✖️ ⭕️ ✔️ images are in before the page slides in.
   const GLOBAL_SCRIPTS = [
+    "/Javascript/Sprites.js",
     "/Javascript/Starfield Setup.js",
     "/Javascript/Layout.js",
     "/Javascript/Keyboard Starfield.js",
@@ -141,7 +174,7 @@
 
   function appendScript(src){
     const s = document.createElement("script");
-    s.src = v(src);
+    s.src = window.assetUrl(src);
     s.async = false;
     document.body.appendChild(s);
   }
@@ -168,7 +201,11 @@
     if (BUDGET_PAGES.includes(PAGE)) {
       appendScript("/Javascript/Process Budget.js");
       appendScript("/Javascript/Budget UI.js");
+      // Search (Home's and History's): before the page script, which opens it
+      if (PAGE === "home" || PAGE === "history") appendScript("/Javascript/Budget Search.js");
       appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");
+      // Temporary: bringing a Google Sheets budget over (see Sheet Import.js)
+      if (PAGE === "home") appendScript("/Javascript/Sheet Import.js");
     }
   }
 

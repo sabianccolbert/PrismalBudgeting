@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=10.06.2026.A">
-    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=10.06.2026.A">
+    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=e02be993e2">
     <title>Prismal Budget - Tracker</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -40,17 +40,17 @@
       <header>
         <div class="stacked">
           <h1>Tracker</h1>
-          <h2>Prismal Budget</h2>
+          <h2 translate="no">Prismal Budget</h2>
         </div>
         <nav class="navButtons">
           <a id="normalBack" href="back">
-            <img src="/Resources/Back.webp" alt="Back">
+            <img src="/Resources/Back.webp?v=e8de49845b" alt="Back">
           </a>
           <a href="/">
-            <img src="/Resources/Home.webp" alt="Home">
+            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.webp" alt="Logout">
+            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
           </a>
         </nav>
       </header>
@@ -62,7 +62,7 @@
         <div id="dataView"></div>
 
         <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
-        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png?v=" alt="Help" loading="lazy" decoding="async"></button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Tracker Help</h3>
           <p>The tracker adds up your entries over the last 4 weeks, 3 months, and 365 days. It counts today and every day before it, from the calendar and History, so an entry counts as soon as its day comes.</p>
@@ -72,21 +72,19 @@
             <li>Each row counts the entries its aliases point to. An alias is an entry title, set to count <strong>All</strong> of its amounts, only its <strong>Costs</strong>, or only its <strong>Gains</strong>.</li>
             <li>In a row's panel, each alias has its own line: type the entry title, then pick All, Costs, or Gains. Typing a comma (or pressing Enter) starts the next one.</li>
             <li>Rows leave out ⭕️ Transfers, since most transfers aren't real costs or gains. Turn on Also count ⭕️ Transfers for a row that should count them (its title then starts with ⭕️).</li>
-            <li>✖️ Hidden entries count like any other entry.</li>
-            <li>Entries for your Other Accounts (like a transfer into Savings) only move money between your own accounts, so they count like transfers, even when they're Hidden.</li>
+            <li>✖️ Hidden entries always count, like any other entry, even ones for your Other Accounts.</li>
+            <li>A ⭕️ Transfer for an Other Account (like moving money into Savings) is still a transfer, so only rows set to count transfers count it.</li>
             <li>If more than one row has the same alias, each of those rows counts it.</li>
-            <li>To see the entries behind a row, search for its title with its Tracker button on the home page.</li>
+            <li>To see the entries behind a row, search for its title with its Tracker button in Home's (or History's) Search.</li>
           </ul>
+
+          <h4>Search</h4>
+          <p>🔎 Search (at the top, next to Edit) looks through the tracker's own rows: as you type, it lists the rows with every word you typed in their title or aliases (like "food" or "gas"). Tap a row it found to open it. × or Escape closes it.</p>
 
           <h4>Costs, Gains, And Undefined</h4>
           <ul>
-            <li><strong>Costs</strong> and <strong>Gains</strong> add up every cost and every gain, except transfers and entries for your Other Accounts. They fill in by themselves.</li>
-            <li><strong>Undefined</strong> lists the entry titles that no row counts yet, and adds them up. If you add an alias to a row but Undefined still lists it, one of two things is happening:
-              <ol>
-                <li>The alias only counts Costs or only Gains, so entries of the other kind aren't counted yet. For example, if an alias for John counts Gains, costs titled John are still undefined.</li>
-                <li>Some of those entries are ⭕️ Transfers (or entries for your Other Accounts), and the row doesn't count transfers. Turn on Also count ⭕️ Transfers for that row.</li>
-              </ol>
-            </li>
+            <li><strong>Costs</strong> and <strong>Gains</strong> add up every cost and every gain (✖️ Hidden ones too), except ⭕️ Transfers. They fill in by themselves.</li>
+            <li><strong>Undefined</strong> lists the entry titles that no row counts yet, and adds them up. ⭕️ Transfers never go there: a transfer only counts in a row set to count transfers. If you add an alias to a row but Undefined still lists it, the alias only counts Costs or only Gains, so entries of the other kind aren't counted yet. For example, if an alias for John counts Gains, costs titled John are still undefined.</li>
           </ul>
 
           <h4>Changing Rows</h4>

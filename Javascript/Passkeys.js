@@ -107,7 +107,7 @@ window.Passkeys = (() => {
   function problem(error, adding = false) {
     switch (error && error.name) {
       case "NotAllowedError":
-        return adding ? "The passkey wasn't made (it was cancelled, or it timed out)." : "Passkey sign-in was cancelled, or it timed out.";
+        return adding ? "The passkey wasn't made (it was cancelled, or it timed out)." : "Passkey sign-in was cancelled, or it timed out. Tap Sign In With A Passkey to try again.";
       case "InvalidStateError":
         return "This device already has a passkey for your account.";
       case "SecurityError":

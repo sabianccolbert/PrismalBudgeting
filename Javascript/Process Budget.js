@@ -47,14 +47,24 @@ let accountsEdited = false;
 let logsEdited = false;
 
 // Dates Data
-const today = createSafeMidnight(new Date());
-const yesterday = createSafeMidnight(new Date(today.getTime() - 86400000));
+// Days are calendar days in the device's time zone (stored as MM/DD/YYYY text, never as a moment in time),
+// so moving to another time zone never moves an entry to another day. pageDay is this device's date when
+// the page loaded; today is the budget's day, which is the same, except it never goes back before the last
+// day the budget was brought up to date (see setBudgetDay in loadWorkspace).
+const pageDay = createSafeMidnight(new Date());
+let today, yesterday, gridDates, gridStartDate, gridEndDate, nextFourStart;
+setBudgetDay(pageDay);
 
-let gridDates = getGridDates();
-let gridStartDate = gridDates[0][0];
-let gridEndDate = gridDates[3][6];
-
-let nextFourStart = createSafeMidnight(new Date(gridEndDate.getTime() + 86400000));
+// The budget's day, and the four-week calendar (Sunday through Saturday) that starts with its week.
+// Days are counted on the calendar (addDays), never in 24-hour steps, so daylight saving time can't skip one.
+function setBudgetDay(day) {
+  today = createSafeMidnight(day);
+  yesterday = addDays(today, -1);
+  gridDates = getGridDates();
+  gridStartDate = gridDates[0][0];
+  gridEndDate = gridDates[3][6];
+  nextFourStart = addDays(gridEndDate, 1);
+}
 
 // DAVE
 let visibleUncommons = 0;
@@ -116,7 +126,7 @@ async function loadWorkspace() {
 
   // Load from Cloudflare API using Authorization Header
   try {
-    // (Removed the duplicate 'const token' declaration that was here)
+    const requestedAt = performance.now(); // The daily update's change log starts when the budget is asked for
 
     const response = await fetch(`${window.API_BASE_URL}/api/data/load`, {
       method: 'GET',
@@ -177,6 +187,11 @@ async function loadWorkspace() {
     const calendarIsEmpty = calendarData.every(row => row.every(cell => String(cell).trim() === ""));
     const isNewAccount = !data.last_processed_date && calendarIsEmpty;
     lastDailyUpdate = isNewAccount ? today : createSafeMidnight(data.last_processed_date || yesterday);
+    // The budget's day never goes back. After flying west across a Sunday, or with the clock set back, this
+    // device's date can be before the day the budget was last brought up to date (on this device or another
+    // one); the calendar would then be laid out on the week before, and every day's entries would land on
+    // the wrong day. So the budget keeps that later day until this device's date catches up.
+    if (lastDailyUpdate.getTime() > today.getTime()) setBudgetDay(lastDailyUpdate);
     if (isNewAccount) pendingProcessedDate = formatToMMDDYYYY(today);
     const isNewDay = lastDailyUpdate.getTime() < today.getTime();
 
@@ -184,7 +199,7 @@ async function loadWorkspace() {
     // (recurring entries, math, Dave, tracker). Only tables that changed get saved.
     const loadSnapshot = snapshotTables();
     try {
-      beginChangeLog("🕛 Daily Update");
+      beginChangeLog("🕛 Daily Update", requestedAt);
       await performDailyUpdate();
       stripRecurringEntries();
       refreshBudgetData();
@@ -455,26 +470,8 @@ function readLatestHistoryInBank() {
 // One cell's In Bank / Gains / Costs lines, using the same math as writeBudgetMath
 function applyCellBudgetMath(cellText, lastInBank) {
   let lines = cellText.split("\n");
-  let gains = 0;
-  let costs = 0;
-  let moneyMoves = 0;
-
-  for (let l = 1; l < lines.length; l++) {
-    let parts = getParts(lines[l]);
-    if (systemEmojis.includes(parts[0])) continue;
-    // Hidden entries are on accounts outside the budget: the tracker counts them, In Bank doesn't
-    if (parts[0].includes("✖️")) continue;
-    let lineAmt = parseAmount(parts[1]);
-    if (parts[0].includes("⭕️")) {
-      moneyMoves += lineAmt;
-    } else if (lineAmt < 0) {
-      costs += Math.abs(lineAmt);
-    } else {
-      gains += lineAmt;
-    }
-  }
-
-  let inBank = Math.round((gains - costs + lastInBank + moneyMoves) * 100) / 100;
+  let { gains, costs, bankChange } = dayMath(lines);
+  let inBank = Math.round((lastInBank + bankChange) * 100) / 100;
   let finalLines = [lines[0]];
   finalLines.push((inBank < 0 ? "⛔️ " : "✅ ") + formatMoney(inBank) + " In Bank");
   if (gains > 0) finalLines.push(`❇️ ${formatMoney(gains)} Gains`);
@@ -582,13 +579,16 @@ let changeLogStart = 0;
 
 // New calendar entry. entry: { title, sprite, amount (signed number), date }. Can be undone.
 function addCalendarEntry(entry) {
-  return runBudgetAction("", () => unique({
-    title: entry.title,
-    sprite: entry.sprite,
-    action: entry.amount > 0 ? "add" : "subtract",
-    amount: String(Math.abs(entry.amount)),
-    date: entry.date
-  }), { label: `added ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${formatToMMDD(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
+  return runBudgetAction("", () => {
+    const added = unique({
+      title: entry.title,
+      sprite: entry.sprite,
+      action: entry.amount > 0 ? "add" : "subtract",
+      amount: String(Math.abs(entry.amount)),
+      date: entry.date
+    });
+    return { purchase: { title: entry.title, amount: entry.amount, date: createSafeMidnight(entry.date || today), type: added.entryType } };
+  }, { label: `added ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
 // Change, move, or delete a calendar entry. change: { title, sprite, date, action, amount, moveDate }.
@@ -600,7 +600,7 @@ function changeCalendarEntry(change) {
 // "deleted Coffee on 10/05", for Undo and Redo
 function describeEntryChange(change) {
   const title = capitalize(String(change.title || "").trim());
-  const day = (date) => formatToMMDD(createSafeMidnight(date || today));
+  const day = (date) => showDay(createSafeMidnight(date || today));
   const action = String(change.action || "").toLowerCase();
   const amount = Number(change.amount);
   const amountChanged = action !== "delete" && String(change.amount ?? "").trim() !== "";
@@ -679,7 +679,7 @@ async function applyQuickEntries(queue) {
     const entry = quick && quick.entry;
     const date = entry ? createSafeMidnight(entry.date, true) : null;
     const undo = entry && date && !isNaN(date.getTime())
-      ? { label: `quick entry ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${formatToMMDD(date)}`, dates: [date] }
+      ? { label: `quick entry ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${showDay(date)}`, dates: [date] }
       : null;
     const result = await runBudgetAction("", () => quickEntry(quick), undo);
     if (result.ok) added++;
@@ -706,9 +706,9 @@ function quickEntry(quick) {
   if (!entry || typeof entry.amount !== "number" || isNaN(date.getTime())) throw new BudgetInputError("It couldn't be read.");
   const table = date < gridStartDate ? "history" : (date > gridEndDate ? "future" : "calendar");
   if (table === "history" && !historyHasDay(date)) {
-    throw new BudgetInputError(`${formatToMMDDYYYY(date)} is before your budget's History starts.`);
+    throw new BudgetInputError(`${showDate(date)} is before your budget's History starts.`);
   }
-  unique({
+  const added = unique({
     title: entry.title,
     sprite: Object.prototype.hasOwnProperty.call(QUICK_ENTRY_TYPES, entry.type) ? QUICK_ENTRY_TYPES[entry.type] : "",
     action: entry.amount > 0 ? "add" : "subtract",
@@ -716,7 +716,7 @@ function quickEntry(quick) {
     date
   });
   formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
-  return { quickEntry: { id: quick.id, table } };
+  return { quickEntry: { id: quick.id, table }, purchase: { title: entry.title, amount: entry.amount, date, type: added.entryType } };
 }
 
 // Does History have a cell for this day? (an entry for an older day would have nowhere to go)
@@ -733,31 +733,35 @@ function historyHasDay(date) {
 // Queue one change through the full budget flow. undo: { label, dates } makes it a step Undo can take
 // back (calendar and quick entries; see UNDO + REDO)
 function runBudgetAction(logType, change, undo = null) {
-  const run = budgetQueue.then(() => processBudgetAction(logType, change, undo));
+  const requestedAt = performance.now(); // The change log's start: when the change was asked for
+  const run = budgetQueue.then(() => processBudgetAction(logType, change, undo, requestedAt));
   budgetQueue = run.catch(() => {});
   return run;
 }
 
-async function processBudgetAction(logType, change, undo = null) {
+// The page shows a change right away (it's saved right after), and its change log row says how long that
+// took: from when it was asked for to when the page had drawn it.
+async function processBudgetAction(logType, change, undo = null, requestedAt = performance.now()) {
   if (!workspaceLoaded) return { ok: false, message: "Your budget hasn't finished loading yet." };
 
-  // The page stayed open past midnight: reload so the daily update runs before any change
-  if (createSafeMidnight(new Date()).getTime() !== today.getTime()) {
+  // The page stayed open past midnight (or the device moved to another time zone): reload so the daily
+  // update runs before any change
+  if (deviceDayChanged()) {
     window.location.reload();
     return { ok: false, message: "A new day started, so your budget is reloading." };
   }
 
   const snapshot = snapshotTables();
   const undoBefore = undo ? captureEntryDays(undo.dates) : null;
+  const lowestBefore = lowestInBank; // For Dave's refund tip
   let result = {};
 
   try {
-    beginChangeLog(logType);
+    beginChangeLog(logType, requestedAt);
     stripRecurringEntries();
     result = change() || {};
     refreshBudgetData();
     if (undo) result.newUndoStep = makeUndoStep(undo.label, undoBefore);
-    finishChangeLog();
   } catch (err) {
     restoreTables(snapshot);
     // A remembered change that can't be undone (or redone) anymore is dropped, so older ones still can be
@@ -774,6 +778,8 @@ async function processBudgetAction(logType, change, undo = null) {
   }
 
   markChangedTables(snapshot);
+  noticeRiskyPurchase(result.purchase, lowestBefore);
+  delete result.purchase;
   if (result.newUndoStep) rememberUndoStep(result.newUndoStep);
   if (result.historyStep) moveHistoryStep(result.historyStep.direction);
   delete result.newUndoStep;
@@ -782,8 +788,10 @@ async function processBudgetAction(logType, change, undo = null) {
     BUDGET_TABLES[result.quickEntry.table].markEdited();
     quickEntryAcks[result.quickEntry.table].push(result.quickEntry.id);
   }
-  const saved = await saveChanges();
   notifyBudgetChanged();
+  await afterNextPaint();
+  finishChangeLog(); // (Saved with the rest, just below)
+  const saved = await saveChanges();
   queueReminderPlanSync();
   return { ok: true, saved, notFound, ...result };
 }
@@ -791,6 +799,19 @@ async function processBudgetAction(logType, change, undo = null) {
 // Tell the page that budget data changed (pages re-render on this)
 function notifyBudgetChanged() {
   document.dispatchEvent(new CustomEvent("budget:updated"));
+}
+
+// Resolves once the page has drawn what just changed (right away for a page in the background, which isn't
+// drawn, and after half a second at most)
+function afterNextPaint() {
+  if (document.visibilityState !== "visible") return Promise.resolve();
+  return new Promise(resolve => {
+    const latest = setTimeout(resolve, 500);
+    requestAnimationFrame(() => setTimeout(() => {
+      clearTimeout(latest);
+      resolve();
+    }, 0));
+  });
 }
 
 function snapshotTables() {
@@ -813,11 +834,13 @@ function markChangedTables(snapshot) {
 /* ---------- Change Logs (the spreadsheet's "Form Entries" tab) ---------- */
 // Row: [time, duration, action, detail, detail, detail, detail, status ("" | "Not Found" | "Error")]
 
-function beginChangeLog(type) {
-  changeLogStart = performance.now();
+// startedAt (performance.now() time): when the change was asked for, which is the row's time. finishChangeLog
+// works out how long it took.
+function beginChangeLog(type, startedAt = performance.now()) {
+  changeLogStart = startedAt;
   hadError = false;
   notFound = false;
-  formEntryRow = [formatLogTime(new Date()), "", type || "", "", "", "", ""];
+  formEntryRow = [formatLogTime(new Date(Date.now() - (performance.now() - startedAt))), "", type || "", "", "", "", ""];
 }
 
 function finishChangeLog() {
@@ -828,9 +851,10 @@ function finishChangeLog() {
   logsEdited = true;
 }
 
-// "H:mm M/d/yyyy", same as the spreadsheet's log times
+// "H:mm" and the day, like the spreadsheet's log times, with the day in this device's date format
+// (logs are only ever read by people)
 function formatLogTime(date) {
-  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")} ${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")} ${showDate(date)}`;
 }
 
 /* ---------- The budget flow ---------- */
@@ -870,6 +894,7 @@ function refreshBudgetData() {
   normalizeFrequencies();
   upcomingEntriesMaintanence();
   writeRecurring();
+  releaseEndedTemps();
   if (deleteExpiredReccurrings()) recurringEdited = true;
   organizeCellEntries();
   writeBudgetMath();
@@ -900,9 +925,9 @@ function unique(entry) {
   if (action === "subtract" || action === "add") action = "append";
 
   let dateObj = createSafeMidnight(entry.date || today);
-  formEntryRow[4] = "On: " + formatToMMDDYYYY(dateObj);
+  formEntryRow[4] = "On: " + showDate(dateObj);
   let dateMove = createSafeMidnight(entry.moveDate || dateObj);
-  formEntryRow[5] = entry.moveDate ? "Move To: " + formatToMMDDYYYY(dateMove) : "Move To: None";
+  formEntryRow[5] = entry.moveDate ? "Move To: " + showDate(dateMove) : "Move To: None";
 
   // Refraction type ("" matches or inherits whatever is already there)
   let modifier = String(entry.sprite || "").trim();
@@ -1038,7 +1063,7 @@ function unique(entry) {
   formEntryRow[2] = formEntryType;
   let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : formatMoney(rawAmtString);
   formEntryRow[6] = capitalize(rawAction) + ": " + formEntrySuffix;
-  return {};
+  return { entryType: targetIncomingSpecial }; // The refraction type it landed as (Auto picks one)
 }
 
 // Put an entry on a day (calendar, History, or Future Dates, depending on the date), combining it
@@ -1268,8 +1293,8 @@ function recurring(fields) {
 
   formEntryRow[2] = "✔️ Create Recurring";
   formEntryRow[3] = sprite + " " + title;
-  formEntryRow[4] = frequency + ": " + formatToMMDDYYYY(startDate);
-  formEntryRow[5] = "Expiration: " + endDate;
+  formEntryRow[4] = frequency + ": " + showDate(startDate);
+  formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
   formEntryRow[6] = "Amount: " + amount;
   return {};
 }
@@ -1299,8 +1324,8 @@ function editRecurringRow(index, fields) {
 
   formEntryRow[2] = "✔️ Change Recurring";
   formEntryRow[3] = sprite + " " + title;
-  formEntryRow[4] = frequency + ": " + row[2];
-  formEntryRow[5] = "Expiration: " + endDate;
+  formEntryRow[4] = frequency + ": " + showStoredDate(row[2]);
+  formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
   formEntryRow[6] = "New Amount: " + row[1];
   return {};
 }
@@ -1406,10 +1431,13 @@ function describeAliases(text) {
 
 /* ---------- Other Accounts ---------- */
 // Accounts outside the budget, like Savings. A Hidden or Transfer entry titled with an account's name
-// moves money into or out of it: the account gets the opposite of what the entry adds to the calendar
-// (a $100 cost puts $100 in the account, a $100 gain takes $100 out). An account's balance is all of
-// those changes added up (there's no balance to type in: what's already in an account goes in as a
-// Hidden entry), so changing, moving, or deleting one of its entries changes it too.
+// moves money into or out of it (see accountChange):
+//   - A Transfer moves money between the budget's account and this one, so the account gets the
+//     opposite: a $100 Transfer cost takes $100 out of In Bank and puts $100 in the account.
+//   - A Hidden entry happens in the account itself (In Bank never changes), so the account gets the
+//     same amount: a $50 Hidden cost takes $50 out of it, and a $3,000 Hidden gain puts $3,000 in.
+// An account's balance is all of those changes added up (there's no balance to type in: what's already
+// in an account goes in as a Hidden gain), so changing, moving, or deleting one of its entries changes it too.
 // accountsData.list: [0] column titles, then [name, balance today (filled in by updateAccountBalances, so
 // the Quick Entry page can show it), "default" | ""]. The default account, Savings, is always there and
 // can't be deleted.
@@ -1461,10 +1489,18 @@ function linkedAccount(sprite, cleanTitle, accounts = accountTitleMap()) {
   return accounts.get(cleanTitle) || null;
 }
 
-// Transfers, and entries that change another account, move money between your own accounts:
-// they aren't costs or gains (the tracker, search, and the recurring summary treat them alike)
-function isMoveEntry(sprite, cleanTitle, accounts = accountTitleMap()) {
-  return String(sprite || "").includes("⭕️") || linkedAccount(sprite, cleanTitle, accounts) !== null;
+// How much an account entry changes its account: a Transfer the opposite of its amount (the money moved
+// from or to In Bank), a Hidden entry its own amount (the money moved in the account itself). The API's
+// readAccounts (src/quick.js) has to match it.
+function accountChange(sprite, amount) {
+  return getSpecialType(String(sprite || "")) === "⭕️" ? -amount : amount;
+}
+
+// Transfers move money between your own accounts (an Other Account's too), so they aren't costs or gains:
+// the tracker only counts them in rows set to count transfers, Search starts them unchecked, and the
+// recurring summary leaves them out. Hidden entries are costs and gains, even ones for an Other Account.
+function isMoveEntry(sprite) {
+  return getSpecialType(String(sprite || "")) === "⭕️";
 }
 
 // Each account's balance today and on the calendar's last day, with the entries that changed it (and
@@ -1487,7 +1523,7 @@ function accountSummaries() {
       let parts = getParts(lines[l]);
       if (parts.length < 3 || systemEmojis.includes(parts[0])) continue;
       let account = linkedAccount(parts[0], extractTitle(lines[l]), accounts);
-      let change = -parseAmount(parts[1]);
+      let change = account ? accountChange(parts[0], parseAmount(parts[1])) : 0;
       if (account && change !== 0) summaries.get(account.index).entries.push({ date, change, sprite: parts[0] });
     }
   };
@@ -1708,7 +1744,7 @@ function deleteTableRows(tableName, indexes) {
   return {};
 }
 
-/* ---------- Search (the old Search tab, now the home page's search bar) ---------- */
+/* ---------- Search (the old Search tab, now the home page's search box) ---------- */
 
 // Find entries by title and date in History, the calendar, Future Dates, and recurring entries past
 // the calendar. terms: the search bar's list, one title per line, each with its own buttons (which
@@ -1725,13 +1761,13 @@ function search(query) {
   let fromDate = rawFrom ? parseTypedDate(rawFrom) : null;
   let toDate = rawTo ? parseTypedDate(rawTo) : null;
   if ((fromDate && isNaN(fromDate.getTime())) || (toDate && isNaN(toDate.getTime()))) {
-    throw new BudgetInputError("Search dates should look like MM/DD/YYYY.");
+    throw new BudgetInputError(`Search dates should look like ${datePattern()}.`);
   }
   if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) [fromDate, toDate] = [toDate, fromDate];
   let startTime = fromDate ? fromDate.getTime() : -Infinity;
   let endTime = toDate ? toDate.getTime() : Infinity;
-  let dateA = fromDate ? formatToMMDDYYYY(fromDate) : "the start";
-  let dateB = toDate ? formatToMMDDYYYY(toDate) : "the end";
+  let dateA = fromDate ? showDate(fromDate) : "the start";
+  let dateB = toDate ? showDate(toDate) : "the end";
   const inRange = (time) => time >= startTime && time <= endTime;
 
   // 2. What to find: targets for one title each (or every title), and whose amounts they count
@@ -1743,14 +1779,13 @@ function search(query) {
     else targetsByTitle.set(target.clean, [...(targetsByTitle.get(target.clean) || []), target]);
   }
 
-  // An entry is found when a target for its title counts its amount. Moves (transfers, and entries
-  // that change another account) start unchecked, unless a tracker row that counts transfers found them.
+  // An entry is found when a target for its title counts its amount. Transfers start unchecked, unless a
+  // tracker row that counts transfers found them.
   let searchResults = [];
-  let accounts = accountTitleMap();
   const addIfFound = (date, amount, sprite, title, cleanTitle) => {
     let found = [...everyTitle, ...(targetsByTitle.get(cleanTitle) || [])].filter(target => aliasCounts(target.count, amount));
     if (found.length === 0) return;
-    let isMove = isMoveEntry(sprite, cleanTitle, accounts);
+    let isMove = isMoveEntry(sprite);
     searchResults.push({ date, amount, sprite, title, isMove, checked: !isMove || found.some(target => target.withTransfers) });
   };
 
@@ -1873,7 +1908,7 @@ function searchTargets(terms) {
       targets.push({ clean: null, count: rowType, withTransfers: false });
       continue;
     }
-    let withTransfers = String(row[0]).startsWith("⭕️") || rowType === "undefined"; // Undefined counts transfers too
+    let withTransfers = String(row[0]).startsWith("⭕️");
     for (let alias of String(row[4] || "").split(",")) {
       let { clean, count } = parseAlias(alias);
       if (clean) targets.push({ clean, count, withTransfers });
@@ -1990,46 +2025,79 @@ function writeRecurring() {
   }
 }
 
-// Remove expired recurring entries. Their temps from today on become plain unique entries,
-// so ending a recurring entry never changes days that already passed.
+// Remove expired recurring entries. releaseEndedTemps (just before this) already turned their temps from
+// today on into plain unique entries, so ending a recurring entry never changes days that already passed.
 function deleteExpiredReccurrings() {
   let deletedAny = false;
   recurringToDeleteIndexes = [...new Set(recurringToDeleteIndexes)].sort((a, b) => a - b);
   for (let i = recurringToDeleteIndexes.length - 1; i >= 0; i--) {
     deletedRecurrings++;
     deletedAny = true;
-    let targetIndex = recurringToDeleteIndexes[i];
-    let title = cleanString(recurringData[targetIndex][0]);
-    let tempSprite = getSpecialType(recurringData[targetIndex][5]) + "✔️";
-    let todayTime = today.getTime();
-
-    // Update temps on the calendar
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 7; c++) {
-        let lines = calendarData[r][c].split("\n");
-        for (let l = lines.length - 1; l >= 1; l--) {
-          if (gridDates[r][c].getTime() < todayTime || extractTitle(lines[l]) !== title) continue;
-          let parts = getParts(lines[l]);
-          if (parts[0] === tempSprite) {
-            parts[0] = getSpecialType(tempSprite);
-            lines[l] = parts.join(" ");
-          }
-        }
-        calendarData[r][c] = lines.join("\n");
-      }
-    }
-
-    // Update temps in Future Dates
-    for (let f = futureData.length - 1; f >= 1; f--) {
-      if (cleanString(futureData[f][0]) !== title) continue;
-      if (futureData[f][3] === tempSprite) {
-        futureData[f][3] = getSpecialType(tempSprite);
-      }
-    }
-    recurringData.splice(targetIndex, 1);
+    recurringData.splice(recurringToDeleteIndexes[i], 1);
   }
   if (isDailyUpdate) formEntryRow[6] = "Recurrings Expired: " + deletedRecurrings;
   return deletedAny;
+}
+
+// A temp only keeps its recurring entry from landing on its day. Once the recurring entry can't land
+// there anymore (its End Date moved before that day, or it was deleted, which ends it yesterday), the
+// temp is just a unique entry: from today on, on the calendar and in Upcoming, it loses its checkmark,
+// and a $0.00 blocker (which only held the day) goes away. Days that already passed keep their temps.
+function releaseEndedTemps() {
+  // The last day each title + refraction type can land (null: no End Date, so it can always land)
+  let lastDays = new Map();
+  for (let i = 2; i < recurringData.length; i++) {
+    let row = recurringData[i];
+    if (!row || String(row[0]).trim() === "-" || !cleanString(row[0])) continue;
+    let key = cleanString(row[0]) + "|" + getSpecialType(String(row[5] || ""));
+    let endText = String(row[4] ?? "").trim();
+    let endDate = endText && endText.toLowerCase() !== "none" ? createSafeMidnight(endText, true) : null;
+    if (endDate && isNaN(endDate.getTime())) endDate = null;
+    // (Older budgets can have two rows for one title and type: the later End Date wins)
+    if (!lastDays.has(key)) lastDays.set(key, endDate);
+    else if (lastDays.get(key) === null || endDate === null) lastDays.set(key, null);
+    else if (endDate > lastDays.get(key)) lastDays.set(key, endDate);
+  }
+
+  // From the day after the last one it can land on, and never before today
+  const releaseFrom = (cleanTitle, special) => {
+    let lastDay = lastDays.get(cleanTitle + "|" + special);
+    return lastDay ? Math.max(addDays(lastDay, 1).getTime(), today.getTime()) : null;
+  };
+
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      let lines = String(calendarData[r][c]).split("\n");
+      let changed = false;
+      for (let l = lines.length - 1; l >= 1; l--) {
+        let parts = getParts(lines[l]);
+        let special = getSpecialType(parts[0]);
+        if (parts[0] !== special + "✔️") continue; // Only temps
+        let from = releaseFrom(extractTitle(lines[l]), special);
+        if (from === null || gridDates[r][c].getTime() < from) continue;
+        if (parseAmount(parts[1]) === 0) {
+          lines.splice(l, 1);
+        } else {
+          parts[0] = special;
+          lines[l] = parts.join(" ");
+        }
+        changed = true;
+      }
+      if (changed) calendarData[r][c] = lines.join("\n");
+    }
+  }
+
+  for (let f = futureData.length - 1; f >= 1; f--) {
+    let row = futureData[f];
+    let sprite = String(row[3] ?? "").trim();
+    let special = getSpecialType(sprite);
+    if (sprite !== special + "✔️") continue;
+    let from = releaseFrom(cleanString(row[0]), special);
+    let date = createSafeMidnight(row[2], true);
+    if (from === null || isNaN(date.getTime()) || date.getTime() < from) continue;
+    if (parseAmount(row[1]) === 0) futureData.splice(f, 1);
+    else row[3] = special;
+  }
 }
 
 // Order each day's entries by type, then alphabetize within each type
@@ -2093,25 +2161,8 @@ function writeBudgetMath() {
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
       let lines = calendarData[r][c].split("\n");
-      let gains = 0;
-      let costs = 0;
-      let moneyMoves = 0;
-      for (let l = 1; l < lines.length; l++) {
-        let lineStr = lines[l].trim();
-        let parts = getParts(lineStr);
-        if (systemEmojis.includes(parts[0])) continue;
-        // Hidden entries are on accounts outside the budget: the tracker counts them, In Bank doesn't
-        if (parts[0].includes("✖️")) continue;
-        let lineAmt = parseAmount(parts[1]);
-        if (parts[0].includes("⭕️")) {
-          moneyMoves += lineAmt;
-        } else if (lineAmt < 0) {
-          costs += Math.abs(lineAmt);
-        } else {
-          gains += lineAmt;
-        }
-      }
-      let inBank = Math.round((gains - costs + lastInBank + moneyMoves) * 100) / 100;
+      let { gains, costs, bankChange } = dayMath(lines);
+      let inBank = Math.round((lastInBank + bankChange) * 100) / 100;
       if (gridDates[r][c] >= today && inBank < lowest) lowest = inBank;
 
       let bankLine;
@@ -2143,6 +2194,27 @@ function writeBudgetMath() {
   if (predictionValues[2] < 0) nextFourNegative = true;
   if (predictionValues[2] < lowest) lowest = predictionValues[2];
   lowestInBank = lowest === Infinity ? 0 : lowest;
+}
+
+// A day's Gains and Costs lines, and how much its entries change In Bank (lines: the day's cell, line by line):
+//   Regular entries are costs or gains, and change In Bank
+//   Hidden entries are costs or gains too, but happen outside the budget's account, so In Bank stays the same
+//   Transfers change In Bank, but aren't costs or gains (the money is still yours)
+function dayMath(lines) {
+  let gains = 0;
+  let costs = 0;
+  let bankChange = 0;
+  for (let l = 1; l < lines.length; l++) {
+    let parts = getParts(lines[l]);
+    if (!lines[l].trim() || systemEmojis.includes(parts[0])) continue;
+    let lineAmt = parseAmount(parts[1]);
+    let special = getSpecialType(parts[0]);
+    if (special !== "✖️") bankChange += lineAmt;
+    if (special === "⭕️") continue;
+    if (lineAmt < 0) costs += Math.abs(lineAmt);
+    else gains += lineAmt;
+  }
+  return { gains, costs, bankChange };
 }
 
 // The 28 days after the calendar: lowest balance (and when) and the balance on day 28.
@@ -2302,6 +2374,285 @@ function commenceDave() {
   daveMessage = message;
 }
 
+/* ---------- Dave's tips (his "smart" messages) ---------- */
+// Besides his everyday message, Dave has tips about things worth a closer look. The first time Home opens on a
+// day, he shows one of that day's tips for 10 minutes, highlighted. Each visit after that (once the tip before
+// has had its 10 minutes) shows the next one, until all of the day's tips have been shown; then he's back to
+// his everyday message. A purchase that takes the budget below $0 (or further below) gets its tip right away.
+// Which tips were shown is kept on this device (they're only reminders). Tips are worked out once per visit
+// (startDaveVisit), never on every change, so they can't slow changes down. In this order:
+//   payday:  today has a paycheck: about how much usually goes out, besides recurring bills, before the next
+//            one (looking back 4 months, and only with 4 months of History)
+//   pace:    the last 7 days' spending, besides recurring bills, is well over a usual week's (4 months of History)
+//   savings: a big uncommon bill (or one-time cost added for a later day) is coming up in the next 60 days, and
+//            how much to set aside from each paycheck until then
+//   inBank:  once a week: compare In Bank with the bank, and add what's missing (or a Catchup entry)
+//   catchup: once a week, when Catchup entries in the last 30 days add up to $100 or more: add purchases as
+//            they happen instead
+//   refund:  a purchase took the lowest In Bank after today below $0, or further below
+
+const DAVE_TIP_MINUTES = 10;
+const DAVE_BIG_BILL = 200;      // A "big" bill: a cost of at least this much
+const DAVE_BILL_DAYS = 60;      // How far ahead the savings tip looks
+const DAVE_HISTORY_MONTHS = 4;  // How far back the payday and pace tips look (and how much History they need)
+const DAVE_PACE_OVER = 50;      // The pace tip: the last 7 days are at least this much over a usual week...
+const DAVE_PACE_RATIO = 1.25;   // ...and at least this many times it
+const DAVE_CATCHUP = 100;       // The catchup tip: Catchup entries in the last 30 days add up to at least this much
+const DAVE_CATCHUP_DAYS = 30;
+const DAVE_TIPS = [["payday", paydayTip], ["pace", paceTip], ["savings", savingsTip], ["inBank", inBankTip], ["catchup", catchupTip]];
+const DAVE_WEEKLY_TIPS = ["inBank", "catchup"]; // Shown at most once every 7 days
+
+const daveStorageKey = () => `prismal_dave_${localStorage.getItem("prismal_username") || ""}`;
+
+// { day, shown: [today's tips shown so far], current: { id, text, until } | null, weekly: { tip id: the last day
+// it was shown (MM/DD/YYYY) }, refund: { text, day } | null (a purchase's tip, waiting for Home) }
+function readDaveState() {
+  const day = formatToMMDDYYYY(today);
+  let state = null;
+  try { state = JSON.parse(localStorage.getItem(daveStorageKey()) || "null"); } catch (e) {}
+  if (!state || typeof state !== "object" || Array.isArray(state)) state = {};
+  if (state.day !== day) Object.assign(state, { day, shown: [], current: null });
+  if (!Array.isArray(state.shown)) state.shown = [];
+  if (!state.weekly || typeof state.weekly !== "object") state.weekly = {};
+  if (state.refund && state.refund.day !== day) state.refund = null;
+  return state;
+}
+
+function writeDaveState(state) {
+  try { localStorage.setItem(daveStorageKey(), JSON.stringify(state)); } catch (e) {}
+}
+
+// A visit to Home: the tip whose 10 minutes aren't up yet keeps showing; otherwise the next one for today
+// starts (a waiting purchase's tip first)
+function startDaveVisit() {
+  const state = readDaveState();
+  const now = Date.now();
+  if (state.current && state.current.until > now) return;
+  state.current = null;
+  let tip = state.refund ? { id: "refund", text: state.refund.text } : null;
+  state.refund = null;
+  for (const [id, makeTip] of DAVE_TIPS) {
+    if (tip) break;
+    if (state.shown.includes(id) || !weeklyTipDue(state, id)) continue;
+    const text = makeTip();
+    if (text) tip = { id, text };
+  }
+  if (tip) {
+    state.current = { ...tip, until: now + DAVE_TIP_MINUTES * 60000 };
+    if (tip.id !== "refund") state.shown.push(tip.id);
+    if (DAVE_WEEKLY_TIPS.includes(tip.id)) state.weekly[tip.id] = state.day;
+  }
+  writeDaveState(state);
+}
+
+// The tip Dave is showing ({ id, text, until }), or null for his everyday message
+function currentDaveTip() {
+  const state = readDaveState();
+  if (!state.current || !(state.current.until > Date.now())) return null;
+  // The weekly check says today's In Bank as it is now
+  if (state.current.id === "inBank") return { ...state.current, text: inBankTip() || state.current.text };
+  return state.current;
+}
+
+// A purchase (a Regular cost from New Entry or a quick entry) that took the lowest In Bank after today below
+// $0, or further below. On Home, Dave says so right away; elsewhere (like quick entries added as another page
+// opens), on the next visit to Home.
+function noticeRiskyPurchase(purchase, lowestBefore) {
+  if (!purchase || !(purchase.amount < 0) || purchase.type !== "❗️" || purchase.date < gridStartDate) return;
+  if (lowestInBank >= 0 || lowestInBank > lowestBefore - 0.005) return;
+  const text = `Hey, that purchase (${capitalize(String(purchase.title || "").trim())}, ${formatMoney(purchase.amount)} on ${showDay(purchase.date)}) seems to risk your budget balance. Is a refund possible?`;
+  const state = readDaveState();
+  if (window.PAGE === "home") state.current = { id: "refund", text, until: Date.now() + DAVE_TIP_MINUTES * 60000 };
+  else state.refund = { text, day: state.day };
+  writeDaveState(state);
+}
+
+// A weekly tip is due when it's never been shown on this device, or 7 days have passed since (others always are)
+function weeklyTipDue(state, id) {
+  if (!DAVE_WEEKLY_TIPS.includes(id)) return true;
+  const last = state.weekly[id] ? createSafeMidnight(state.weekly[id], true) : null;
+  return !last || isNaN(last.getTime()) || getDayDifference(today, last) >= 7;
+}
+
+function inBankTip() {
+  const spot = calendarSpot(today);
+  const inBank = spot ? readInBank(calendarData[spot.r][spot.c]) : null;
+  const hasEntries = historyData.slice(1).some(row => row.some(cell => String(cell ?? "").trim() !== "")) ||
+    calendarData.some(row => row.some(cell => ownEntryLines(cell).length > 0));
+  if (inBank === null || !hasEntries) return null;
+  return `Time for your weekly check! Look at today's In Bank here (${formatMoney(inBank)}), and compare it with what your bank account actually has. Try to find which purchases are causing any difference, and add them in (on the day they happened, or just to today). Anything you can't find, just put in as "Catchup -$??" to fix your In Bank.`;
+}
+
+// A paycheck: a gain from a recurring entry (its line has a ✔️) that's Regular (not Hidden or a transfer)
+function isPaycheckLine(line) {
+  const parts = getParts(line);
+  return parts[0].includes("✔️") && getSpecialType(parts[0]) === "❗️" && parseAmount(parts[1]) > 0;
+}
+
+// The days that land a paycheck from a recurring entry, from first through last
+function paycheckDays(first, last) {
+  const paychecks = getParsedRecurringRows().filter(row => row.amt > 0 && row.parsed.special === "❗️");
+  const found = [];
+  for (let day = first; day <= last; day = addDays(day, 1)) {
+    if (paychecks.some(row => recurringRowHits(row.parsed, day))) found.push(day);
+  }
+  return found;
+}
+
+// Each day from 4 months ago through today, from History and the calendar: { spent, catchup, payday }, where spent
+// is what went out of In Bank besides recurring bills (Regular costs that didn't come from a recurring entry),
+// and catchup is its Catchup costs. enough: History reaches back the whole 4 months.
+function recentSpending() {
+  const from = new Date(today.getFullYear(), today.getMonth() - DAVE_HISTORY_MONTHS, today.getDate());
+  const days = new Map(); // day's time -> { spent, catchup, payday }
+  let earliest = null;
+  const readDay = (date, cellText) => {
+    if (isNaN(date.getTime())) return;
+    if (!earliest || date < earliest) earliest = date;
+    if (date < from || date > today) return;
+    const day = { spent: 0, catchup: 0, payday: false };
+    for (const line of String(cellText).split("\n").slice(1)) {
+      const parts = getParts(line);
+      if (!line.trim() || systemEmojis.includes(parts[0])) continue;
+      if (isPaycheckLine(line)) day.payday = true;
+      const amount = parseAmount(parts[1]);
+      if (amount >= 0) continue;
+      const special = getSpecialType(parts[0]);
+      if (special === "❗️" && !parts[0].includes("✔️")) day.spent -= amount;
+      if (special !== "⭕️" && /^catch ?up$/.test(extractTitle(line))) day.catchup -= amount;
+    }
+    days.set(date.getTime(), day);
+  };
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 0; c < 7; c++) {
+      const cellText = String(historyData[r][c] ?? "");
+      if (cellText.trim()) readDay(createSafeMidnight(cellText.split("\n")[0].trim(), true), cellText);
+    }
+  }
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) readDay(gridDates[r][c], calendarData[r][c]);
+  }
+  return { days, enough: !!earliest && earliest <= from };
+}
+
+function paydayTip() {
+  const todaySpot = calendarSpot(today);
+  if (!todaySpot || !String(calendarData[todaySpot.r][todaySpot.c]).split("\n").slice(1).some(isPaycheckLine)) return null;
+  const { days, enough } = recentSpending();
+  if (!enough) return null;
+
+  // "The next N days": until the next paycheck from a recurring entry (two weeks if there isn't one)
+  const next = paycheckDays(addDays(today, 1), addDays(today, 62))[0];
+  const span = next ? getDayDifference(next, today) : 14;
+
+  // What went out in the N days from each payday in those 4 months, on average (or, with none to go by, a
+  // day's average times N)
+  const sums = [];
+  let total = 0;
+  let pastDays = 0;
+  for (const [time, day] of days) {
+    if (time >= today.getTime()) continue;
+    total += day.spent;
+    pastDays++;
+    const start = new Date(time);
+    if (!day.payday || addDays(start, span) > today) continue;
+    let sum = 0;
+    for (let d = 0; d < span; d++) sum += days.get(addDays(start, d).getTime())?.spent || 0;
+    sums.push(sum);
+  }
+  const average = sums.length > 0 ? sums.reduce((a, b) => a + b, 0) / sums.length : (pastDays ? total / pastDays * span : 0);
+  if (Math.round(average) <= 0) return null;
+  return `Hey, you just got paid! Keep in mind, besides your recurring bills, you tend to spend about ${formatMoney(Math.round(average))} ${span === 1 ? "by tomorrow" : `in the next ${span} days`}, so be careful what you spend it on!`;
+}
+
+// Spending pace: the last 7 days (today too), besides recurring bills, against a usual week in the 4 months
+// before them. Shown when they're at least $50 and 25% over it.
+function paceTip() {
+  const { days, enough } = recentSpending();
+  if (!enough) return null;
+  const weekStart = addDays(today, -6).getTime();
+  let thisWeek = 0;
+  let before = 0;
+  let beforeDays = 0;
+  for (const [time, day] of days) {
+    if (time >= weekStart) {
+      thisWeek += day.spent;
+    } else {
+      before += day.spent;
+      beforeDays++;
+    }
+  }
+  if (beforeDays < 28) return null;
+  const usualWeek = before / beforeDays * 7;
+  const over = thisWeek - usualWeek;
+  if (over < DAVE_PACE_OVER || thisWeek < usualWeek * DAVE_PACE_RATIO) return null;
+  return `Heads up: you've spent about ${formatMoney(Math.round(thisWeek))} in the last 7 days besides your recurring bills, about ${formatMoney(Math.round(over))} more than usual for a week. Taking it easy for a few days keeps your budget on track!`;
+}
+
+// Catchup entries (titled Catchup or Catch Up) in the last 30 days: when they add up to $100 or more, purchases
+// are being missed, so add them as they happen
+function catchupTip() {
+  const { days } = recentSpending();
+  const from = addDays(today, -(DAVE_CATCHUP_DAYS - 1)).getTime();
+  let total = 0;
+  for (const [time, day] of days) if (time >= from) total += day.catchup;
+  if (total < DAVE_CATCHUP) return null;
+  return `Your Catchup entries add up to ${formatMoney(Math.round(total))} in the last ${DAVE_CATCHUP_DAYS} days, so some purchases are slipping by. Try adding each one as it happens (the Quick Entry icon on your phone's home screen makes it quick), so your In Bank stays right without guessing.`;
+}
+
+// The next big uncommon bill: a recurring cost of $200 or more that lands every 3 months or less often, or a
+// one-time cost of $200 or more added for a later day (on the calendar or in Upcoming), in the next 60 days (not
+// transfers), and how much to set aside from each paycheck until then (today's counts)
+function savingsTip() {
+  const lastDay = addDays(today, DAVE_BILL_DAYS);
+  const uncommon = getParsedRecurringRows().filter(row => row.amt <= -DAVE_BIG_BILL && !isMoveEntry(row.sprite) && isUncommonFrequency(row.parsed.frequency));
+  const uncommonKeys = new Set(uncommon.map(row => row.parsed.cleanTitle + "|" + row.parsed.special));
+  const bills = [];
+
+  // On the calendar after today: uncommon recurring ones as they are there (one changed for its day counts as
+  // changed), and one-time costs added for those days
+  for (let day = addDays(today, 1); day <= gridEndDate && day <= lastDay; day = addDays(day, 1)) {
+    const spot = calendarSpot(day);
+    for (const line of String(calendarData[spot.r][spot.c]).split("\n").slice(1)) {
+      const parts = getParts(line);
+      const amount = parseAmount(parts[1]);
+      if (amount > -DAVE_BIG_BILL || systemEmojis.includes(parts[0]) || isMoveEntry(parts[0])) continue;
+      if (!parts[0].includes("✔️") || uncommonKeys.has(extractTitle(line) + "|" + getSpecialType(parts[0]))) {
+        bills.push({ date: day, title: parts.slice(2).join(" "), amount });
+      }
+    }
+  }
+
+  // After the calendar: where they'll land (unless an Upcoming entry changed that day), and Upcoming costs
+  const upcoming = futureData.slice(1)
+    .map(row => ({ date: createSafeMidnight(row[2], true), title: String(row[0] ?? "").trim(), amount: parseAmount(row[1]), sprite: String(row[3] ?? "") }))
+    .filter(row => row.title && !isNaN(row.date.getTime()));
+  const changed = new Set(upcoming.filter(row => row.sprite.includes("✔️")).map(row => row.date.getTime() + "|" + cleanString(row.title) + "|" + getSpecialType(row.sprite)));
+  if (uncommon.length > 0) {
+    for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
+      for (const row of uncommon) {
+        if (recurringRowHits(row.parsed, day) && !changed.has(day.getTime() + "|" + row.parsed.cleanTitle + "|" + row.parsed.special)) {
+          bills.push({ date: day, title: row.title, amount: row.amt });
+        }
+      }
+    }
+  }
+  for (const row of upcoming) {
+    if (row.date > gridEndDate && row.date <= lastDay && row.amount <= -DAVE_BIG_BILL && !isMoveEntry(row.sprite)) bills.push(row);
+  }
+  if (bills.length === 0) return null;
+
+  bills.sort((a, b) => a.date - b.date);
+  const first = bills[0];
+  const more = bills.length > 1 ? `, and ${bills.length - 1} more in the next ${DAVE_BILL_DAYS} days` : "";
+  const paydays = paycheckDays(today, addDays(first.date, -1)).length;
+  const cost = Math.abs(first.amount);
+  const setAside = paydays === 0 ? " It lands before your next paycheck, so check that what you have now covers it."
+    : paydays === 1 ? ` Setting aside ${formatMoney(Math.ceil(cost))} from your paycheck before then covers it.`
+    : ` Setting aside about ${formatMoney(Math.ceil(cost / paydays))} from each of your ${paydays} paychecks before then covers it.`;
+  return `Hey, you have a big uncommon bill coming up: ${first.title} (${formatMoney(first.amount)}) on ${showDay(first.date)}${more}. Make sure you're saving enough to afford it!${setAside}`;
+}
+
 // Tracker sums (last 28 / 90 / 365 days) from the calendar and History, the Undefined row's
 // aliases (titles no other row tracks), and the Recurring tab's monthly/yearly spending summary
 function updateTrackerTab() {
@@ -2310,7 +2661,6 @@ function updateTrackerTab() {
 
   let activeTrackerData = trackerData.slice(1);
   let trackerRows = [];
-  let coverage = new Map(); // Title -> which of its amounts the rows count ({ costs, gains }), for Undefined
 
   for (let r = 0; r < activeTrackerData.length; r++) {
     let title = String(activeTrackerData[r][0]).trim().toLowerCase();
@@ -2321,16 +2671,6 @@ function updateTrackerTab() {
     }
 
     let aliases = rawAliases.split(",").map(t => t.trim()).filter(t => t !== "");
-    if (!TRACKER_AUTO_ROWS.includes(title)) {
-      for (let alias of aliases) {
-        let { clean, count } = parseAlias(alias);
-        if (!clean) continue;
-        let counted = coverage.get(clean) || { costs: false, gains: false };
-        if (count !== "gains") counted.costs = true;
-        if (count !== "costs") counted.gains = true;
-        coverage.set(clean, counted);
-      }
-    }
     trackerRows.push({ title: title, sum28: 0, sum90: 0, sum365: 0, aliases: aliases, isSeparator: false, countsMoves: title.startsWith("⭕️") });
   }
 
@@ -2348,14 +2688,12 @@ function updateTrackerTab() {
 
   let undefIndex = trackerRows.findIndex(row => !row.isSeparator && row.title.toLowerCase() === "undefined");
   if (undefIndex === -1) {
-    trackerRows.push({ title: "Undefined", sum28: 0, sum90: 0, sum365: 0, aliases: [], isSeparator: false, countsMoves: true });
+    trackerRows.push({ title: "Undefined", sum28: 0, sum90: 0, sum365: 0, aliases: [], isSeparator: false, countsMoves: false });
     undefIndex = trackerRows.length - 1;
   } else {
-    // Only remove from Undefined if the alias is FULLY covered by other rows (costs and gains)
-    trackerRows[undefIndex].aliases = trackerRows[undefIndex].aliases.filter(alias => {
-      let counted = coverage.get(cleanString(alias));
-      return !(counted && counted.costs && counted.gains);
-    });
+    // Filled in again from the entries every time (below), so a title leaves it once a row counts it, or once
+    // its entries are older than 365 days
+    trackerRows[undefIndex].aliases = [];
   }
 
   // Days up to today, newest first: the calendar, then History
@@ -2394,7 +2732,6 @@ function updateTrackerTab() {
     if (counter <= 28) row.sum28 += amount;
   };
 
-  let accounts = accountTitleMap();
   for (let i = 0; i < pastCells.length; i++) {
     counter++;
     if (counter > 365) break;
@@ -2410,9 +2747,8 @@ function updateTrackerTab() {
       let lineAmt = parseAmount(parts[1]);
       if (lineAmt === 0) continue;
 
-      // Transfers (and entries that change another account) move money between your own accounts,
-      // so they aren't costs or gains
-      let isMove = isMoveEntry(parts[0], lineTitle, accounts);
+      // Transfers move money between your own accounts, so they aren't costs or gains (Hidden entries are)
+      let isMove = isMoveEntry(parts[0]);
       if (lineAmt > 0 && !isMove) addToRow(trackerRows[gainIndex], lineAmt);
       if (lineAmt < 0 && !isMove) addToRow(trackerRows[costIndex], lineAmt);
 
@@ -2426,8 +2762,8 @@ function updateTrackerTab() {
         addToRow(row, lineAmt);
       }
 
-      // Everything no row tracks goes to Undefined (including moves)
-      if (countedBy.size === 0) {
+      // Everything else no row tracks goes to Undefined (a transfer only counts where a row is set to count it)
+      if (countedBy.size === 0 && !isMove) {
         if (!trackerRows[undefIndex].aliases.includes(lineTitle)) trackerRows[undefIndex].aliases.push(lineTitle);
         addToRow(trackerRows[undefIndex], lineAmt);
       }
@@ -2457,11 +2793,11 @@ function updateTrackerTab() {
 
   // Recurring summary: about how much the recurring costs add up to each month, and Yearly: this year's
   // spending so far (above) plus every recurring cost still to land this year. Today's already count
-  // as spent, so those start tomorrow. Like the spending so far, moves (like a transfer to savings)
-  // aren't spending.
+  // as spent, so those start tomorrow. Like the spending so far, transfers (like one to savings) aren't
+  // spending.
   let endOfThisYear = new Date(today.getFullYear(), 11, 31);
   for (let row of getParsedRecurringRows()) {
-    if (row.amt >= 0 || isMoveEntry(String(row.sprite || ""), row.parsed.cleanTitle, accounts)) continue;
+    if (row.amt >= 0 || isMoveEntry(row.sprite)) continue;
     monthly += row.amt * timesPerMonth(row.parsed.frequency);
     let lastDay = row.parsed.endDate && row.parsed.endDate < endOfThisYear ? row.parsed.endDate : endOfThisYear;
     for (let day = addDays(today, 1); day <= lastDay; day = addDays(day, 1)) {
@@ -2999,20 +3335,111 @@ function createSafeMidnight(input, failable = false) {
   return getLocalMidnight(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-// A typed date (MM/DD/YYYY, M/D, or YYYY-MM-DD) as local midnight, or an invalid Date when it
-// isn't a real day (13/45/2026 doesn't quietly roll over into next year)
+/* ---------- Dates people see and type ---------- */
+// Stored dates never depend on the device's language, region, or time zone: a day is always stored as
+// MM/DD/YYYY (MM/DD on a calendar day's first line, YYYY-MM-DD for the API) and read back as that same
+// calendar day wherever the device is. Only what people see and type follows their date format: this
+// device's own (from its language and region), or the one picked in Settings. So 05/10/2026 is October 5
+// to someone who writes the day first, and YYYY-MM-DD can always be typed too.
+
+const DATE_FORMATS = {
+  mdy: { pattern: "MM/DD/YYYY" },
+  dmy: { pattern: "DD/MM/YYYY" },
+  ymd: { pattern: "YYYY-MM-DD" }
+};
+const DATE_FORMAT_KEY = "prismal_date_format"; // This device's pick ("mdy", "dmy", "ymd"); none = its own
+
+// The device's own order, from its language and region (en-US: mdy, en-GB and most of the world: dmy,
+// ja, zh, ko, sv, and others: ymd)
+let deviceFormatCache = null;
+function deviceDateFormat() {
+  if (deviceFormatCache) return deviceFormatCache;
+  deviceFormatCache = "mdy";
+  try {
+    const order = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(new Date(2026, 9, 5))
+      .map(part => part.type)
+      .filter(type => type === "year" || type === "month" || type === "day");
+    if (order[0] === "year") deviceFormatCache = "ymd";
+    else if (order[0] === "day") deviceFormatCache = "dmy";
+  } catch (e) {}
+  return deviceFormatCache;
+}
+
+// "mdy", "dmy", or "ymd": picked in Settings on this device, or the device's own
+function dateFormat() {
+  let picked = null;
+  try { picked = localStorage.getItem(DATE_FORMAT_KEY); } catch (e) {}
+  return Object.prototype.hasOwnProperty.call(DATE_FORMATS, picked) ? picked : deviceDateFormat();
+}
+
+// What a date box asks for, like "DD/MM/YYYY"
+function datePattern() {
+  return DATE_FORMATS[dateFormat()].pattern;
+}
+
+// A day as people read it: "10/05/2026", "05/10/2026", or "2026-10-05"
+function showDate(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const format = dateFormat();
+  if (format === "ymd") return `${date.getFullYear()}-${mm}-${dd}`;
+  return format === "dmy" ? `${dd}/${mm}/${date.getFullYear()}` : `${mm}/${dd}/${date.getFullYear()}`;
+}
+
+// A day without its year: "10/05", "05/10", or "10-05"
+function showDay(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const format = dateFormat();
+  if (format === "ymd") return `${mm}-${dd}`;
+  return format === "dmy" ? `${dd}/${mm}` : `${mm}/${dd}`;
+}
+
+// A stored date ("10/05/2026", or "10/05" on a calendar day) as people read it. Anything that isn't a
+// date (like "None") is shown as it is.
+function showStoredDate(text) {
+  const trimmed = String(text ?? "").trim();
+  if (/^\d{1,2}\/\d{1,2}$/.test(trimmed)) return showDay(createSafeMidnight(trimmed));
+  if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) return trimmed;
+  const date = createSafeMidnight(trimmed, true);
+  return isNaN(date.getTime()) ? trimmed : showDate(date);
+}
+
+// A typed date as local midnight, or an invalid Date when it isn't a real day (31/02 doesn't quietly roll
+// over into March). Numbers go in this device's date order (dateFormat), split by /, ., -, or spaces; a
+// 4-digit year first is always year-month-day. Without a year, it's the nearest one (12/30 typed in January
+// is last December). A 2-digit year is in the 2000s. Words, like "Oct 5, 2026", are read too.
 function parseTypedDate(text) {
-  let trimmed = String(text || "").trim();
-  let parsed = createSafeMidnight(trimmed, true);
-  if (isNaN(parsed.getTime())) return parsed;
-  let numbers = trimmed.match(/^(\d{1,4})[\/-](\d{1,2})(?:[\/-](\d{1,4}))?$/);
+  const trimmed = String(text || "").trim();
+  const invalid = new Date("invalid");
+  if (!trimmed) return invalid;
+  let year, month, day;
+  let numbers = trimmed.match(/^(\d{4})[\/.\-\s](\d{1,2})[\/.\-\s](\d{1,2})$/);
   if (numbers) {
-    let isoStyle = numbers[1].length === 4;
-    let month = Number(isoStyle ? numbers[2] : numbers[1]);
-    let day = Number(isoStyle ? numbers[3] : numbers[2]);
-    if (parsed.getMonth() + 1 !== month || parsed.getDate() !== day) return new Date("invalid");
+    [year, month, day] = numbers.slice(1).map(Number);
+  } else {
+    numbers = trimmed.match(/^(\d{1,2})[\/.\-\s](\d{1,2})(?:[\/.\-\s](\d{2}|\d{4}))?\.?$/);
+    if (!numbers) {
+      if (/^[\d\s\/.\-]+$/.test(trimmed)) return invalid;
+      return createSafeMidnight(trimmed, true); // Words, like "Oct 5, 2026"
+    }
+    const [first, second] = [Number(numbers[1]), Number(numbers[2])];
+    [month, day] = dateFormat() === "dmy" ? [second, first] : [first, second];
+    if (numbers[3]) {
+      year = Number(numbers[3]) + (numbers[3].length === 2 ? 2000 : 0);
+    } else {
+      // The nearest year: this one, or next or last year around New Year's
+      year = today.getFullYear();
+      if (month === 12 && today.getMonth() === 0) year--;
+      else if (month === 1 && today.getMonth() === 11) year++;
+    }
   }
-  return parsed;
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return invalid;
+  return createSafeMidnight(date);
 }
 
 function getGridDates() {
@@ -3418,41 +3845,103 @@ table?.addEventListener('touchend', endTransform);
 table?.addEventListener('touchcancel', endTransform);
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
+// A tapped day zooms in and stays zoomed until its v, or anything outside it, is tapped. On phones (touch
+// screens and narrow windows) it fills almost the whole screen, centered over a dimmed page; on a computer
+// it doubles in size. --zoom (how much it's scaled) keeps its v the same small size on screen.
 
 window.editingCell = false;
-let activeEditCell = null; 
+let activeEditCell = null;
+const fullZoomQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)");
+let zoomBackdrop = null;
+
+function zoomDay(cell) {
+  if (activeEditCell) closeZoomedDay();
+  window.editingCell = true;
+  activeEditCell = cell;
+  cell.classList.add('is-editing');
+  if (!fullZoomQuery.matches) return;
+  cell.classList.add('is-fullZoom');
+  if (!zoomBackdrop) {
+    // In the page's own layer, just under the zoomed day (a backdrop in <body> would cover the day too)
+    zoomBackdrop = document.createElement('div');
+    zoomBackdrop.className = 'dayZoomBackdrop';
+    document.getElementById('transitionContainer')?.appendChild(zoomBackdrop);
+  }
+  zoomBackdrop.classList.add('shown');
+  fitZoomedDay(true);
+}
+
+function closeZoomedDay() {
+  const cell = activeEditCell;
+  window.editingCell = false;
+  activeEditCell = null;
+  if (zoomBackdrop) zoomBackdrop.classList.remove('shown');
+  if (!cell) return;
+  cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom');
+  cell.style.removeProperty('transform');
+  cell.style.removeProperty('transform-origin');
+  cell.style.removeProperty('transition');
+  cell.style.removeProperty('--zoom');
+}
+
+// Scale and move the zoomed day so it fills almost the whole screen, centered. It's measured where it sits
+// unzoomed (the zoom is taken off just for the measuring, which nothing draws in between). Again, without
+// the slide, when the page scrolls or resizes, or the day's entries change.
+function fitZoomedDay(animate = false) {
+  const cell = activeEditCell;
+  if (!cell || !cell.classList.contains('is-fullZoom')) return;
+  const before = cell.style.transform;
+  cell.style.transition = 'none';
+  cell.style.transform = 'none';
+  const box = cell.getBoundingClientRect();
+  const content = cell.querySelector('.cell-content');
+  const height = Math.max(box.height, content ? content.offsetHeight : 0); // A long day shows all of it
+  cell.style.transform = before;
+  const viewWidth = document.documentElement.clientWidth || window.innerWidth;
+  const viewHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const scale = Math.min((viewWidth * 0.92) / box.width, (viewHeight * 0.84) / height);
+  const toLeft = (viewWidth - box.width * scale) / 2;
+  const toTop = (viewHeight - height * scale) / 2;
+  if (animate) {
+    void cell.offsetWidth; // Start the slide from where it is now
+    cell.style.removeProperty('transition');
+  }
+  cell.style.transformOrigin = '0 0';
+  cell.style.setProperty('--zoom', String(scale));
+  cell.style.transform = `translate(${toLeft - box.left}px, ${toTop - box.top}px) scale(${scale})`;
+}
+
+let refitFrame = 0;
+const refitZoomedDay = () => {
+  cancelAnimationFrame(refitFrame);
+  refitFrame = requestAnimationFrame(() => fitZoomedDay(false));
+};
+window.addEventListener('scroll', () => { if (activeEditCell) refitZoomedDay(); }, { passive: true });
+window.addEventListener('resize', () => { if (activeEditCell) refitZoomedDay(); });
+// A day tapped while the page was still sliding in was measured on the move
+document.getElementById('transitionContainer')?.addEventListener('transitionend', (e) => {
+  if (activeEditCell && e.target === e.currentTarget) refitZoomedDay();
+});
+document.addEventListener('budget:updated', () => { if (activeEditCell) refitZoomedDay(); }); // After the page redraws it
 
 table?.addEventListener('click', (e) => {
   if (e.target.closest('.cell-action-btn')) {
-    const cell = e.target.closest('td');
-    if (cell) {
-      cell.classList.remove('is-editing', 'is-magnified');
-      window.editingCell = false;
-      activeEditCell = null;
-    }
-    e.stopPropagation(); 
+    closeZoomedDay();
+    e.stopPropagation();
     return;
   }
 
   const cell = e.target.closest('td');
-  if (!cell) return;
-  if (activeEditCell === cell) return;
-  if (activeEditCell) activeEditCell.classList.remove('is-editing');
-
-  window.editingCell = true;
-  activeEditCell = cell;
-  cell.classList.add('is-editing');
-  e.stopPropagation(); 
+  if (!cell || activeEditCell === cell) return;
+  zoomDay(cell);
+  e.stopPropagation();
 });
 
 document.addEventListener('click', (e) => {
   if (!window.editingCell || !activeEditCell) return;
   if (activeEditCell.contains(e.target)) return;
   if (e.target.closest('.budgetPanel')) return; // Working in an entry's panel keeps its day zoomed
-
-  window.editingCell = false;
-  activeEditCell.classList.remove('is-editing');
-  activeEditCell = null;
+  closeZoomedDay();
 });
 
 // 3. PC MOUSE GLIDE & MAGNIFYING GLASS
@@ -3566,13 +4055,13 @@ function stepThroughHistory(direction) {
   const to = direction === "undo" ? "before" : "after";
   const changed = step.days.find(day => JSON.stringify(dayEntries(createSafeMidnight(day.date))) !== JSON.stringify(day[from]));
   if (changed || (step.equity && JSON.stringify(accountsData?.equity ?? null) !== step.equity[from])) {
-    const what = changed ? formatToMMDD(createSafeMidnight(changed.date)) : "your Other Accounts";
+    const what = changed ? showDay(createSafeMidnight(changed.date)) : "your Other Accounts";
     throw new StaleHistoryError(`That (${step.label}) can't be ${direction === "undo" ? "undone" : "redone"} anymore, because ${what} changed since.`, direction);
   }
   for (const day of step.days) setDayEntries(createSafeMidnight(day.date), day[to]);
   if (step.equity) accountsData.equity = JSON.parse(step.equity[to]);
   formEntryRow[3] = step.label;
-  formEntryRow[4] = "Days: " + step.days.map(day => day.date).join(", ");
+  formEntryRow[4] = "Days: " + step.days.map(day => showStoredDate(day.date)).join(", ");
   return { historyStep: { direction, label: step.label } };
 }
 
@@ -3746,12 +4235,24 @@ function showRememberedBudgetNotice() {
   if (kind && BUDGET_NOTICES[kind] && typeof BudgetUI !== "undefined") BudgetUI.showToast(...BUDGET_NOTICES[kind]);
 }
 
+// This device's date isn't the one the page loaded on anymore: midnight passed, or the device moved to
+// another time zone (its days' midnights are then different moments, so everything is worked out again)
+function deviceDayChanged() {
+  return createSafeMidnight(new Date()).getTime() !== pageDay.getTime();
+}
+
 // Coming back to this page (another tab, or the phone woke up): if the budget was saved somewhere else
-// in the meantime, reload to show it. Not while something here is unsaved: that save is refused
-// anyway, and reloads then.
+// in the meantime, or a new day started, reload to show it. Not while something here is unsaved: that
+// save is refused anyway, and reloads then (and the next change reloads for a new day).
 let lastRevisionCheck = 0;
 async function checkForNewerBudget() {
   if (document.visibilityState !== "visible" || !workspaceLoaded || dataRevision === null || savingNow || hasUnsavedChanges()) return;
+  if (deviceDayChanged()) {
+    reloadingBudget = true;
+    workspaceLoaded = false;
+    window.location.reload();
+    return;
+  }
   if (Date.now() - lastRevisionCheck < 10000) return;
   lastRevisionCheck = Date.now();
   const result = await budgetApi("/api/data/revision");
@@ -3777,6 +4278,13 @@ if (window.PAGE !== "quick") {
     event.returnValue = "";
   });
   document.addEventListener("visibilitychange", checkForNewerBudget);
+  // Back to this page with the browser's Back button: browsers can show it just as it was left (the
+  // back/forward cache), so check it the same way
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted) return;
+    lastRevisionCheck = 0;
+    checkForNewerBudget();
+  });
 }
 
 //#endregion

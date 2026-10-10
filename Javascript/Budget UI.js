@@ -112,7 +112,6 @@ const BudgetUI = (() => {
     const api = currentPanel;
     if (!api) return;
     currentPanel = null;
-    if (pickingPanel === api.panel) stopPicking();
     if (pickTarget && api.panel.contains(pickTarget)) setPickTarget(null);
 
     const panel = api.panel;
@@ -189,11 +188,9 @@ const BudgetUI = (() => {
     }
   }
 
-  // Escape brings back a panel that stepped aside for picking a day, or closes it
+  // Escape closes the panel
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if (pickingPanel) stopPicking();
-    else if (currentPanel && currentPanel.closable) closePanel();
+    if (event.key === "Escape" && currentPanel && currentPanel.closable) closePanel();
   });
 
   //#endregion
@@ -271,19 +268,65 @@ const BudgetUI = (() => {
   }
 
   // Refraction type picker. value(): "" (Auto), "❗️", "✖️", or "⭕️". onChange(key) runs when one is tapped.
+  // A tiny ? next to its label shows what each type does.
   function refractionField({ value = "", allowAuto = true, optional = allowAuto, onChange = null } = {}) {
     const options = allowAuto ? [{ key: "", label: "Auto" }, ...REFRACTION_TYPES] : REFRACTION_TYPES;
     const picker = segmented(options, value || (allowAuto ? "" : "❗️"), onChange);
     const hint = allowAuto ? "Auto matches an entry that's already there, or uses Regular." : "";
-    return { el: field("Refraction Type", picker.el, { optional, hint }), value: () => picker.value() };
+    const el = field("Refraction Type", picker.el, { optional, hint });
+    addFieldHelp(el, "What the refraction types do", refractionHelp(allowAuto));
+    // set(key) picks a type the way a tap does (onChange runs too)
+    const set = (key) => {
+      picker.set(key);
+      if (onChange) onChange(key);
+    };
+    return { el, value: () => picker.value(), set };
+  }
+
+  // What each refraction type does (the same as Home's Help, in short)
+  function refractionHelp(allowAuto) {
+    const list = element("ul");
+    const item = (sprite, name, text) => {
+      const li = element("li", "", sprite ? `${sprite} ` : "");
+      li.append(element("strong", "", name), `: ${text}`);
+      list.appendChild(li);
+    };
+    item("❗️", "Regular", "a normal cost or gain. It changes In Bank, and the tracker counts it.");
+    item("✖️", "Hidden", "money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same. With an Other Account picked, that account changes by the same amount: a cost takes from it, and a gain adds to it.");
+    item("⭕️", "Transfer", "money moving between your own accounts, like depositing cash. It changes In Bank, but it isn't a cost or gain, so the day's Gains and Costs and the tracker leave it out. With an Other Account picked, that account gets the opposite: a cost here adds to it, and a gain takes from it.");
+    if (allowAuto) item("", "Auto", "uses the type of an entry with this title already on that day, or Regular if there isn't one.");
+    else list.appendChild(element("li", "", "Recurring entries show these behind a ✔️ (✔️ is Regular)."));
+    return list;
+  }
+
+  // A tiny ? button after a field's label that shows (or hides) a short explanation under the field
+  let fieldHelpCount = 0;
+  function addFieldHelp(fieldEl, label, content) {
+    const help = element("div", "fieldHelp");
+    help.id = `fieldHelp${++fieldHelpCount}`;
+    help.hidden = true;
+    help.appendChild(content);
+    const button = element("button", "fieldHelpButton", "?");
+    button.type = "button";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-controls", help.id);
+    button.setAttribute("aria-expanded", "false");
+    button.title = label;
+    button.addEventListener("click", () => {
+      help.hidden = !help.hidden;
+      button.setAttribute("aria-expanded", String(!help.hidden));
+    });
+    fieldEl.querySelector(".fieldLabel").appendChild(button);
+    fieldEl.insertBefore(help, fieldEl.children[1].nextSibling);
   }
 
   // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked.
   // An entry changes an account when it's titled with the account's name, so picking one fills in the
-  // title (and typing an account's name picks it). The account gets the opposite of the entry's amount.
+  // title (and typing an account's name picks it). A Transfer changes the account by the opposite of its
+  // amount (the money moved from or to In Bank), a Hidden entry by its own amount (see accountChange).
   // accounts: in order, [{ name, balance }] (each shows its balance today), or just names.
-  // title, amount: the form's textField and amountField.
-  function accountField({ accounts = [], title, amount }) {
+  // title, amount: the form's textField and amountField. type(): the picked refraction type.
+  function accountField({ accounts = [], title, amount, type = () => "⭕️" }) {
     const list = accounts.map(account => (typeof account === "string" ? { name: account, balance: null } : account));
     const select = element("select", "selectInput accountSelect");
     select.appendChild(new Option("None", ""));
@@ -299,10 +342,17 @@ const BudgetUI = (() => {
     function describe() {
       const name = select.value;
       const value = amount.value();
+      const isTransfer = type() === "⭕️";
       if (!name) hint.textContent = "Pick an account if this money moves into or out of it.";
-      else if (value === null || Number.isNaN(value) || value === 0) hint.textContent = `A cost adds to ${name}, and a gain takes from it.`;
-      else if (value < 0) hint.textContent = `Adds ${formatMoney(-value)} to ${name}.`;
-      else hint.textContent = `Takes ${formatMoney(value)} out of ${name}.`;
+      else if (value === null || Number.isNaN(value) || value === 0) {
+        hint.textContent = isTransfer
+          ? `A cost moves money from In Bank into ${name}, and a gain moves it back.`
+          : `A cost takes from ${name}, and a gain adds to it (In Bank stays the same).`;
+      } else if (isTransfer) {
+        hint.textContent = value < 0 ? `Moves ${formatMoney(-value)} from In Bank into ${name}.` : `Moves ${formatMoney(value)} from ${name} into In Bank.`;
+      } else {
+        hint.textContent = value < 0 ? `Takes ${formatMoney(-value)} out of ${name}.` : `Adds ${formatMoney(value)} to ${name}.`;
+      }
     }
 
     select.addEventListener("change", () => {
@@ -337,27 +387,19 @@ const BudgetUI = (() => {
 
   const isAccountType = (key) => key === "✖️" || key === "⭕️";
 
-  // Date field. value(): Date, null when blank, undefined when it isn't a real date. With the calendar
-  // on the page, 📅 moves the panel aside until a day is tapped (any day the panel doesn't cover can be
-  // tapped right away too).
+  // Date field. value(): Date, null when blank, undefined when it isn't a real date. 📅 opens the device's
+  // own date picker. With the calendar on the page, tapping a day while the box is waiting fills it too.
   function dateField({ label = "Date", date = null, optional = false } = {}) {
     const input = element("input", "dateInput");
     input.type = "text";
     input.inputMode = "numeric";
-    input.placeholder = "MM/DD/YYYY";
-    if (date) input.value = formatToMMDDYYYY(date);
+    input.placeholder = datePattern(); // This device's date format, like DD/MM/YYYY
+    input.translate = false;
+    if (date) input.value = showDate(date);
     input.addEventListener("focus", () => setPickTarget(input));
-    let control = input;
-    if (hasCalendar()) {
-      const pick = element("button", "budgetButton pickDay", "📅");
-      pick.type = "button";
-      pick.title = "Pick a day on the calendar";
-      pick.setAttribute("aria-label", `Pick the ${label.toLowerCase()} on the calendar`);
-      pick.addEventListener("click", () => startPicking(input, label));
-      control = element("div", "dateRow");
-      control.append(input, pick);
-    }
-    const hint = hasCalendar() ? "Type a date, or tap 📅 and then a day on the calendar." : "";
+    const control = element("div", "dateRow");
+    control.append(input, datePickerButton(input, label));
+    const hint = hasCalendar() ? "Type a date, tap 📅, or tap a day on the calendar." : "Type a date, or tap 📅 to pick one.";
     return {
       el: field(label, control, { optional, hint }),
       input,
@@ -606,19 +648,37 @@ const BudgetUI = (() => {
   // Hidden or Transfer, the Other Account it moves money into or out of (accounts: their names).
   // The calendar's New Entry panel and the Quick Entry page share it, so they always match.
   // read(): { entry: { title, amount, date, sprite } } when it's filled in right, otherwise { error }
+  // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
+  //   unreadable), sprite ("" for Auto) }
+  // fill({ title, amount, sprite }): puts these in, leaving the fields they don't have as they are
+  //   (the Quick Entry page's prisms). dateEl: the date field, for a form that doesn't need one.
   function newEntryFields({ date = today, accounts = [] } = {}) {
     const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas..." });
     const amount = amountField();
     const dateInput = dateField({ label: "Date", date });
-    const account = accountField({ accounts, title, amount });
+    const account = accountField({ accounts, title, amount, type: () => refraction.value() });
     const refraction = refractionField({ onChange: (key) => account.setVisible(isAccountType(key)) });
     return {
       els: [title.el, amount.el, dateInput.el, refraction.el, account.el],
+      dateEl: dateInput.el,
+      inputs: { title: title.input, amount: amount.input },
+      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value() }),
+      fill({ title: newTitle = "", amount: newAmount = null, sprite = "" } = {}) {
+        if (newTitle) title.input.value = newTitle;
+        if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
+          amount.input.value = Math.abs(newAmount).toFixed(2);
+          amount.setSign(newAmount > 0 ? 1 : -1);
+        }
+        if (sprite) refraction.set(sprite);
+        // The account picker follows the title (and shows for Hidden or Transfer)
+        title.input.dispatchEvent(new Event("input", { bubbles: true }));
+        account.setVisible(isAccountType(refraction.value()));
+      },
       read() {
         const entry = { title: title.value(), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
         if (!entry.title) return { error: "Give the entry a title." };
         if (entry.amount === null || Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
-        if (entry.date === undefined) return { error: "That date isn't a real day. Use MM/DD/YYYY." };
+        if (entry.date === undefined) return { error: `That date isn't a real day. Use ${datePattern()}.` };
         entry.date = entry.date || date;
         return { entry };
       }
@@ -642,44 +702,50 @@ const BudgetUI = (() => {
   // =====================================================================
   // #region DATE PICKING
   // =====================================================================
-  // While a date field is the "pick target", tapping a calendar day fills it in. Panels keep
-  // their date field as the target while they're open; other date fields (the search bar)
-  // stop picking when you tap somewhere else.
+  // 📅 next to a date box opens the device's own date picker. And with the calendar (or History) on the
+  // page, while a date box is the "pick target", tapping a day fills it in: panels (and the search box) keep
+  // their date box as the target while they're open; other date boxes stop when you tap somewhere else.
 
+  const DAY_TABLES = ".elastic-table, .historyTable"; // Tables whose days can be tapped to pick them
   let pickTarget = null;
-  const hasCalendar = () => !!document.querySelector(".elastic-table");
+  const hasCalendar = () => !!document.querySelector(DAY_TABLES);
 
-  // 📅 next to a date field: its panel steps aside (hidden, not closed) and a banner asks for a day,
-  // until a day is tapped (or Cancel / Escape). Floating panels can cover part of the calendar, so this
-  // is how every day stays reachable.
-  let pickingPanel = null;
-  let pickBanner = null;
+  // 📅 for a typed date box: a see-through date input fills the button, so a tap lands right on it and the
+  // device's picker opens (showPicker opens it on a click elsewhere on the button, where browsers allow it).
+  // The picker starts on the typed date, and the picked one is written back in this device's date format.
+  function datePickerButton(textInput, label = "Date") {
+    const button = element("span", "budgetButton pickDay", "📅");
+    button.title = "Pick a date";
+    const picker = element("input", "nativeDate");
+    picker.type = "date";
+    picker.tabIndex = -1;
+    picker.setAttribute("aria-label", `Pick the ${label.toLowerCase()}`);
+    button.appendChild(picker);
 
-  function startPicking(input, label) {
-    setPickTarget(input);
-    if (!pickTarget) return;
-    stopPicking();
-    pickingPanel = input.closest(".budgetPanel");
-    if (pickingPanel) pickingPanel.classList.add("isPicking");
-    if (!pickBanner) {
-      pickBanner = element("div", "pickBanner");
-      pickBanner.setAttribute("role", "status");
-      const cancel = element("button", "budgetButton", "Cancel");
-      cancel.type = "button";
-      cancel.addEventListener("click", stopPicking);
-      pickBanner.append(element("span", "pickBannerText"), cancel);
-      document.body.appendChild(pickBanner);
-    }
-    pickBanner.querySelector(".pickBannerText").textContent = `Tap a day on the calendar for ${label}.`;
-    pickBanner.hidden = false;
+    const startOnTyped = () => {
+      const typed = parseTypedDate(textInput.value);
+      picker.value = formatToYMD(isNaN(typed.getTime()) ? today : typed);
+    };
+    button.addEventListener("pointerdown", startOnTyped);
+    button.addEventListener("click", (event) => {
+      startOnTyped();
+      if (typeof picker.showPicker !== "function") return;
+      try {
+        picker.showPicker();
+        event.preventDefault();
+      } catch (e) {} // Then the tap on the date input itself opens it
+    });
+    picker.addEventListener("change", () => {
+      if (!picker.value) return;
+      textInput.value = showDate(createSafeMidnight(picker.value, true));
+      textInput.dispatchEvent(new Event("input", { bubbles: true }));
+      textInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return button;
   }
 
-  function stopPicking() {
-    if (pickingPanel) pickingPanel.classList.remove("isPicking");
-    pickingPanel = null;
-    if (pickBanner) pickBanner.hidden = true;
-  }
-
+  // The date box a calendar tap fills: it glows, and the calendar gets a dashed outline, so it's clear
+  // tapping a day works
   function setPickTarget(input) {
     if (pickTarget) pickTarget.classList.remove("isPickTarget");
     pickTarget = input && input.isConnected && !input.closest(".isClosing") ? input : null;
@@ -695,7 +761,7 @@ const BudgetUI = (() => {
   function pickDate(date, cellEl) {
     if (!datePickActive()) return false;
     const input = pickTarget;
-    input.value = formatToMMDDYYYY(date);
+    input.value = showDate(date);
     input.dataset.touched = "1";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     if (cellEl) {
@@ -707,7 +773,6 @@ const BudgetUI = (() => {
     // e.g. search From -> To
     const next = input.dataset.nextPick && document.getElementById(input.dataset.nextPick);
     if (next && !next.value.trim()) setPickTarget(next);
-    stopPicking(); // A panel that stepped aside comes back with the date in it
     return true;
   }
 
@@ -717,10 +782,9 @@ const BudgetUI = (() => {
 
   document.addEventListener("pointerdown", (event) => {
     if (!pickTarget) return;
-    if (event.target.closest(".elastic-table")) return;
-    const owner = pickTarget.closest(".budgetPanel, .searchBar");
-    if (owner && owner.contains(event.target)) return;
-    if (owner && owner.classList.contains("budgetPanel")) return; // Open panels keep picking
+    if (event.target.closest(DAY_TABLES)) return;
+    const owner = pickTarget.closest(".budgetPanel, .searchBox");
+    if (owner) return; // Open panels (and the search box) keep picking
     setPickTarget(null);
   }, true);
 
@@ -730,24 +794,33 @@ const BudgetUI = (() => {
   // #region ENTRY LINES + TOASTS
   // =====================================================================
 
-  // One line of a day cell: the date, a system line (In Bank, Costs, Gains), or an entry.
-  // Entries with a positive amount show green.
+  // One line of a day cell: the date (as people read it: the caller passes it shown), a system line (In
+  // Bank, Costs, Gains), or an entry. Entries with a positive amount show green.
+  // A browser translating the page leaves entries, amounts, and dates as they are (they're the person's
+  // own words and numbers); only the budget's own words, like In Bank, get translated.
   function renderEntryLine(line, lineIndex) {
-    const el = element("div", "", line);
-    if (lineIndex === 0) {
-      el.className = "lineDate";
-      return el;
-    }
+    if (lineIndex === 0) return noTranslate(element("div", "lineDate", line));
     const parts = getParts(line);
     const amount = parseAmount(parts[1]);
     if (isSystemLine(parts[0])) {
-      el.className = "lineSystem";
+      const el = element("div", "lineSystem");
       if (amount < 0) el.classList.add("negative");
-    } else {
-      el.className = "lineEntry";
-      el.dataset.line = lineIndex;
-      if (amount > 0) el.classList.add("positive");
+      // "✅ $812.40 Lowest: 11/14": the day shows in this device's date format
+      const words = parts.slice(2).join(" ");
+      const day = words.match(/^(.*?)(\d{1,2}\/\d{1,2})$/);
+      el.append(noTranslate(element("span", "", `${parts[0]} ${parts[1]} `)), day ? day[1] : words);
+      if (day) el.appendChild(noTranslate(element("span", "", showStoredDate(day[2]))));
+      return el;
     }
+    const el = noTranslate(element("div", "lineEntry", line));
+    el.dataset.line = lineIndex;
+    if (amount > 0) el.classList.add("positive");
+    return el;
+  }
+
+  // Kept out of the browser's translation: entries, names, amounts, and dates show as they are
+  function noTranslate(el) {
+    el.translate = false;
     return el;
   }
 
@@ -793,9 +866,11 @@ const BudgetUI = (() => {
     newEntryFields,
     buttonRow,
     setPickTarget,
+    datePickerButton,
     datePickActive,
     pickDate,
     renderEntryLine,
+    noTranslate,
     showToast
   };
 })();

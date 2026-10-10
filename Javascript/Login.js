@@ -291,7 +291,7 @@ function goToBudget() {
 // =====================================================================
 
 let signInReady = null; // { options, at }: a challenge fetched ahead, so a tap starts the device's check right away
-let autofill = null;    // Cancels the autofill request waiting on the username box
+let autofill = null;    // { controller, settled }: the autofill request waiting on the username box
 let autofillTimer = null;
 let autofillRun = 0;    // Bumped on every start and stop, so an older start that's still loading gives up
 
@@ -305,38 +305,63 @@ async function prepareSignIn() {
 
 const signInIsFresh = () => !!signInReady && Date.now() - signInReady.at < Passkeys.FRESH_MS;
 
-// Browsers with passkey autofill list the site's passkeys under the username box. The request waits
-// there until one is picked, and starts over with a new challenge before its challenge gets old.
+// Keeps a challenge ready while the login page is up (a new one before it gets old), for the button and for
+// passkey autofill: browsers with autofill list the site's passkeys under the username box, and that request
+// waits there until one is picked. Safari only lets a tap start the device's check if the tap doesn't have
+// to wait on the server first, which is why the challenge is fetched ahead even without autofill.
 async function startPasskeyAutofill() {
-  stopPasskeyAutofill();
+  await stopPasskeyAutofill();
   const run = autofillRun;
-  if (!(await Passkeys.autofillAvailable())) return;
+  if (!Passkeys.usable || mode !== 'login') return;
   if (!signInIsFresh() && await prepareSignIn()) return;
   if (run !== autofillRun || mode !== 'login') return;
-  const controller = new AbortController();
-  autofill = controller;
   autofillTimer = setTimeout(startPasskeyAutofill, Passkeys.FRESH_MS);
+  if (!(await Passkeys.autofillAvailable()) || run !== autofillRun) return;
+  const controller = new AbortController();
+  const request = navigator.credentials.get({ publicKey: Passkeys.signInRequest(signInReady.options), mediation: 'conditional', signal: controller.signal });
+  autofill = { controller, settled: request.then(() => {}, () => {}) };
   let credential;
   try {
-    credential = await navigator.credentials.get({ publicKey: Passkeys.signInRequest(signInReady.options), mediation: 'conditional', signal: controller.signal });
+    credential = await request;
   } catch (error) {
+    // (A phone can stop it when the page goes to the background: it starts again when the page is back)
     if (error.name !== 'AbortError') console.warn("Passkey autofill stopped:", error);
+    if (autofill && autofill.controller === controller) autofill = null;
     return;
-  } finally {
-    if (autofill === controller) {
-      autofill = null;
-      clearTimeout(autofillTimer);
-    }
   }
+  if (autofill && autofill.controller === controller) autofill = null;
+  clearTimeout(autofillTimer);
   await finishPasskeySignIn(credential);
 }
 
+// Cancels the autofill request. Resolves once it has closed (a moment at most): Chrome and Edge refuse a
+// new passkey request while the old one is still closing, which used to show as "cancelled or timed out".
 function stopPasskeyAutofill() {
   autofillRun++;
   clearTimeout(autofillTimer);
-  if (autofill) {
-    autofill.abort();
-    autofill = null;
+  if (!autofill) return Promise.resolve();
+  const { controller, settled } = autofill;
+  autofill = null;
+  controller.abort();
+  return Promise.race([settled, new Promise(resolve => setTimeout(resolve, 300))]);
+}
+
+// Back on the login page (another app, another tab, or the phone woke up): a fresh challenge, and autofill
+// waiting again if the phone stopped it
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && mode === 'login' && (!autofill || !signInIsFresh())) startPasskeyAutofill();
+});
+
+// The device's passkey sheet. If the browser says another request is still closing ("A request is already
+// pending"), it's tried once more after a moment.
+async function requestPasskey(options) {
+  const publicKey = Passkeys.signInRequest(options);
+  try {
+    return await navigator.credentials.get({ publicKey });
+  } catch (error) {
+    if (error.name !== 'NotAllowedError' || !/pending/i.test(error.message || '')) throw error;
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return navigator.credentials.get({ publicKey });
   }
 }
 
@@ -346,22 +371,28 @@ passkeyBtn.addEventListener('click', async () => {
     setStatus(Passkeys.onIpAddress ? Passkeys.IP_ADDRESS_TEXT : "This browser can't use passkeys.");
     return;
   }
-  stopPasskeyAutofill(); // One passkey request at a time
-  if (!signInIsFresh()) {
+  passkeyBtn.disabled = true;
+  await stopPasskeyAutofill(); // One passkey request at a time
+  // Without a challenge ready, this tap has to wait on the server first, and Safari may then not let it
+  // open the passkey sheet: the next tap will
+  const hadToWait = !signInIsFresh();
+  if (hadToWait) {
     const error = await prepareSignIn();
     if (error) {
+      passkeyBtn.disabled = false;
       setStatus(error);
       startPasskeyAutofill();
       return;
     }
   }
-  passkeyBtn.disabled = true;
   let credential;
   try {
-    credential = await navigator.credentials.get({ publicKey: Passkeys.signInRequest(signInReady.options) });
+    credential = await requestPasskey(signInReady.options);
   } catch (error) {
     passkeyBtn.disabled = false;
-    setStatus(Passkeys.problem(error));
+    setStatus(hadToWait && error.name === 'NotAllowedError'
+      ? "Passkey sign-in is ready now. Tap Sign In With A Passkey again."
+      : Passkeys.problem(error));
     startPasskeyAutofill();
     return;
   }

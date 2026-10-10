@@ -40,9 +40,15 @@
   // 2. Prevent duplicate script insertion if Analytics.js runs again
   if (document.querySelector('script[src*="googletagmanager.com/gtag/js"]')) return;
 
-  // 3. The page view, queued now; Google's script reads the queue when it arrives
+  // 3. The page view, queued now; Google's script reads the queue when it arrives. The Site shows no ads,
+  //    so nothing goes to Google's advertising features (Google Signals and ad personalization).
   window.gtag('js', new Date());
-  window.gtag('config', MEASUREMENT_ID, { page_location: bare(location.href), page_referrer: bare(document.referrer) });
+  window.gtag('config', MEASUREMENT_ID, {
+    page_location: bare(location.href),
+    page_referrer: bare(document.referrer),
+    allow_google_signals: false,
+    allow_ad_personalization_signals: false
+  });
 
   // 4. Google's script loads after the page has (a script added before then would hold up the page's
   //    load, and with it the page sliding in)

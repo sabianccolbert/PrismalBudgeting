@@ -85,6 +85,10 @@
   
   /* Placeholders */
   --PLACEHOLDER_COLOR: rgba(90, 90, 90, 0.5);
+
+  /* Step 5: the red-orange diagonal gradient on the borders of chosen, hovered, and focused controls
+     (see GRADIENT BORDERS at the end) */
+  --EDGE_GRADIENT: linear-gradient(135deg, #ee0000 0%, #ff4500 55%, #ff9a1a 100%);
 }
 
 /* #endregion 1) DESIGN TOKENS (ROOT VARIABLES) */
@@ -115,7 +119,7 @@
    in Chinese). Both come from BpmfHuninn-Regular.ttf, which no page loads anymore. */
 @font-face {
   font-family: "Main Font";
-  src: url("/Fonts/MainFont-Latin.woff2") format("woff2");
+  src: url("/Fonts/MainFont-Latin.woff2?v=854a3379ad") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -124,7 +128,7 @@
 
 @font-face {
   font-family: "Main Font";
-  src: url("/Fonts/MainFont-More.woff2") format("woff2");
+  src: url("/Fonts/MainFont-More.woff2?v=78a7b4bd30") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -220,7 +224,7 @@ body {
   width: 100lvw;
   height: 100lvh;
   
-  background-image: url("/Resources/Background.webp");
+  background-image: url("/Resources/Background.webp?v=758b115279");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -286,7 +290,7 @@ hr {
   border: none;
 
   /* Step 6: hr is image-driven instead of a plain line */
-  background-image: url("/Resources/Hr.webp");
+  background-image: url("/Resources/Hr.webp?v=7c2fbe9896");
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -442,7 +446,7 @@ img {
   inset: -2vmin;
 
   /* Step 5: image-based frame */
-  background-image: url("/Resources/Image Border.webp");
+  background-image: url("/Resources/Image Border.webp?v=");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: center;
@@ -534,14 +538,13 @@ button {
 }
 
 button:hover {
-  /* Step 6: scale + glow + brand color */
+  /* Step 6: scale + glow + brand color (the border turns into the gradient: GRADIENT BORDERS) */
   transform: scale(1.05);
 
   text-shadow: var(--SHADOW);
   color: var(--LINK_LIGHT);
 
   box-shadow: var(--SHADOW);
-  border-color: var(--LINK_LIGHT);
 }
 
 /* #endregion 8) BUTTONS */
@@ -573,11 +576,9 @@ button:hover {
   color: var(--LINK_LIGHT);
 }
 
-/* Nav icon glow & scale (targets icon image inside the link) */
-.navButtons a img:hover,
-.navButtons a img:active {
-  transform: scale(1.05);
-  border-color: var(--LINK_LIGHT);
+/* Nav icon glow (the link grows a little, and its gradient border is drawn on the link: GRADIENT BORDERS) */
+.navButtons a:hover img,
+.navButtons a:active img {
   box-shadow: var(--SHADOW);
 }
 
@@ -604,10 +605,13 @@ header .brand {
   gap: 3vw;
 }
 
-/* Shrink the main logo image */
+/* Shrink the main logo image. It never gets narrower than it is tall (a skinny screen used to squish it
+   sideways, since the header's row shrank it but not its height). */
 header .brand-icon {
-  width: 12vmin; 
+  flex-shrink: 0;
+  width: 12vmin;
   height: 12vmin;
+  aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -652,9 +656,14 @@ header .stacked h2 {
   margin: 0; /* Overrides the old 'margin: 0 auto' so it stays right-aligned */
 }
 
-/* Shrink the spacing between nav links so they fit side-by-side */
+/* Shrink the spacing between nav links so they fit side-by-side. Each link is exactly its icon's size, so
+   its gradient border (GRADIENT BORDERS) lands on the icon's border. */
 .navButtons a {
+  position: relative;
+  display: inline-flex;
   margin: 0 2vw;
+  padding: 0;
+  border-radius: 30%;
 }
 
 /* Keep nav icons slightly prominent */
@@ -784,6 +793,30 @@ header .stacked h2 {
   overflow-wrap: anywhere;
 }
 
+/* The ❗️ ✖️ ⭕️ ✔️ images (Sprites.js): sized like the letters around them, wherever they are. Not the round
+   pictures every other img is (section 7). */
+img.sprite {
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0 0.05em;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  object-fit: contain;
+  vertical-align: -0.22em;
+  box-shadow: none;
+  transform: none;
+}
+
+/* One that couldn't load is just its emoji again, in line with the text */
+.sprite.missingImage {
+  display: inline;
+  font-size: inherit;
+  line-height: inherit;
+  overflow: visible;
+}
+
 #versionBadge {
   position:fixed;
   bottom:4px;
@@ -825,10 +858,11 @@ input {
   border: 3px solid var(--BASE_COLOR);
   border-radius: 9999px;
   
-  /* Match typography */
+  /* Match typography. A steady size (it used to grow with the screen and got huge on wide ones); 16px at
+     least, so phones don't zoom in when a box is tapped. */
   color: var(--BASE_COLOR);
   font-family: 'Main Font', sans-serif;
-  font-size: 5vmin;
+  font-size: clamp(16px, 3.4vmin, 21px);
   text-align: center;
   
   /* FIXED: Explicitly define transform transition parameters */
@@ -840,13 +874,19 @@ input {
     text-shadow var(--SLOW_SHADOW);
 }
 
-/* Hover and focus states */
+/* A password's hidden characters: the plain font's dots, small and evenly spaced (the site's font draws
+   them big) */
+input[type="password"] {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.12em;
+}
+
+/* Hover and focus states (the border turns into the gradient: GRADIENT BORDERS) */
 input:hover,
 input:focus {
   outline: none;
   transform: scale(1.05);
   text-shadow: var(--SHADOW);
-  border-color: var(--LINK_LIGHT);
   box-shadow: var(--SHADOW);
   color: var(--LINK_LIGHT);
 }
@@ -871,7 +911,7 @@ input:focus {
   text-align: center;
   color: var(--BASE_COLOR);
   background: rgba(10, 0, 50, 0.97);
-  border: 2px solid var(--LINK_LIGHT);
+  border: 2px solid transparent; /* The gradient border: GRADIENT BORDERS */
   border-radius: 14px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 14px rgba(200, 0, 0, 0.35);
 }
@@ -931,4 +971,95 @@ input[type="checkbox"]:focus {
 
 .textButton:hover {
   box-shadow: none;
+}
+
+/*========================================*
+ *  14) GRADIENT BORDERS
+ *========================================*
+ *  Chosen, hovered, and focused controls get a red-orange diagonal gradient border (--EDGE_GRADIENT).
+ *   - Buttons, button-like links, nav icons, panels, and notices draw it as a ring over their own border
+ *     (the ::before below), which keeps their round corners and see-through backgrounds. --EDGE_WIDTH is
+ *     their border's width; a nav icon's link draws it right on the icon's border (--EDGE_OUTSET: 0).
+ *   - Text boxes can't have a ::before, so they paint the gradient as a background under a solid fill
+ *     (--EDGE_FILL: the box's color while it's focused, set by what it's in).
+ */
+:root {
+  --EDGE_FILL: rgb(4, 0, 22);
+}
+
+button,
+a.budgetButton {
+  position: relative; /* The ring's frame */
+  --EDGE_WIDTH: 3px;
+}
+
+.budgetButton,
+.imageButton,
+.budgetPanel,
+.idleWarning {
+  --EDGE_WIDTH: 2px;
+}
+
+.fieldHelpButton {
+  --EDGE_WIDTH: 1.5px;
+}
+
+.navButtons a {
+  --EDGE_WIDTH: 3px;
+  --EDGE_OUTSET: 0px;
+}
+
+button:not([class]):hover,
+.imageButton:hover,
+.budgetButton.primary,
+.budgetButton:not(.danger):not(:disabled):hover,
+.segmented .budgetButton[aria-checked="true"],
+.fieldHelpButton:hover,
+.fieldHelpButton:focus-visible,
+.fieldHelpButton[aria-expanded="true"],
+.newEntryButton .newEntryPlus,
+.budgetPanel.prismDraft,
+.idleWarning,
+.navButtons a:hover,
+.navButtons a:focus-visible {
+  border-color: transparent;
+}
+
+button:not([class]):hover::before,
+.imageButton:hover::before,
+.budgetButton.primary::before,
+.budgetButton:not(.danger):not(:disabled):hover::before,
+.segmented .budgetButton[aria-checked="true"]::before,
+.fieldHelpButton:hover::before,
+.fieldHelpButton:focus-visible::before,
+.fieldHelpButton[aria-expanded="true"]::before,
+.newEntryButton .newEntryPlus::before,
+.budgetPanel.prismDraft::before,
+.idleWarning::before,
+.navButtons a:hover::before,
+.navButtons a:focus-visible::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--EDGE_OUTSET, var(--EDGE_WIDTH, 2px)));
+  padding: var(--EDGE_WIDTH, 2px);
+  border-radius: inherit;
+  background: var(--EDGE_GRADIENT);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+
+.navButtons a:hover img,
+.navButtons a:focus-visible img {
+  border-color: transparent;
+}
+
+input:not([type="checkbox"]):not([type="range"]):not([type="number"]):not([type="date"]):hover,
+input:not([type="checkbox"]):not([type="range"]):not([type="number"]):not([type="date"]):focus,
+input.dateInput.isPickTarget,
+select:focus,
+textarea:focus {
+  border-color: transparent;
+  background: linear-gradient(var(--EDGE_FILL), var(--EDGE_FILL)) padding-box, var(--EDGE_GRADIENT) border-box;
 }

@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=10.06.2026.A">
-    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=10.06.2026.A">
+    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=e02be993e2">
     <title>Prismal Budget - History</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -40,29 +40,65 @@
       <header>
         <div class="stacked">
           <h1>History</h1>
-          <h2>Prismal Budget</h2>
+          <h2 translate="no">Prismal Budget</h2>
         </div>
         <nav class="navButtons">
           <a id="normalBack" href="back">
-            <img src="/Resources/Back.webp" alt="Back">
+            <img src="/Resources/Back.webp?v=e8de49845b" alt="Back">
           </a>
           <a href="/">
-            <img src="/Resources/Home.webp" alt="Home">
+            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.webp" alt="Logout">
+            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
           </a>
         </nav>
       </header>
       <hr>
       <main>
-        <div id="pageToolbar" class="tableToolbar"></div>
+        <div id="pageToolbar" class="tableToolbar">
+          <button id="searchButton" class="budgetButton" type="button" aria-haspopup="dialog" aria-controls="searchBox" aria-expanded="false">🔎 Search</button>
+        </div>
+
+        <!-- Search, the same as Home's (Budget Search.js moves it into <body> and fills in its working title
+             list). Tapping a day in History fills From or To too. -->
+        <section id="searchBox" class="searchBar searchBox" role="dialog" aria-labelledby="searchTitle" hidden>
+          <header class="panelHeader">
+            <h3 id="searchTitle">Search</h3>
+            <button id="searchClose" type="button" class="panelClose" aria-label="Close search">×</button>
+          </header>
+          <form id="searchForm" autocomplete="off">
+            <div id="searchTerms" class="searchTerms">
+              <div class="termList" role="group" aria-label="Titles to search for">
+                <div class="termRow">
+                  <input class="termInput" type="text" placeholder="Title, like rent" aria-label="Title">
+                  <div class="segmented" role="radiogroup" aria-label="Title: find">
+                    <button type="button" class="budgetButton" role="radio" aria-checked="true">All</button>
+                    <button type="button" class="budgetButton" role="radio" aria-checked="false">Costs</button>
+                    <button type="button" class="budgetButton" role="radio" aria-checked="false">Gains</button>
+                    <button type="button" class="budgetButton" role="radio" aria-checked="false">Tracker</button>
+                  </div>
+                  <button type="button" class="panelClose termRemove" aria-label="Remove title">×</button>
+                </div>
+              </div>
+            </div>
+            <div class="searchDates">
+              <button id="searchAdd" type="button" class="budgetButton termAdd">+ Add Title</button>
+              <div class="dateRow"><input id="searchFrom" class="dateInput" type="text" inputmode="numeric" placeholder="From MM/DD/YYYY" aria-label="From date" data-next-pick="searchTo"></div>
+              <div class="dateRow"><input id="searchTo" class="dateInput" type="text" inputmode="numeric" placeholder="To MM/DD/YYYY" aria-label="To date"></div>
+              <button type="submit" class="budgetButton primary">Search</button>
+            </div>
+          </form>
+          <!-- Tracker row titles, suggested while a title's Tracker button is picked -->
+          <datalist id="trackerRowTitles"></datalist>
+          <div id="searchResults" class="searchResults" hidden></div>
+        </section>
         <div id="panelSlot"></div>
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <div id="dataView"></div>
 
         <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
-        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png?v=" alt="Help" loading="lazy" decoding="async"></button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">History Help</h3>
           <ul>
@@ -71,6 +107,14 @@
             <li>By then, its recurring entries have turned into unique entries (like ❗️✔️), so changing a recurring entry never changes your History.</li>
             <li>To add an entry to a day in History, use New Entry on the home page (or your Quick Entry icon) with that day's date. If that day already has an entry with the same title and refraction type, the amounts are added together. History's In Bank amounts don't change, but the tracker and Search count the new entry.</li>
             <li>The tracker counts the last 365 days, from History and the calendar.</li>
+          </ul>
+
+          <h4>Search</h4>
+          <ul>
+            <li>🔎 Search (at the top) is the same as Home's: it finds entries by title in History, the calendar, and Upcoming, and, with a To date after the calendar, the recurring entries still to come (up to two years ahead). It floats over the page; × or Escape closes it.</li>
+            <li>Type a title, then pick <strong>All</strong>, <strong>Costs</strong> (only its costs), <strong>Gains</strong> (only its gains), or <strong>Tracker</strong> (the title is a tracker row, like Food: it finds what that row counts). Press Enter (or tap + Add Title) for another title, and leave the title blank to find everything.</li>
+            <li>From and To are optional. Tap 📅 to pick a date, or, while a date box glows, tap a day in History to fill it in.</li>
+            <li>Results show newest first, with a total of the checked ones. ⭕️ Transfers start unchecked.</li>
           </ul>
         </section>
       </main>

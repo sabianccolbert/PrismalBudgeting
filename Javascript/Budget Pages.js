@@ -1,7 +1,8 @@
 // Budget Pages: the menu data pages (Recurring, History, Other Accounts, Tracker, Paycheck Calculator,
 // Change Logs). Recurring and Tracker: New Entry, tap a row to change it, and an Edit mode with section
 // buttons between rows, delete checkboxes, and a move bar to drag rows. Other Accounts: tap an account
-// to change it, and an Edit mode to add, delete, and drag accounts.
+// to change it, and an Edit mode to add, delete, and drag accounts. Tracker and Change Logs: a Search that
+// looks through their own rows (History's Search is Home's, in Budget Search.js).
 // Every change goes through Process Budget.js (runBudgetAction), which saves and then fires
 // "budget:updated" so the page re-renders.
 
@@ -40,6 +41,7 @@ function renderCurrentPage() {
   const render = PAGE_RENDERERS[window.PAGE];
   const view = document.getElementById("dataView");
   if (render && view) render(view);
+  if (pageSearch && !pageSearch.box.hidden) renderPageSearch(); // Open results follow the change
 }
 
 //#endregion
@@ -78,11 +80,11 @@ function renderRecurringPage(view) {
     rows,
     renderEntry(tr, row) {
       tr.appendChild(cell(row[5], "typeCell"));
-      tr.appendChild(cell(row[0], "titleCell"));
-      tr.appendChild(cell(row[1], "amountCell"));
-      tr.appendChild(cell(row[2]));
+      tr.appendChild(noTranslate(cell(row[0], "titleCell")));
+      tr.appendChild(noTranslate(cell(row[1], "amountCell")));
+      tr.appendChild(noTranslate(cell(showStoredDate(row[2]))));
       tr.appendChild(cell(describeFrequency(row[3])));
-      tr.appendChild(cell(row[4]));
+      tr.appendChild(noTranslate(cell(showStoredDate(row[4]))));
     },
     onEntryClick: (index, origin) => openRecurringPanel(origin, index)
   });
@@ -109,13 +111,25 @@ function renderHistoryPage(view) {
       const td = document.createElement("td");
       td.className = "historyCell";
       String(week[c] ?? "").split("\n").forEach((line, l) => {
-        if (l === 0 || line.trim()) td.appendChild(BudgetUI.renderEntryLine(line, l));
+        // The first line is the day (stored MM/DD/YYYY), shown in this device's date format
+        if (l === 0) td.dataset.date = line.trim();
+        if (l === 0 || line.trim()) td.appendChild(BudgetUI.renderEntryLine(l === 0 ? showStoredDate(line) : line, l));
       });
       tr.appendChild(td);
     }
     fragment.appendChild(tr);
   }
   tableEl.tBodies[0].appendChild(fragment);
+
+  // While a Search date box is waiting (it glows), tapping a day fills it in
+  tableEl.addEventListener("click", (event) => {
+    if (!BudgetUI.datePickActive()) return;
+    const td = event.target.closest("td.historyCell");
+    const date = td && createSafeMidnight(td.dataset.date, true);
+    if (!date || isNaN(date.getTime())) return;
+    event.preventDefault();
+    BudgetUI.pickDate(date, td);
+  });
   view.appendChild(wrapScroll(tableEl));
 }
 
@@ -124,7 +138,7 @@ function renderHistoryPage(view) {
 // Separator rows: ["-", category title, "", "", "-"]
 // Titles starting with ⭕️ also count Transfers
 function renderTrackerPage(view) {
-  renderToolbar("tracker", (origin) => openTrackerPanel(origin, null));
+  renderToolbar("tracker", (origin) => openTrackerPanel(origin, null), { search: true });
   view.replaceChildren();
 
   const rows = indexedRows(trackerData, 1);
@@ -138,16 +152,22 @@ function renderTrackerPage(view) {
     columns: ["Type", "Last 4 Weeks", "Last 3 Months", "Last 365 Days", "Aliases"],
     rows,
     extraClass: "trackerTable",
-    renderEntry(tr, row) {
-      tr.appendChild(cell(row[0], "titleCell"));
-      tr.appendChild(cell(row[1], "amountCell"));
-      tr.appendChild(cell(row[2], "amountCell"));
-      tr.appendChild(cell(row[3], "amountCell"));
-      tr.appendChild(cell(trackerAliasText(row), "aliasCell"));
-    },
+    renderEntry: trackerCells,
     onEntryClick: (index, origin) => openTrackerPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
+}
+
+// A tracker row's cells (the page's table, and its Search results)
+function trackerCells(tr, row) {
+  // Costs, Gains, and Undefined are the budget's own words (they translate); other rows are the person's
+  const isAuto = TRACKER_AUTO_ROWS.includes(cleanString(row[0]));
+  tr.appendChild(isAuto ? cell(row[0], "titleCell") : noTranslate(cell(row[0], "titleCell")));
+  tr.appendChild(noTranslate(cell(row[1], "amountCell")));
+  tr.appendChild(noTranslate(cell(row[2], "amountCell")));
+  tr.appendChild(noTranslate(cell(row[3], "amountCell")));
+  const aliases = cell(trackerAliasText(row), "aliasCell");
+  tr.appendChild(isAuto && cleanString(row[0]) !== "undefined" ? aliases : noTranslate(aliases));
 }
 
 // Other Accounts: [0] column titles, then [name, balance, "default" | ""] (see Other Accounts in Process
@@ -160,7 +180,7 @@ function renderAccountsPage(view) {
 
   const tableEl = buildRowTable({
     tableName: "accounts",
-    columns: ["Account", "Balance", `By ${formatToMMDD(gridEndDate)}`],
+    columns: ["Account", "Balance", `By ${showDay(gridEndDate)}`],
     rows: indexedRows(accountsData.list, 1),
     extraClass: "accountsTable",
     sections: false,
@@ -168,9 +188,9 @@ function renderAccountsPage(view) {
     lockedNote: (row) => `${row[0]} is your default account, so it can't be deleted.`,
     renderEntry(tr, row, index) {
       const summary = summaries.get(index);
-      tr.appendChild(cell(row[0], "titleCell"));
-      tr.appendChild(cell(formatMoney(summary ? summary.today : 0), "amountCell"));
-      tr.appendChild(cell(formatMoney(summary ? summary.calendarEnd : 0), "amountCell"));
+      tr.appendChild(noTranslate(cell(row[0], "titleCell")));
+      tr.appendChild(noTranslate(cell(formatMoney(summary ? summary.today : 0), "amountCell")));
+      tr.appendChild(noTranslate(cell(formatMoney(summary ? summary.calendarEnd : 0), "amountCell")));
     },
     onEntryClick: (index, origin) => openAccountPanel(origin, index)
   });
@@ -181,6 +201,7 @@ function renderAccountsPage(view) {
 // Change Logs (the spreadsheet's "Form Entries" tab), newest first:
 // [time, duration, action, detail, detail, detail, detail, status]
 function renderLogsPage(view) {
+  renderSearchToolbar();
   view.replaceChildren();
   const rows = logsData.slice(1).filter(row => !isBlankRow(row));
   if (rows.length === 0) {
@@ -188,23 +209,28 @@ function renderLogsPage(view) {
     return;
   }
 
-  const tableEl = createDataTable(["Time", "Took", "Action", "Details"]);
+  const tableEl = createDataTable(LOG_COLUMNS);
   tableEl.classList.add("logsTable");
   const fragment = document.createDocumentFragment();
-  for (let row of rows) {
-    const tr = document.createElement("tr");
-    if (row[7] === "Error") tr.className = "errorRow";
-    if (row[7] === "Not Found") tr.className = "notFoundRow";
-    tr.appendChild(cell(row[0], "timeCell"));
-    tr.appendChild(cell(String(row[1]).replace(" Seconds", "s"), "timeCell"));
-    tr.appendChild(cell(row[2], "actionCell"));
-    const details = row.slice(3, 7).filter(detail => String(detail).trim() !== "");
-    if (row[7]) details.push("Status: " + row[7]);
-    tr.appendChild(cell(details.join("\n"), "detailsCell"));
-    fragment.appendChild(tr);
-  }
+  for (let row of rows) fragment.appendChild(logRow(row));
   tableEl.tBodies[0].appendChild(fragment);
   view.appendChild(wrapScroll(tableEl));
+}
+
+const LOG_COLUMNS = ["Time", "Took", "Action", "Details"];
+
+// One Change Logs row (the page's table, and its Search results)
+function logRow(row) {
+  const tr = document.createElement("tr");
+  if (row[7] === "Error") tr.className = "errorRow";
+  if (row[7] === "Not Found") tr.className = "notFoundRow";
+  tr.appendChild(noTranslate(cell(row[0], "timeCell")));
+  tr.appendChild(noTranslate(cell(String(row[1]).replace(" Seconds", "s"), "timeCell")));
+  tr.appendChild(cell(row[2], "actionCell"));
+  const details = row.slice(3, 7).filter(detail => String(detail).trim() !== "");
+  if (row[7]) details.push("Status: " + row[7]);
+  tr.appendChild(noTranslate(cell(details.join("\n"), "detailsCell"))); // Titles, amounts, and dates
+  return tr;
 }
 
 // Paycheck Calculator: the last calculation's results and how they add up, then the inputs
@@ -334,12 +360,152 @@ function calculatorForm(inputs) {
 //#endregion
 
 // =====================================================================
+// #region PAGE SEARCH (Tracker and Change Logs)
+// =====================================================================
+// 🔎 Search on the Tracker and Change Logs pages looks through that page's own rows. It floats over the page
+// like Home's Search (×, Escape, or the button again closes it), and as you type, it lists the rows that have
+// every word you typed, in any column. On the tracker, tapping a found row opens it.
+
+const PAGE_SEARCHES = {
+  tracker: {
+    placeholder: "A row or an alias, like food",
+    noun: ["row", "rows"],
+    columns: ["Type", "Last 4 Weeks", "Last 3 Months", "Last 365 Days", "Aliases"],
+    rows: () => indexedRows(trackerData, 1).filter(({ row }) => !isSeparatorRow(row)),
+    text: (row) => [row[0], row[4], trackerAliasText(row)].join(" "),
+    render: (row) => {
+      const tr = document.createElement("tr");
+      trackerCells(tr, row);
+      return tr;
+    },
+    open: (index) => openTrackerPanel(document.querySelector(`#dataView tr[data-index="${index}"]`) || document.getElementById("pageSearchButton"), index)
+  },
+  logs: {
+    placeholder: "A title, an action, or a date",
+    noun: ["change", "changes"],
+    columns: LOG_COLUMNS,
+    rows: () => logsData.map((row, index) => ({ index, row })).slice(1).filter(({ row }) => !isBlankRow(row)),
+    text: (row) => row.join(" "),
+    render: logRow,
+    open: null
+  }
+};
+
+let pageSearch = null; // { box, input, results }, made the first time it opens
+
+function pageSearchButton() {
+  const button = toolbarButton("🔎 Search", "", () => setPageSearchOpen(!pageSearch || pageSearch.box.hidden));
+  button.id = "pageSearchButton";
+  button.setAttribute("aria-haspopup", "dialog");
+  button.setAttribute("aria-controls", "pageSearchBox");
+  button.setAttribute("aria-expanded", String(!!pageSearch && !pageSearch.box.hidden));
+  return button;
+}
+
+// A toolbar with only 🔎 Search (Change Logs)
+function renderSearchToolbar() {
+  const bar = document.getElementById("pageToolbar");
+  if (bar) bar.replaceChildren(pageSearchButton());
+}
+
+function setPageSearchOpen(open) {
+  if (!open && !pageSearch) return;
+  const { box, input } = pageSearch || makePageSearch();
+  box.hidden = !open;
+  document.getElementById("pageSearchButton")?.setAttribute("aria-expanded", String(open));
+  if (open) {
+    renderPageSearch();
+    input.focus({ preventScroll: true });
+  }
+}
+
+// The floating box, in <body> (the page's #transitionContainer is transformed, which would make a fixed box
+// scroll with it)
+function makePageSearch() {
+  const config = PAGE_SEARCHES[window.PAGE];
+  const box = BudgetUI.element("section", "searchBar searchBox pageSearch");
+  box.id = "pageSearchBox";
+  box.hidden = true;
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-labelledby", "pageSearchTitle");
+
+  const header = BudgetUI.element("header", "panelHeader");
+  const title = BudgetUI.element("h3", "", "Search");
+  title.id = "pageSearchTitle";
+  const close = BudgetUI.element("button", "panelClose", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", "Close search");
+  close.addEventListener("click", () => {
+    setPageSearchOpen(false);
+    document.getElementById("pageSearchButton")?.focus({ preventScroll: true });
+  });
+  header.append(title, close);
+
+  const input = BudgetUI.element("input", "pageSearchInput");
+  input.type = "text";
+  input.placeholder = config.placeholder;
+  input.autocomplete = "off";
+  input.setAttribute("aria-label", "Search for");
+  input.addEventListener("input", renderPageSearch);
+
+  const results = BudgetUI.element("div", "searchResults");
+  results.setAttribute("aria-live", "polite");
+  results.hidden = true;
+  box.append(header, input, results);
+  document.body.appendChild(box);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !box.hidden && !document.querySelector(".budgetPanel")) setPageSearchOpen(false);
+  });
+  pageSearch = { box, input, results };
+  return pageSearch;
+}
+
+// The rows with every typed word (in any order, any column, upper or lower case)
+function renderPageSearch() {
+  const config = PAGE_SEARCHES[window.PAGE];
+  const { input, results } = pageSearch;
+  const words = input.value.normalize("NFKC").toLowerCase().split(/\s+/).filter(Boolean);
+  results.replaceChildren();
+  results.hidden = words.length === 0;
+  if (words.length === 0) return;
+
+  const rows = config.rows();
+  const found = rows.filter(({ row }) => {
+    const text = config.text(row).normalize("NFKC").toLowerCase();
+    return words.every(word => text.includes(word));
+  });
+  const [one, many] = config.noun;
+  results.appendChild(BudgetUI.element("p", "searchSummary", `${found.length} of ${rows.length} ${rows.length === 1 ? one : many} found${config.open && found.length && !editMode ? ". Tap one to open it." : ""}`));
+  if (found.length === 0) return;
+
+  const tableEl = createDataTable(config.columns);
+  for (const { index, row } of found) {
+    const tr = config.render(row);
+    if (config.open && !editMode) {
+      tr.classList.add("clickable");
+      tr.addEventListener("click", () => {
+        setPageSearchOpen(false);
+        config.open(index);
+      });
+    }
+    tableEl.tBodies[0].appendChild(tr);
+  }
+  const scroll = BudgetUI.element("div", "dataScroll searchScroll");
+  scroll.appendChild(tableEl);
+  results.appendChild(scroll);
+}
+
+//#endregion
+
+// =====================================================================
 // #region TOOLBAR + EDIT MODE TABLE
 // =====================================================================
 
 // New Entry + Edit normally; Delete Selected + Done in edit mode. Other Accounts adds accounts in edit
-// mode instead (newLabel: the add button's label, newInEditMode: show it in edit mode).
-function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMode = false } = {}) {
+// mode instead (newLabel: the add button's label, newInEditMode: show it in edit mode). search: a 🔎 Search
+// button too, outside edit mode (see PAGE SEARCH).
+function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMode = false, search = false } = {}) {
   const bar = document.getElementById("pageToolbar");
   if (!bar) return;
   bar.replaceChildren();
@@ -351,8 +517,10 @@ function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMo
       editMode = true;
       selectedRows.clear();
       BudgetUI.closePanel(true);
+      setPageSearchOpen(false);
       renderCurrentPage();
     }));
+    if (search) bar.append(pageSearchButton());
     return;
   }
 
@@ -520,7 +688,9 @@ function selectCell(index, selectable = true) {
 // #region DRAG TO MOVE
 // =====================================================================
 // Hold a row's move bar and drag. Rows reorder live under the pointer. The page scrolls only
-// while the pointer is in the top or bottom 25% of the screen, faster closer to the edge.
+// while the pointer is in the top or bottom 25% of the screen, faster closer to the edge. The pointer is
+// followed on the whole page: moving the row in the table makes the browser let go of a pointer capture,
+// which used to stop the drag after the first row it passed.
 
 const EDGE_ZONE = 0.25;  // Fraction of the screen height at each edge that scrolls
 const MAX_SCROLL = 22;   // Pixels per frame at the very edge
@@ -530,12 +700,12 @@ function startRowDrag(event, bar, tableEl, tableName) {
   const row = bar.closest("tr");
   const body = tableEl.tBodies[0];
   const startOrder = rowOrder(body);
+  const pointerId = event.pointerId;
   let pointerY = event.clientY;
   let frame = null;
 
   tableEl.classList.add("isDragging");
   row.classList.add("dragRow");
-  try { bar.setPointerCapture(event.pointerId); } catch {}
 
   // Put the dragged row before the first row whose middle is below the pointer
   const placeRow = () => {
@@ -564,15 +734,17 @@ function startRowDrag(event, bar, tableEl, tableName) {
   };
 
   const onMove = (moveEvent) => {
+    if (moveEvent.pointerId !== pointerId) return;
     pointerY = moveEvent.clientY;
     placeRow();
   };
 
-  const onEnd = () => {
+  const onEnd = (endEvent) => {
+    if (endEvent.pointerId !== pointerId) return;
     cancelAnimationFrame(frame);
-    bar.removeEventListener("pointermove", onMove);
-    bar.removeEventListener("pointerup", onEnd);
-    bar.removeEventListener("pointercancel", onEnd);
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onEnd);
+    document.removeEventListener("pointercancel", onEnd);
     tableEl.classList.remove("isDragging");
     row.classList.remove("dragRow");
 
@@ -588,9 +760,9 @@ function startRowDrag(event, bar, tableEl, tableName) {
     });
   };
 
-  bar.addEventListener("pointermove", onMove);
-  bar.addEventListener("pointerup", onEnd);
-  bar.addEventListener("pointercancel", onEnd);
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onEnd);
+  document.addEventListener("pointercancel", onEnd);
   frame = requestAnimationFrame(autoScroll);
 }
 
@@ -613,15 +785,17 @@ function openRecurringPanel(origin, index) {
     size: "large",
     title: existing ? "Change Recurring Entry" : "New Recurring Entry",
     build(form, panel) {
-      const existingEnd = existing && String(existing[4]).trim().toLowerCase() !== "none" ? parseTypedDate(existing[4]) : null;
+      // Stored dates are always MM/DD/YYYY (the boxes show them in this device's date format)
+      const existingEnd = existing && String(existing[4]).trim().toLowerCase() !== "none" ? createSafeMidnight(existing[4], true) : null;
+      const existingStart = existing ? createSafeMidnight(existing[2], true) : null;
 
       const title = BudgetUI.textField({ label: "Title", value: existing ? existing[0] : "", placeholder: "Rent, paycheck, phone..." });
       const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : null });
       const frequency = BudgetUI.frequencyField({ value: existing ? existing[3] : "Every Month" });
-      const start = BudgetUI.dateField({ label: "Start Date", date: existing ? parseTypedDate(existing[2]) : today });
+      const start = BudgetUI.dateField({ label: "Start Date", date: existing ? (isNaN(existingStart) ? null : existingStart) : today });
       const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : null, optional: true });
       // Hidden and Transfer entries can move money into or out of an Other Account (like a savings transfer)
-      const account = BudgetUI.accountField({ accounts: otherAccounts(), title, amount });
+      const account = BudgetUI.accountField({ accounts: otherAccounts(), title, amount, type: () => refraction.value() });
       const refraction = BudgetUI.refractionField({
         value: existing ? getSpecialType(existing[5]) : "❗️",
         allowAuto: false,
@@ -640,7 +814,7 @@ function openRecurringPanel(origin, index) {
         if (!fields.title) return panel.setError("Give the recurring entry a title.");
         if (Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
         if (!existing && fields.amount === null) return panel.setError("Enter an amount, like 12.50.");
-        if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError("That date isn't a real day. Use MM/DD/YYYY.");
+        if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
         fields.frequency = frequency.value();
         if (!fields.frequency) return panel.setError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
         fields.sprite = BudgetUI.RECURRING_SPRITES[refraction.value()];
@@ -709,9 +883,9 @@ function openAccountPanel(origin, index) {
     build(form, panel) {
       const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Cash, investments, HSA..." });
       const fields = [name.el];
-      const howToSet = "To put what's already in the account here, add a Hidden entry for it on the calendar: a cost of that amount, with this account picked under Other Account.";
+      const howToSet = "To put what's already in the account here, add a Hidden entry for it on the calendar: a gain of that amount, with this account picked under Other Account.";
       if (summary) {
-        const balance = BudgetUI.element("p", "panelText accountBalance", formatMoney(summary.today));
+        const balance = noTranslate(BudgetUI.element("p", "panelText accountBalance", formatMoney(summary.today)));
         if (summary.today < 0) balance.classList.add("negative");
         if (summary.today > 0) balance.classList.add("positive");
         fields.push(BudgetUI.field("Balance today", balance, { hint: `It comes from this account's entries. ${howToSet}` }));
@@ -740,7 +914,7 @@ function openAccountPanel(origin, index) {
 }
 
 // An account's entries for its panel: the ones still to come on the calendar, then the latest ones.
-// Amounts are what the account gets (the opposite of the entry's amount).
+// Amounts are what the account gets (a Transfer's opposite amount, or a Hidden entry's own; see accountChange).
 const ACCOUNT_ENTRIES_SHOWN = 8;
 
 function accountEntriesField(summary) {
@@ -752,8 +926,8 @@ function accountEntriesField(summary) {
   const list = BudgetUI.element("ul", "accountEntries");
   for (const entry of [...upcoming, ...latest]) {
     const item = BudgetUI.element("li", entry.date > today ? "accountEntry upcomingChange" : "accountEntry");
-    item.appendChild(BudgetUI.element("span", "accountEntryDate", formatToMMDDYYYY(entry.date)));
-    const amount = BudgetUI.element("span", "accountEntryAmount", (entry.change > 0 ? "+" : "") + formatMoney(entry.change));
+    item.appendChild(noTranslate(BudgetUI.element("span", "accountEntryDate", showDate(entry.date))));
+    const amount = noTranslate(BudgetUI.element("span", "accountEntryAmount", (entry.change > 0 ? "+" : "") + formatMoney(entry.change)));
     if (entry.change > 0) amount.classList.add("positive");
     if (entry.change < 0) amount.classList.add("negative");
     item.appendChild(amount);
@@ -812,6 +986,9 @@ function createDataTable(headers) {
   tableEl.createTBody();
   return tableEl;
 }
+
+// Kept out of the browser's translation: the person's titles, names, amounts, and dates show as they are
+const noTranslate = (el) => BudgetUI.noTranslate(el);
 
 // textContent only: cell text comes from user data and must never be parsed as HTML
 function cell(value, className) {

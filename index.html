@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=10.06.2026.A">
-    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=10.06.2026.A">
+    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=e02be993e2">
     <title>Prismal Budget - Home</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -40,19 +40,19 @@
       
       <header>
         <div class="brand">
-          <img src="/Resources/Prismal.webp" alt="Prismal Logo" class="brand-icon">
-          <h2 class="logo">Prismal Budget</h2>
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <h2 class="logo" translate="no">Prismal Budget</h2>
         </div>
         
         <nav class="navButtons">
-          <a href="/menu">
-            <img src="/Resources/Menu.webp" alt="Menu">
-          </a>
           <a href="/settings.html">
-            <img src="/Resources/Settings.webp" alt="Settings">
+            <img src="/Resources/Settings.webp?v=74326b689c" alt="Settings">
+          </a>
+          <a href="/menu">
+            <img src="/Resources/Menu.webp?v=342f2c8a5e" alt="Menu">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.webp" alt="Logout">
+            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
           </a>
         </nav>
       </header>
@@ -84,7 +84,43 @@
           <p class="panelHint">Want the details? <a href="/how-it-works.html">How Prismal Budget Works</a> explains everything.</p>
         </section>
 
-        <section class="searchBar" aria-label="Search entries">
+        <section class="infoRow">
+          <div class="infoCard lowestCard">
+            <span class="infoLabel">Lowest in bank after today</span>
+            <span id="lowestAmount" class="lowestAmount">--</span>
+          </div>
+          <div class="infoCard daveCard">
+            <!-- Dave's picture: Resources/Dave.webp (see Dave.webpdummy) -->
+            <img class="daveImage" src="/Resources/Dave.webp?v=" alt="Dave">
+            <div class="daveText">
+              <span id="daveTipLabel" class="infoLabel daveTipLabel" hidden>Dave's Tip</span>
+              <p id="daveMessage" class="daveMessage">Loading...</p>
+            </div>
+          </div>
+          <div class="infoCard upcomingCard">
+            <span class="infoLabel">Upcoming</span>
+            <ul id="upcomingList" class="upcomingList"></ul>
+          </div>
+        </section>
+
+        <!-- The calendar's buttons (Calendar Page.js). On phones: Undo and Redo on the left, a big round + (New Entry)
+             in the middle, and Search and Quick Entry on the right. On wider screens, one row: Undo at the very left,
+             Search at the very right. Undo and Redo cover calendar entries and quick entries (Process Budget.js). -->
+        <div class="homeControls">
+          <button id="undoButton" class="budgetButton homeUndo" type="button" disabled aria-label="Undo">↶ Undo</button>
+          <button id="redoButton" class="budgetButton homeRedo" type="button" disabled aria-label="Redo">↷ Redo</button>
+          <button id="addEntryButton" class="newEntryButton" type="button"><span class="newEntryPlus" aria-hidden="true">+</span><span class="newEntryLabel">New Entry</span></button>
+          <button id="quickEntryButton" class="budgetButton homeQuick" type="button">Quick Entry</button>
+          <button id="searchButton" class="budgetButton homeSearch" type="button" aria-haspopup="dialog" aria-controls="searchBox" aria-expanded="false">🔎 Search</button>
+        </div>
+
+        <!-- Search floats over the page from the Search button (Calendar Page.js moves it into <body> and fills
+             in its working title list). Tapping a day on the calendar fills From or To too. -->
+        <section id="searchBox" class="searchBar searchBox" role="dialog" aria-labelledby="searchTitle" hidden>
+          <header class="panelHeader">
+            <h3 id="searchTitle">Search</h3>
+            <button id="searchClose" type="button" class="panelClose" aria-label="Close search">×</button>
+          </header>
           <form id="searchForm" autocomplete="off">
             <!-- Titles to search for, one per line, each with its own All / Costs / Gains / Tracker
                  buttons. Calendar Page.js swaps in the working list, which looks the same. -->
@@ -104,8 +140,8 @@
             </div>
             <div class="searchDates">
               <button id="searchAdd" type="button" class="budgetButton termAdd">+ Add Title</button>
-              <input id="searchFrom" class="dateInput" type="text" inputmode="numeric" placeholder="From MM/DD/YYYY" aria-label="From date" data-next-pick="searchTo">
-              <input id="searchTo" class="dateInput" type="text" inputmode="numeric" placeholder="To MM/DD/YYYY" aria-label="To date">
+              <div class="dateRow"><input id="searchFrom" class="dateInput" type="text" inputmode="numeric" placeholder="From MM/DD/YYYY" aria-label="From date" data-next-pick="searchTo"></div>
+              <div class="dateRow"><input id="searchTo" class="dateInput" type="text" inputmode="numeric" placeholder="To MM/DD/YYYY" aria-label="To date"></div>
               <button type="submit" class="budgetButton primary">Search</button>
             </div>
           </form>
@@ -113,33 +149,6 @@
           <datalist id="trackerRowTitles"></datalist>
           <div id="searchResults" class="searchResults" hidden></div>
         </section>
-
-        <section class="infoRow">
-          <div class="infoCard lowestCard">
-            <span class="infoLabel">Lowest in bank after today</span>
-            <span id="lowestAmount" class="lowestAmount">--</span>
-          </div>
-          <div class="infoCard daveCard">
-            <!-- Dave's picture: Resources/Dave.webp (see Dave.webpdummy) -->
-            <img class="daveImage" src="/Resources/Dave.webp" alt="Dave">
-            <p id="daveMessage" class="daveMessage">Loading...</p>
-          </div>
-          <div class="infoCard upcomingCard">
-            <span class="infoLabel">Upcoming</span>
-            <ul id="upcomingList" class="upcomingList"></ul>
-          </div>
-        </section>
-
-        <div class="calendarToolbar">
-          <!-- Undo and Redo: calendar entries and quick entries (Calendar Page.js; the steps are in Process Budget.js) -->
-          <div class="undoButtons">
-            <button id="undoButton" class="budgetButton" type="button" disabled aria-label="Undo">↶ Undo</button>
-            <button id="redoButton" class="budgetButton" type="button" disabled aria-label="Redo">↷ Redo</button>
-          </div>
-          <!-- Button images: Resources/Quick Entry.png and Resources/New Entry.png (see their .pngdummy files) -->
-          <button id="quickEntryButton" class="imageButton" type="button"><img src="/Resources/Quick Entry.png" alt="Quick Entry Icon"></button>
-          <button id="addEntryButton" class="imageButton" type="button"><img src="/Resources/New Entry.png" alt="New Entry"></button>
-        </div>
         <div id="panelSlot"></div>
 
         <article>
@@ -188,7 +197,7 @@
         </article>
 
         <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
-        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png?v=" alt="Help" loading="lazy" decoding="async"></button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Home Help</h3>
 
@@ -197,7 +206,7 @@
 
           <h4>Undo And Redo</h4>
           <ul>
-            <li><strong>↶ Undo</strong> (above the calendar, or Ctrl+Z / ⌘Z) takes back your last change to the calendar's entries: a New Entry, Set to, Add to it, Move to, Delete, the starting balance, or a quick entry from your home screen icon. <strong>↷ Redo</strong> (Ctrl+Shift+Z / ⌘⇧Z, or Ctrl+Y) puts it back. On a computer, point at a button to see what it will do; either way, a note says what it did.</li>
+            <li><strong>↶ Undo</strong> (above the calendar, at the left, or Ctrl+Z / ⌘Z) takes back your last change to the calendar's entries: a New Entry, Set to, Add to it, Move to, Delete, the starting balance, or a quick entry from your home screen icon. <strong>↷ Redo</strong> (Ctrl+Shift+Z / ⌘⇧Z, or Ctrl+Y) puts it back. On a computer, point at a button to see what it will do; either way, a note says what it did.</li>
             <li>It only covers calendar entries, not recurring entries, the tracker, or your accounts. It remembers up to 25 changes while this tab is open, and forgets them when you sign out.</li>
             <li>If a day was changed some other way since (like on another device), that step can't be undone anymore, so it tells you and skips it instead of erasing the newer change.</li>
           </ul>
@@ -212,22 +221,31 @@
           <ul>
             <li>Your calendar shows four weeks, starting with this one. Each day shows its In Bank balance, its Gains and Costs, and then its entries.</li>
             <li>✅ In Bank is what will be in your account at the end of that day. It turns ⛔️, and the day turns red, when it goes below $0.</li>
-            <li>Tap New Entry to add an entry. Tap a day to zoom in on it, then tap one of its entries to change its amount, move it to another day, or delete it. On a computer, you can also hold the mouse button down and slide across the days to magnify them.</li>
+            <li>Tap the round <strong>+</strong> (New Entry, above the calendar) to add an entry. Tap a day to zoom in on it, then tap one of its entries to change its amount, move it to another day, or delete it.</li>
             <li>Boxes like New Entry float over the page, so nothing under them moves. To close one, tap × or press Escape.</li>
-            <li>While a date box is waiting for a date, tapping a day on the calendar fills it in. If the box you're in covers the day you want, tap 📅 next to the date: the box steps aside until you tap a day, then comes back with that date.</li>
+            <li>While a date box is waiting for a date (it glows, and the calendar gets a dashed outline), tapping a day on the calendar fills it in. Or tap 📅 next to the date to pick one with your device's own date picker.</li>
+            <li>Dates show (and are typed) in your device's date format, like 10/05 or 05/10. To pick another one, go to Settings, Language And Dates. YYYY-MM-DD always works too.</li>
             <li>When a week is over, it moves to History.</li>
           </ul>
 
+          <h4>Viewing The Calendar</h4>
+          <ul>
+            <li><strong>Tap a day</strong> to zoom in on it. On a phone, it fills almost the whole screen and shows all of its entries; on a computer, it doubles in size. Tap its <strong>v</strong> (in its top right corner), or anywhere outside it, to zoom back out.</li>
+            <li><strong>Pinch or stretch with two fingers</strong> on one day to zoom just that day out or in (it turns and moves with your fingers too), or across days to zoom and move the whole calendar. Let go, and it settles back.</li>
+            <li><strong>On a computer,</strong> hold the mouse button down on a day to magnify it, and keep holding while you slide across the days to magnify each one you pass.</li>
+            <li>To zoom the whole page, pinch anywhere else on a phone, or press Ctrl and + (⌘ and + on a Mac) on a computer.</li>
+          </ul>
+
           <h4>Search</h4>
-          <p>Search finds entries by title in History, the calendar, and Upcoming.</p>
+          <p>Search finds entries by title in History, the calendar, and Upcoming (History has the same Search). Tap 🔎 Search (above the calendar, at the right) to open it: it floats over the page, and × or Escape closes it.</p>
           <ul>
             <li>Type a title, then pick what to find for it: <strong>All</strong> finds every entry with that title, <strong>Costs</strong> only its costs, and <strong>Gains</strong> only its gains.</li>
             <li><strong>Tracker</strong> finds what a tracker row counts: type the row's title (like Food), and Search uses that row's aliases, each with its own All, Costs, or Gains setting.</li>
             <li>To search for more than one title, press Enter (or tap + Add Title) to start the next line, and pick that line's own buttons. Tap × to take a line out.</li>
             <li>Tap Search, or press Enter on an empty line, to search. Leave the title blank to find everything (or every cost, or every gain).</li>
-            <li>From and To are optional: a blank From searches from the beginning, and a blank To searches to the end. You can tap days on the calendar to fill them in. To include recurring entries after the calendar, pick a To date after it (up to two years ahead).</li>
+            <li>From and To are optional: a blank From searches from the beginning, and a blank To searches to the end. Tap 📅 to pick a date, or tap days on the calendar to fill them in. To include recurring entries after the calendar, pick a To date after it (up to two years ahead).</li>
             <li>A title can have two tracker rows, one that counts transfers (like ⭕️Food) and one that doesn't (Food). Type the ⭕️ to search the first; otherwise Search uses the one that doesn't.</li>
-            <li>Results float just under the search bar, newest first, with a total of the ones that are checked. ⭕️ Transfers and entries for your Other Accounts start unchecked, since they aren't really costs or gains, unless you searched a tracker row that counts transfers. Tap × to close them.</li>
+            <li>Results show under the search, newest first, with a total of the ones that are checked. ⭕️ Transfers start unchecked, since they aren't really costs or gains, unless you searched a tracker row that counts transfers. Tap × to close them.</li>
           </ul>
 
           <h4>Entry Types</h4>
@@ -236,6 +254,7 @@
             <li><strong>Recurring entries</strong> (✔️ ✔️✖️ ✔️⭕️) always start with a checkmark. They come from your Recurring Entries page (like paychecks and bills), and are added for you on today and every day after. Once a day passes, its recurring entries turn into unique entries, so later changes to a recurring entry never change days that already happened.</li>
             <li><strong>Unique entries</strong> (❗️ ✖️ ⭕️ ❗️✔️ ✖️✔️ ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
             <li><strong>Temporary recurring entries</strong> (❗️✔️ ✖️✔️ ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
+            <li>If a recurring entry's End Date moves before a day you changed (or you delete the recurring entry), that day's temporary entry from today on becomes a plain unique entry, like ❗️, since there's nothing left for it to hold back. A $0.00 one just goes away.</li>
             <li>Adding an entry with the same title and refraction type as one already on that day adds the two together. So a day has at most three entries with the same title: one Regular, one Hidden, and one Transfer.</li>
           </ul>
 
@@ -243,20 +262,20 @@
           <p>Besides the checkmark, an entry's emoji is its refraction type (a recurring entry with only ✔️ is Regular):</p>
           <ul>
             <li>❗️ <strong>Regular</strong>: a normal cost or gain. It changes In Bank, and the tracker counts it.</li>
-            <li>✖️ <strong>Hidden</strong>: money spent or received outside your budget's account, like spending cash. Only the tracker counts it: In Bank and the day's Gains and Costs stay the same.</li>
+            <li>✖️ <strong>Hidden</strong>: money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same.</li>
             <li>⭕️ <strong>Transfer</strong>: money moving between your own accounts without really being gained or lost, like depositing cash. It changes In Bank, but it isn't a cost or gain: the day's Gains and Costs leave it out, and so does the tracker, unless a row is set to count transfers.</li>
             <li><strong>Auto</strong>, when you add an entry, uses the type of an entry with that title already on that day, or Regular if there isn't one.</li>
+            <li>In New Entry, the little ? next to Refraction Type shows these anytime.</li>
           </ul>
 
           <h4>Other Accounts</h4>
-          <p>When you pick Hidden or Transfer for a new entry, you can also pick one of your Other Accounts, like Savings. The list shows each account's balance today. The entry is titled with the account's name, and the account gets the opposite amount: a cost on your calendar adds to the account, and a gain takes from it.</p>
+          <p>When you pick Hidden or Transfer for a new entry, you can also pick one of your Other Accounts, like Savings. The list shows each account's balance today, and the entry is titled with the account's name.</p>
           <ul>
-            <li>Moving $100 into savings: a $100 Transfer cost, with Savings picked. In Bank goes down $100, and Savings goes up $100.</li>
-            <li>Taking $200 out of savings: a $200 Transfer gain, with Savings picked. In Bank goes up $200, and Savings goes down $200.</li>
-            <li>Putting $50 in cash into savings: a $50 Hidden cost, with Savings picked. In Bank stays the same, and Savings goes up $50.</li>
-            <li>An account's balance is only ever its entries added up. To put in what's already in an account (like the $3,000 already in your savings), add a $3,000 Hidden cost with that account picked.</li>
+            <li>A <strong>Transfer</strong> moves money between your budget's account and that one, so the account gets the opposite amount. Moving $100 into savings is a $100 Transfer cost: In Bank goes down $100, and Savings goes up $100. Taking $200 out is a $200 Transfer gain: In Bank goes up $200, and Savings goes down $200.</li>
+            <li>A <strong>Hidden</strong> entry happens in the account itself, so the account changes by the same amount, and In Bank stays the same. Putting $50 in cash into savings is a $50 Hidden gain (Savings goes up $50); paying $30 straight out of savings is a $30 Hidden cost (Savings goes down $30).</li>
+            <li>An account's balance is only ever its entries added up. To put in what's already in an account (like the $3,000 already in your savings), add a $3,000 Hidden gain with that account picked.</li>
           </ul>
-          <p>Since the money is still yours, these entries aren't costs or gains: the tracker treats them like transfers. Other Accounts (in the Menu) shows each account's balance.</p>
+          <p>A Transfer for an account is still a transfer: it isn't a cost or gain, and only tracker rows set to count transfers count it. A Hidden entry for an account is a cost or gain like any Hidden entry, so the day's Gains and Costs show it, and the tracker counts it. Other Accounts (in the Menu) shows each account's balance.</p>
 
           <h4>The Last Day's Extra Lines</h4>
           <p>The calendar's last day has two extra lines that look at the 28 days after the calendar, counting your recurring entries and Upcoming entries (but not Hidden ones):</p>
@@ -270,11 +289,25 @@
           <ul>
             <li><strong>Lowest in bank after today</strong> is the lowest In Bank from today through the 28 days after the calendar.</li>
             <li><strong>Dave</strong> looks over your budget and lets you know what to keep in mind: days that go below $0, going below $0 in the 28 days after the calendar, uncommon recurring entries (ones that land every 3 months or less often) on the calendar, and Upcoming entries. Dave also has a new affirmation for you every day.</li>
+            <li><strong>Dave's tips:</strong> the first time you open Home each day, Dave shows a tip for 10 minutes (his card glows, with a "Dave's Tip" label), and each visit after that shows the next one, until he's shown all of the day's tips. They're: on payday, about how much you tend to spend (besides your recurring bills) before the next paycheck; when the last 7 days' spending is well over a usual week's (both of these once you have 4 months of History); a big uncommon bill (or a one-time cost added for a later day) of $200 or more in the next 60 days, and how much to set aside from each paycheck until then; once a week, a reminder to check your In Bank against your bank and add what's missing (or a Catchup entry); once a week, when your Catchup entries add up to $100 or more in the last 30 days, a nudge to add purchases as they happen; and, right after a purchase that takes Lowest in bank after today below $0 (or further below), whether a refund is possible.</li>
             <li><strong>Upcoming</strong> lists entries dated after the calendar. Each one moves onto the calendar when its day shows up.</li>
           </ul>
 
-          <h4>Quick Entry Icon</h4>
-          <p>The Quick Entry Icon button puts an icon on your phone's home screen that opens a New Entry form, with no login needed. The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one). Its entries show up here the next time you open Prismal Budget. If your password changes, the icon stops working, and you can turn icons off anytime in Settings.</p>
+          <h4>Quick Entry</h4>
+          <p>The Quick Entry button (above the calendar, at the right) puts an icon on your phone's home screen that opens a New Entry form, with no login needed. The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms. Its entries show up here the next time you open Prismal Budget.</p>
+          <p><strong>Prisms</strong> are entries you add often, saved on the Quick Entry page (Add Prism). Tapping one fills in New Entry with what it keeps (like a title, an amount, a type, or an account), and you fill in the rest. They're saved with your budget, so every icon has them. If your password changes, the icon stops working, and you can turn icons off anytime in Settings.</p>
+        </section>
+
+        <!-- TEMPORARY: bringing a Google Sheets budget over (Sheet Import.js). Delete this card with that file
+             once the last spreadsheet is moved. -->
+        <section id="sheetImport" class="budgetCard sheetImport" aria-labelledby="sheetImportTitle">
+          <h3 id="sheetImportTitle">Bring Over A Spreadsheet Budget</h3>
+          <p class="panelHint">For moving a Prismal Budget Google Sheet into this account. In Google Sheets, tap Share and set General access to Anyone with the link, then paste its link here. Its calendar, History, recurring entries, tracker, Upcoming, Change Logs (Form Entries), and paycheck calculator come over, replacing what this budget has.</p>
+          <form id="sheetImportForm" class="startForm" autocomplete="off">
+            <input id="sheetImportLink" type="text" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://docs.google.com/spreadsheets/d/..." aria-label="Spreadsheet link">
+            <button type="submit" class="budgetButton primary">Import</button>
+          </form>
+          <p id="sheetImportStatus" class="panelHint" role="status" hidden></p>
         </section>
       </main>
     </div>

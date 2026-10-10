@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=10.06.2026.A">
-    <link rel="preload" href="/Fonts/MainFont-Latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=10.06.2026.A">
+    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=e02be993e2">
     <title>Prismal Budget - Other Accounts</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -40,17 +40,17 @@
       <header>
         <div class="stacked">
           <h1>Other Accounts</h1>
-          <h2>Prismal Budget</h2>
+          <h2 translate="no">Prismal Budget</h2>
         </div>
         <nav class="navButtons">
           <a id="normalBack" href="back">
-            <img src="/Resources/Back.webp" alt="Back">
+            <img src="/Resources/Back.webp?v=e8de49845b" alt="Back">
           </a>
           <a href="/">
-            <img src="/Resources/Home.webp" alt="Home">
+            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
           </a>
           <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.webp" alt="Logout">
+            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
           </a>
         </nav>
       </header>
@@ -62,7 +62,7 @@
         <div id="dataView"></div>
 
         <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
-        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png" alt="Help" loading="lazy" decoding="async"></button>
+        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png?v=" alt="Help" loading="lazy" decoding="async"></button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Other Accounts Help</h3>
           <p>Other Accounts keeps track of your money outside your budget's account, like savings, cash, or investments. Balance is what's in each account today. The By column also counts what's still coming up on your calendar.</p>
@@ -70,17 +70,17 @@
           <h4>Moving Money In And Out</h4>
           <ul>
             <li>When you add a Hidden or Transfer entry (on the calendar, in Recurring Entries, or with the Quick Entry icon), pick the account under Other Account. The list shows each account's balance today, and the entry is titled with the account's name.</li>
-            <li>The account gets the opposite of the entry's amount: a cost on your calendar adds to the account, and a gain takes from it. Moving $100 into savings is a $100 Transfer cost: In Bank goes down $100, and Savings goes up $100.</li>
-            <li>⭕️ <strong>Transfer</strong> changes In Bank too, since the money moves between your budget's account and this one. ✖️ <strong>Hidden</strong> doesn't, like putting cash into savings.</li>
+            <li>⭕️ <strong>Transfer</strong> moves money between your budget's account and this one, so In Bank changes and the account gets the opposite amount. Moving $100 into savings is a $100 Transfer cost: In Bank goes down $100, and Savings goes up $100.</li>
+            <li>✖️ <strong>Hidden</strong> happens in the account itself, so In Bank stays the same and the account changes by the same amount. Putting $50 in cash into savings is a $50 Hidden gain (Savings goes up $50); paying $30 straight out of savings is a $30 Hidden cost (Savings goes down $30).</li>
             <li>Every Hidden or Transfer entry titled with an account's name counts, even one you typed yourself. Changing, moving, or deleting one changes the account too.</li>
-            <li>Since the money is still yours, the tracker doesn't count these entries as costs or gains. Like transfers, only a tracker row set to count transfers counts them.</li>
+            <li>Entries for an account keep their type everywhere else: a ⭕️ Transfer is still a transfer (it isn't a cost or gain, and only a tracker row set to count transfers counts it), and a ✖️ Hidden one is a cost or gain like any Hidden entry (the day's Gains and Costs show it, and the tracker counts it).</li>
           </ul>
 
           <h4>Balances</h4>
           <ul>
             <li>An account's balance is its entries added up, so there's no balance to type in. Tap an account to see its latest entries and the ones coming up.</li>
-            <li>To put in what's already in an account, like the $3,000 already in your savings, add a Hidden entry for it: a $3,000 cost with Savings picked under Other Account. In Bank stays the same, and Savings goes up $3,000.</li>
-            <li>If an account ever drifts from the real one, add a Hidden entry for the difference the same way (a cost adds to the account, a gain takes from it).</li>
+            <li>To put in what's already in an account, like the $3,000 already in your savings, add a Hidden entry for it: a $3,000 gain with Savings picked under Other Account. In Bank stays the same, and Savings goes up $3,000 (like any Hidden gain, it shows in that day's Gains, and the tracker counts it).</li>
+            <li>If an account ever drifts from the real one, add a Hidden entry for the difference the same way (a gain adds to the account, a cost takes from it).</li>
           </ul>
 
           <h4>Edit</h4>
