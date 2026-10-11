@@ -11,19 +11,17 @@
 
 /* Table Layout */
 .elastic-table {
-  width: 90vw;   
-  height: 60vh;  
+  width: 90vw;
+  height: 60vh;
   table-layout: fixed;
-  
-  /* CHANGE THIS: switch from collapse to separate */
-  border-collapse: separate; 
-  
-  /* ADD THIS: sets the 1% gap between all cells */
-  border-spacing: 1%; 
-  
+
+  /* Separate cells, with a 1% gap between them */
+  border-collapse: separate;
+  border-spacing: 1%;
+
   /* Prevent text highlighting while drag-zooming on PC */
-  user-select: none; 
-  -webkit-user-select: none; 
+  user-select: none;
+  -webkit-user-select: none;
 
   /* Smoothly animates the table's transform when released */
   transition: transform 0.25s ease-in-out;
@@ -31,14 +29,14 @@
 
 /* The actual element that scales, zooms, and tilts */
 .cell-content {
-  pointer-events: none; 
-  background: linear-gradient(to bottom, rgb(15, 0, 80), transparent); 
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgb(15, 0, 80), transparent);
   padding: 4px;
-  box-sizing: border-box; 
-  
-  /* NEW: Cuts off excess text normally */
-  overflow: hidden; 
-  
+  box-sizing: border-box;
+
+  /* Cuts off excess text (a zoomed day shows all of it) */
+  overflow: hidden;
+
   width: 100%;
   height: 100%;
   position: absolute;
@@ -54,42 +52,28 @@
   transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-/* PC Magnification triggered by JS */
-.elastic-table td.is-magnified .cell-content {
-  transform: scale(2); 
-  transition: transform 0.1s ease-out; 
-  
-  /* NEW: Reveals the text when zoomed on PC */
-  overflow: visible;
-  
-  user-select: none; /* Prevents text highlighting while dragging */
-  -webkit-user-select: none; /* For Safari */
-}
-
-/* 
- * Mouse Interaction (Magnifying Glass Effect)
- * Pure CSS handles the click-down and cursor-move logic 
+/*
+ * PC Mouse Interaction (Magnifying Glass Effect): holding the mouse down on a day magnifies it
+ * (Process Budget.js adds .is-magnified)
  */
-
-/* 
- * PC Mouse Interaction (Magnifying Glass Effect)
- * Isolated from mobile using media queries.
- */
-/* 1. Base hover effect (Optional, keeps z-index clean on PC) */
+/* 1. Base hover effect (keeps z-index clean on PC) */
 @media (hover: hover) and (pointer: fine) {
   .elastic-table td:hover {
     z-index: 10;
   }
 }
 
-/* 2. Magnification triggered by JS (No media query restrictions!) */
+/* 2. The held day stays above the ones next to it, magnified with all of its text showing */
 .elastic-table td.is-magnified {
-  z-index: 20; /* Ensures the actively held cell stays above adjacent hovers */
+  z-index: 20;
 }
 
 .elastic-table td.is-magnified .cell-content {
-  transform: scale(2); 
-  transition: transform 0.1s ease-out; 
+  transform: scale(2);
+  transition: transform 0.1s ease-out;
+  overflow: visible;
+  user-select: none; /* Prevents text highlighting while dragging */
+  -webkit-user-select: none;
 }
 
 /* Edit mode: Stays zoomed until clicked outside */
@@ -213,6 +197,8 @@
   --PANEL_LINE: rgba(189, 189, 189, 0.15);
   --PANEL_BORDER: rgba(189, 189, 189, 0.35);
   --PANEL_RADIUS: 14px;
+  /* Floating windows (panels, Search, Help): a purple to blue diagonal */
+  --HOVER_GRADIENT: linear-gradient(135deg, rgb(72, 8, 122) 0%, rgb(40, 6, 112) 48%, rgb(10, 24, 118) 100%);
   --NEGATIVE_TEXT: #ff6b6b;
   --POSITIVE_TEXT: #5ee39a;              /* Positive entries */
   --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
@@ -279,9 +265,13 @@
   text-align: center;
   white-space: nowrap;
   color: var(--BASE_COLOR);
-  background: linear-gradient(to bottom, var(--PANEL_DEEP), var(--PANEL_SOFT));
-  border-bottom: 2px solid #ee0000;
-  border-image: linear-gradient(90deg, #ee0000, #ff4500, #ff9a1a) 1; /* The red-orange gradient */
+  /* The red-orange bar under the column titles is one gradient across the whole row: Budget UI.js
+     (spanHeaderBar) sets --barWidth (the row's width) and each title's --barX (where it sits in the row), so
+     each title shows its own piece of the same gradient. Before that, each title shows the whole gradient. */
+  background:
+    linear-gradient(90deg, #ee0000, #ff4500, #ff9a1a) var(--barX, 0px) 100% / var(--barWidth, 100%) 2px no-repeat,
+    linear-gradient(to bottom, var(--PANEL_DEEP), var(--PANEL_SOFT));
+  border-bottom: none;
   box-shadow: 0 6px 12px -8px rgba(200, 0, 0, 0.9);
 }
 
@@ -476,28 +466,6 @@ body.datePicking .historyTable td {
   pointer-events: none;
 }
 
-/* Image buttons show their alt text until the image is added */
-.imageButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0.35em 1.1em;
-  font-size: var(--UI_TEXT);
-  border-width: 2px;
-}
-
-.imageButton img {
-  width: auto;
-  height: auto;
-  max-height: 7vmin;
-  min-height: 1.2em;
-  border-radius: 0;
-  object-fit: contain;
-  color: var(--BASE_COLOR);
-  font: inherit;
-}
-
 /*========================================*
  *  PANELS (new entry, entry options, recurring, tracker, sections)
  *========================================*/
@@ -534,14 +502,14 @@ body.datePicking .historyTable td {
   max-height: calc(100dvh - 2 * max(2vh, env(safe-area-inset-top, 0px)));
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+  background: var(--HOVER_GRADIENT);
 }
 
 .budgetPanel.small {
   position: absolute;
   z-index: 1300;
   width: min(88vw, 340px);
-  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+  background: var(--HOVER_GRADIENT);
 }
 
 /* A date box with its 📅 button */
@@ -838,12 +806,18 @@ input.dateInput.isPickTarget {
   width: auto;
 }
 
-.termRow .segmented {
+/* A line's buttons and its ×, together: × right after the last button, and all of it at the right when it
+   wraps under the title (instead of × on a line of its own) */
+.termControls {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4em;
+  margin-left: auto;
 }
 
-.termRemove {
-  margin-left: auto;
+.termRow .segmented {
+  flex: 0 1 auto;
 }
 
 .budgetButton.termAdd {
@@ -1018,7 +992,7 @@ input.dateInput.isPickTarget {
   font-size: var(--UI_TEXT);
   text-align: left;
   color: var(--BASE_COLOR);
-  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+  background: var(--HOVER_GRADIENT);
   border: 2px solid var(--PANEL_BORDER);
   border-radius: var(--PANEL_RADIUS);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 18px rgba(200, 0, 0, 0.25);
@@ -1214,12 +1188,13 @@ input.dateInput.isPickTarget {
 }
 
 .daveCard {
+  position: relative; /* Its tip's gradient border (below) */
   display: flex;
   align-items: flex-start;
   gap: 0.9em;
 }
 
-/* Room for Dave's picture (shows the alt text until there is one) */
+/* Dave's picture, in a circle (it shows his name if it can't load) */
 .daveImage {
   flex-shrink: 0;
   width: 12vmin;
@@ -1247,10 +1222,6 @@ input.dateInput.isPickTarget {
 
 /* Dave's tip (Process Budget.js DAVE'S TIPS): for its 10 minutes, his card gets the red-orange gradient border
    and a slow glow (it fades in and out with opacity alone, so it never makes the page redraw), and a label */
-.daveCard {
-  position: relative;
-}
-
 .daveCard.daveTip {
   border-color: transparent;
 }
@@ -1317,9 +1288,9 @@ input.dateInput.isPickTarget {
   opacity: 0.7;
 }
 
-/* The calendar's buttons, under Lowest, Dave, and Upcoming. On phones, a grid: Undo over Redo at the left, a big
-   round + (New Entry) in the middle, and Search over Quick Entry at the right. On wider screens, one row: Undo at
-   the very left, Search at the very right, New Entry in the middle. */
+/* The calendar's buttons, just above it (Lowest, Dave, and Upcoming are under it). On phones, a grid: Undo over
+   Redo at the left, a big round + (New Entry) in the middle, and Search over Quick Entry at the right. On wider
+   screens, one row: Undo at the very left, Search at the very right, New Entry in the middle. */
 .homeControls {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -1827,9 +1798,17 @@ a.budgetButton:hover {
   overflow-wrap: anywhere;
 }
 
-/* Help: the Help button at the bottom of a page opens the page's help, floating over a dimmed page */
+/* Help: the Help button at the bottom of a page opens the page's help, floating over a dimmed page. The
+   word in a small pill (its padding follows the panels' text size, the word a little bigger on big screens). */
 .helpButton {
-  margin-top: 5vmin;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 5vmin 0 0;
+  padding: calc(var(--UI_TEXT) * 0.35) calc(var(--UI_TEXT) * 1.1);
+  font-size: max(12px, 2.4vmin);
+  line-height: 1.1;
+  border-width: 2px;
 }
 
 .budgetCard.helpView {
@@ -1844,7 +1823,7 @@ a.budgetButton:hover {
   overflow-y: auto;
   overscroll-behavior: contain;
   line-height: 1.45;
-  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(10, 0, 50));
+  background: var(--HOVER_GRADIENT);
   border-color: var(--PANEL_BORDER);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.7), 0 0 18px rgba(200, 0, 0, 0.25);
 }

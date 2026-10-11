@@ -3,9 +3,13 @@
 // everywhere, and some are black on the dark background). Only what's shown changes: the stored budget, the
 // text in boxes, and anything copied or read aloud still have the emoji (each image's alt text is its emoji).
 //
-// The images are Resources/Sprites/*.webp. To change one, replace its file (any square image with a
-// transparent background works; around 128x128 is plenty), then stamp the site (node _tools/stamp.mjs) so
-// browsers get the new one. If an image can't load, its emoji shows instead.
+// The images are Resources/Sprites/*.webp, one color per type, all drawn as thick rounded lines with the same
+// soft shadow: Regular red (a ! as a line and a dot), Hidden purple (an X), Transfer green (a ring), and
+// Recurring orange (a check). To change one, replace its file (any square image with a transparent background
+// works; around 128x128 is plenty), then stamp the site (node _tools/stamp.mjs) so browsers get the new one.
+// If an image can't load, its emoji shows instead. Text that can't hold an image (dialogs, suggestion lists,
+// text boxes) shows the device's own emoji in its own colors, so the site words those spots instead where it
+// can (like "(counts transfers)" in Search's suggestions).
 
 (function sprites() {
   "use strict";

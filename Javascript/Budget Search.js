@@ -19,21 +19,32 @@ function wireSearch() {
   if (!form || !slot || !box || !openButton) return;
   // In <body>: the page's #transitionContainer is transformed, which would make a fixed box scroll with it
   document.body.appendChild(box);
-  const setOpen = (open) => {
-    box.hidden = !open;
+  // It zooms out of the Search button, and back into it (immediately: right away, when the page is left)
+  let isOpen = false;
+  const setOpen = (open, immediately = false) => {
+    isOpen = open;
     openButton.setAttribute("aria-expanded", String(open));
     if (open) {
+      box.hidden = false;
+      window.FloatingWindows?.zoomOpen(box, openButton);
       if (window.matchMedia("(pointer: fine)").matches) box.querySelector(".termInput")?.focus({ preventScroll: true });
-    } else {
-      BudgetUI.setPickTarget(null);
-      openButton.focus({ preventScroll: true });
+      return;
     }
+    BudgetUI.setPickTarget(null);
+    if (immediately || !window.FloatingWindows) {
+      box.zoomAnimation?.cancel();
+      box.hidden = true;
+      return;
+    }
+    openButton.focus({ preventScroll: true });
+    window.FloatingWindows.zoomClose(box, openButton, () => { box.hidden = true; });
   };
-  openButton.addEventListener("click", () => setOpen(box.hidden));
+  openButton.addEventListener("click", () => setOpen(!isOpen));
   document.getElementById("searchClose").addEventListener("click", () => setOpen(false));
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !box.hidden && !document.querySelector(".budgetPanel")) setOpen(false);
+    if (event.key === "Escape" && isOpen && !document.querySelector(".budgetPanel")) setOpen(false);
   });
+  window.FloatingWindows?.closeOnPageExit(() => setOpen(false, true));
   // What each title finds (the spreadsheet typed rent-, rent+ and car stuff= instead, which still pick
   // these): All, Costs, Gains, or Tracker (the title is a tracker row: find what it counts)
   const searchButtons = [
@@ -56,7 +67,6 @@ function wireSearch() {
   const terms = BudgetUI.termList({
     items: [{ title: typedEarly, mode: "all" }],
     options: searchButtons,
-    endings: { "-": "costs", "+": "gains", "=": "category" },
     label: "Titles to search for",
     lineLabel: "Title",
     addLabel: "+ Add Title",
@@ -95,14 +105,16 @@ function showSearchMessage(message) {
   container.hidden = false;
 }
 
-// Suggestions for a search title's Tracker button: the tracker's row titles (a row that counts
-// transfers keeps its ⭕️, since a title can have one of each)
+// Suggestions for a search title's Tracker button: the tracker's row titles. A row that counts transfers is
+// "Food (counts transfers)", since a title can have one of each, and a suggestion list can only show the
+// device's own ⭕️, not the site's (searchTargets in Process Budget.js reads it back)
 function fillTrackerRowTitles() {
   const list = document.getElementById("trackerRowTitles");
   if (!list) return;
   const rowTitles = trackerData.slice(1)
     .filter(row => !["", "-"].includes(String(row[0] ?? "").trim()))
-    .map(row => String(row[0]).trim());
+    .map(row => String(row[0]).trim())
+    .map(title => (/^⭕/.test(title) ? `${title.replace(/^⭕️?\s*/, "")} ${COUNTS_TRANSFERS}` : title));
   list.replaceChildren(...[...new Set(rowTitles)].map(title => {
     const option = document.createElement("option");
     option.value = title;
@@ -148,6 +160,7 @@ function renderSearchResults({ results, from, to, searchingFor }) {
   masterCell.appendChild(master);
   headRow.appendChild(masterCell);
   for (const label of ["Date", "Amount", "Entry"]) headRow.appendChild(BudgetUI.element("th", "", label));
+  BudgetUI.spanHeaderBar(tableEl);
 
   const body = tableEl.createTBody();
   const checkboxes = results.map(result => {

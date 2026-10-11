@@ -6,7 +6,7 @@
          its code until Login.js takes it out) -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="stylesheet" href="/stylesheet.css?v=97b6527c38">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
     <title>Prismal Budget - Login</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
@@ -73,13 +73,13 @@
             </div>
 
             <label id="terms-group" class="termsField hidden">
-              <input type="checkbox" id="agree-terms" required disabled>
+              <input type="checkbox" id="agree-terms" class="pillSwitch" role="switch" required disabled>
               <span>I agree to the <a href="/privacy and terms.html" target="_blank">Privacy Policy & Terms of Use</a></span>
             </label>
 
             <!-- Login: make a passkey for this device right after signing in (Login.js names its check, like Face ID) -->
             <label id="passkey-group" class="termsField hidden">
-              <input type="checkbox" id="turn-on-passkey" disabled>
+              <input type="checkbox" id="turn-on-passkey" class="pillSwitch" role="switch" disabled>
               <span id="passkey-label">Turn on passkey sign-in</span>
             </label>
 

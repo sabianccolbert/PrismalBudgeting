@@ -114,7 +114,7 @@ const MODES = {
     newPassword: true,
     passwordLabel: 'New Password'
   },
-  // Signed in with a password, and the account hasn't answered this yet (or the box was checked)
+  // Signed in with a password with "Turn on passkey sign-in" switched on
   offer: {
     title: 'Turn On Passkey Sign-In?',
     hint: `Next time, sign in with a passkey${UNLOCK} instead of typing your password. Your password keeps working too, and your face or fingerprint never leaves this device. You can change this anytime in Settings.`,
@@ -334,7 +334,7 @@ async function startPasskeyAutofill() {
   await finishPasskeySignIn(credential);
 }
 
-// Cancels the autofill request. Resolves once it has closed (a moment at most): Chrome and Edge refuse a
+// Cancels the autofill request. Resolves once it has closed (a second at most): Chrome and Edge refuse a
 // new passkey request while the old one is still closing, which used to show as "cancelled or timed out".
 function stopPasskeyAutofill() {
   autofillRun++;
@@ -343,7 +343,7 @@ function stopPasskeyAutofill() {
   const { controller, settled } = autofill;
   autofill = null;
   controller.abort();
-  return Promise.race([settled, new Promise(resolve => setTimeout(resolve, 300))]);
+  return Promise.race([settled, new Promise(resolve => setTimeout(resolve, 1000))]);
 }
 
 // Back on the login page (another app, another tab, or the phone woke up): a fresh challenge, and autofill
@@ -352,15 +352,20 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && mode === 'login' && (!autofill || !signInIsFresh())) startPasskeyAutofill();
 });
 
-// The device's passkey sheet. If the browser says another request is still closing ("A request is already
-// pending"), it's tried once more after a moment.
-async function requestPasskey(options) {
+// The device's passkey sheet. It has to open right in the tap (Safari refuses one that waited on anything
+// first), so nothing is awaited before it. If the browser refused it at once (the autofill request it just
+// cancelled was still closing: "A request is already pending", or a no faster than anyone could answer), it's
+// tried once more as soon as that request has closed. autofillClosed: resolves when it has.
+async function requestPasskey(options, autofillClosed) {
   const publicKey = Passkeys.signInRequest(options);
+  const started = Date.now();
   try {
     return await navigator.credentials.get({ publicKey });
   } catch (error) {
-    if (error.name !== 'NotAllowedError' || !/pending/i.test(error.message || '')) throw error;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const refusedAtOnce = /pending/i.test(error.message || '') || Date.now() - started < Passkeys.INSTANT_MS;
+    if (error.name !== 'NotAllowedError' || !refusedAtOnce) throw error;
+    await autofillClosed;
+    await new Promise(resolve => setTimeout(resolve, 100));
     return navigator.credentials.get({ publicKey });
   }
 }
@@ -372,7 +377,7 @@ passkeyBtn.addEventListener('click', async () => {
     return;
   }
   passkeyBtn.disabled = true;
-  await stopPasskeyAutofill(); // One passkey request at a time
+  const autofillClosed = stopPasskeyAutofill(); // One passkey request at a time (not waited on: see requestPasskey)
   // Without a challenge ready, this tap has to wait on the server first, and Safari may then not let it
   // open the passkey sheet: the next tap will
   const hadToWait = !signInIsFresh();
@@ -387,7 +392,7 @@ passkeyBtn.addEventListener('click', async () => {
   }
   let credential;
   try {
-    credential = await requestPasskey(signInReady.options);
+    credential = await requestPasskey(signInReady.options, autofillClosed);
   } catch (error) {
     passkeyBtn.disabled = false;
     setStatus(hadToWait && error.name === 'NotAllowedError'
@@ -411,6 +416,13 @@ async function finishPasskeySignIn(credential) {
     return;
   }
   if (data.unknownPasskey) Passkeys.forget(credential.id); // So the device stops offering it
+  if (data.passkeysOff && passkeyInput && !passkeyInput.disabled) {
+    // Turned off in Settings: signing in with the password with the switch on turns it back on
+    passkeyInput.checked = true;
+    setStatus("Passkey sign-in is turned off for this account. Sign in with your password: \"Turn on passkey sign-in\" is on, so it turns back on.");
+    startPasskeyAutofill();
+    return;
+  }
   setStatus(status === 0 ? "Failed to connect to the server." : (data.error || "That passkey couldn't sign you in."));
   startPasskeyAutofill();
 }
@@ -425,16 +437,14 @@ let offerPassword = ''; // The password just typed: adding a passkey checks it a
 let addReady = null;    // { options, at }: a challenge for making a passkey, fetched ahead
 let addPreparing = null;
 
-// Signed in with a password. The checked box means yes, so make the passkey now. An account that
-// hasn't answered (passkeysOn is null) is asked once. Anyone else goes straight to their budget.
+// Signed in with a password. The switch on means make a passkey for this device now; off goes straight
+// to the budget (nothing about passkeys changes).
 function signedIn(data, password) {
   saveSession(data);
-  const wanted = passkeyInput.checked;
-  if (Passkeys.usable && (wanted || data.passkeysOn === null)) {
+  if (Passkeys.usable && passkeyInput.checked) {
     offerPassword = password;
     setMode('offer');
-    if (wanted) addPasskey();
-    else prepareNewPasskey();
+    addPasskey(true);
     return;
   }
   goToBudget();
@@ -451,8 +461,10 @@ function prepareNewPasskey() {
   return addPreparing;
 }
 
-// Yes (or the checked box): the device makes a passkey, and the API saves it and turns passkey sign-in on
-async function addPasskey() {
+// Yes (or the switch): the device makes a passkey, and the API saves it and turns passkey sign-in on.
+// Right after signing in (firstTry), it's tried straight away; Safari only makes one right in a tap, and
+// signing in waited on the server, so there it's refused at once, and Yes (a tap) makes it.
+async function addPasskey(firstTry = false) {
   setStatus('');
   if (!addReady || Date.now() - addReady.at >= Passkeys.FRESH_MS) {
     primaryBtn.disabled = true;
@@ -464,11 +476,16 @@ async function addPasskey() {
     }
   }
   let credential;
+  const started = Date.now();
   try {
     credential = await navigator.credentials.create({ publicKey: Passkeys.addRequest(addReady.options) });
   } catch (error) {
     if (error.name === 'InvalidStateError') {
       await alreadyHasPasskey();
+      return;
+    }
+    if (firstTry && error.name === 'NotAllowedError' && Date.now() - started < Passkeys.INSTANT_MS) {
+      setStatus("One more step: press Yes, Turn It On, and your device asks for your face, fingerprint, or PIN to make the passkey.", true);
       return;
     }
     setStatus(`${Passkeys.problem(error, true)} Press Yes to try again, or No Thanks to skip it.`);
@@ -496,11 +513,11 @@ async function alreadyHasPasskey() {
   setTimeout(goToBudget, 2500);
 }
 
-// No Thanks: saved as the account's answer, so it isn't asked again (Settings can turn it on later)
-async function declinePasskeys() {
+// No Thanks: no passkey for this device right now. Passkey sign-in stays as it was for the account (passkeys
+// made on other devices keep working); Settings can add one later.
+function declinePasskeys() {
   primaryBtn.disabled = toggleBtn.disabled = true;
   offerPassword = '';
-  await api('/api/passkey/turn', { on: false }, true); // If this doesn't reach the server, it's just asked again next time
   goToBudget();
 }
 

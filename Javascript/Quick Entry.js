@@ -200,11 +200,14 @@ function prismEditRow(prism, index) {
   return item;
 }
 
-// "❗️ Coffee -$4.50", "Rent", "✖️ Savings", or just "⭕️ Transfer"
-function prismLabel(prism) {
+// "❗️ Coffee -$4.50", "Rent", "✖️ Savings", or just "⭕️ Transfer". inWords: "Coffee -$4.50 (Regular)" instead,
+// for a dialog, which can't show the type's image (only the device's own emoji)
+function prismLabel(prism, inWords = false) {
   const sprite = prism.type ? QUICK_ENTRY_TYPES[prism.type] : "";
-  const parts = [sprite, prism.title, prism.amount === null ? "" : formatMoney(prism.amount)].filter(Boolean);
-  if (!prism.title && prism.amount === null) parts.push(REFRACTION_NAMES.get(sprite));
+  const type = sprite ? REFRACTION_NAMES.get(sprite) : "";
+  const parts = [inWords ? "" : sprite, prism.title, prism.amount === null ? "" : formatMoney(prism.amount)].filter(Boolean);
+  if (!prism.title && prism.amount === null) parts.push(type);
+  else if (inWords && type) parts.push(`(${type})`);
   return parts.join(" ");
 }
 
@@ -251,7 +254,7 @@ async function savePrismFromForm(panel, fields) {
 
 async function deletePrism(index) {
   const prism = quickPrisms[index];
-  if (!prism || !window.confirm(`Delete the prism ${prismLabel(prism)}?`)) return;
+  if (!prism || !window.confirm(`Delete the prism ${prismLabel(prism, true)}?`)) return;
   if (await savePrisms(quickPrisms.filter((_, i) => i !== index))) {
     BudgetUI.showToast(`Deleted the prism ${prismLabel(prism)}.`);
     if (quickPrisms.length === 0) setPrismEditing(false);

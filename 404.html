@@ -5,9 +5,9 @@
     <meta charset="UTF-8">
     <meta name="robots" content="noindex">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="stylesheet" href="/stylesheet.css?v=97b6527c38">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/debug.css?v=1ac6737741">
+    <link rel="stylesheet" href="/debug.css?v=f248812512">
     <title>Prismal Budget - 404 Not Found</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -54,15 +54,19 @@
       </header>
       <hr>
 <footer>
+    <!-- A hidden extra, far below the first screen: starfield controls (styled in debug.css, wired up by
+         Starfield Setup.js and Debug.js) -->
     <div id="debugBox">
-                  <!-- Star controller -->
-          <input type="text" id="controller" placeholder="Controller">
-            <hr>
-        <!-- Debug readouts (populated by JS elsewhere) -->
-        <label>Misc: <span id="dbgMisc">NAN</span></label>
-        <label>User Speed: <span id="dbgSpeed">0.000</span></label>
-        <label>Circle Timer: <span id="dbgCircle">0.000</span></label>
-        <label>Poke Timer: <span id="dbgPoke">0.000</span></label>
+        <!-- Star controller: typing here (it empties itself) pushes the stars around -->
+        <input type="text" id="controller" placeholder="Controller" aria-label="Star controller: type to push the stars">
+        <hr>
+        <!-- Readouts (Starfield Setup.js fills them in) -->
+        <div class="readouts">
+          <label>Misc: <span id="dbgMisc">NAN</span></label>
+          <label>User Speed: <span id="dbgSpeed">0.000</span></label>
+          <label>Circle Timer: <span id="dbgCircle">0.000</span></label>
+          <label>Poke Timer: <span id="dbgPoke">0.000</span></label>
+        </div>
         <hr>
         <div class="gravityGrid">
           <!-- =========================

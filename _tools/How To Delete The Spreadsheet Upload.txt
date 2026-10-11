@@ -1,0 +1,133 @@
+HOW TO DELETE THE SPREADSHEET UPLOAD
+====================================
+
+The spreadsheet upload ("Bring Over A Spreadsheet Budget" at the very bottom of Home) is temporary: it's only
+there until the last Google Sheets budgets are moved over. Once they are, follow these steps to remove every
+sign of it. Nothing else on the site depends on it, and budgets that were already imported keep working (their
+data is ordinary website data; the "📥 Spreadsheet Import" row in their Change Logs and the log rows that came
+from the sheet just stay as history).
+
+This file lives in _tools/, which the website never publishes. Delete this file too at the end (step 4).
+
+
+1) THE WEBSITE (C:\Users\Sabian\OneDrive\Documents\PrismalBudgeting)
+---------------------------------------------------------------------
+
+  a. Delete the file:   Javascript/Sheet Import.js
+
+  b. Javascript/Boot.js: delete these two lines (search for "Sheet Import"):
+         // Temporary: bringing a Google Sheets budget over (see Sheet Import.js)
+         if (PAGE === "home") appendScript("/Javascript/Sheet Import.js");
+     Don't touch its line in FILE_VERSIONS by hand: step 1h takes it out.
+
+  c. index.html: delete the whole card at the very bottom of the page, from the comment
+         <!-- TEMPORARY: bringing a Google Sheets budget over (Sheet Import.js). ...
+     through the end of its   <section id="sheetImport" ...> ... </section>   (it holds the
+     "Bring Over A Spreadsheet Budget" title, the link box, the Import button, and the status line).
+
+  d. budgetStyle.css: delete the block that starts with the comment that mentions Sheet Import.js
+     (search for "sheetImport"): the rules for  .budgetCard.sheetImport,  .sheetImport #sheetImportStatus,
+     and  .sheetImport #sheetImportStatus.negative.
+
+  e. how-it-works.html:
+       - Delete the whole "Bringing Over A Spreadsheet Budget (For Now)" part: from
+           <h3 id="sheet-import">
+         through the end of the list under it (the </ul> right before that section's </section>).
+       - In the pages table, Home's row ends with "and (for now) Bring Over A Spreadsheet Budget at the very
+         bottom." Take that part out.
+       - In the API table, delete the row for  POST /api/import/sheet.
+       - Search the page for "spreadsheet import", "sheet-import", "import/sheet", and "Sheet Import" and take
+         out anything left. (Leave mentions of the spreadsheet that explain where the site's rules came from,
+         like Semi-Monthly or the tracker's aliases: those are about how the site works, not the upload.)
+       - Update its "Last updated" line (near the top) to the day you do this, with the new site version.
+
+  f. privacy and terms.html: in "4) Sharing & Third Parties", delete the paragraph that starts
+         "If you bring a budget over from the Google Sheets version of Prismal Budget ..."
+     Then set both "Effective Date" lines to the day you do this.
+
+  g. sitemap.xml: set <lastmod> for the home page, how-it-works, and the privacy page to that day
+     (YYYY-MM-DD).
+
+  h. Set the new site version (see "THE SITE VERSION" below), then stamp the site, so every fingerprint
+     matches (this also takes Sheet Import.js out of Boot.js's FILE_VERSIONS):
+         node _tools/stamp.mjs
+
+  i. Check nothing is left (each of these should find nothing, except this file):
+         git grep -n -i "sheet import"
+         git grep -n -i "sheetimport"
+         git grep -n "import/sheet"
+         git grep -n "sheet-import"
+         git grep -n "Bring Over A Spreadsheet"
+
+
+2) THE API (C:\Users\Sabian\prismal-budget-api)
+-----------------------------------------------
+
+  a. Delete the file:   src/sheetimport.js
+
+  b. src/index.js:
+       - delete the line near the top:
+           import { handleSheetImport } from "./sheetimport.js"; // Temporary (see sheetimport.js)
+       - delete the route block (search for "SPREADSHEET IMPORT"):
+           // SPREADSHEET IMPORT (temporary: ...
+           if (url.pathname === '/api/import/sheet') {
+             return handleSheetImport(request, env, userId, corsHeaders);
+           }
+
+  c. Check nothing is left:
+         git grep -n -i "sheetimport"
+         git grep -n "import/sheet"
+         git grep -n "sheet-import"
+
+  Nothing in the database needs cleaning up: the upload only used the rate-limit table, and its rows
+  ("sheet-import:<account>") expire by themselves within an hour.
+
+
+3) TEST, THEN GO LIVE
+---------------------
+
+  a. Website: open the site locally (with the API's wrangler dev running) and check Home loads, the bottom of
+     Home ends with the Help button, and the browser's console has no errors.
+
+  b. API, from its folder:
+         cd C:\Users\Sabian\prismal-budget-api
+         git add -A
+         git commit -m "Remove the temporary spreadsheet upload"
+         git push
+         npx wrangler deploy
+     (Run "npx wrangler deploy" from inside that folder, or the live API won't change.)
+
+  c. Website: commit on the Testing branch, push, then merge Testing into main and push main (GitHub Pages
+     serves main):
+         cd C:\Users\Sabian\OneDrive\Documents\PrismalBudgeting
+         git checkout Testing
+         git add -A
+         git commit -m "Release <version>: remove the temporary spreadsheet upload"
+         git push
+         git checkout main
+         git merge --no-ff Testing -m "Merge Testing into main: release <version>"
+         git push
+         git checkout Testing
+     The pre-commit hook refuses the commit if a fingerprint is out of date: run node _tools/stamp.mjs,
+     git add -A, and commit again.
+
+  d. After a minute or two, open https://prismalbudget.org, sign in, and check the version badge at the bottom
+     shows the new version and the card is gone from the bottom of Home. (The API's old address,
+     https://prismal-budget-api.prismalbudget.workers.dev/api/import/sheet, is then gone too: for a signed-in
+     account it answers Not Found.)
+
+
+4) LAST
+-------
+
+  - Delete this file (_tools/How To Delete The Spreadsheet Upload.txt) and commit that too.
+  - If you use Claude Code: tell it the upload is gone, so it can update its notes about it.
+
+
+THE SITE VERSION
+----------------
+The version is shown at the bottom of every page (like v10.11.2026.A): the release's date, then a letter for
+which release that day (A, then B, ...). It's written in two places:
+  - Javascript/Boot.js:   const SITE_VERSION = "10.11.2026.A";
+  - how-it-works.html:    the "Last updated: ... (site version 10.11.2026.A)." line near the top
+Change both to the new version before stamping.

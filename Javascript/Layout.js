@@ -80,12 +80,79 @@ function freezeAndSaveStarfield() {
   }
 }
 
+/* GROUP: Floating windows (Help, panels, search boxes) */
+// They zoom out of the button that opened them, and back into it when they close (Budget UI.js's panels do
+// the same). Each one also closes the moment the page is left, so the browser's Back button (which can
+// bring a page back exactly as it was left) never shows one still open.
+const PAGE_EXIT_CLOSERS = new Set();
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// Where the window would sit as its button: its corner on the button's corner, shrunk to the button's size
+function zoomedToButton(EL, BUTTON) {
+  const FROM = BUTTON.getBoundingClientRect();
+  const TO = EL.getBoundingClientRect();
+  const SCALE_X = Math.max(FROM.width / (TO.width || 1), 0.05);
+  const SCALE_Y = Math.max(FROM.height / (TO.height || 1), 0.05);
+  return `translate(${FROM.left - TO.left}px, ${FROM.top - TO.top}px) scale(${SCALE_X}, ${SCALE_Y})`;
+}
+
+function canZoom(EL, BUTTON) {
+  return !!(EL.animate && BUTTON && BUTTON.isConnected && BUTTON.getClientRects().length && !prefersReducedMotion());
+}
+
+window.FloatingWindows = {
+  // EL has just been shown: it grows out of BUTTON
+  zoomOpen(EL, BUTTON) {
+    if (EL.zoomAnimation) EL.zoomAnimation.cancel();
+    EL.zoomAnimation = null;
+    if (!canZoom(EL, BUTTON)) return;
+    EL.zoomAnimation = EL.animate([
+      { transformOrigin: "0 0", transform: zoomedToButton(EL, BUTTON), opacity: 0.35 },
+      { transformOrigin: "0 0", transform: "none", opacity: 1 }
+    ], { duration: 320, easing: "cubic-bezier(0.25, 0.8, 0.25, 1)" });
+  },
+  // EL shrinks back into BUTTON, then HIDE() hides it (right away when it can't zoom)
+  zoomClose(EL, BUTTON, HIDE) {
+    if (EL.zoomAnimation) EL.zoomAnimation.cancel();
+    EL.zoomAnimation = null;
+    if (!canZoom(EL, BUTTON) || !EL.getClientRects().length) {
+      HIDE();
+      return;
+    }
+    const ANIMATION = EL.animate([
+      { transformOrigin: "0 0", transform: "none", opacity: 1 },
+      { transformOrigin: "0 0", transform: zoomedToButton(EL, BUTTON), opacity: 0 }
+    ], { duration: 200, easing: "ease-in", fill: "forwards" });
+    EL.zoomAnimation = ANIMATION;
+    ANIMATION.onfinish = () => {
+      if (EL.zoomAnimation !== ANIMATION) return; // Opened again in the meantime
+      EL.zoomAnimation = null;
+      HIDE();
+      ANIMATION.cancel(); // Back to normal for the next time it opens
+    };
+  },
+  // CLOSE() closes a window right away (no animation) when the page is left
+  closeOnPageExit(CLOSE) {
+    PAGE_EXIT_CLOSERS.add(CLOSE);
+  }
+};
+
 /* GROUP: Leave/return lifecycle */
 // pagehide fires for real navigations and for bfcache entries.
 // This is the most reliable "we are leaving" hook across browsers.
+function closeFloatingWindows() {
+  PAGE_EXIT_CLOSERS.forEach((CLOSE) => {
+    try { CLOSE(); } catch (ERROR) { console.warn("Couldn't close a floating window:", ERROR); }
+  });
+}
+
 window.addEventListener("pagehide", () => {
   clearPendingTransitionTimers();
   freezeAndSaveStarfield();
+  closeFloatingWindows();
 });
 
 /* GROUP: Backgrounding + tab switching */
@@ -329,6 +396,9 @@ function transitionTo(URL, useReplace = false) {
     URL = readStored("homepageBackUrl") || "/";
   }
 
+  /* GROUP: Floating windows close before the page slides out */
+  closeFloatingWindows();
+
   const LEAVE = () => {
     IS_TRANSITION_ACTIVE = false; // safety unlock (in case navigation is blocked)
     if (useReplace) window.location.replace(URL);
@@ -548,17 +618,28 @@ function openHelp(HELP) {
   HELP.scrollTop = 0;
   HELP.helpButton.setAttribute("aria-expanded", "true");
   HELP.querySelector(".helpClose").focus({ preventScroll: true });
+  window.FloatingWindows.zoomOpen(HELP, HELP.helpButton);
 }
 
-function closeHelp() {
+// IMMEDIATE: no zoom back into the button (leaving the page)
+function closeHelp(IMMEDIATE = false) {
   if (!OPEN_HELP) return;
   const HELP = OPEN_HELP;
   OPEN_HELP = null;
-  HELP.hidden = true;
   HELP_BACKDROP.hidden = true;
   HELP.helpButton.setAttribute("aria-expanded", "false");
+  const HIDE = () => { HELP.hidden = true; };
+  if (IMMEDIATE) {
+    if (HELP.zoomAnimation) HELP.zoomAnimation.cancel();
+    HELP.zoomAnimation = null;
+    HIDE();
+    return;
+  }
   HELP.helpButton.focus({ preventScroll: true });
+  window.FloatingWindows.zoomClose(HELP, HELP.helpButton, HIDE);
 }
+
+window.FloatingWindows.closeOnPageExit(() => closeHelp(true));
 
 HELP_BACKDROP.addEventListener("click", () => closeHelp());
 // Capture, so Escape closes the help and nothing under it (like an open panel)
@@ -574,7 +655,7 @@ onDOMReady(() => {
     const TARGET = document.getElementById(btn.getAttribute("data-toggle"));
     if (TARGET && TARGET.classList.contains("helpView")) {
       setupFloatingHelp(btn, TARGET);
-      btn.addEventListener("click", () => (TARGET.hidden ? openHelp(TARGET) : closeHelp()));
+      btn.addEventListener("click", () => (OPEN_HELP === TARGET ? closeHelp() : openHelp(TARGET)));
       return;
     }
     btn.addEventListener("click", () => {

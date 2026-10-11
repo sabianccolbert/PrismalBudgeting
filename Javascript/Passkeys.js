@@ -15,6 +15,9 @@ window.Passkeys = (() => {
   // A challenge from the API stays good for 5 to 10 minutes; this one is fresh enough to use right
   // away (Safari wants the device's check to start right after the tap, before any server call)
   const FRESH_MS = 4 * 60000;
+  // A "no" from the browser this soon came before anyone could answer the device's check: the browser refused
+  // the request itself (like Safari when it didn't start right in a tap), so it's worth one more try
+  const INSTANT_MS = 700;
 
   const appleMobile = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
@@ -162,6 +165,7 @@ window.Passkeys = (() => {
     usable: supported && !onIpAddress,
     IP_ADDRESS_TEXT,
     FRESH_MS,
+    INSTANT_MS,
     unlockName,
     deviceName,
     autofillAvailable,
