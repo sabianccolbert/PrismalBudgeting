@@ -1,312 +1,281 @@
-      /*==============================================================*
-       *           GRAVITY CONTROLS (FOOTER DEBUG / TUNING UI)
-       *==============================================================*
-       *  Styles the off-screen footer panel and its controls:
-       *   - Footer lives just below the first viewport for a "scroll-reveal"
-       *   - Two-column layout (Attract / Repel), stacks on small screens
-       *   - Range sliders with filled track + red thumb
-       *   - Number inputs styled like pill buttons
-       *   - Shared hover/focus states without the default blue outline
-       *==============================================================*/
-      #controller{
-        margin: 0 auto;
-        width:6em;
-      }
+/*==============================================================*
+ *        STARFIELD CONTROLS (the 404 page's hidden extra)
+ *==============================================================*
+ *  Far below "404 Not Found" (the page looks empty until it's scrolled), a card of controls for how the
+ *  stars are pulled toward and pushed away from a touch or the pointer, with live readouts. Styled like the
+ *  rest of the site: a deep blue card, pill boxes and buttons that get the red-orange gradient border when
+ *  they're pointed at or focused, and sliders filled with that gradient up to their value (Debug.js paints
+ *  the fill as they move). Everything here is scoped to #debugBox: the site's own sizes for headings,
+ *  labels, and buttons are made for whole pages.
+ *==============================================================*/
 
+#debugBox {
+  --CARD_LINE: rgba(189, 189, 189, 0.15);
+  --CARD_FILL: rgb(10, 0, 48);  /* A focused box's color inside its gradient border */
+  --TRACK: rgba(189, 189, 189, 0.22);
+  --FILL: linear-gradient(90deg, #ee0000, #ff4500, #ff9a1a);
 
-      /*==============================================================*
-       *                 STEPPER BUTTONS ( + / - )
-       *==============================================================*/
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 94vw);
+  margin: 100vh auto 6vh; /* Parked below the first screen, with room around it */
+  padding: 1.1em 1.3em 1.4em;
+  font-size: clamp(13px, 2.6vmin, 18px);
+  color: var(--BASE_COLOR);
+  text-align: left;
+  background: linear-gradient(to bottom, rgba(15, 0, 80, 0.85), rgba(15, 0, 80, 0.35));
+  border: 1px solid var(--CARD_LINE);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 18px rgba(200, 0, 0, 0.2);
+  user-select: text;
+  -webkit-user-select: text;
+}
 
-      .stepper{
-        width: 100%;
-        justify-self: stretch;
-        display: flex;
-        justify-content: space-between;
-      }
+#debugBox hr {
+  width: 100%;
+  margin: 1em 0;
+}
 
-      .stepBtn{
-        display: inline-grid;
-        text-align: center;
+/*==============================*
+ *  THE CONTROLLER BOX AND THE READOUTS
+ *==============================*/
 
-        margin: auto 0 auto 5%;
-        width: 45%;
-        height: 6dvmin;
-        flex:1;
+/* Typing here (it empties itself) pushes the stars around, and on a phone it brings up the keyboard */
+#debugBox #controller {
+  width: 9em;
+  max-width: 100%;
+  margin: 0.2em auto 0;
+}
 
-        background: transparent;
-        color: var(--BASE_COLOR);
-
-        line-height: 1;
-        font: 3dvmin Arial;
-        font-weight: bold;
-        border: none;
-        border-radius: 9999px;
-        object-fit: cover;
-
-        /* Matches the number input "pill" styling */
-        background-image: url("/Resources/Button Border.webp?v=");
-        background-size: 110% 110%;
-        background-position: center;
-        background-repeat: no-repeat;
-
-        box-sizing: border-box;
-        user-select: none;
-        -webkit-user-select: none;
-
-        transition:
-          transform var(--SLOW_TRANSFORM),
-          box-shadow var(--SLOW_SHADOW),
-          color var(--SLOW_COLOR),
-          border-color var(--SLOW_BORDER);
-      }
-
-      /*==============================================================*
-       *           INTERACTION STATES (BUTTONS + INPUTS)
-       *==============================================================*/
-
-      .stepBtn:hover,
-      .stepBtn:active,
-      input:hover,
-      input:active {
-        transform: scale(1.05);
-        box-shadow: var(--SHADOW);
-        text-shadow: var(--SHADOW);
-      }
-
-      .stepBtn:focus-visible,
-      input:focus-visible {
-        outline: none;
-        box-shadow: var(--SHADOW);
-      }
-      
-      /* Prevent slider from growing */
-      input[type="range"]:active {
-        transform: none;
-      }
-
-      /*==============================*
-       *  1) FOOTER PANEL POSITIONING
-       *==============================*/
-
-      #debugBox{
-        width: 100%;
-        max-width: 100%;
-        margin-top: 100vh;     /* parks footer below the first viewport with extra room for play */
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        user-select: text;
-        -webkit-user-select: text;
-      }
-
-      /*==============================*
-       *  2) GRID LAYOUT (ATTRACT/REPEL)
-       *==============================*/
-
-      .gravityGrid{
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-
-        width: min(900px, 96vw);
-        margin: 0 auto;
-
-        box-sizing: border-box;
-      }
-
-      section{
-        margin: 0 15px;
-      }
-
-      /*==============================*
-       *  3) CONTROL ROWS (LABEL + INPUTS)
-       *==============================*/
-
-      .controlBlock{
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        margin-bottom:2dvmin;
-        align-items: center;
-      }
-
-      label{
-        grid-column: 1 / -1;
-      }
-
-      /*==============================*
-       *  4) TEXT INPUTS (PILL BUTTON LOOK)
-       *==============================*/
-
-      input[type="number"],
-      input[type="text"]
-      {
-        width: 100%;
-        height: 10dvmin;
-        font-size: 6dvmin;
-        text-align: center;
-        justify-self: stretch;
-
-        border: none;
-        border-radius: 9999px;
-        background: transparent;
-
-        font-family: 'New Rocker';
-        color: inherit;
-
-        background-image: url("/Resources/Button Border.webp?v=");
-        background-size: 110% 110%;
-        background-position: center;
-        background-repeat: no-repeat;
-
-        box-sizing: border-box;
-
-        transition:
-          transform var(--SLOW_TRANSFORM),
-          box-shadow var(--SLOW_SHADOW),
-          border-color var(--SLOW_BORDER);
-      }
-      
-      input[type="number"]::-webkit-inner-spin-button,
-      input[type="number"]::-webkit-outer-spin-button{
-        -webkit-appearance: none;
-        margin: 0;
-      }
-      
-      #controller::placeholder {
+#controller::placeholder {
   color: var(--PLACEHOLDER_COLOR);
 }
 
-#controller::-webkit-input-placeholder {
-  color: var(--PLACEHOLDER_COLOR);
+/* Four readouts, two to a row (one on phones) */
+#debugBox .readouts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4em 1.2em;
 }
 
-#controller::-moz-placeholder {
-  color: var(--PLACEHOLDER_COLOR);
+#debugBox .readouts label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  margin: 0;
+  padding: 0.35em 0.7em;
+  font-size: 1em;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--CARD_LINE);
+  border-radius: 9999px;
 }
 
-#controller:-ms-input-placeholder {
-  color: var(--PLACEHOLDER_COLOR);
+#debugBox .readouts span {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 
-      /*==============================*
-       *  5) RANGE SLIDERS (TRACK + THUMB)
-       *==============================*
-       *  Track fill is updated via JS:
-       *   - filled   = black
-       *   - unfilled = #bdbdbd
-       *  Thumb is styled red with a dark border.
-       *==============================*/
+/*==============================*
+ *  ATTRACT AND REPEL (side by side, stacked on phones)
+ *==============================*/
 
-      input[type="range"]{
-        -webkit-appearance: none;
-        appearance: none;
+#debugBox .gravityGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1em;
+}
 
-        grid-column: 1 / -1;
-        width: 100%;
-        height: 3px;
-        margin: 3dvmin 0;
-        border-radius: 999px;
+#debugBox section {
+  margin: 0;
+  padding: 0.9em 1em 0.5em;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--CARD_LINE);
+  border-radius: 12px;
+}
 
-        /* Initial background; JS paints the fill gradient. */
-        background: black;
-        outline: none;
-        cursor: pointer;
-      }
+#debugBox h3 {
+  margin: 0 0 0.5em;
+  font-size: 1.35em;
+  font-weight: normal;
+  text-align: center;
+  text-shadow: var(--SHADOW);
+}
 
-      /* WebKit track */
-      input[type="range"]::-webkit-slider-runnable-track{
-        height: 10px;
-        border-radius: 999px;
-      }
+/* Each control: its name, its slider, then its number and − / + */
+#debugBox .controlBlock {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 0.6em;
+  margin-bottom: 0.9em;
+}
 
-      /* WebKit thumb (Chrome/Edge/Safari/iOS) */
-      input[type="range"]::-webkit-slider-thumb{
-        -webkit-appearance: none;
-        appearance: none;
+#debugBox .controlBlock label {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 1em;
+}
 
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
+/* The number: a small pill, with the gradient border while it's pointed at or typed in */
+#debugBox input[type="number"] {
+  box-sizing: border-box; /* Its padding and border inside its column, so it never runs under − */
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0.3em 0.6em;
+  font-size: max(16px, 1em); /* 16px at least, so phones don't zoom in when it's tapped */
+  border-width: 2px;
+  -moz-appearance: textfield;
+}
 
-        background: #ee0000;
-        border: 2px solid #000;
+#debugBox input[type="number"]:hover,
+#debugBox input[type="number"]:focus {
+  border-color: transparent;
+  background: linear-gradient(var(--CARD_FILL), var(--CARD_FILL)) padding-box, var(--EDGE_GRADIENT) border-box;
+}
 
-        box-shadow:
-          0 0 6px rgba(238, 0, 0, 0.9),
-          inset 0 0 4px rgba(0, 0, 0, 0.8);
+#debugBox input[type="number"]::-webkit-inner-spin-button,
+#debugBox input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 
-        margin-top: -6px; /* centers thumb on 10px track */
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-      }
+/* − and + : small pill buttons, like the site's buttons */
+#debugBox .stepper {
+  display: flex;
+  gap: 0.35em;
+}
 
-      input[type="range"]:hover::-webkit-slider-thumb{
-        box-shadow:
-          0 0 10px rgba(238, 0, 0, 1),
-          inset 0 0 4px rgba(0, 0, 0, 0.9);
-      }
+#debugBox .stepBtn {
+  --EDGE_WIDTH: 2px;
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  padding: 0.2em 0.85em;
+  font-size: 1.15em;
+  line-height: 1.2;
+  border-width: 2px;
+  user-select: none;
+  -webkit-user-select: none;
+}
 
-      input[type="range"]:active::-webkit-slider-thumb{
-        transform: scale(1.15);
-      }
+#debugBox .stepBtn:hover,
+#debugBox .stepBtn:focus-visible {
+  border-color: transparent;
+  outline: none;
+}
 
-      input[type="range"]:focus-visible::-webkit-slider-thumb{
-        box-shadow:
-          0 0 0 3px rgba(0, 0, 0, 0.9),
-          0 0 0 6px rgba(238, 0, 0, 0.9);
-      }
+#debugBox .stepBtn:hover::before,
+#debugBox .stepBtn:focus-visible::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--EDGE_WIDTH));
+  padding: var(--EDGE_WIDTH);
+  border-radius: inherit;
+  background: var(--EDGE_GRADIENT);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
 
-      /* Firefox track + progress */
-      input[type="range"]::-moz-range-track{
-        height: 10px;
-        border-radius: 999px;
-        background: #bdbdbd;
-      }
+/*==============================*
+ *  SLIDERS: filled with the red-orange gradient up to the value (Debug.js), round gradient thumbs
+ *==============================*/
 
-      input[type="range"]::-moz-range-progress{
-        height: 10px;
-        border-radius: 999px;
-        background: #000;
-      }
+#debugBox input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  grid-column: 1 / -1;
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: 6px;
+  margin: 0.8em 0 0.9em;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: var(--TRACK);
+  box-shadow: none;
+  outline: none;
+  cursor: pointer;
+}
 
-      input[type="range"]::-moz-range-thumb{
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
+#debugBox input[type="range"]:hover,
+#debugBox input[type="range"]:focus {
+  transform: none;
+  box-shadow: none;
+}
 
-        background: #ee0000;
-        border: 2px solid #000;
+#debugBox input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
 
-        box-shadow:
-          0 0 6px rgba(238, 0, 0, 0.9),
-          inset 0 0 4px rgba(0, 0, 0, 0.8);
+#debugBox input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px; /* Centered on the 6px track */
+  border: 2px solid #f2f2f2;
+  border-radius: 50%;
+  background: var(--EDGE_GRADIENT);
+  box-shadow: 0 0 8px rgba(255, 69, 0, 0.7);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
 
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-      }
+#debugBox input[type="range"]:hover::-webkit-slider-thumb {
+  box-shadow: 0 0 14px rgba(255, 69, 0, 1);
+}
 
-      input[type="range"]:hover::-moz-range-thumb{
-        box-shadow:
-          0 0 10px rgba(238, 0, 0, 1),
-          inset 0 0 4px rgba(0, 0, 0, 0.9);
-      }
+#debugBox input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
 
-      input[type="range"]:active::-moz-range-thumb{
-        transform: scale(1.15);
-      }
+#debugBox input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(10, 0, 48, 0.9), 0 0 0 5px #ff4500;
+}
 
-      /*==============================*
-       *  6) GLOBAL FOCUS: DISABLE DEFAULT OUTLINE
-       *==============================*/
+#debugBox input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--TRACK);
+}
 
-      input:focus{
-        outline: none;
-      }
+#debugBox input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--FILL);
+}
 
-      /*==============================*
-       *  7) RESPONSIVE: STACK WHEN NARROW
-       *==============================*/
+#debugBox input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #f2f2f2;
+  border-radius: 50%;
+  background: var(--EDGE_GRADIENT);
+  box-shadow: 0 0 8px rgba(255, 69, 0, 0.7);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
 
-      @media (max-width: 500px){
-        .gravityGrid{
-          grid-template-columns: 1fr;
-        }
-      }
+#debugBox input[type="range"]:hover::-moz-range-thumb {
+  box-shadow: 0 0 14px rgba(255, 69, 0, 1);
+}
+
+#debugBox input[type="range"]:active::-moz-range-thumb {
+  transform: scale(1.15);
+}
+
+/*==============================*
+ *  PHONES: one column
+ *==============================*/
+
+@media (max-width: 560px) {
+  #debugBox .gravityGrid,
+  #debugBox .readouts {
+    grid-template-columns: 1fr;
+  }
+}

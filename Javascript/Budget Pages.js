@@ -41,7 +41,7 @@ function renderCurrentPage() {
   const render = PAGE_RENDERERS[window.PAGE];
   const view = document.getElementById("dataView");
   if (render && view) render(view);
-  if (pageSearch && !pageSearch.box.hidden) renderPageSearch(); // Open results follow the change
+  if (pageSearch && pageSearch.isOpen) renderPageSearch(); // Open results follow the change
 }
 
 //#endregion
@@ -152,6 +152,8 @@ function renderTrackerPage(view) {
     columns: ["Type", "Last 4 Weeks", "Last 3 Months", "Last 365 Days", "Aliases"],
     rows,
     extraClass: "trackerTable",
+    canSelect: (row) => !TRACKER_AUTO_ROWS.includes(cleanString(row[0])),
+    lockedNote: (row) => `${String(row[0]).trim()} fills in by itself, so it can't be deleted.`,
     renderEntry: trackerCells,
     onEntryClick: (index, origin) => openTrackerPanel(origin, index)
   });
@@ -167,7 +169,8 @@ function trackerCells(tr, row) {
   tr.appendChild(noTranslate(cell(row[2], "amountCell")));
   tr.appendChild(noTranslate(cell(row[3], "amountCell")));
   const aliases = cell(trackerAliasText(row), "aliasCell");
-  tr.appendChild(isAuto && cleanString(row[0]) !== "undefined" ? aliases : noTranslate(aliases));
+  // (Undefined and Transfers list entry titles, which are the person's words)
+  tr.appendChild(isAuto && !["undefined", "transfers"].includes(cleanString(row[0])) ? aliases : noTranslate(aliases));
 }
 
 // Other Accounts: [0] column titles, then [name, balance, "default" | ""] (see Other Accounts in Process
@@ -391,14 +394,14 @@ const PAGE_SEARCHES = {
   }
 };
 
-let pageSearch = null; // { box, input, results }, made the first time it opens
+let pageSearch = null; // { box, input, results, isOpen }, made the first time it opens
 
 function pageSearchButton() {
-  const button = toolbarButton("🔎 Search", "", () => setPageSearchOpen(!pageSearch || pageSearch.box.hidden));
+  const button = toolbarButton("🔎 Search", "", () => setPageSearchOpen(!(pageSearch && pageSearch.isOpen)));
   button.id = "pageSearchButton";
   button.setAttribute("aria-haspopup", "dialog");
   button.setAttribute("aria-controls", "pageSearchBox");
-  button.setAttribute("aria-expanded", String(!!pageSearch && !pageSearch.box.hidden));
+  button.setAttribute("aria-expanded", String(!!pageSearch && pageSearch.isOpen));
   return button;
 }
 
@@ -408,15 +411,27 @@ function renderSearchToolbar() {
   if (bar) bar.replaceChildren(pageSearchButton());
 }
 
-function setPageSearchOpen(open) {
-  if (!open && !pageSearch) return;
-  const { box, input } = pageSearch || makePageSearch();
-  box.hidden = !open;
-  document.getElementById("pageSearchButton")?.setAttribute("aria-expanded", String(open));
+// It zooms out of the Search button, and back into it (immediately: right away, like when the page is left
+// or Edit mode starts)
+function setPageSearchOpen(open, immediately = false) {
+  if (!open && (!pageSearch || !pageSearch.isOpen)) return;
+  const search = pageSearch || makePageSearch();
+  const button = document.getElementById("pageSearchButton");
+  search.isOpen = open;
+  button?.setAttribute("aria-expanded", String(open));
   if (open) {
+    search.box.hidden = false;
     renderPageSearch();
-    input.focus({ preventScroll: true });
+    window.FloatingWindows?.zoomOpen(search.box, button);
+    search.input.focus({ preventScroll: true });
+    return;
   }
+  if (immediately || !button || !window.FloatingWindows) {
+    search.box.zoomAnimation?.cancel();
+    search.box.hidden = true;
+    return;
+  }
+  window.FloatingWindows.zoomClose(search.box, button, () => { search.box.hidden = true; });
 }
 
 // The floating box, in <body> (the page's #transitionContainer is transformed, which would make a fixed box
@@ -455,9 +470,10 @@ function makePageSearch() {
   document.body.appendChild(box);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !box.hidden && !document.querySelector(".budgetPanel")) setPageSearchOpen(false);
+    if (event.key === "Escape" && pageSearch.isOpen && !document.querySelector(".budgetPanel")) setPageSearchOpen(false);
   });
-  pageSearch = { box, input, results };
+  window.FloatingWindows?.closeOnPageExit(() => setPageSearchOpen(false, true));
+  pageSearch = { box, input, results, isOpen: false };
   return pageSearch;
 }
 
@@ -485,7 +501,7 @@ function renderPageSearch() {
     if (config.open && !editMode) {
       tr.classList.add("clickable");
       tr.addEventListener("click", () => {
-        setPageSearchOpen(false);
+        setPageSearchOpen(false, true);
         config.open(index);
       });
     }
@@ -517,7 +533,7 @@ function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMo
       editMode = true;
       selectedRows.clear();
       BudgetUI.closePanel(true);
-      setPageSearchOpen(false);
+      setPageSearchOpen(false, true);
       renderCurrentPage();
     }));
     if (search) bar.append(pageSearchButton());
@@ -831,7 +847,8 @@ function openRecurringPanel(origin, index) {
 }
 
 // New tracker row (index null) or change the tapped one. Each alias gets All / Costs / Gains buttons.
-// Costs, Gains, and Undefined fill in by themselves, so their panels only say what they count.
+// Costs, Gains, Transfers, and Undefined fill in by themselves, so their panels only say what they count (and
+// they can't be deleted).
 function openTrackerPanel(origin, index) {
   const existing = index === null ? null : trackerData[index];
   const isAuto = !!existing && TRACKER_AUTO_ROWS.includes(cleanString(existing[0]));
@@ -843,14 +860,21 @@ function openTrackerPanel(origin, index) {
       const existingTitle = existing ? String(existing[0]).replace("⭕️", "") : "";
       const title = BudgetUI.textField({ label: "Title", value: existingTitle, placeholder: "Groceries, car stuff...", disabled: isAuto });
       const aliases = isAuto ? null : BudgetUI.aliasField({ aliases: existing ? aliasList(existing[4]) : [] });
-      const transfers = BudgetUI.checkboxField({ label: "Also count ⭕️ Transfers", checked: existing ? String(existing[0]).startsWith("⭕️") : false });
+      // Whether the row counts transfers too (its title then starts with ⭕️): an on/off switch
+      const transferSwitch = BudgetUI.checkboxField({ label: "Count ⭕️ Transfers in this row", checked: existing ? String(existing[0]).startsWith("⭕️") : false });
+      const transfers = {
+        el: BudgetUI.field("Transfers", transferSwitch.el, { hint: "Rows leave transfers out unless this is on (the Transfers row has every one either way)." }),
+        value: transferSwitch.value
+      };
       const fields = isAuto
-        ? [title.el, BudgetUI.field("Counts", BudgetUI.element("p", "panelText", autoRowNote(existing)))]
+        ? [title.el, BudgetUI.field("Counts", BudgetUI.element("p", "panelText", autoRowNote(existing))), BudgetUI.element("p", "panelHint", `${existingTitle.trim()} fills in by itself, so it can't be deleted.`)]
         : [title.el, aliases.el, transfers.el];
 
-      const buttons = existing
-        ? [...(isAuto ? [] : [{ label: "Save", kind: "primary", type: "submit" }]), { label: "Delete", kind: "danger", onClick: deleteRow }, { label: isAuto ? "Close" : "Cancel", onClick: () => panel.close() }]
-        : [{ label: "Add Row", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
+      const buttons = !existing
+        ? [{ label: "Add Row", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }]
+        : isAuto
+          ? [{ label: "Close", onClick: () => panel.close() }]
+          : [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteRow }, { label: "Cancel", onClick: () => panel.close() }];
       form.append(...fields, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
@@ -861,9 +885,10 @@ function openTrackerPanel(origin, index) {
         BudgetUI.submit(panel, () => saveTrackerEntry(changes, index));
       });
 
+      // (A dialog can't show the ⭕️ image, so a row that counts transfers says so in words)
       function deleteRow() {
-        const note = isAuto ? " It comes back automatically." : "";
-        if (!window.confirm(`Delete ${existing[0]}?${note}`)) return;
+        const counts = String(existing[0]).startsWith("⭕️") ? " (the one that counts transfers)" : "";
+        if (!window.confirm(`Delete the ${existingTitle.trim()} row${counts}?`)) return;
         BudgetUI.submit(panel, () => deleteBudgetRows("tracker", [index]));
       }
     }
@@ -984,7 +1009,7 @@ function createDataTable(headers) {
     headRow.appendChild(th);
   }
   tableEl.createTBody();
-  return tableEl;
+  return BudgetUI.spanHeaderBar(tableEl);
 }
 
 // Kept out of the browser's translation: the person's titles, names, amounts, and dates show as they are
@@ -1038,14 +1063,16 @@ function trackerAliasText(row) {
   const rowType = cleanString(row[0]);
   if (rowType === "costs") return "Every cost";
   if (rowType === "gains") return "Every gain";
+  if (rowType === "transfers") return String(row[4] ?? "").trim() ? `Every transfer: ${describeAliases(row[4])}` : "Every transfer";
   return describeAliases(row[4]);
 }
 
 // What Costs, Gains, or Undefined counts, for its panel
 function autoRowNote(row) {
   const rowType = cleanString(row[0]);
-  if (rowType === "costs") return "Every cost, except transfers. This row fills in by itself.";
-  if (rowType === "gains") return "Every gain, except transfers. This row fills in by itself.";
+  if (rowType === "costs") return "Every cost (✖️ Hidden ones too), except transfers. This row fills in by itself.";
+  if (rowType === "gains") return "Every gain (✖️ Hidden ones too), except transfers. This row fills in by itself.";
+  if (rowType === "transfers") return `Every ⭕️ Transfer${String(row[4] ?? "").trim() ? ": " + describeAliases(row[4]) : " (there aren't any right now)"}, so they never land in Undefined. This row fills in by itself.`;
   const titles = trackerAliasText(row);
   return `Entries that no other row counts${titles ? ": " + titles : " (there aren't any right now)"}. This row fills in by itself.`;
 }

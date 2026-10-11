@@ -52,9 +52,10 @@ window.addEventListener("keydown", (EVENT) => {
   // Prevents accidental impulses while typing.
   if (EVENT.isComposing) return;
 
-  // Normalize key to lowercase and dispatch if mapped.
-  // Optional chaining keeps unknown keys harmless.
-  KEY_FUNCTIONS[EVENT.key.toLowerCase()]?.();
+  // Normalize key to lowercase and dispatch if mapped. (Autofill sends key events with no key at all, so
+  // those, and keys that aren't in the table, do nothing.)
+  const KEY = typeof EVENT.key === "string" ? EVENT.key.toLowerCase() : "";
+  if (Object.prototype.hasOwnProperty.call(KEY_FUNCTIONS, KEY)) KEY_FUNCTIONS[KEY]();
 });
 
 /* GROUP: Key → action dispatch table */

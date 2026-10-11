@@ -8,7 +8,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.10.2026.A";
+  const SITE_VERSION = "10.11.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -22,26 +22,26 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "2803600ede",
     "/Javascript/Analytics.js": "dac605ae19",
-    "/Javascript/Budget Pages.js": "434888ec2b",
-    "/Javascript/Budget Search.js": "61e70de7c5",
-    "/Javascript/Budget UI.js": "d5687c9081",
+    "/Javascript/Budget Pages.js": "5e9ee63dfd",
+    "/Javascript/Budget Search.js": "ccd0b54452",
+    "/Javascript/Budget UI.js": "0ba80c229e",
     "/Javascript/Calendar Page.js": "4d04a01de9",
-    "/Javascript/Debug.js": "3c205d5fa0",
-    "/Javascript/Keyboard Starfield.js": "2b28e8ba7c",
-    "/Javascript/Layout.js": "4b7f954329",
-    "/Javascript/Login.js": "cb5b2c6e2e",
-    "/Javascript/Passkeys.js": "a2905991dd",
-    "/Javascript/Process Budget.js": "07d9b0fb2e",
-    "/Javascript/Quick Entry.js": "0894737feb",
+    "/Javascript/Debug.js": "f8ff7d25bc",
+    "/Javascript/Keyboard Starfield.js": "97af3e4bd4",
+    "/Javascript/Layout.js": "2f9ed62a71",
+    "/Javascript/Login.js": "96d48e4c04",
+    "/Javascript/Passkeys.js": "57181546e2",
+    "/Javascript/Process Budget.js": "43449cc096",
+    "/Javascript/Quick Entry.js": "f9e7402fe9",
     "/Javascript/Session.js": "ff5a8f1a97",
     "/Javascript/Settings Page.js": "3606ca67a2",
-    "/Javascript/Sheet Import.js": "59aab8b637",
-    "/Javascript/Sprites.js": "4c4e2d66b8",
+    "/Javascript/Sheet Import.js": "2dda717131",
+    "/Javascript/Sprites.js": "b95de2e3bf",
     "/Javascript/Starfield Setup.js": "65f71b67e6",
-    "/Resources/Sprites/Hidden.webp": "2827d5c983",
-    "/Resources/Sprites/Recurring.webp": "4f494bda3d",
-    "/Resources/Sprites/Regular.webp": "6d52ba4e84",
-    "/Resources/Sprites/Transfer.webp": "8ac57c50be"
+    "/Resources/Sprites/Hidden.webp": "9c3afd2c80",
+    "/Resources/Sprites/Recurring.webp": "f35a230cbd",
+    "/Resources/Sprites/Regular.webp": "11a1321f81",
+    "/Resources/Sprites/Transfer.webp": "0b848dff24"
   };
   // </stamp:files>
 

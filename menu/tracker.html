@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=e465ad329a">
+    <link rel="stylesheet" href="/stylesheet.css?v=97b6527c38">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=e02be993e2">
+    <link rel="stylesheet" href="/budgetStyle.css?v=f5cf7f9192">
     <title>Prismal Budget - Tracker</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -61,8 +61,8 @@
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <div id="dataView"></div>
 
-        <!-- Help button image: Resources/Help.png (see Help.pngdummy). It's at the bottom, so it loads last. -->
-        <button class="imageButton helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false"><img src="/Resources/Help.png?v=" alt="Help" loading="lazy" decoding="async"></button>
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Tracker Help</h3>
           <p>The tracker adds up your entries over the last 4 weeks, 3 months, and 365 days. It counts today and every day before it, from the calendar and History, so an entry counts as soon as its day comes.</p>
@@ -71,7 +71,7 @@
           <ul>
             <li>Each row counts the entries its aliases point to. An alias is an entry title, set to count <strong>All</strong> of its amounts, only its <strong>Costs</strong>, or only its <strong>Gains</strong>.</li>
             <li>In a row's panel, each alias has its own line: type the entry title, then pick All, Costs, or Gains. Typing a comma (or pressing Enter) starts the next one.</li>
-            <li>Rows leave out ⭕️ Transfers, since most transfers aren't real costs or gains. Turn on Also count ⭕️ Transfers for a row that should count them (its title then starts with ⭕️).</li>
+            <li>Rows leave out ⭕️ Transfers, since most transfers aren't real costs or gains. In a row's panel, turn on its "Count ⭕️ Transfers in this row" switch for a row that should count them (its title then starts with ⭕️).</li>
             <li>✖️ Hidden entries always count, like any other entry, even ones for your Other Accounts.</li>
             <li>A ⭕️ Transfer for an Other Account (like moving money into Savings) is still a transfer, so only rows set to count transfers count it.</li>
             <li>If more than one row has the same alias, each of those rows counts it.</li>
@@ -84,12 +84,13 @@
           <h4>Costs, Gains, And Undefined</h4>
           <ul>
             <li><strong>Costs</strong> and <strong>Gains</strong> add up every cost and every gain (✖️ Hidden ones too), except ⭕️ Transfers. They fill in by themselves.</li>
-            <li><strong>Undefined</strong> lists the entry titles that no row counts yet, and adds them up. ⭕️ Transfers never go there: a transfer only counts in a row set to count transfers. If you add an alias to a row but Undefined still lists it, the alias only counts Costs or only Gains, so entries of the other kind aren't counted yet. For example, if an alias for John counts Gains, costs titled John are still undefined.</li>
+            <li><strong>Transfers</strong> adds up every ⭕️ Transfer and lists their titles, so transfers never land in Undefined. It fills in by itself.</li>
+            <li><strong>Undefined</strong> lists the entry titles that no row counts yet, and adds them up. ⭕️ Transfers never go there: they're in the Transfers row (and in any row set to count them). If you add an alias to a row but Undefined still lists it, the alias only counts Costs or only Gains, so entries of the other kind aren't counted yet. For example, if an alias for John counts Gains, costs titled John are still undefined.</li>
           </ul>
 
           <h4>Changing Rows</h4>
           <ul>
-            <li>Tap New Entry to add a row, or tap a row to change or delete it. Tap Edit to drag rows by their ≡ bar, add sections (+ Section), or check rows and delete them. Costs, Gains, and Undefined come back if you delete them.</li>
+            <li>Tap New Entry to add a row, or tap a row to change or delete it. Tap Edit to drag rows by their ≡ bar, add sections (+ Section), or check rows and delete them. Costs, Gains, Transfers, and Undefined fill in by themselves, so they can't be deleted (they show a 🔒 in Edit). A new budget also starts with an Unknown row (Misc, Catchup, and Other), which you can change or delete.</li>
             <li>A title can have two rows: one that counts transfers (its title starts with ⭕️) and one that doesn't. If you add one that matches a title and transfer setting you already have, it says so, and you change the one that's there instead.</li>
           </ul>
         </section>

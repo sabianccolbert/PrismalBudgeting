@@ -93,7 +93,8 @@ const BudgetUI = (() => {
       document.body.appendChild(panel);
       if (size === "small") positionNear(panel, origin);
     }
-    animateFromOrigin(panel, origin);
+    // It grows out of what opened it (the same zoom as Help and Search: FloatingWindows in Layout.js)
+    window.FloatingWindows?.zoomOpen(panel, origin);
     if (inline) panel.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
 
     // Date fields fill from calendar taps right away (no keyboard needed on phones)
@@ -117,36 +118,9 @@ const BudgetUI = (() => {
     const panel = api.panel;
     panel.classList.add("isClosing");
     panel.inert = true; // A closing panel can't be clicked, typed in, or picked into
-    if (immediate || prefersReducedMotion() || !api.origin || !api.origin.isConnected || !panel.animate) {
-      panel.remove();
-      return;
-    }
-    animateToOrigin(panel, api.origin);
-    setTimeout(() => panel.remove(), 210); // Right after the close animation
-  }
-
-  // The panel grows out of its origin's spot on screen
-  function animateFromOrigin(panel, origin) {
-    if (!origin || prefersReducedMotion() || !panel.animate) return;
-    panel.animate([
-      { transformOrigin: "0 0", transform: originTransform(panel, origin), opacity: 0.35 },
-      { transformOrigin: "0 0", transform: "none", opacity: 1 }
-    ], { duration: 320, easing: "cubic-bezier(0.25, 0.8, 0.25, 1)" });
-  }
-
-  function animateToOrigin(panel, origin) {
-    return panel.animate([
-      { transformOrigin: "0 0", transform: "none", opacity: 1 },
-      { transformOrigin: "0 0", transform: originTransform(panel, origin), opacity: 0 }
-    ], { duration: 200, easing: "ease-in", fill: "forwards" });
-  }
-
-  function originTransform(panel, origin) {
-    const from = origin.getBoundingClientRect();
-    const to = panel.getBoundingClientRect();
-    const scaleX = Math.max(from.width / (to.width || 1), 0.05);
-    const scaleY = Math.max(from.height / (to.height || 1), 0.05);
-    return `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scaleX}, ${scaleY})`;
+    // It shrinks back into what opened it, then goes (right away when it can't, or shouldn't, zoom)
+    if (immediate || !window.FloatingWindows) panel.remove();
+    else window.FloatingWindows.zoomClose(panel, api.origin, () => panel.remove());
   }
 
   // Small panels sit just below their origin (or above it near the bottom of the screen)
@@ -191,6 +165,14 @@ const BudgetUI = (() => {
   // Escape closes the panel
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && currentPanel && currentPanel.closable) closePanel();
+  });
+
+  // Leaving the page closes the panel, any date box's waiting for a day, and notes, right away, so the
+  // browser's Back button never brings the page back with them still up (see FloatingWindows in Layout.js)
+  window.FloatingWindows?.closeOnPageExit(() => {
+    closePanel(true);
+    setPickTarget(null);
+    if (toastStack) toastStack.replaceChildren();
   });
 
   //#endregion
@@ -293,7 +275,7 @@ const BudgetUI = (() => {
     };
     item("❗️", "Regular", "a normal cost or gain. It changes In Bank, and the tracker counts it.");
     item("✖️", "Hidden", "money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same. With an Other Account picked, that account changes by the same amount: a cost takes from it, and a gain adds to it.");
-    item("⭕️", "Transfer", "money moving between your own accounts, like depositing cash. It changes In Bank, but it isn't a cost or gain, so the day's Gains and Costs and the tracker leave it out. With an Other Account picked, that account gets the opposite: a cost here adds to it, and a gain takes from it.");
+    item("⭕️", "Transfer", "money moving between your own accounts, like depositing cash. It changes In Bank, but it isn't a cost or gain, so the day's Gains and Costs leave it out, and in the tracker only the Transfers row (and rows set to count transfers) count it. With an Other Account picked, that account gets the opposite: a cost here adds to it, and a gain takes from it.");
     if (allowAuto) item("", "Auto", "uses the type of an entry with this title already on that day, or Regular if there isn't one.");
     else list.appendChild(element("li", "", "Recurring entries show these behind a ✔️ (✔️ is Regular)."));
     return list;
@@ -458,10 +440,12 @@ const BudgetUI = (() => {
     return { el: field(label, select), input: select, value: () => select.value };
   }
 
+  // An on/off choice: a pill switch (stylesheet.css .pillSwitch) and its words, which turn it on and off too
   function checkboxField({ label, checked = false, disabled = false }) {
     const wrapper = element("label", "checkboxField");
-    const input = element("input");
+    const input = element("input", "pillSwitch");
     input.type = "checkbox";
+    input.setAttribute("role", "switch");
     input.checked = checked;
     input.disabled = disabled;
     wrapper.append(input, element("span", "", label));
@@ -470,29 +454,21 @@ const BudgetUI = (() => {
 
   // A list of titles, one per line, each with its own buttons (like All / Costs / Gains) and an ×.
   // The tracker's aliases and the search bar use it. A comma starts the next line (so a pasted list
-  // splits up), Enter adds a line, and a title typed with an ending (rent-, paycheck+) picks its button.
+  // splits up), and Enter adds a line. Only the buttons pick what a line finds: a title is kept as it's
+  // typed, so one like "Disney+" stays a title.
   //   items: [{ title, mode }]. options: [{ key, label }] (the first is the default for new lines).
-  //   endings: { "-": mode, ... }. placeholder and suggestions (a datalist id) can be functions of the
-  //   line's mode. onEnterEmpty: runs when Enter is pressed on an empty line.
+  //   placeholder and suggestions (a datalist id) can be functions of the line's mode. onEnterEmpty: runs
+  //   when Enter is pressed on an empty line.
   // Returns { el (the lines and the add button), lines, addButton, items(): [{ title, mode }] for
   // every line, blank ones too }
-  function termList({ items = [], options, endings = {}, label, lineLabel, addLabel, placeholder = "", suggestions = null, onEnterEmpty = null }) {
+  function termList({ items = [], options, label, lineLabel, addLabel, placeholder = "", suggestions = null, onEnterEmpty = null }) {
     const list = element("div", "termList");
     list.setAttribute("role", "group");
     list.setAttribute("aria-label", label);
     const lines = [];
     const defaultMode = options[0].key;
     const forMode = (setting, mode) => (typeof setting === "function" ? setting(mode) : setting);
-
-    // "rent-" -> { title: "rent", mode: endings["-"], ended: true }; without an ending, the line keeps its mode
-    const readTyped = (text, mode) => {
-      const trimmed = String(text ?? "").replace(/\s+/g, " ").trim();
-      const ending = trimmed.slice(-1);
-      if (ending && Object.prototype.hasOwnProperty.call(endings, ending)) {
-        return { title: trimmed.slice(0, -1).trim(), mode: endings[ending], ended: true };
-      }
-      return { title: trimmed, mode, ended: false };
-    };
+    const tidy = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
     // A line goes after the line `after`, or at the end
     function addLine(item = { title: "", mode: defaultMode }, after = null) {
@@ -506,7 +482,10 @@ const BudgetUI = (() => {
       const remove = element("button", "panelClose termRemove", "×");
       remove.type = "button";
       remove.setAttribute("aria-label", `Remove ${lineLabel.toLowerCase()}`);
-      row.append(input, modes.el, remove);
+      // The buttons and × stay together, × right after the last button, when the line wraps
+      const controls = element("div", "termControls");
+      controls.append(modes.el, remove);
+      row.append(input, controls);
 
       // Placeholder and suggestions for the line's button (the search bar's Tracker suggests rows)
       function showMode(mode) {
@@ -526,15 +505,6 @@ const BudgetUI = (() => {
         list.appendChild(row);
       }
 
-      const readEnding = () => {
-        const typed = readTyped(input.value, modes.value());
-        if (!typed.ended) return;
-        input.value = typed.title;
-        modes.set(typed.mode);
-        showMode(typed.mode);
-      };
-      input.addEventListener("change", readEnding);
-
       input.addEventListener("input", () => {
         if (!input.value.includes(",")) return;
         const [first, ...rest] = input.value.split(",");
@@ -543,11 +513,10 @@ const BudgetUI = (() => {
           return;
         }
         input.value = first.trim();
-        readEnding();
         let last = line;
         rest.forEach((piece, i) => {
           if (!piece.trim() && i < rest.length - 1) return; // ",," leaves no empty line
-          last = addLine(readTyped(piece, defaultMode), last);
+          last = addLine({ title: tidy(piece), mode: defaultMode }, last);
         });
         last.input.focus();
         last.input.setSelectionRange(last.input.value.length, last.input.value.length);
@@ -561,7 +530,6 @@ const BudgetUI = (() => {
           if (onEnterEmpty) onEnterEmpty();
           return;
         }
-        readEnding();
         const next = lines[lines.indexOf(line) + 1];
         (next && !next.input.value.trim() ? next : addLine(undefined, line)).input.focus();
       });
@@ -590,15 +558,12 @@ const BudgetUI = (() => {
       el,
       lines: list,
       addButton,
-      items: () => lines.map(line => {
-        const { title, mode } = readTyped(line.input.value, line.modes.value());
-        return { title, mode };
-      })
+      items: () => lines.map(line => ({ title: tidy(line.input.value), mode: line.modes.value() }))
     };
   }
 
   // Tracker row aliases: one entry title per line, each counting All of its amounts, only Costs, or
-  // only Gains (rent-, paycheck+, and atm= pick them too).
+  // only Gains.
   // aliases: [{ title, count }]. value(): [{ title, count }] (blank lines left out)
   const ALIAS_COUNTS = [{ key: "all", label: "All" }, { key: "costs", label: "Costs" }, { key: "gains", label: "Gains" }];
 
@@ -606,7 +571,6 @@ const BudgetUI = (() => {
     const terms = termList({
       items: aliases.map(alias => ({ title: alias.title, mode: alias.count })),
       options: ALIAS_COUNTS,
-      endings: { "-": "costs", "+": "gains", "=": "all" },
       label: "Aliases",
       lineLabel: "Alias",
       addLabel: "+ Add Alias",
@@ -818,6 +782,36 @@ const BudgetUI = (() => {
     return el;
   }
 
+  // A table's red-orange bar under its column titles runs as one gradient across the whole row (see .dataTable
+  // th in budgetStyle.css): each title gets the row's width and its own spot in it. Measured from the layout
+  // (offsetLeft and offsetWidth, which a zoom animation's transform doesn't change), and again whenever the
+  // table changes size. A table can be passed in before it's on the page.
+  const headerBarObserver = typeof ResizeObserver === "function"
+    ? new ResizeObserver(entries => entries.forEach(entry => placeHeaderBar(entry.target)))
+    : null;
+
+  function placeHeaderBar(table) {
+    if (!table.isConnected) {
+      headerBarObserver?.unobserve(table); // Gone from the page (redrawn)
+      return;
+    }
+    const titles = [...(table.tHead?.rows[0]?.cells || [])];
+    if (titles.length === 0) return;
+    const start = titles[0].offsetLeft;
+    const last = titles[titles.length - 1];
+    const width = last.offsetLeft + last.offsetWidth - start;
+    for (const title of titles) {
+      title.style.setProperty("--barWidth", `${width}px`);
+      title.style.setProperty("--barX", `${start - title.offsetLeft}px`);
+    }
+  }
+
+  function spanHeaderBar(table) {
+    if (headerBarObserver) headerBarObserver.observe(table);
+    else requestAnimationFrame(() => placeHeaderBar(table));
+    return table;
+  }
+
   // Kept out of the browser's translation: entries, names, amounts, and dates show as they are
   function noTranslate(el) {
     el.translate = false;
@@ -871,6 +865,7 @@ const BudgetUI = (() => {
     pickDate,
     renderEntryLine,
     noTranslate,
+    spanHeaderBar,
     showToast
   };
 })();

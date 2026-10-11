@@ -9,15 +9,8 @@
     const range = (max - min) || 1;
     const pct = ((val - min) / range) * 100;
 
-    slider.style.background = `
-      linear-gradient(
-        to right,
-        #bdbdbd 0%,
-        #bdbdbd ${pct}%,
-        #000 ${pct}%,
-        #000 100%
-      )
-    `;
+    // The red-orange gradient up to the value, the plain track after it (debug.css)
+    slider.style.background = `linear-gradient(90deg, #ee0000, #ff4500, #ff9a1a) 0 0 / ${pct}% 100% no-repeat, rgba(189, 189, 189, 0.22)`;
   };
 
   const PAINT_ALL = (root=document) => {

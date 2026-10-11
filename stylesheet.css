@@ -23,24 +23,18 @@
  *
  *  6) LINKS
  *     - base link style + hover effects
- *     - utility variants (.clean, .dead, .premium)
  *
- *  7) IMAGES + IMAGE WRAPPERS
+ *  7) IMAGES
  *     - circular avatars
- *     - .imgBorder ring frame
- *     - .imgButton (homepage badge-style images)
- *     - .navButtons icons
  *
  *  8) BUTTONS
  *     - base button typography + hover behavior
- *     - note: shares visuals with .imgButton on purpose
  *
- *  9) GROUP INTERACTIONS
- *     - .hoverTogether “hover whole card” behavior
+ *  9) NAV ICONS
  *     - nav icon hover/active behavior
  *
- * 10) SCRIPT CHARACTER NAME COLORS
- *     - character classes for script pages
+ * 10) HEADER
+ *     - logo, title, and nav buttons
  *
  * 11) SLIDE-IN PAGE TRANSITION SYSTEM
  *     - #transitionContainer and JS-driven states
@@ -48,6 +42,10 @@
  *
  * 12) REDUCED-MOTION ACCESSIBILITY
  *     - disables animated canvas + transitions when requested
+ *
+ * 13) FORM ELEMENTS (LOGIN/REGISTER), CHECKBOXES, PILL SWITCHES
+ *
+ * 14) GRADIENT BORDERS
  *
  *  NOTE: Sections use /* #region ... *\/ for editor folding.
  *==============================================================*/
@@ -260,11 +258,6 @@ h3 {
   font-size: 12vmin;
 }
 
-.aboveName {
-  /* To remove space in scripts bewteen h3 and name lines */
-  margin-bottom:0em;
-}
-
 h4 {
   font-size: 7vmin;
 }
@@ -349,7 +342,6 @@ article {
  *   1) inline-block so transform works nicely
  *   2) default neutral color
  *   3) hover grows slightly + glows + turns red
- *   4) utility variants override specific behavior
  */
 
 a {
@@ -375,42 +367,18 @@ a:hover {
   color: var(--LINK_LIGHT);
 }
 
-/* Utility variants */
-.clean { color: var(--BASE_COLOR); }
-.clean:hover { transform: scale(1.1); }
-
-/* “Dead” links: locked down, dim, no scaling */
-.dead,
-.dead:hover {
-  transform: scale(1);
-  color: var(--LINK_DARK);
-}
-
-/* “Premium” links: purple glow accent */
-.premium {
-  text-shadow: 0 0 20px rgba(100, 0, 100, 1);
-}
-
 /* #endregion 6) LINKS */
 
 
 
-/* #region 7) IMAGES + IMAGE WRAPPERS */
+/* #region 7) IMAGES */
 /*========================================*
- *  7) IMAGES + IMAGE WRAPPERS
+ *  7) IMAGES
  *========================================*
- *  This section defines:
- *   - base circular image rules
- *   - decorative ring frame (.imgBorder)
- *   - badge-style image buttons (.imgButton)
- *   - nav icon strip (.navButtons)
- *
- *  Important note:
- *   .imgButton and button share a block on purpose
- *   so they feel like they belong to the same UI “family”.
+ *  Images are round by default (the logo, nav icons, and Dave's picture start from this). The ❗️ ✖️ ⭕️ ✔️
+ *  sprites have their own rule (img.sprite, near the end).
  */
 
-/*---------- Base circular images ----------*/
 img {
   /* Step 1: default avatar sizing */
   width: 40vmin;
@@ -422,79 +390,7 @@ img {
   overflow: hidden;
 }
 
-/*---------- Decorative border wrapper (.imgBorder) ----------*/
-.imgBorder {
-  /* Step 1: shrink-wrap around the image */
-  display: inline-block;
-  position: relative;
-
-  /* Step 2: keep it circular */
-  border-radius: 50%;
-
-  /* Step 3: remove inline baseline gap */
-  line-height: 0;
-  
-  margin:4vmin;
-}
-
-/* The ring frame lives on a pseudo-element behind the image */
-.imgBorder::before {
-  content: "";
-  position: absolute;
-
-  /* Step 4: inset controls ring thickness */
-  inset: -2vmin;
-
-  /* Step 5: image-based frame */
-  background-image: url("/Resources/Image Border.webp?v=");
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  background-position: center;
-
-  /* Step 6: match circle and sit behind */
-  border-radius: 50%;
-  z-index: -1;
-}
-
-/* Ensure the image behaves as a block (no baseline gap) */
-.imgBorder img {
-  display: block;
-}
-
-/*---------- Homepage badge-style image buttons ----------*/
-/* Note: .imgButton shares a block with button here on purpose */
-.imgButton {
-  /* Step 1: make it a block so it centers cleanly */
-  display: block;
-
-  /* Step 2: let width fit content, set consistent height */
-  width: auto;
-  height: 20vmin;
-
-  /* Step 3: spacing + padding */
-  margin-top: 3vmin;
-  padding: 5vmin;
-
-  /* Step 4: black backing */
-  background-color: black;
-
-  /* Step 5: fallback font if images fail */
-  font: 1vmin Arial;
-
-  /* Step 6: for replaced elements (img), harmless for buttons */
-  object-fit: contain;
-
-  /* Step 7: pill shape + border */
-  border-radius: 10vmin;
-  border: 3px solid var(--BASE_COLOR);
-
-  /* Step 8: smooth transitions */
-  transition:
-    transform var(--SLOW_TRANSFORM),
-    box-shadow var(--SLOW_SHADOW),
-    border-color var(--SLOW_BORDER),
-    color var(--SLOW_COLOR);
-}
+/* #endregion 7) IMAGES */
 
 
 
@@ -502,9 +398,7 @@ img {
 /*========================================*
  *  8) BUTTONS
  *========================================*
- *  Reminder:
- *   - button already gets some shared visuals above (with .imgButton)
- *   - THIS section is where button typography and hover “personality” lives
+ *  Button typography and hover “personality” live here (the gradient border: GRADIENT BORDERS).
  */
 
 button {
@@ -551,30 +445,10 @@ button:hover {
 
 
 
-/* #region 9) GROUP INTERACTIONS */
+/* #region 9) NAV ICONS */
 /*========================================*
- *  9) GROUP INTERACTIONS
- *========================================*
- *  This makes a whole “card” react together.
- *
- *  Step-by-step:
- *   1) hovering the group boosts the badge
- *   2) hovering the group boosts the links
- *   3) nav icons get their own hover/active behavior
- */
-
-/* Hover/focus within a group boosts its badge + links */
-.hoverTogether:hover .imgButton,
-.hoverTogether:focus-within .imgButton {
-  box-shadow: var(--SHADOW);
-  border-color: var(--LINK_LIGHT);
-}
-
-.hoverTogether:hover a,
-.hoverTogether:focus-within a {
-  text-shadow: var(--SHADOW);
-  color: var(--LINK_LIGHT);
-}
+ *  9) NAV ICONS
+ *========================================*/
 
 /* Nav icon glow (the link grows a little, and its gradient border is drawn on the link: GRADIENT BORDERS) */
 .navButtons a:hover img,
@@ -582,7 +456,7 @@ button:hover {
   box-shadow: var(--SHADOW);
 }
 
-/* #endregion 9) GROUP INTERACTIONS */
+/* #endregion 9) NAV ICONS */
 
 /* #region 10) HEADER */
 /*========================================*
@@ -676,7 +550,7 @@ header .stacked h2 {
   object-fit: cover;
   transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER);
 }
-/* #endregion 9) GROUP INTERACTIONS */
+/* #endregion 10) HEADER */
 
 /* #region 11) SLIDE-IN PAGE TRANSITION SYSTEM */
 /*========================================*
@@ -939,6 +813,49 @@ input[type="checkbox"]:focus {
   box-shadow: none;
 }
 
+/* Pill switches: an on/off choice, like "Turn on passkey sign-in" (checkboxes that pick rows from a list, like
+   search results, stay checkboxes). Still a checkbox underneath (with role="switch"), so forms and screen
+   readers work the same. Off: a dark pill with a gray knob at the left. On: the red-orange gradient, with a
+   white knob at the right. The knob is a background layer, so it works on every browser. */
+input[type="checkbox"].pillSwitch {
+  --SWITCH_H: clamp(24px, 3vmin, 30px);
+  --KNOB: calc(var(--SWITCH_H) - 8px);
+  box-sizing: border-box;
+  width: calc(var(--SWITCH_H) * 1.8);
+  height: var(--SWITCH_H);
+  -webkit-appearance: none;
+  appearance: none;
+  border: 2px solid var(--BASE_COLOR);
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle closest-side, var(--BASE_COLOR) 90%, transparent 100%) left 2px center / var(--KNOB) var(--KNOB) no-repeat,
+    rgba(0, 0, 0, 0.35);
+  transition: background-position 0.2s ease, border-color 0.2s ease, box-shadow var(--SLOW_SHADOW);
+}
+
+input[type="checkbox"].pillSwitch:checked {
+  border-color: transparent;
+  background:
+    radial-gradient(circle closest-side, #fff 90%, transparent 100%) right 2px center / var(--KNOB) var(--KNOB) no-repeat,
+    var(--EDGE_GRADIENT) border-box;
+}
+
+input[type="checkbox"].pillSwitch:hover,
+input[type="checkbox"].pillSwitch:focus-visible {
+  box-shadow: var(--SHADOW);
+}
+
+input[type="checkbox"].pillSwitch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type="checkbox"].pillSwitch {
+    transition: none;
+  }
+}
+
 /* Create account: agree to the Privacy Policy & Terms of Use */
 .termsField {
   display: flex;
@@ -994,7 +911,7 @@ a.budgetButton {
 }
 
 .budgetButton,
-.imageButton,
+.helpButton,
 .budgetPanel,
 .idleWarning {
   --EDGE_WIDTH: 2px;
@@ -1010,7 +927,7 @@ a.budgetButton {
 }
 
 button:not([class]):hover,
-.imageButton:hover,
+.helpButton:hover,
 .budgetButton.primary,
 .budgetButton:not(.danger):not(:disabled):hover,
 .segmented .budgetButton[aria-checked="true"],
@@ -1026,7 +943,7 @@ button:not([class]):hover,
 }
 
 button:not([class]):hover::before,
-.imageButton:hover::before,
+.helpButton:hover::before,
 .budgetButton.primary::before,
 .budgetButton:not(.danger):not(:disabled):hover::before,
 .segmented .budgetButton[aria-checked="true"]::before,
