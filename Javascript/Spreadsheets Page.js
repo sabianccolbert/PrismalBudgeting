@@ -40,7 +40,7 @@ const SHEET_FIELD_KEYS = ["date", "title", "amount", "type", "account"];
 const SHEET_SIGNS = [{ key: "written", label: "As Written" }, { key: "costs", label: "All Costs" }, { key: "gains", label: "All Gains" }];
 const MAX_SHEET_CONNECTIONS = 10;
 const SHEET_PREVIEW_LINES = 8;
-const SHARING_EMAIL = "prismalbudget@gmail.com";
+const SHARING_EMAIL = "admin@prismalbudget.org";
 
 // Add Spreadsheet, the verification note's button, and redrawing after every change
 function wireSheets() {

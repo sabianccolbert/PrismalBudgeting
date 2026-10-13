@@ -8,7 +8,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.13.2026.D";
+  const SITE_VERSION = "10.13.2026.E";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -36,7 +36,7 @@
     "/Javascript/Session.js": "ec241e0ce9",
     "/Javascript/Settings Page.js": "203122f77c",
     "/Javascript/Sheet Import.js": "969eb4976d",
-    "/Javascript/Spreadsheets Page.js": "a104b3b20c",
+    "/Javascript/Spreadsheets Page.js": "b49f5dcffb",
     "/Javascript/Spreadsheets.js": "4107bd6583",
     "/Javascript/Sprites.js": "4f0c83ae83",
     "/Javascript/Starfield Setup.js": "d728f1054f",
