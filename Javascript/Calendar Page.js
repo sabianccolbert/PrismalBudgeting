@@ -92,8 +92,8 @@ async function takeHistoryStep(direction) {
 // #region GETTING STARTED (a new budget's first steps)
 // =====================================================================
 // A new budget starts at $0, so its first step says what's in the bank: a ⭕️ Transfer titled Starting
-// Balance on today (it changes In Bank, but isn't a gain), and for savings a ✖️ Hidden gain titled with
-// the default account's name (it puts the money in that account without changing In Bank). The card
+// Balance on today (it changes In Bank, but isn't a gain), and for savings a ✖️ Hidden gain for the default
+// account, "→ Savings" (it puts the money in that account without changing In Bank). The card
 // shows until the starting balance and a recurring entry are there, or it's hidden with ×.
 
 const STARTING_BALANCE = "Starting Balance";
@@ -157,7 +157,7 @@ async function setStartingBalance(event) {
   const savingsAccount = accountRows().find(account => isDefaultAccount(account.row))?.name || otherAccounts()[0]?.name;
   let result = await addCalendarEntry({ title: STARTING_BALANCE, sprite: "⭕️", amount: balance, date: today });
   if (result.ok && savings > 0 && savingsAccount) {
-    result = await addCalendarEntry({ title: savingsAccount, sprite: "✖️", amount: savings, date: today });
+    result = await addCalendarEntry({ title: withAccount("", savingsAccount), sprite: "✖️", amount: savings, date: today });
   }
   form.querySelectorAll("input, button").forEach(control => { control.disabled = false; });
   if (!result.ok) return BudgetUI.showToast(result.message || "Couldn't set the starting balance. Please try again.", true);
@@ -365,7 +365,7 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
       const display = BudgetUI.renderEntryLine(line, lineIndex);
       display.classList.add("panelEntry");
       // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own
-      const account = linkedAccount(parts[0], cleanString(title));
+      const account = linkedAccount(parts[0], title);
       const accountNote = account ? BudgetUI.element("p", "panelHint", refraction === "⭕️"
         ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
         : `${account.name} (Other Accounts) changes by this entry's amount, and In Bank doesn't.`) : null;

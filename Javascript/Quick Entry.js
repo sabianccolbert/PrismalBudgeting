@@ -30,6 +30,13 @@ if (quickKey && quickParams.has("setup")) {
   history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(quickKey)}`);
 }
 
+// Home goes to the budget when this browser is signed in, and straight to the login page when it isn't (not the
+// front page)
+let quickSignedIn = false;
+try { quickSignedIn = !!localStorage.getItem("prismal_jwt"); } catch (e) {}
+const quickHomeLink = document.querySelector('.navButtons a[href="/"]');
+if (quickHomeLink && !quickSignedIn) quickHomeLink.href = "/login.html";
+
 checkQuickKey();
 
 //#endregion
@@ -77,10 +84,10 @@ function openQuickEntryForm(mode = "entry", fill = null) {
       const fields = BudgetUI.newEntryFields({ date: createSafeMidnight(new Date()), accounts: quickAccounts });
       if (makingPrism) {
         form.append(BudgetUI.element("p", "panelHint prismDraftHint", "Fill in or pick only what this prism should keep: a title, an amount, a type, or an account. Then tap Save Prism."));
-        fields.dateEl.hidden = true;
         panel.panel.classList.add("prismDraft");
       }
-      form.append(...fields.els, BudgetUI.buttonRow(makingPrism
+      // A prism never keeps a date, so New Prism has no date box
+      form.append(...fields.els.filter(el => !makingPrism || el !== fields.dateEl), BudgetUI.buttonRow(makingPrism
         ? [{ label: "Save Prism", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => openQuickEntryForm("entry", fields.values()) }]
         : [{ label: "Add Entry", kind: "primary", type: "submit" }]));
       if (fill) fields.fill(fill);
@@ -204,13 +211,13 @@ function prismEditRow(prism, index) {
   return item;
 }
 
-// "❗️ Coffee -$4.50", "Rent", "✖️ Savings", or just "⭕️ Transfer". inWords: "Coffee -$4.50 (Regular)" instead,
-// for a dialog, which can't show the type's image (only the device's own emoji)
+// "❗️ Coffee -$4.50", "Rent", "⭕️ Payday → Savings", or just "⭕️ Transfer". inWords: "Coffee -$4.50 (Regular)"
+// instead, for a dialog, which can't show the type's image (only the device's own emoji)
 function prismLabel(prism, inWords = false) {
   const sprite = prism.type ? QUICK_ENTRY_TYPES[prism.type] : "";
   const type = sprite ? REFRACTION_NAMES.get(sprite) : "";
-  const parts = [inWords ? "" : sprite, prism.title, prism.amount === null ? "" : formatMoney(prism.amount)].filter(Boolean);
-  if (!prism.title && prism.amount === null) parts.push(type);
+  const parts = [inWords ? "" : sprite, withAccount(prism.title, prism.account), prism.amount === null ? "" : formatMoney(prism.amount)].filter(Boolean);
+  if (!prism.title && !prism.account && prism.amount === null) parts.push(type);
   else if (inWords && type) parts.push(`(${type})`);
   return parts.join(" ");
 }
@@ -220,7 +227,7 @@ function prismLabel(prism, inWords = false) {
 function applyPrism(prism) {
   if (!quickForm || quickForm.mode !== "entry") openQuickEntryForm("entry");
   const { fields } = quickForm;
-  fields.fill({ title: prism.title, amount: prism.amount, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "" });
+  fields.fill({ title: prism.title, amount: prism.amount, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "" });
   highlightForm();
   const next = [fields.inputs.title, fields.inputs.amount].find(input => !input.value.trim());
   if (next) next.focus({ preventScroll: true });
@@ -240,11 +247,12 @@ function highlightForm() {
 
 // Save Prism: whatever's filled in or picked (Auto counts as nothing picked), and at least one thing
 async function savePrismFromForm(panel, fields) {
-  const { title, amount, sprite } = fields.values();
+  const { title, amount, sprite, account } = fields.values();
   if (Number.isNaN(amount)) return panel.setError("Enter an amount, like 12.50, or leave it blank.");
   if (amount !== null && Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null };
-  if (!prism.title && prism.amount === null && !prism.type) {
+  // The title and the Other Account are kept apart, so the title is never the account's name unless it was typed
+  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null };
+  if (!prism.title && prism.amount === null && !prism.type && !prism.account) {
     return panel.setError("Fill in or pick at least one thing for this prism: a title, an amount, a type, or an account.");
   }
   if (quickPrisms.length >= MAX_PRISMS) return panel.setError(`You can have up to ${MAX_PRISMS} prisms. Delete one in Edit Prisms first.`);

@@ -634,7 +634,8 @@ const Spreadsheets = (() => {
         type = type || "❗️";
       }
 
-      let account = typedAccount;
+      // The account's name as it's written on Other Accounts, so the entry reads "Title → Savings" (any capitals typed)
+      let account = typedAccount ? accounts.get(cleanString(typedAccount)) : "";
       if (read.account) {
         const accountCell = valueAt("account", i);
         const name = cellText(accountCell.cell);
@@ -649,18 +650,21 @@ const Spreadsheets = (() => {
         continue;
       }
 
-      let title = account || typedTitle;
-      if (!account && read.title) {
+      // The entry keeps its own title, with its Other Account after it ("Payday → Savings"); with no title, it's
+      // the account's name
+      let title = typedTitle;
+      if (read.title) {
         const titleCell = valueAt("title", i);
         title = cellText(titleCell.cell);
-        if (!cleanString(title)) {
+        if (!cleanString(title) && !account) {
           problem(`${titleCell.ref} has no title. Fill it in, or clear its date.`);
           continue;
         }
       }
 
       if (date < keepFrom || date > keepTo) continue;
-      entries.push([formatToMMDDYYYY(date), type, Math.round(amount * 100) / 100, capitalize(title.replace(/\s+/g, " ").trim()).slice(0, MAX_TITLE)]);
+      const ownTitle = capitalize(splitAccount(title.replace(/\s+/g, " ").trim()).title).slice(0, MAX_TITLE);
+      entries.push([formatToMMDDYYYY(date), type, Math.round(amount * 100) / 100, withAccount(ownTitle, account)]);
     }
 
     entries.sort((a, b) => createSafeMidnight(a[0], true) - createSafeMidnight(b[0], true));
