@@ -8,7 +8,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.13.2026.E";
+  const SITE_VERSION = "10.13.2026.F";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -28,7 +28,7 @@
     "/Javascript/Calendar Page.js": "49aa60945d",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "c627653108",
-    "/Javascript/Layout.js": "13544159d9",
+    "/Javascript/Layout.js": "75736bde30",
     "/Javascript/Login.js": "b8bf5b119d",
     "/Javascript/Passkeys.js": "67a10905c2",
     "/Javascript/Process Budget.js": "91ebf02d11",
