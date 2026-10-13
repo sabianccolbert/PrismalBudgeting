@@ -866,6 +866,7 @@ function openRecurringPanel(origin, index) {
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
+        if (title.value().includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
         const fields = { title: withAccount(title.value(), account.value()), amount: amount.value(), startDate: start.value(), endDate: end.value() };
         if (!fields.title) return panel.setError("Give the recurring entry a title.");
         if (Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
@@ -996,8 +997,11 @@ function accountEntriesField(summary) {
     if (entry.change > 0) amount.classList.add("positive");
     if (entry.change < 0) amount.classList.add("negative");
     item.appendChild(amount);
-    const type = getSpecialType(entry.sprite) === "⭕️" ? "⭕️ Transfer" : "✖️ Hidden";
-    item.appendChild(BudgetUI.element("span", "accountEntryType", entry.date > today ? `${type}, coming up` : type));
+    // Its own title ("Payday"), or its type when it has none
+    const sprite = getSpecialType(entry.sprite) === "⭕️" ? "⭕️" : "✖️";
+    const label = `${sprite} ${entry.title || (sprite === "⭕️" ? "Transfer" : "Hidden")}`;
+    const what = BudgetUI.element("span", "accountEntryType", entry.date > today ? `${label}, coming up` : label);
+    item.appendChild(entry.title ? noTranslate(what) : what);
     list.appendChild(item);
   }
   return BudgetUI.field("Entries", list, { hint: "What each entry put in or took out. Upcoming ones are on the calendar after today." });

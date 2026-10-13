@@ -1057,7 +1057,9 @@ function unique(entry) {
     hasBlocker: false
   };
   let isExisting = !injectOrDefer("delete", dateObj, 0, title, sprite, outData);
-  let isOriginalVirginRecurring = (!!source && !isExisting && !outData.hasBlocker);
+  // Only days from today on have entries that land by themselves: the daily update turns every day that passed into
+  // temps (and days long after the budget was last used never got them), so a past day never takes one in
+  let isOriginalVirginRecurring = (!!source && !isExisting && !outData.hasBlocker && dateObj.getTime() >= today.getTime());
   let virginSprite = isOriginalVirginRecurring ? source.sprite : "";
   let virginSpecial = getSpecialType(virginSprite);
   // Inherit sprite before checking target date or calculating amounts
@@ -1674,7 +1676,7 @@ function isTransferEntry(sprite) {
 
 // Each account's balance today and on the calendar's last day, with the entries that changed it (and
 // the ones on the calendar that will), newest first:
-// [{ index, name, isDefault, today, calendarEnd, entries: [{ date, change, sprite }] }]
+// [{ index, name, isDefault, start, today, calendarEnd, entries: [{ date, change, sprite, title (its own, "" without one) }] }]
 function accountSummaries() {
   let accounts = accountTitleMap();
   let summaries = new Map(accountRows().map(account => [account.index, {
@@ -1698,7 +1700,7 @@ function accountSummaries() {
       const change = account ? accountChange(line.sprite, line.amount) : 0;
       if (!account || change === 0) continue;
       date = date || dayOf(lines);
-      if (!isNaN(date.getTime())) summaries.get(account.index).entries.push({ date, change, sprite: line.sprite });
+      if (!isNaN(date.getTime())) summaries.get(account.index).entries.push({ date, change, sprite: line.sprite, title: splitAccount(line.title).title });
     }
   };
   for (let r = 3; r >= 0; r--) {
@@ -3086,7 +3088,7 @@ function inBankTip() {
   const hasEntries = historyData.slice(1).some(row => row.some(cell => String(cell ?? "").trim() !== "")) ||
     calendarData.some(row => row.some(cell => ownEntryLines(cell).length > 0));
   if (inBank === null || !hasEntries) return null;
-  return `Time for your weekly check! Look at today's In Bank here (${formatMoney(inBank)}), and compare it with what your bank account actually has. Try to find which purchases are causing any difference, and add them in (on the day they happened, or just to today). Anything you can't find, just put in as "Catchup -$??" to fix your In Bank.`;
+  return `Time for your weekly check! Look at today's In Bank here (${formatMoney(inBank)}), and compare it with what your bank account actually has. Try to find which purchases are causing any difference, and add them in (on the day they happened, or just to today). Anything you can't find: tap today's In Bank on the calendar and type what your bank says, and a Catchup entry makes up the difference.`;
 }
 
 // A paycheck: a gain from a recurring entry or a connected spreadsheet (its line has a ✔️ or ➕) that's
@@ -4185,6 +4187,8 @@ function cleanString(title) {
   cleanCache.set(text, clean);
   return clean;
 }
+
+// One part of a title, compared: lowercase letters and numbers (symbols only when it has neither), single spaces
 function tidyTitle(text) {
   const lower = text.normalize("NFKC").toLowerCase().replace(/\p{Variation_Selector}/gu, "");
   const tidy = (pattern) => lower.replace(pattern, "").replace(/\s+/g, " ").trim();
@@ -4214,6 +4218,10 @@ function splitAccount(text) {
   const account = at >= 0 ? value.slice(at + 3).trim() : "";
   return account ? { title: value.slice(0, at).trim(), account } : { title: value.trim(), account: "" };
 }
+
+// A typed title can't hold the arrow: it's what marks the Other Account picked (withAccount), so a typed one would
+// put the entry in an account without picking it
+const TITLE_ARROW = `Titles can't have ${ACCOUNT_ARROW} in them. To put an entry in an Other Account, pick the account under Other Account.`;
 
 // An entry's title with the Other Account picked for it, which never changes the title: "Payday → Savings", or
 // "→ Savings" with no title of its own. Only an entry with one is for an account (linkedAccount), even if its

@@ -376,6 +376,7 @@ function openSheetPanel(id, origin) {
         const fields = currentFields();
         if (!name.value()) return panel.setError("Give the spreadsheet a name.");
         if (!Spreadsheets.isLinked(fields.date)) return panel.setError("Tap ➕ next to Date to pick the cells with the dates.");
+        if (!Spreadsheets.isLinked(fields.title) && String(fields.title.value || "").includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
         if (!Spreadsheets.isLinked(fields.title) && !fields.title.value && !fields.account.value) return panel.setError("Type a title, or tap ➕ next to Title to pick its cells.");
         if (!Spreadsheets.isLinked(fields.amount)) {
           const value = amount.value();
@@ -602,6 +603,7 @@ function settingsButton(label, kind, onClick) {
   return button;
 }
 
+// What went wrong with an account request, in words (the server's own message when it sent one)
 function accountError(result, fallback) {
   if (result.status === 401) return "You've been signed out. Please log in again.";
   if (result.status === 0) return "Couldn't reach the server. Please try again.";

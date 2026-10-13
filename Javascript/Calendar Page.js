@@ -450,7 +450,10 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
         if (newSprite !== refraction || newAccount !== startAccount) {
           const total = mode === "set" ? (newAmount === null ? currentAmount : newAmount) : currentAmount + (newAmount || 0);
           if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-          const kind = { title, sprite: refraction, date, newTitle: withAccount(ownTitle, newAccount), newSprite, amount: total };
+          const newTitle = withAccount(ownTitle, newAccount);
+          // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
+          if (!newTitle) return panel.setError("This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
+          const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total };
           if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
           return BudgetUI.submit(panel, () => changeEntryKind(kind));
         }

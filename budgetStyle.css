@@ -2138,6 +2138,15 @@ a.budgetButton:hover {
   top: calc(max(2vh, env(safe-area-inset-top, 0px)) + 1.2em);
 }
 
+/* Date boxes in cards (Settings' birth date): a line of text tall even when empty, with the date at the left */
+.budgetCard input[type="date"] {
+  min-height: calc(1.2em + 1em + 4px);
+}
+
+.budgetCard input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 /* Settings' birth date box */
 .budgetCard .settingsField .ageInput {
   width: 11em;

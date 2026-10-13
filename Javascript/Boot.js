@@ -8,7 +8,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.13.2026.C";
+  const SITE_VERSION = "10.13.2026.D";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -22,21 +22,21 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "558a7e0f16",
     "/Javascript/Analytics.js": "dac605ae19",
-    "/Javascript/Budget Pages.js": "7727e368cc",
+    "/Javascript/Budget Pages.js": "de1887028d",
     "/Javascript/Budget Search.js": "6f91b4418f",
-    "/Javascript/Budget UI.js": "bc9416f9e5",
-    "/Javascript/Calendar Page.js": "d321aad136",
+    "/Javascript/Budget UI.js": "e6fac9bd8b",
+    "/Javascript/Calendar Page.js": "49aa60945d",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "c627653108",
     "/Javascript/Layout.js": "13544159d9",
     "/Javascript/Login.js": "b8bf5b119d",
     "/Javascript/Passkeys.js": "67a10905c2",
-    "/Javascript/Process Budget.js": "3aedb0b57a",
-    "/Javascript/Quick Entry.js": "701cc35a4e",
+    "/Javascript/Process Budget.js": "91ebf02d11",
+    "/Javascript/Quick Entry.js": "67af52ee20",
     "/Javascript/Session.js": "ec241e0ce9",
-    "/Javascript/Settings Page.js": "e9b3b9c0d0",
+    "/Javascript/Settings Page.js": "203122f77c",
     "/Javascript/Sheet Import.js": "969eb4976d",
-    "/Javascript/Spreadsheets Page.js": "b4a766db5e",
+    "/Javascript/Spreadsheets Page.js": "a104b3b20c",
     "/Javascript/Spreadsheets.js": "4107bd6583",
     "/Javascript/Sprites.js": "4f0c83ae83",
     "/Javascript/Starfield Setup.js": "d728f1054f",

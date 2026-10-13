@@ -665,6 +665,7 @@ const BudgetUI = (() => {
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
       },
       read() {
+        if (title.value().includes(ACCOUNT_ARROW)) return { error: TITLE_ARROW };
         const entry = { title: withAccount(title.value(), account.value()), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
         if (!entry.title) return { error: "Give the entry a title." };
         if (entry.amount === null || Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
