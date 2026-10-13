@@ -8,7 +8,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.11.2026.A";
+  const SITE_VERSION = "10.12.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -20,27 +20,29 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "2803600ede",
+    "/Javascript/Active Starfield.js": "23a44ae782",
     "/Javascript/Analytics.js": "dac605ae19",
-    "/Javascript/Budget Pages.js": "5e9ee63dfd",
+    "/Javascript/Budget Pages.js": "04733b80e1",
     "/Javascript/Budget Search.js": "ccd0b54452",
-    "/Javascript/Budget UI.js": "0ba80c229e",
+    "/Javascript/Budget UI.js": "8714407d69",
     "/Javascript/Calendar Page.js": "4d04a01de9",
-    "/Javascript/Debug.js": "f8ff7d25bc",
-    "/Javascript/Keyboard Starfield.js": "97af3e4bd4",
-    "/Javascript/Layout.js": "2f9ed62a71",
-    "/Javascript/Login.js": "96d48e4c04",
+    "/Javascript/Debug.js": "2661348b4b",
+    "/Javascript/Keyboard Starfield.js": "c627653108",
+    "/Javascript/Layout.js": "df6b6e4d98",
+    "/Javascript/Login.js": "456ef5d0df",
     "/Javascript/Passkeys.js": "57181546e2",
-    "/Javascript/Process Budget.js": "43449cc096",
-    "/Javascript/Quick Entry.js": "f9e7402fe9",
+    "/Javascript/Process Budget.js": "b959bd6db3",
+    "/Javascript/Quick Entry.js": "e8b4cd28f4",
     "/Javascript/Session.js": "ff5a8f1a97",
-    "/Javascript/Settings Page.js": "3606ca67a2",
+    "/Javascript/Settings Page.js": "a7d30885ff",
     "/Javascript/Sheet Import.js": "2dda717131",
-    "/Javascript/Sprites.js": "b95de2e3bf",
-    "/Javascript/Starfield Setup.js": "65f71b67e6",
+    "/Javascript/Spreadsheets.js": "09c4338f30",
+    "/Javascript/Sprites.js": "9dd3752085",
+    "/Javascript/Starfield Setup.js": "fece082597",
     "/Resources/Sprites/Hidden.webp": "9c3afd2c80",
     "/Resources/Sprites/Recurring.webp": "f35a230cbd",
     "/Resources/Sprites/Regular.webp": "11a1321f81",
+    "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "0b848dff24"
   };
   // </stamp:files>
@@ -88,7 +90,6 @@
   // Pages that work without logging in (Quick Entry uses the key in its link instead; How It Works and
   // the Not Found page are for anyone, search engines included)
   const PUBLIC_PAGES = ["login", "privacy", "quick", "guide", "notfound"];
-  window.PUBLIC_PAGE = PUBLIC_PAGES.includes(PAGE);
 
   /* ===============================
    *  2) SITE DATA
@@ -102,7 +103,19 @@
   } catch (e) {
     storage = null;
   }
-  if (!storage && (PAGE === "login" || !PUBLIC_PAGES.includes(PAGE))) {
+  const isLoggedIn = !!(storage && storage.getItem("prismal_jwt"));
+
+  // Home is the budget for anyone signed in, and the front page (what Prismal Budget is, with Sign In and
+  // Create Account) for anyone else, search engines included. index.html starts as the front page, so it
+  // reads the same without JavaScript.
+  const FRONT_PAGE = PAGE === "home" && !isLoggedIn;
+  window.FRONT_PAGE = FRONT_PAGE;
+  document.documentElement.classList.toggle("frontPage", FRONT_PAGE);
+  if (PAGE === "home" && !FRONT_PAGE) document.title = "Prismal Budget - Home";
+  const IS_PUBLIC = FRONT_PAGE || PUBLIC_PAGES.includes(PAGE);
+  window.PUBLIC_PAGE = IS_PUBLIC;
+
+  if (!storage && (PAGE === "login" || !IS_PUBLIC)) {
     document.documentElement.classList.add("noStorage");
     return;
   }
@@ -126,7 +139,6 @@
     ? 'http://127.0.0.1:8787'
     : "https://prismal-budget-api.prismalbudget.workers.dev";
 
-  const isLoggedIn = !!(storage && storage.getItem("prismal_jwt"));
   // The link in a password reset email (/login.html?reset=...) opens the login page even when signed in.
   // Login.js moves the code into this tab's session storage, so a reload of that page still counts.
   let hasResetCode = false;
@@ -134,7 +146,7 @@
   const isResetLink = PAGE === "login" && (new URLSearchParams(location.search).has("reset") || hasResetCode);
 
   // If they are not logged in, and not already on a page that works without it, redirect them.
-  if (!isLoggedIn && !PUBLIC_PAGES.includes(PAGE)) {
+  if (!isLoggedIn && !IS_PUBLIC) {
     window.location.replace("/login.html");
     return;
   }
@@ -153,7 +165,7 @@
    * =============================== */
   // Starfield Setup starts the worker (Active Starfield.js) itself, so Active isn't listed here.
   // Setup must come before Keyboard and Layout, which use window.STARFIELD. Sprites goes first, so the
-  // ❗️ ✖️ ⭕️ ✔️ images are in before the page slides in.
+  // ❗️ ✖️ ⭕️ ✔️ ➕ images are in before the page slides in.
   const GLOBAL_SCRIPTS = [
     "/Javascript/Sprites.js",
     "/Javascript/Starfield Setup.js",
@@ -190,17 +202,19 @@
     if (PAGE === "login") {
       appendScript("/Javascript/Login.js");
     }
-    else if (!PUBLIC_PAGES.includes(PAGE)) {
+    else if (!IS_PUBLIC) {
       appendScript("/Javascript/Session.js"); // Sends signed-out visitors to login, so public pages skip it
     }
     if (PAGE === "notfound") {
       appendScript("/Javascript/Debug.js");
     }
     // Every page that shows budget data loads + saves it through Process Budget,
-    // then draws itself: the calendar page, settings, or the menu data pages
-    if (BUDGET_PAGES.includes(PAGE)) {
+    // then draws itself: the calendar page, settings, or the menu data pages (the front page shows none)
+    if (BUDGET_PAGES.includes(PAGE) && !FRONT_PAGE) {
       appendScript("/Javascript/Process Budget.js");
       appendScript("/Javascript/Budget UI.js");
+      // Connected spreadsheets' reading (Quick Entry never reads them)
+      if (PAGE !== "quick") appendScript("/Javascript/Spreadsheets.js");
       // Search (Home's and History's): before the page script, which opens it
       if (PAGE === "home" || PAGE === "history") appendScript("/Javascript/Budget Search.js");
       appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");

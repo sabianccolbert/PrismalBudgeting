@@ -1,4 +1,3 @@
-// thank heavens for chatGPT <3
 // Layout + page transitions for Prismal Budget.
 // This file owns navigation animations, bfcache hygiene, touch-safe tap handling, floating Help, the
 // footer, and signing out. Starfield is treated as a "passenger" that we freeze/save during transitions.
@@ -355,9 +354,14 @@ window.addEventListener("pageshow", (EVENT) => {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
 
-  // Back to a signed-in page after signing out (it came back from the back/forward cache): go to login
+  // Back to a signed-in page after signing out (it came back from the back/forward cache): go to login.
+  // Back to the front page after signing in: the budget.
   if (!readStored("prismal_jwt") && !window.PUBLIC_PAGE) {
     window.location.replace("/login.html");
+    return;
+  }
+  if (window.FRONT_PAGE && readStored("prismal_jwt")) {
+    window.location.reload();
     return;
   }
 

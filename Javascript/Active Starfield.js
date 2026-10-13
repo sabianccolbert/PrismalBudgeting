@@ -1,38 +1,44 @@
-// thank heavens for chatGPT <3                                           // Credit header
-// Active Starfield: the starfield engine. Owns state, physics, rendering, pointer math, and the loop. // File purpose
-// Runs inside a Web Worker on an OffscreenCanvas, started by Starfield Setup.js. // Where it runs
-// Workers can't see the page (no window/document/localStorage), so ALL input arrives as messages (region 6). // Key rule
-// If OffscreenCanvas is unsupported, Setup loads this file on the main thread instead (same message path). // Fallback
+// Active Starfield: the starfield engine. Owns state, physics, rendering, pointer math, and the loop.
+// Runs inside a Web Worker on an OffscreenCanvas, started by Starfield Setup.js.
+// Workers can't see the page (no window/document/localStorage), so ALL input arrives as messages (region 6).
+// If OffscreenCanvas is unsupported, Setup loads this file on the main thread instead (same message path).
 
-/*======================================================================  // Big section divider
- *  MENU                                                                  // Table of contents
+/*======================================================================
+ *  MENU
  *----------------------------------------------------------------------
- *  0) ENGINE STATE + HELPERS                                              // State, keyboard impulses, utilities, sprite
- *  1) PHYSICS                                                             // Forces + movement
- *  2) RENDERING                                                           // Drawing stars + links + ring
- *  3) USER INPUT                                                          // Pointer events (sent by Setup) -> speed + poke
- *  4) INIT: RESTORE OR CREATE STARS                                       // Adopt saved stars or build fresh ones
- *  5) RESIZE + ANIMATION LOOP                                             // Canvas sizing, scaling, loop, snapshots
- *  6) MESSAGES                                                            // Setup <-> engine message handling
- *====================================================================*/   // End menu block
+ *  0) ENGINE STATE + HELPERS
+ *     - State, keyboard impulses, utilities, sprite
+ *  1) PHYSICS
+ *     - Forces + movement
+ *  2) RENDERING
+ *     - Drawing stars + links + ring
+ *  3) USER INPUT
+ *     - Pointer events (sent by Setup) -> speed + poke
+ *  4) INIT: RESTORE OR CREATE STARS
+ *     - Adopt saved stars or build fresh ones
+ *  5) RESIZE + ANIMATION LOOP
+ *     - Canvas sizing, scaling, loop, snapshots
+ *  6) MESSAGES
+ *     - Setup <-> engine message handling
+ *====================================================================*/
 
-// Wrap the engine so its names (S, KEYBOARD, helpers) never clash with page globals   // Why the wrapper exists
-// when the main-thread fallback loads this file as a normal <script>.               // (Layout/Keyboard also use a global S)
+// Wrap the engine so its names (S, KEYBOARD, helpers) never clash with page globals
+// when the main-thread fallback loads this file as a normal <script>.
 (function STARFIELD_ENGINE() {
 
 
-/*======================================================================  // Region divider
- * #region 0) ENGINE STATE + HELPERS                                      // Start region 0
- *====================================================================*/   // Divider
+/*======================================================================
+ * #region 0) ENGINE STATE + HELPERS
+ *====================================================================*/
 
-/* GROUP: Where are we running? */                                        // Group label
-// True inside the Web Worker, false when Setup loaded us on the main thread as a fallback. // Explanation
+/* GROUP: Where are we running? */
+// True inside the Web Worker, false when Setup loaded us on the main thread as a fallback.
 const IS_WORKER =
   typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope; // Only workers have WorkerGlobalScope
 
-/* GROUP: Engine state */                                                 // Group label
-// The engine's own STARFIELD state. In the worker this is NOT window.STARFIELD   // Explanation
-// (the worker can't see the page); Setup only reaches it through messages.      // Explanation
+/* GROUP: Engine state */
+// The engine's own STARFIELD state. In the worker this is NOT window.STARFIELD
+// (the worker can't see the page); Setup only reaches it through messages.
 const S = {};
 
 /* GROUP: Canvas wiring (filled by the INIT message) */
@@ -172,10 +178,10 @@ const KEYBOARD = {
   // Add a global drift impulse on Y (ex: WASD movement).
   addY: 0,
 
-  // Paddles: X position (0..100 style “percent” space used by your pong logic).
+  // Paddles: X position (0..100 style “percent” space the pong paddles use).
   paddlesX: 50,
 
-  // Paddles: Y position (0..100 style “percent” space used by your pong logic).
+  // Paddles: Y position (0..100 style “percent” space the pong paddles use).
   paddlesY: 50,
 
   // Paddles: timer that keeps paddles “active” briefly after input.
@@ -242,20 +248,20 @@ function postToMain(MESSAGE) {
   else if (self.STARFIELD) self.STARFIELD.handleEngineMessage(MESSAGE);
 }
 
-/* GROUP: Sprite stars (WebP) */                                          // Group label
-// Hold sprite loading state so rendering can bail until the image is ready. // Why we track load state
-const STAR_SPRITES = {                                                    // Sprite load state container
+/* GROUP: Sprite stars (WebP) */
+// Hold sprite loading state so rendering can bail until the image is ready.
+const STAR_SPRITES = {
 
-  // True once the star image is fully loaded.                             // Meaning
-  ready: false,                                                           // Loading gate
+  // True once the star image is fully loaded.
+  ready: false,
 
-  // The ImageBitmap used by drawImage().                                  // Meaning
-  img: null                                                               // Image reference
-};                                                                        // End sprite state
+  // The ImageBitmap used by drawImage().
+  img: null
+};
 
-// Load the star sprite immediately so it is ready by the time rendering starts. // Why IIFE exists
-// Workers have no Image(), so fetch the file and decode it into an ImageBitmap. // Why fetch
-(function loadStarSpriteNow() {                                           // IIFE: runs once at parse time
+// Load the star sprite immediately so it is ready by the time rendering starts.
+// Workers have no Image(), so fetch the file and decode it into an ImageBitmap.
+(function loadStarSpriteNow() {
   fetch("/Resources/Star.webp")                                           // Sprite path (same origin as the worker)
     .then((RESPONSE) => {                                                 // Check the download
       if (!RESPONSE.ok) throw new Error("HTTP " + RESPONSE.status);       // Treat 404 etc. as a failure
@@ -270,208 +276,208 @@ const STAR_SPRITES = {                                                    // Spr
       STAR_SPRITES.ready = false;                                         // Keep ready false on error
       console.warn("Could not load star sprite:", ERROR);                 // Say why stars aren't drawing
     });
-})();                                                                     // Invoke immediately
+})();
 
-/* GROUP: Link throttle state */                                          // Group label
-// Count frames so we can rebuild link geometry every N frames.            // Why LINK_FRAME exists
-let LINK_FRAME = 0;                                                       // Frame counter for link throttling
+/* GROUP: Link throttle state */
+// Count frames so we can rebuild link geometry every N frames.
+let LINK_FRAME = 0;
 
-// Flag used to force an immediate link rebuild (ex: fast pointer movement). // Why LINKS_DIRTY exists
-let LINKS_DIRTY = true;                                                   // Start dirty so first frame builds links
+// Flag used to force an immediate link rebuild (ex: fast pointer movement).
+let LINKS_DIRTY = true;
 
-/* GROUP: Links fade near the edges */                                    // Group label
-// Faster edge fade helper for links (keeps rendering logic light).        // Why this helper exists
-function getEdgeFadeFactorFast(STAR) {                                    // Returns 0..1 fade for link brightness
+/* GROUP: Links fade near the edges */
+// Faster edge fade helper for links (keeps rendering logic light).
+function getEdgeFadeFactorFast(STAR) {
 
-  // Approximate star "radius" based on how large it draws on screen.      // Why we compute radius
-  const STAR_RADIUS = (STAR.whiteValue * 2 + STAR.size) || 0;             // Star padding radius (safe fallback 0)
+  // Approximate star "radius" based on how large it draws on screen.
+  const STAR_RADIUS = (STAR.whiteValue * 2 + STAR.size) || 0;
 
-  // Measure padded distance to each edge (radius avoids visible popping at wrap). // Explanation
-  const DIST_LEFT = STAR.x + STAR_RADIUS;                                 // Distance to left edge including radius
+  // Measure padded distance to each edge (radius avoids visible popping at wrap).
+  const DIST_LEFT = STAR.x + STAR_RADIUS;
   const DIST_RIGHT = (S.canvasWidth + STAR_RADIUS) - STAR.x;              // Distance to right edge including radius
   const DIST_TOP = STAR.y + STAR_RADIUS;                                  // Distance to top edge including radius
   const DIST_BOTTOM = (S.canvasHeight + STAR_RADIUS) - STAR.y;            // Distance to bottom edge including radius
 
-  // Find the closest edge distance (the "most at risk" direction).        // Why min
-  const MIN_EDGE_DISTANCE = Math.min(DIST_LEFT, DIST_RIGHT, DIST_TOP, DIST_BOTTOM); // Closest edge distance
+  // Find the closest edge distance (the "most at risk" direction).
+  const MIN_EDGE_DISTANCE = Math.min(DIST_LEFT, DIST_RIGHT, DIST_TOP, DIST_BOTTOM);
 
-  // Define fade band width (cap it so it stays cheap).                    // Fade band logic
-  const FADE_BAND = Math.min(90, S.screenPerimeter * 0.03) || 1;          // Fade band size (never 0)
+  // Define fade band width (cap it so it stays cheap).
+  const FADE_BAND = Math.min(90, S.screenPerimeter * 0.03) || 1;
 
-  // Convert closest distance into 0..1 fade factor.                       // Normalize into [0,1]
+  // Convert closest distance into 0..1 fade factor.
   const T =
     MIN_EDGE_DISTANCE <= 0 ? 0 :                                          // At/over edge => fully faded
     MIN_EDGE_DISTANCE >= FADE_BAND ? 1 :                                  // Safely inside => full strength
     (MIN_EDGE_DISTANCE / FADE_BAND);                                      // Otherwise scale proportionally
 
-  // Square for quick easing (cheap “smooth-ish” curve).                   // Fast easing
-  return T * T;                                                           // Ease-in curve
-}                                                                          // End helper
+  // Square for quick easing (cheap “smooth-ish” curve).
+  return T * T;
+}
 
-/* GROUP: Time scaling helpers */                                         // Group label
-// Define how many ms one 60fps frame represents (conversion constant).    // Explanation
-const SIXTY_FPS_FRAME_MS = 1000 / 60;                                     // 16.666...ms per frame
+/* GROUP: Time scaling helpers */
+// Define how many ms one 60fps frame represents (conversion constant).
+const SIXTY_FPS_FRAME_MS = 1000 / 60;
 
-// Clamp dt (ms) to prevent tab-sleep teleports and clock weirdness.       // Why we clamp dt
-function clampDtMs(DT_MS) {                                               // Returns safe dt in ms
+// Clamp dt (ms) to prevent tab-sleep teleports and clock weirdness.
+function clampDtMs(DT_MS) {
 
-  // Prevent negative dt (clock weirdness) from producing inverted updates. // Explanation
-  if (DT_MS < 0) return 0;                                                // Negative dt becomes 0
+  // Prevent negative dt (clock weirdness) from producing inverted updates.
+  if (DT_MS < 0) return 0;
 
-  // Cap dt so tab sleep / lag spikes don't cause massive forces and teleports. // Explanation
-  if (DT_MS > 50) return 50;                                              // Cap at ~3 frames @ 60fps
+  // Cap dt so tab sleep / lag spikes don't cause massive forces and teleports.
+  if (DT_MS > 50) return 50;
 
-  // Return dt unchanged when it is in a safe range.                       // Explanation
-  return DT_MS;                                                           // Safe dt
-}                                                                          // End clamp
+  // Return dt unchanged when it is in a safe range.
+  return DT_MS;
+}
 
-// Convert a per-frame decay constant into a time-based decay.             // Why we convert
-function decayPerFrameToDt(BASE_PER_FRAME, DT_FRAMES) {                   // Converts per-frame decay to variable FPS
-  // Example: 0.98 per frame becomes 0.98^DT_FRAMES for variable FPS.      // Explanation
-  return Math.pow(BASE_PER_FRAME, DT_FRAMES);                             // Exponentiate by frame count
-}                                                                          // End decay converter
+// Convert a per-frame decay constant into a time-based decay.
+function decayPerFrameToDt(BASE_PER_FRAME, DT_FRAMES) {
+  // Example: 0.98 per frame becomes 0.98^DT_FRAMES for variable FPS.
+  return Math.pow(BASE_PER_FRAME, DT_FRAMES);
+}
 
-/* #endregion 0) PERF HELPERS */                                          // End region 0
+/* #endregion 0) PERF HELPERS */
 
 
 
-/*======================================================================  // Region divider
- * #region 1) PHYSICS                                                     // Start region 1
- *====================================================================*/   // Divider
+/*======================================================================
+ * #region 1) PHYSICS
+ *====================================================================*/
 
-/* GROUP: Physics entry point */                                          // Group label
-// Decide how each star should move.                                       // High-level purpose
-S.updateStarPhysics = function updateStarPhysics() {                      // Install physics function onto STARFIELD
+/* GROUP: Physics entry point */
+// Decide how each star should move.
+S.updateStarPhysics = function updateStarPhysics() {
 
-  // Bail early if we have no stars to simulate.                           // Guard
-  if (!S.starList.length) return;                                         // Nothing to do
+  // Bail early if we have no stars to simulate.
+  if (!S.starList.length) return;
 
-  // Sample time from Setup helper (performance.now when possible).        // Time source
-  const NOW_MS = S.getNowMs();                                            // Current time (ms)
+  // Sample time from Setup helper (performance.now when possible).
+  const NOW_MS = S.getNowMs();
 
-  // Mark start time for per-frame debug timing.                           // For debug time measurement
-  const FRAME_START_MS = NOW_MS;                                          // Start timestamp for this frame
+  // Mark start time for per-frame debug timing.
+  const FRAME_START_MS = NOW_MS;
 
-  // Use previous timestamp, or default to NOW on first frame.             // Last time fallback
-  const LAST_PHYSICS_MS = S.lastPhysicsMs || NOW_MS;                      // Last physics timestamp
+  // Use previous timestamp, or default to NOW on first frame.
+  const LAST_PHYSICS_MS = S.lastPhysicsMs || NOW_MS;
 
-  // Compute elapsed time and clamp to avoid huge simulation jumps.        // dt computation
-  const DT_MS = clampDtMs(NOW_MS - LAST_PHYSICS_MS);                      // Safe delta time in ms
+  // Compute elapsed time and clamp to avoid huge simulation jumps.
+  const DT_MS = clampDtMs(NOW_MS - LAST_PHYSICS_MS);
 
-  // Store this frame's timestamp for next update.                         // Persist last time
-  S.lastPhysicsMs = NOW_MS;                                               // Save timestamp
+  // Store this frame's timestamp for next update.
+  S.lastPhysicsMs = NOW_MS;
 
-  // Normalize elapsed time into “60fps frames”.                           // Convert dt into frame units
+  // Normalize elapsed time into “60fps frames”.
   const DT_FRAMES = DT_MS / SIXTY_FPS_FRAME_MS;                           // dt in "frames"
 
-  // Bail if dt is zero so we don't waste work.                            // Guard
-  if (DT_FRAMES <= 0) return;                                             // No time passed
+  // Bail if dt is zero so we don't waste work.
+  if (DT_FRAMES <= 0) return;
 
-  /* GROUP: Ranges + settings */                                          // Group label
-  // Define maximum range where pointer forces can affect stars.           // Influence radius
-  const INFLUENCE_RANGE = S.screenPerimeter * 0.2;                        // Range scales with screen
+  /* GROUP: Ranges + settings */
+  // Define maximum range where pointer forces can affect stars.
+  const INFLUENCE_RANGE = S.screenPerimeter * 0.2;
 
-  // Precompute squared range for cheap comparisons.                       // Optimization
-  const INFLUENCE_RANGE_SQ = INFLUENCE_RANGE * INFLUENCE_RANGE;           // Range squared
+  // Precompute squared range for cheap comparisons.
+  const INFLUENCE_RANGE_SQ = INFLUENCE_RANGE * INFLUENCE_RANGE;
 
-  // Local distance threshold for wrap vs bounce behavior.                 // Wrap/bounce threshold
-  const WRAP_DISTANCE_SQ = 200 * 200;                                     // 200px squared
+  // Local distance threshold for wrap vs bounce behavior.
+  const WRAP_DISTANCE_SQ = 200 * 200;
 
-  // Grab UI-tunable settings.                                             // Settings alias
-  const SETTINGS = S.interactionSettings;                                 // Slider-driven settings
+  // Grab UI-tunable settings.
+  const SETTINGS = S.interactionSettings;
 
-  // Grab precomputed screen scaling powers.                               // Scaling alias
-  const SCALE = S.screenScalePowers;                                      // Screen scaling multipliers
+  // Grab precomputed screen scaling powers.
+  const SCALE = S.screenScalePowers;
 
-  /* GROUP: Time-based decays */                                          // Group label
-  // Convert legacy “per frame” decays into time-based multipliers.        // Explanation
-  const MOMENTUM_DECAY = decayPerFrameToDt(0.98, DT_FRAMES);              // Momentum decay per dt
+  /* GROUP: Time-based decays */
+  // Convert legacy “per frame” decays into time-based multipliers.
+  const MOMENTUM_DECAY = decayPerFrameToDt(0.98, DT_FRAMES);
   const WHITE_DECAY = decayPerFrameToDt(0.98, DT_FRAMES);                 // White flash decay per dt
   const POINTER_SPEED_DECAY = decayPerFrameToDt(0.5, DT_FRAMES);          // Pointer energy decay per dt
   const RING_DECAY = decayPerFrameToDt(0.95, DT_FRAMES);                  // Ring timer decay per dt
   const POKE_DECAY = decayPerFrameToDt(0.85, DT_FRAMES);                  // Poke timer decay per dt
 
-  /* GROUP: Update each star */                                           // Group label
+  /* GROUP: Update each star */
   for (const STAR of S.starList) {                                        // Iterate all stars
 
-    // Prevent paddle bounce and normal bounce from fighting each other.   // Why flag exists
-    let DID_BOUNCE = false;                                               // Whether we already bounced this frame
+    // Prevent paddle bounce and normal bounce from fighting each other.
+    let DID_BOUNCE = false;
 
-    // Compute pointer delta vector (pointer minus star).                  // Delta vector
-    const POINTER_DELTA_X = S.pointerClientX - STAR.x;                    // dx to pointer
+    // Compute pointer delta vector (pointer minus star).
+    const POINTER_DELTA_X = S.pointerClientX - STAR.x;
     const POINTER_DELTA_Y = S.pointerClientY - STAR.y;                    // dy to pointer
 
-    // Compute squared distance for range checks.                          // Distance squared
+    // Compute squared distance for range checks.
     const DISTANCE_TO_POINTER_SQ =
       POINTER_DELTA_X * POINTER_DELTA_X + POINTER_DELTA_Y * POINTER_DELTA_Y; // dx^2 + dy^2
 
-    /* GROUP: Proximity-only forces */                                    // Group label
+    /* GROUP: Proximity-only forces */
     if (DISTANCE_TO_POINTER_SQ < INFLUENCE_RANGE_SQ) {                    // Only compute expensive forces in range
 
-      // Compute true distance and add epsilon to prevent divide-by-zero.  // Safe sqrt
-      const DISTANCE_TO_POINTER = Math.sqrt(DISTANCE_TO_POINTER_SQ) + 0.0001; // Distance + epsilon
+      // Compute true distance and add epsilon to prevent divide-by-zero.
+      const DISTANCE_TO_POINTER = Math.sqrt(DISTANCE_TO_POINTER_SQ) + 0.0001;
 
-      // Normalize delta into a unit vector toward pointer.                // Unit direction
-      const UNIT_TO_POINTER_X = POINTER_DELTA_X / DISTANCE_TO_POINTER;    // ux
+      // Normalize delta into a unit vector toward pointer.
+      const UNIT_TO_POINTER_X = POINTER_DELTA_X / DISTANCE_TO_POINTER;
       const UNIT_TO_POINTER_Y = POINTER_DELTA_Y / DISTANCE_TO_POINTER;    // uy
 
-      /* GROUP: Attraction */                                             // Group label
-      // Convert distance into 0..1 gradient inside attraction radius.     // Gradient mapping
+      /* GROUP: Attraction */
+      // Convert distance into 0..1 gradient inside attraction radius.
       let ATTRACTION_GRADIENT =
         1 - (DISTANCE_TO_POINTER / ((SETTINGS.attractRadius * SCALE.attractionGradient) || 1)); // Invert normalized distance
 
-      // Clamp so it never goes negative outside radius.                   // Clamp
-      ATTRACTION_GRADIENT = Math.max(0, ATTRACTION_GRADIENT);             // 0..1
+      // Clamp so it never goes negative outside radius.
+      ATTRACTION_GRADIENT = Math.max(0, ATTRACTION_GRADIENT);
 
-      // Shape attraction falloff curve.                                   // Curve shaping
-      const ATTRACTION_SHAPE = Math.pow(                                 // Exponent curve
+      // Shape attraction falloff curve.
+      const ATTRACTION_SHAPE = Math.pow(
         ATTRACTION_GRADIENT,                                             // Base gradient
         Math.max(0.1, (SETTINGS.attractScale * SCALE.attractionShape)) // Exponent (never below 0.1)
       );
 
-      // Compute attraction force (settings + screen scale + pointer energy + shape). // Force composition
+      // Compute attraction force (settings + screen scale + pointer energy + shape).
       const ATTRACTION_FORCE =
         (SETTINGS.attractStrength * SCALE.attractionForce) *  // Base strength scaled
         S.pointerSpeedUnits *                                            // Pointer energy multiplier
         ATTRACTION_SHAPE;                                                // Curve-shaped falloff
 
-      /* GROUP: Repulsion */                                              // Group label
-      // Convert distance into 0..1 gradient inside repulsion radius.      // Gradient mapping
+      /* GROUP: Repulsion */
+      // Convert distance into 0..1 gradient inside repulsion radius.
       let REPULSION_GRADIENT =
         1 - (DISTANCE_TO_POINTER / ((SETTINGS.repelRadius * SCALE.repulsionGradient) || 1)); // Invert normalized distance
 
-      // Clamp so it never goes negative outside radius.                   // Clamp
-      REPULSION_GRADIENT = Math.max(0, REPULSION_GRADIENT);               // 0..1
+      // Clamp so it never goes negative outside radius.
+      REPULSION_GRADIENT = Math.max(0, REPULSION_GRADIENT);
 
-      // Shape repulsion falloff curve.                                    // Curve shaping
-      const REPULSION_SHAPE = Math.pow(                                   // Exponent curve
+      // Shape repulsion falloff curve.
+      const REPULSION_SHAPE = Math.pow(
         REPULSION_GRADIENT,                                               // Base gradient
         Math.max(0.1, (SETTINGS.repelScale * SCALE.repulsionShape))                        // Exponent (never below 0.1)
       );
 
-      // Compute repulsion force (settings + screen scale + pointer energy + shape). // Force composition
+      // Compute repulsion force (settings + screen scale + pointer energy + shape).
       const REPULSION_FORCE =
         (SETTINGS.repelStrength * SCALE.repulsionForce) *      // Base strength scaled
         S.pointerSpeedUnits *                                             // Pointer energy multiplier
         REPULSION_SHAPE;                                                  // Curve-shaped falloff
 
-      /* GROUP: Poke */                                                   // Group label
-      // Define poke radius as a fraction of screen size.                  // Poke radius definition
-      const POKE_RADIUS = S.screenPerimeter * 0.2;                        // Poke reach scales with screen
+      /* GROUP: Poke */
+      // Define poke radius as a fraction of screen size.
+      const POKE_RADIUS = S.screenPerimeter * 0.2;
 
-      // Convert distance into 0..1 poke gradient inside poke radius.      // Gradient mapping
-      const POKE_GRADIENT = 1 - (DISTANCE_TO_POINTER / POKE_RADIUS);      // Inverted normalized distance
+      // Convert distance into 0..1 poke gradient inside poke radius.
+      const POKE_GRADIENT = 1 - (DISTANCE_TO_POINTER / POKE_RADIUS);
 
-      // Shape poke so it ramps sharply near pointer.                      // Curve shaping
-      const POKE_SHAPE = Math.pow(Math.max(0, POKE_GRADIENT), 2);         // Clamp then square
+      // Shape poke so it ramps sharply near pointer.
+      const POKE_SHAPE = Math.pow(Math.max(0, POKE_GRADIENT), 2);
 
-      // Compute poke force (settings + impulse timer + shape).            // Poke force composition
+      // Compute poke force (settings + impulse timer + shape).
       const POKE_FORCE =
         (0.01 * SETTINGS.pokeStrength) *                                  // Poke strength base
         S.pokeImpulseTimer *                                              // Impulse timer multiplier
         POKE_SHAPE;                                                       // Shape falloff
 
-      /* GROUP: Apply proximity-only forces */                            // Group label
+      /* GROUP: Apply proximity-only forces */
       STAR.momentumX += (ATTRACTION_FORCE * UNIT_TO_POINTER_X) * DT_FRAMES; // Pull toward pointer (x)
       STAR.momentumY += (ATTRACTION_FORCE * UNIT_TO_POINTER_Y) * DT_FRAMES; // Pull toward pointer (y)
 
@@ -482,20 +488,20 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
       STAR.momentumY += (POKE_FORCE * -UNIT_TO_POINTER_Y) * DT_FRAMES;      // Poke burst away (y)
     }
 
-    /* GROUP: Global forces */                                            // Group label
+    /* GROUP: Global forces */
     const DRIFT_BOOST = Math.min(7, 0.01 * (S.pointerSpeedUnits + 0.0001)); // Drift boost increases with pointer energy (capped)
 
     STAR.momentumX += (STAR.vx * DRIFT_BOOST) * DT_FRAMES;                // Add baseline drift (x) into momentum
     STAR.momentumY += (STAR.vy * DRIFT_BOOST) * DT_FRAMES;                // Add baseline drift (y) into momentum
 
-    /* GROUP: Keyboard influence */                                       // Group label
+    /* GROUP: Keyboard influence */
     STAR.momentumX += KEYBOARD.addX + (KEYBOARD.multX * STAR.vx * 0.05); // Add keyboard impulse + drift assist (x)
     STAR.momentumY += KEYBOARD.addY + (KEYBOARD.multY * STAR.vy * 0.05); // Add keyboard impulse + drift assist (y)
 
     STAR.momentumX *= KEYBOARD.multX;                               // Multiply momentum (x) for speed scaling keys
     STAR.momentumY *= KEYBOARD.multY;                               // Multiply momentum (y) for speed scaling keys
 
-    /* GROUP: Magnet orbit */                                             // Group label
+    /* GROUP: Magnet orbit */
     if (KEYBOARD.magnetY > 0 || KEYBOARD.magnetPointer) {    // If magnet mode is active
 
       const CANVAS = S.constellationCanvas;                               // Canvas ref for bounding rect conversions
@@ -504,8 +510,8 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
 
         const RECT = { left: 0, top: 0 };                                 // Canvas is position:fixed + inset:0 (no DOM rect in a worker)
 
-        // Magnet target in CANVAS space.                                // Target variables
-        let MAGNET_X_CANVAS, MAGNET_Y_CANVAS;                             // Target coordinates
+        // Magnet target in CANVAS space.
+        let MAGNET_X_CANVAS, MAGNET_Y_CANVAS;
 
         if (KEYBOARD.magnetPointer) {                              // Pointer-centered magnet mode
           MAGNET_X_CANVAS = S.pointerClientX - RECT.left;                 // Pointer x relative to canvas
@@ -515,24 +521,24 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
           MAGNET_Y_CANVAS = (KEYBOARD.magnetY / 100) * S.canvasHeight; // Percent -> canvas y
         }
 
-        // Vector from star -> magnet.                                     // Delta vector
-        const DELTA_TO_MAGNET_X = MAGNET_X_CANVAS - STAR.x;               // dx to magnet
+        // Vector from star -> magnet.
+        const DELTA_TO_MAGNET_X = MAGNET_X_CANVAS - STAR.x;
         const DELTA_TO_MAGNET_Y = MAGNET_Y_CANVAS - STAR.y;               // dy to magnet
 
-        // Distance to magnet (epsilon prevents divide-by-zero).           // Distance
-        const DIST_TO_MAGNET = Math.sqrt(                                 // sqrt(dx^2 + dy^2)
+        // Distance to magnet (epsilon prevents divide-by-zero).
+        const DIST_TO_MAGNET = Math.sqrt(
           DELTA_TO_MAGNET_X * DELTA_TO_MAGNET_X + DELTA_TO_MAGNET_Y * DELTA_TO_MAGNET_Y
         ) + 0.0001;                                                       // Add epsilon
 
-        // Unit vector toward magnet (scaled up for “snappy” feel).        // Direction vector
-        const UNIT_TOWARD_MAGNET_X = (DELTA_TO_MAGNET_X / DIST_TO_MAGNET) * 5; // ux * gain
+        // Unit vector toward magnet (scaled up for “snappy” feel).
+        const UNIT_TOWARD_MAGNET_X = (DELTA_TO_MAGNET_X / DIST_TO_MAGNET) * 5;
         const UNIT_TOWARD_MAGNET_Y = (DELTA_TO_MAGNET_Y / DIST_TO_MAGNET) * 5; // uy * gain
 
-        // Orbit direction (default clockwise).                            // Orbit direction choice
-        const ORBIT_DIR = (KEYBOARD.magnetDir === -1) ? -1 : 1;    // -1 for CCW if requested, else +1
+        // Orbit direction (default clockwise).
+        const ORBIT_DIR = (KEYBOARD.magnetDir === -1) ? -1 : 1;
 
-        // Perpendicular orbit vector (rotate 90 degrees).                 // Perpendicular vector
-        const UNIT_ORBIT_X = (-UNIT_TOWARD_MAGNET_Y) * ORBIT_DIR;         // Rotate (ux,uy) -> (-uy,ux)
+        // Perpendicular orbit vector (rotate 90 degrees).
+        const UNIT_ORBIT_X = (-UNIT_TOWARD_MAGNET_Y) * ORBIT_DIR;
         const UNIT_ORBIT_Y = ( UNIT_TOWARD_MAGNET_X) * ORBIT_DIR;         // Rotate (ux,uy) -> (-uy,ux)
 
         const MAGNET_STRENGTH = KEYBOARD.magnetStrength || 1;      // Optional external strength knob (default 1)
@@ -555,7 +561,7 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
       }
     }
 
-    /* GROUP: Momentum clamp */                                           // Group label
+    /* GROUP: Momentum clamp */
     const MOMENTUM_LIMIT = 2 * SETTINGS.clamp * SCALE.forceClamp;         // Max allowed momentum magnitude
 
     const MOMENTUM_MAG = Math.sqrt(                                       // Compute |momentum|
@@ -568,11 +574,11 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
       STAR.momentumY *= MOMENTUM_SCALE;                                   // Clamp momentum (y)
     }
 
-    /* GROUP: Integration */                                              // Group label
+    /* GROUP: Integration */
     STAR.x += (STAR.vx + STAR.momentumX) * DT_FRAMES;                     // Integrate x position
     STAR.y += (STAR.vy + STAR.momentumY) * DT_FRAMES;                     // Integrate y position
 
-    /* GROUP: Momentum friction with floor */                             // Group label
+    /* GROUP: Momentum friction with floor */
     const MIN_MOM = 0.01;                                                 // Minimum momentum floor to avoid "stuck" micro jitter
 
     STAR.momentumX *= MOMENTUM_DECAY;                                     // Apply momentum decay (x)
@@ -586,7 +592,7 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
       STAR.momentumY = Math.sign(STAR.momentumY) * Math.max(MIN_MOM, Math.abs(STAR.momentumY)); // Keep at least MIN_MOM
     }
 
-    /* GROUP: Paddle star physics */                                      // Group label
+    /* GROUP: Paddle star physics */
     if (KEYBOARD.paddlesTimer > 0 && STAR === S.starList[0]) {      // If paddles active and this is the special "ball" star
 
       STAR.whiteValue = 1;                                                // Force the ball star to appear bright
@@ -699,7 +705,7 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
       }
     }
 
-    /* GROUP: Edge behavior (wrap vs bounce) */                            // Group label
+    /* GROUP: Edge behavior (wrap vs bounce) */
     if (S.pointerRingTimer === 0 || DISTANCE_TO_POINTER_SQ > WRAP_DISTANCE_SQ || S.pokeImpulseTimer > 10) { // Decide wrap mode
 
       const STAR_RADIUS = (STAR.whiteValue * 2 + STAR.size) || 0;          // Radius padding for wrap
@@ -744,13 +750,13 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
       }
     }
 
-    /* GROUP: White flash decay */                                          // Group label
+    /* GROUP: White flash decay */
     if (STAR.whiteValue > 0) {                                             // If star is in white-flash state
       STAR.whiteValue *= WHITE_DECAY;                                      // Decay the white value over time
       if (STAR.whiteValue < 0.001) STAR.whiteValue = 0;                    // Snap to 0 when tiny
     }
 
-    /* GROUP: Opacity / twinkle cycle */                                   // Group label
+    /* GROUP: Opacity / twinkle cycle */
     if (STAR.opacity <= 0.005) {                                           // If twinkle faded out
       STAR.opacity = 1;                                                    // Reset opacity to full
       if (Math.random() < 0.07) STAR.whiteValue = 1;                       // Occasional white "spark" on reset
@@ -761,7 +767,7 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
     }
   }
 
-  /* GROUP: Reset keyboard impulses */                                     // Group label
+  /* GROUP: Reset keyboard impulses */
   KEYBOARD.multX = 1;                                               // Reset speed multiplier x
   KEYBOARD.multY = 1;                                               // Reset speed multiplier y
   KEYBOARD.addX = 0;                                                // Reset impulse add x
@@ -770,19 +776,19 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
   KEYBOARD.magnetY = 0;                                             // Clear magnet target y
   KEYBOARD.magnetPointer = false;                                   // Clear pointer magnet flag
 
-  /* GROUP: Pointer energy decay */                                        // Group label
+  /* GROUP: Pointer energy decay */
   S.pointerSpeedUnits *= POINTER_SPEED_DECAY;                              // Decay pointer energy
   if (S.pointerSpeedUnits < 0.001) S.pointerSpeedUnits = 0;                // Snap to 0 when tiny
 
-  /* GROUP: Ring timer decay */                                            // Group label
+  /* GROUP: Ring timer decay */
   S.pointerRingTimer *= RING_DECAY;                                        // Decay ring timer
   if (S.pointerRingTimer < 1) S.pointerRingTimer = 0;                      // Snap to 0 when small
 
-  /* GROUP: Poke timer decay */                                            // Group label
+  /* GROUP: Poke timer decay */
   S.pokeImpulseTimer *= POKE_DECAY;                                        // Decay poke timer
   if (S.pokeImpulseTimer < 1) S.pokeImpulseTimer = 0;                      // Snap to 0 when small
 
-  /* GROUP: Debug readouts (only when present) */                          // Group label
+  /* GROUP: Debug readouts (only when present) */
   if (S.wantsDebug) {                                                      // Only when the page has debug readouts
     postToMain({                                                           // Setup writes these into the DOM
       type: "DEBUG",                                                       // Message type
@@ -793,7 +799,7 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
     });
   }
 
-  /* GROUP: Adaptive link-distance “lag buster” */                         // Group label
+  /* GROUP: Adaptive link-distance “lag buster” */
   const FRAME_TIME_MS = S.getNowMs() - FRAME_START_MS;                     // Measure how long this physics frame took
 
   const TARGET_MS = 3;                                                     // Desired max budget for physics (ms)
@@ -823,9 +829,9 @@ S.updateStarPhysics = function updateStarPhysics() {                      // Ins
   } else if (S.maxLinkDistance > MAX_LINK_DISTANCE) {                      // If link distance overshot
     S.maxLinkDistance = MAX_LINK_DISTANCE;                                 // Clamp to maximum
   }
-};                                                                         // End updateStarPhysics
+};
 
-/* GROUP: Bounce helpers (momentum-only, no hard stop) */                  // Group label
+/* GROUP: Bounce helpers (momentum-only, no hard stop) */
 function bounceVertical(
   STAR,
   WALL_X,
@@ -906,15 +912,15 @@ function bounceHorizontal(
   return true;
 }
 
-/* #endregion 1) PHYSICS */                                                // End region 1
+/* #endregion 1) PHYSICS */
 
 
 
-/*======================================================================  // Region divider
- * #region 2) RENDERING                                                   // Start region 2
- *====================================================================*/   // Divider
+/*======================================================================
+ * #region 2) RENDERING
+ *====================================================================*/
 
-/* GROUP: Link bucket constants */                                        // Group label
+/* GROUP: Link bucket constants */
 const LINK_BUCKET_COUNT = 18;                                             // Number of alpha buckets for batching strokes
 
 let LINK_PATHS_BY_BUCKET = Array.from({ length: LINK_BUCKET_COUNT }, () => new Path2D()); // One Path2D per alpha bucket
@@ -925,14 +931,14 @@ function resetLinkPaths() {                                               // Cle
   }
 }
 
-/* GROUP: Render entry point */                                           // Group label
+/* GROUP: Render entry point */
 S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Install render function onto STARFIELD
 
   const CONTEXT = S.drawingContext;                                       // Canvas 2D context alias
 
   CONTEXT.clearRect(0, 0, S.canvasWidth, S.canvasHeight);                 // Clear full canvas each frame
 
-  /* GROUP: Paddles overlay */                                            // Group label
+  /* GROUP: Paddles overlay */
   if (KEYBOARD.paddlesTimer > 0) {                                 // Draw paddles only when active
 
     KEYBOARD.paddlesX = Math.max(0, Math.min(100, KEYBOARD.paddlesX)); // Clamp paddlesX to 0..100
@@ -982,7 +988,7 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
     KEYBOARD.paddlesTimer -= 0.1;                                  // Decrease paddles visibility timer
   }
 
-  /* GROUP: Links */                                                      // Group label
+  /* GROUP: Links */
   CONTEXT.lineWidth = 1;                                                  // Link stroke width
 
   const STAR_COUNT = S.starList.length;                                   // Cache star count
@@ -1063,7 +1069,7 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
     }
   }
 
-  /* GROUP: Stars */                                                      // Group label
+  /* GROUP: Stars */
   if (!STAR_SPRITES.ready) return;                                        // Bail until sprite image is loaded
 
   const IMG = STAR_SPRITES.img;                                           // Sprite image alias
@@ -1111,7 +1117,7 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
     CONTEXT.restore();                                                    // Restore state so transforms don't stack
   }
 
-  /* GROUP: User pointer ring */                                          // Group label
+  /* GROUP: User pointer ring */
   const TARGET_RING_RADIUS = Math.max(0, S.screenScaleUp * 100 - 40);      // Base ring radius based on screen size
 
   let RING_RADIUS = TARGET_RING_RADIUS * (S.pointerRingTimer / 50);       // Ring radius based on timer
@@ -1138,21 +1144,21 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
     CONTEXT.stroke();                                                     // Stroke ring
     CONTEXT.restore();                                                    // Restore state
   }
-};                                                                         // End renderStarsAndLinks
+};
 
-/* #endregion 2) RENDERING */                                              // End region 2
+/* #endregion 2) RENDERING */
 
 
 
-/*======================================================================  // Region divider
- * #region 3) USER INPUT                                                  // Start region 3
- *====================================================================*/   // Divider
+/*======================================================================
+ * #region 3) USER INPUT
+ *====================================================================*/
 
-/* GROUP: Pointer speed energy */                                          // Group label
+/* GROUP: Pointer speed energy */
 S.updatePointerSpeed = function updatePointerSpeed(CURRENT_X, CURRENT_Y, EVENT_TIME_MS) { // Update pointer position + compute energy
 
-  // Use the event's own timestamp, not arrival time: messages can reach the worker bunched up, // Why not getNowMs()
-  // and two moves "1ms apart" would read as a huge speed spike.                               // Explanation
+  // Use the event's own timestamp, not arrival time: messages can reach the worker bunched up,
+  // and two moves "1ms apart" would read as a huge speed spike.
   const NOW_MS = S.normalizePointerTimestampMs(EVENT_TIME_MS);            // Event time in this thread's perf space
 
   if (!S.lastPointerTimeMs) {                                             // If this is the first pointer sample
@@ -1185,7 +1191,7 @@ S.updatePointerSpeed = function updatePointerSpeed(CURRENT_X, CURRENT_Y, EVENT_T
   S.lastPointerTimeMs = NOW_MS;                                           // Store pointer time
 };
 
-/* GROUP: Begin interaction */                                             // Group label
+/* GROUP: Begin interaction */
 S.beginPointerInteraction = function beginPointerInteraction(START_X, START_Y, EVENT_TIME_MS) { // Called on click/tap start
   S.pokeImpulseTimer = 200;                                               // Kick poke timer to full impulse
   S.lastPointerTimeMs = 0;                                                // Force pointer speed to re-init cleanly
@@ -1193,7 +1199,7 @@ S.beginPointerInteraction = function beginPointerInteraction(START_X, START_Y, E
 };
 
 
-/* #endregion 3) USER INPUT */                                             // End region 3
+/* #endregion 3) USER INPUT */
 
 
 
@@ -1601,4 +1607,4 @@ if (IS_WORKER) {
 
 /* #endregion 6) MESSAGES */
 
-})(); // End STARFIELD_ENGINE
+})();

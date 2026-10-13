@@ -4,6 +4,7 @@ const formHint = document.getElementById('form-hint');
 const usernameInput = document.getElementById('username');
 const usernameLabel = document.getElementById('username-label');
 const emailInput = document.getElementById('email');
+const ageInput = document.getElementById('age');
 const passwordInput = document.getElementById('password');
 const passwordLabel = document.getElementById('password-label');
 const verifyInput = document.getElementById('verify-password');
@@ -51,11 +52,23 @@ function passwordProblem(value) {
   return '';
 }
 
+// Prismal Budget is for people 18 and older (the API's readAge): an account can't be made for anyone younger
+const MIN_AGE = 18;
+const MAX_AGE = 120;
+function ageProblem(value) {
+  const text = value.trim();
+  const age = /^\d{1,3}$/.test(text) ? Number(text) : NaN;
+  if (!Number.isInteger(age) || age > MAX_AGE) return 'Enter your age in years, like 34.';
+  if (age < MIN_AGE) return `Prismal Budget is for people ${MIN_AGE} and older, so an account can't be made for someone younger.`;
+  return '';
+}
+
 // Why the last page signed out, when it says (see Session.js, Process Budget.js, Settings Page.js)
 const SIGNED_OUT_REASONS = {
   idle: "You were signed out after 15 minutes without activity, to keep your budget safe. Please sign in again.",
   expired: "You've been signed out (your session ended, or it was signed out from another device). Please sign in again.",
-  everywhere: "You've been signed out on every device, and your Quick Entry icons were turned off."
+  everywhere: "You've been signed out on every device, and your Quick Entry icons were turned off.",
+  quickKey: "That Quick Entry icon doesn't work anymore, because your password changed or the icon was replaced. Delete it, then sign in and tap Quick Entry on Home to make a new one."
 };
 
 // What unlocks a passkey on this device, like "Face ID or Touch ID" (see Passkeys.js)
@@ -81,7 +94,7 @@ function forgetResetToken() {
 
 // What each mode shows. Groups it doesn't list are hidden, and their inputs disabled so the
 // browser's required checks skip them. passkeys: the passkey button and passkey autofill.
-const ALL_GROUPS = ['username-group', 'email-group', 'password-group', 'verify-password-group', 'terms-group', 'passkey-group'];
+const ALL_GROUPS = ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'passkey-group'];
 const MODES = {
   login: {
     title: 'Sign In To Prismal Budget',
@@ -93,7 +106,8 @@ const MODES = {
   },
   create: {
     title: 'Create Your Account',
-    groups: ['username-group', 'email-group', 'password-group', 'verify-password-group', 'terms-group'],
+    hint: `Prismal Budget is for people ${MIN_AGE} and older.`,
+    groups: ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group'],
     primary: 'Create Account',
     toggle: 'Back to Login',
     newPassword: true
@@ -211,6 +225,13 @@ authForm.addEventListener('submit', async (e) => {
     setStatus("Enter a valid email address.");
     return;
   }
+  if (mode === 'create') {
+    const problem = ageProblem(ageInput.value);
+    if (problem) {
+      setStatus(problem);
+      return;
+    }
+  }
   if (mode === 'create' && !termsInput.checked) {
     setStatus("Please agree to the Privacy Policy & Terms of Use to create an account.");
     return;
@@ -218,7 +239,7 @@ authForm.addEventListener('submit', async (e) => {
 
   const requests = {
     login: ['/api/login', { username, password }],
-    create: ['/api/register', { username, email, password, agreedToTerms: true }],
+    create: ['/api/register', { username, email, age: Number(ageInput.value.trim()), password, agreedToTerms: true }],
     forgot: ['/api/password/forgot', { email }],
     reset: ['/api/password/reset', { token: resetToken, password }]
   };
@@ -335,7 +356,7 @@ async function startPasskeyAutofill() {
 }
 
 // Cancels the autofill request. Resolves once it has closed (a second at most): Chrome and Edge refuse a
-// new passkey request while the old one is still closing, which used to show as "cancelled or timed out".
+// new passkey request while the old one is still closing, and say it was "cancelled or timed out".
 function stopPasskeyAutofill() {
   autofillRun++;
   clearTimeout(autofillTimer);
@@ -523,11 +544,12 @@ function declinePasskeys() {
 
 //#endregion
 
-// Start in the mode the link asked for
+// Start in the mode the link asked for (?new: the front page's Create Account)
 if (resetToken) {
   setMode('reset');
 } else {
-  setMode('login');
+  setMode(pageParams.has('new') ? 'create' : 'login');
+  if (pageParams.has('new')) clearPageParams();
   let signedOut = null;
   try {
     signedOut = sessionStorage.getItem('prismal_signed_out');

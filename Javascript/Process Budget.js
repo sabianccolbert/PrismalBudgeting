@@ -1,6 +1,6 @@
 
 // =====================================================================
-// GLOBAL VARIABLES (Kept identical to your setup)
+// GLOBAL VARIABLES
 // =====================================================================
 
 // Data Variables
@@ -13,6 +13,7 @@ let searchData = null;
 let calculatorData = null;
 let accountsData = null; // Other Accounts: { version, list: [[...]], equity: {...} } (see normalizeApiAccounts)
 let logsData = null;     // Change Logs (the spreadsheet's "Form Entries" tab), newest first
+let sheetsData = null;   // Connected spreadsheets: { version, list: [connection] } (see CONNECTED SPREADSHEETS)
 
 // Data Sizes
 // The calendar is always exactly 4x7. Every other table keeps all of its stored rows
@@ -45,6 +46,7 @@ let searchEdited = false;
 let calculatorEdited = false;
 let accountsEdited = false;
 let logsEdited = false;
+let sheetsEdited = false;
 
 // Dates Data
 // Days are calendar days in the device's time zone (stored as MM/DD/YYYY text, never as a moment in time),
@@ -111,9 +113,8 @@ let savingNow = false;
 
 async function loadWorkspace() {
   isDailyUpdate = true;
-  // 1. Grab the token once
   const token = localStorage.getItem('prismal_jwt');
-  
+
   if (!token) {
     console.error("No active session found. Redirecting to login...");
     if (typeof window.transitionTo === 'function') {
@@ -124,7 +125,6 @@ async function loadWorkspace() {
     return false;
   }
 
-  // Load from Cloudflare API using Authorization Header
   try {
     const requestedAt = performance.now(); // The daily update's change log starts when the budget is asked for
 
@@ -136,7 +136,7 @@ async function loadWorkspace() {
       }
     });
 
-    // 2. The session ended (signed out everywhere, a new password, or it expired): sign out here too
+    // The session ended (signed out everywhere, a new password, or it expired): sign out here too
     if (response.status === 401) {
       signedOutElsewhere();
       return false;
@@ -149,9 +149,8 @@ async function loadWorkspace() {
     const data = await response.json();
     dataRevision = Number.isInteger(data.revision) ? data.revision : null;
 
-    // Helper function to safely extract and parse the database content string.
-    // If stored content exists but can't be parsed, that table is locked from saving
-    // so the (possibly recoverable) stored copy is never overwritten with an empty one.
+    // A table's stored JSON text, parsed. If stored content exists but can't be parsed, that table is locked
+    // from saving, so the (possibly recoverable) stored copy is never overwritten with an empty one.
     function parseDB(dbResult, tableName) {
       if (dbResult && dbResult.length > 0 && dbResult[0].content) {
         try {
@@ -165,8 +164,7 @@ async function loadWorkspace() {
       return null;
     }
 
-    // Safely extract and parse the strings back into 2D arrays before normalizing.
-    // Tables keep every stored row (only the calendar has a fixed size).
+    // Each table back as rows of cells. Tables keep every stored row (only the calendar has a fixed size).
     calendarData   = normalizeApiGrid(parseDB(data.calendar, "calendar"), calendarRows, calendarCols);
     recurringData  = normalizeApiTable(parseDB(data.recurring, "recurring"), TABLE_SHAPES.recurring);
     trackerData    = normalizeApiTable(parseDB(data.tracker, "tracker"), TABLE_SHAPES.tracker);
@@ -177,6 +175,7 @@ async function loadWorkspace() {
     const storedAccounts = parseDB(data.accounts, "accounts");
     accountsData   = normalizeApiAccounts(storedAccounts);
     logsData       = normalizeApiTable(parseDB(data.logs, "logs"), TABLE_SHAPES.logs);
+    sheetsData     = normalizeApiSheets(parseDB(data.sheets, "sheets"));
     workspaceLoaded = true;
     // Accounts that were just set up (like Savings in a new budget) are saved right away, so the
     // Quick Entry page can list them too
@@ -283,6 +282,7 @@ async function performDailyUpdate() {
   let todayTime = today.getTime();
   let missedFromTime = lastDailyUpdate.getTime();
   let lastInBank = null;
+  let sheetDays = sheetEntriesByDay(lastDailyUpdate, yesterday);
 
   // 4. One pass over the timeline in date order, stopping at today
   timelineLoop:
@@ -295,7 +295,8 @@ async function performDailyUpdate() {
       let isMissed = cellTime >= missedFromTime;
 
       // Days that were never on a saved grid: add what the daily runs would have added
-      // (Future Dates entries first, then recurring entries, same order as the spreadsheet)
+      // (Future Dates entries first, then recurring entries, same order as the spreadsheet, then the
+      // connected spreadsheets' entries)
       if (cell.isNew && isMissed) {
         let futureRows = futureByDate.get(cellTime) || [];
         for (let i of futureRows) {
@@ -306,15 +307,17 @@ async function performDailyUpdate() {
           usedFutureRows.add(i);
         }
         cell.text = writeRecurringToCell(cell.text, cell.date, recurringRows);
+        cell.text = writeSheetsToCell(cell.text, sheetDays.get(cellTime));
       }
 
-      // Every missed day: turn recurring entries into temps
+      // Every missed day: turn recurring and spreadsheet entries into temps (they stay as they were that day)
       if (isMissed) {
         let lines = cell.text.split("\n");
         for (let l = 1; l < lines.length; l++) {
           let parts = getParts(lines[l]);
-          if (parts[0].includes("✔️")) {
-            let newSprite = getSpecialType(parts[0]) + "✔️";
+          let mark = entryMark(parts[0]);
+          if (mark) {
+            let newSprite = getSpecialType(parts[0]) + mark;
             if (newSprite !== parts[0]) uniquesCreated++;
             parts[0] = newSprite;
             lines[l] = parts.join(" ");
@@ -433,8 +436,8 @@ function writeRecurringToCell(cellText, cellDate, recurringRows) {
       if (extractTitle(cellLines[l]) !== row.parsed.cleanTitle) continue;
       // Only an entry with the same refraction type affects it (a title can have one of each type)
       if (getSpecialType(parts[0]) !== row.parsed.special) continue;
-      // A temp (checkmark entry) blocks the recurring entry for this day
-      if (parts[0].includes("✔️")) {
+      // A temp (checkmark entry) blocks the recurring entry for this day (so does a spreadsheet's)
+      if (entryMark(parts[0])) {
         hasTemp = true;
         break;
       }
@@ -570,6 +573,7 @@ const BUDGET_TABLES = {
   search:     { get: () => searchData,     set: (v) => { searchData = v; },     markEdited: () => { searchEdited = true; },     edited: () => searchEdited,     saved: () => { searchEdited = false; } },
   calculator: { get: () => calculatorData, set: (v) => { calculatorData = v; }, markEdited: () => { calculatorEdited = true; }, edited: () => calculatorEdited, saved: () => { calculatorEdited = false; } },
   accounts:   { get: () => accountsData,   set: (v) => { accountsData = v; },   markEdited: () => { accountsEdited = true; },   edited: () => accountsEdited,   saved: () => { accountsEdited = false; } },
+  sheets:     { get: () => sheetsData,     set: (v) => { sheetsData = v; },     markEdited: () => { sheetsEdited = true; },     edited: () => sheetsEdited,     saved: () => { sheetsEdited = false; } },
   logs:       { get: () => logsData,       set: (v) => { logsData = v; },       markEdited: () => { logsEdited = true; },       edited: () => logsEdited,       saved: () => { logsEdited = false; } }
 };
 
@@ -653,14 +657,33 @@ function saveAccount(fields, index = null) {
 }
 
 // Search bar. query: { terms: [{ title, match: "all" | "costs" | "gains" | "category" }], from, to }.
-// Resolves with result.search.
+// Resolves with result.search. It looks through the calendar as it was before the change started, since
+// every change first takes the recurring entries off the calendar (to write them again after).
 function searchBudget(query) {
-  return runBudgetAction("🔎 Search", () => ({ search: search(query) }));
+  return runBudgetAction("🔎 Search", (before) => ({ search: search(query, JSON.parse(before.calendar)) }));
 }
 
 // Paycheck Calculator. values: { [input key]: number } for every CALCULATOR_INPUTS key. Resolves with result.paycheck.
 function savePaycheck(values) {
   return runBudgetAction("🧮 Calculator", () => calculator(values));
+}
+
+// Connected spreadsheets (Settings, see CONNECTED SPREADSHEETS): connect a new one (id null) or change one,
+// with what reading it found; turn one on or off; delete one; and what reading them again found (Spreadsheets.js)
+function saveSheetConnection(config, read, id = null) {
+  return runBudgetAction("", () => sheetConnection(config, read, id));
+}
+
+function turnSheetConnection(id, on) {
+  return runBudgetAction("", () => switchSheet(id, on));
+}
+
+function deleteSheetConnection(id) {
+  return runBudgetAction("", () => removeSheet(id));
+}
+
+function updateSheetReads(reads) {
+  return runBudgetAction("", () => applySheetReads(reads));
 }
 
 /* ---------- Quick Entry (the home screen icon's page, quick.html) ---------- */
@@ -734,8 +757,9 @@ function historyHasDay(date) {
 
 /* ---------- Running a change ---------- */
 
-// Queue one change through the full budget flow. undo: { label, dates } makes it a step Undo can take
-// back (calendar and quick entries; see UNDO + REDO)
+// Queue one change through the full budget flow. change(before) gets the tables as they were before it
+// (snapshotTables). undo: { label, dates } makes it a step Undo can take back (calendar and quick entries;
+// see UNDO + REDO)
 function runBudgetAction(logType, change, undo = null) {
   const requestedAt = performance.now(); // The change log's start: when the change was asked for
   const run = budgetQueue.then(() => processBudgetAction(logType, change, undo, requestedAt));
@@ -763,7 +787,7 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
   try {
     beginChangeLog(logType, requestedAt);
     stripRecurringEntries();
-    result = change() || {};
+    result = change(snapshot) || {};
     refreshBudgetData();
     if (undo) result.newUndoStep = makeUndoStep(undo.label, undoBefore);
   } catch (err) {
@@ -863,8 +887,8 @@ function formatLogTime(date) {
 
 /* ---------- The budget flow ---------- */
 
-// Remove everything but unique entries (and temps) from the calendar. Recurring entries,
-// In Bank, Gains/Costs and the next-28 lines are all rebuilt by refreshBudgetData().
+// Remove everything but unique entries (and temps) from the calendar. Recurring entries, connected
+// spreadsheets' entries, In Bank, Gains/Costs and the next-28 lines are all rebuilt by refreshBudgetData().
 function stripRecurringEntries() {
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
@@ -898,7 +922,9 @@ function refreshBudgetData() {
   normalizeFrequencies();
   upcomingEntriesMaintanence();
   writeRecurring();
+  writeSheetEntries();
   releaseEndedTemps();
+  releaseSheetTemps();
   if (deleteExpiredReccurrings()) recurringEdited = true;
   organizeCellEntries();
   writeBudgetMath();
@@ -940,7 +966,11 @@ function unique(entry) {
 
   formEntryRow[3] = (sprite || "❗️") + " " + title;
 
-  let recurringIndex = recurringHits(title, dateObj, explicitSpecial);
+  // What lands on the day by itself, a recurring entry (✔️) or a connected spreadsheet's (➕): { amount,
+  // sprite, mark } or null (see scheduledHit). A "virgin" one is still just as it lands (it's taken off the
+  // calendar while a change runs, see stripRecurringEntries); changing it makes a temp, its type and its mark
+  // (like ❗️✔️ or ❗️➕), which keeps it from landing on that day again.
+  let source = scheduledHit(title, dateObj, explicitSpecial);
   // 2. Extract from Original Date
   let outData = {
     oldAmt: 0,
@@ -948,8 +978,8 @@ function unique(entry) {
     hasBlocker: false
   };
   let isExisting = !injectOrDefer("delete", dateObj, 0, title, sprite, outData);
-  let isOriginalVirginRecurring = (recurringIndex && !isExisting && !outData.hasBlocker);
-  let virginSprite = isOriginalVirginRecurring ? recurringData[recurringIndex][5] : "";
+  let isOriginalVirginRecurring = (!!source && !isExisting && !outData.hasBlocker);
+  let virginSprite = isOriginalVirginRecurring ? source.sprite : "";
   let virginSpecial = getSpecialType(virginSprite);
   // Inherit sprite before checking target date or calculating amounts
   if (modifier === "") {
@@ -959,13 +989,16 @@ function unique(entry) {
       sprite = virginSprite;
     }
   }
-  // Re-evaluate recurringIndex using exact special type of deleted entry
+  // Re-evaluate the source using exact special type (and mark) of deleted entry
   if (isExisting && outData.oldSprite) {
-    let matchedIndex = recurringHits(title, dateObj, getSpecialType(outData.oldSprite));
-    if (matchedIndex !== false) recurringIndex = matchedIndex;
+    let matched = scheduledHit(title, dateObj, getSpecialType(outData.oldSprite), entryMark(outData.oldSprite) || null);
+    if (matched) source = matched;
   }
   let targetIncomingSpecial = getSpecialType(sprite);
-  let hasOriginalCheckmark = isExisting && outData.oldSprite.includes("✔️");
+  let originalMark = isExisting ? entryMark(outData.oldSprite) : "";
+  let hasOriginalCheckmark = originalMark !== "";
+  // A changed day keeps the mark of where it came from
+  let virginMark = isOriginalVirginRecurring ? source.mark : originalMark;
   let isMismatchedVirgin = false;
   if (isOriginalVirginRecurring && targetIncomingSpecial !== virginSpecial) {
     isOriginalVirginRecurring = false;
@@ -991,7 +1024,7 @@ function unique(entry) {
   }
   // 4. Calculate Amounts for the Moved Entry
   let finalAmt = amt;
-  let baseAmtOriginal = (isOriginalVirginRecurring || isMismatchedVirgin) ? parseAmount(recurringData[recurringIndex][1]) : 0;
+  let baseAmtOriginal = (isOriginalVirginRecurring || isMismatchedVirgin) ? source.amount : 0;
   if (action === "append") {
     finalAmt = (isExisting ? outData.oldAmt : baseAmtOriginal) + amt;
   } else if (action === "set" && rawAmtString === "") {
@@ -1002,13 +1035,13 @@ function unique(entry) {
   if (dateObj.getTime() >= gridStartDate.getTime()) {
     if (isOriginalVirginRecurring || isMismatchedVirgin) {
       if (dateObj.getTime() !== dateMove.getTime() || finalAmt !== baseAmtOriginal || action === "delete") {
-        let blockerSprite = getSpecialType(recurringData[recurringIndex][5]) + "✔️";
+        let blockerSprite = getSpecialType(source.sprite) + source.mark;
         injectOrDefer("set", dateObj, 0, title, blockerSprite);
       }
-    } else if (hasOriginalCheckmark && recurringIndex && (dateObj.getTime() !== dateMove.getTime() || action === "delete")) {
+    } else if (hasOriginalCheckmark && source && (dateObj.getTime() !== dateMove.getTime() || action === "delete")) {
       // Only inject the blocker if the entry wasn't ALREADY a $0 blocker.
       if (outData.oldAmt !== 0) {
-        let blockerSprite = getSpecialType(outData.oldSprite) + "✔️";
+        let blockerSprite = getSpecialType(outData.oldSprite) + originalMark;
         injectOrDefer("set", dateObj, 0, title, blockerSprite);
       }
     }
@@ -1019,34 +1052,34 @@ function unique(entry) {
       let moveAmt = finalAmt;
       let moveSprite = sprite;
       if (dateMove.getTime() !== dateObj.getTime()) {
-        let recurringMoveIndex = recurringHits(title, dateMove, targetIncomingSpecial);
-        let isTargetVirginRecurring = (recurringMoveIndex && dateMove.getTime() >= today.getTime() && !moveIsExisting && !moveOutData.hasBlocker);
-        let moveBaseAmt = isTargetVirginRecurring ? parseAmount(recurringData[recurringMoveIndex][1]) : 0;
-        let moveBaseSprite = isTargetVirginRecurring ? recurringData[recurringMoveIndex][5] : "";
+        let moveSource = scheduledHit(title, dateMove, targetIncomingSpecial);
+        let isTargetVirginRecurring = (!!moveSource && dateMove.getTime() >= today.getTime() && !moveIsExisting && !moveOutData.hasBlocker);
+        let moveBaseAmt = isTargetVirginRecurring ? moveSource.amount : 0;
+        let moveBaseSprite = isTargetVirginRecurring ? moveSource.sprite : "";
         let destAmt = 0;
         let destSpecial = "";
-        let destHasCheckmark = false;
+        let destMark = "";
         let mergeValid = false;
         if (moveIsExisting) {
           destAmt = moveOutData.oldAmt;
           destSpecial = getSpecialType(moveOutData.oldSprite);
-          destHasCheckmark = moveOutData.oldSprite.includes("✔️");
+          destMark = entryMark(moveOutData.oldSprite);
           mergeValid = true;
         } else if (isTargetVirginRecurring) {
           destAmt = moveBaseAmt;
           destSpecial = getSpecialType(moveBaseSprite);
-          destHasCheckmark = true;
+          destMark = moveSource.mark;
           mergeValid = true;
         }
         if (mergeValid && targetIncomingSpecial === destSpecial) {
           moveAmt += destAmt;
-          moveSprite = targetIncomingSpecial + (destHasCheckmark || isOriginalVirginRecurring || moveSprite.includes("✔️") ? "✔️" : "");
+          moveSprite = targetIncomingSpecial + (destMark || (isOriginalVirginRecurring ? virginMark : "") || entryMark(moveSprite));
         } else if (isOriginalVirginRecurring) {
-          moveSprite = targetIncomingSpecial + "✔️";
+          moveSprite = targetIncomingSpecial + virginMark;
         }
       } else {
-        if (isOriginalVirginRecurring || (isExisting && outData.oldSprite.includes("✔️"))) {
-          moveSprite = targetIncomingSpecial + "✔️";
+        if (isOriginalVirginRecurring || (isExisting && hasOriginalCheckmark)) {
+          moveSprite = targetIncomingSpecial + virginMark;
         }
       }
       // 7. Inject combined result back into target date
@@ -1062,8 +1095,8 @@ function unique(entry) {
   // 8. Change Logs row
   let formEntryType = "Missing";
   if (!isExisting && !isOriginalVirginRecurring) formEntryType = "❗️ Create Unique";
-  if (isExisting && !recurringIndex) formEntryType = "❗️ Change Unique";
-  if (isOriginalVirginRecurring || (isExisting && hasOriginalCheckmark)) formEntryType = "❗️✔️ Make Unique";
+  if (isExisting && !source) formEntryType = "❗️ Change Unique";
+  if (isOriginalVirginRecurring || (isExisting && hasOriginalCheckmark)) formEntryType = `❗️${virginMark || "✔️"} Make Unique`;
   formEntryRow[2] = formEntryType;
   let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : formatMoney(rawAmtString);
   formEntryRow[6] = capitalize(rawAction) + ": " + formEntrySuffix;
@@ -1091,7 +1124,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
       let matchedOldSprite = parts[0];
       let existingSpecial = getSpecialType(matchedOldSprite);
       // Check for blockers
-      if (matchedOldSprite.includes("✔️") && (!incomingSpecial || existingSpecial === incomingSpecial)) {
+      if (entryMark(matchedOldSprite) && (!incomingSpecial || existingSpecial === incomingSpecial)) {
         cellHasBlocker = true;
       }
       // Check for match
@@ -1213,7 +1246,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
       if (futureDateObj.getTime() !== dateObj.getTime()) continue;
       let futureSpecial = getSpecialType(futureSprite);
       // Blocker check
-      if (futureSprite.includes("✔️") && (!incomingSpecial || futureSpecial === incomingSpecial)) {
+      if (entryMark(futureSprite) && (!incomingSpecial || futureSpecial === incomingSpecial)) {
         cellHasBlocker = true;
       }
       // Match check
@@ -1319,6 +1352,14 @@ function editRecurringRow(index, fields) {
   let endDate = resolveEndDate(fields.endDate ?? "None", row[4]);
   let frequency = readFrequency(String(fields.frequency || "").trim() || row[3]);
 
+  // A new title or type takes the days that were changed for this entry along (moveRecurringTemps)
+  let oldTitle = String(row[0]).trim();
+  let oldSpecial = getSpecialType(String(row[5] || ""));
+  let newSpecial = getSpecialType(sprite);
+  if ((cleanString(oldTitle) !== cleanString(title) || oldSpecial !== newSpecial) && recurringTwin(oldTitle, oldSpecial, index) === -1) {
+    moveRecurringTemps(cleanString(oldTitle), oldSpecial, title, newSpecial);
+  }
+
   row[0] = title;
   row[1] = formatMoney(hasAmount ? fields.amount : parseAmount(row[1]));
   row[2] = formatToMMDDYYYY(startDate);
@@ -1342,6 +1383,38 @@ function resolveEndDate(endDate, current) {
   if (currentText === "" || currentText.toLowerCase() === "none") return "None";
   let parsed = createSafeMidnight(currentText, true);
   return isNaN(parsed.getTime()) ? "None" : formatToMMDDYYYY(parsed);
+}
+
+// A recurring entry given a new title or refraction type keeps the days it was changed on: from today on, its
+// temps (on the calendar and in Upcoming) take the new title and type, $0.00 blockers too. Otherwise the
+// entry would land on those days again under its new name, next to the old temp (counted twice), and on days
+// it was deleted from. Days that already passed keep the name they had.
+function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
+  const isOldTemp = (sprite, title) => String(sprite ?? "").trim() === oldSpecial + "✔️" && cleanString(title) === oldClean;
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (gridDates[r][c] < today) continue;
+      let lines = String(calendarData[r][c]).split("\n");
+      let moved = false;
+      for (let l = 1; l < lines.length; l++) {
+        let parts = getParts(lines[l]);
+        if (parts.length < 3 || !isOldTemp(parts[0], parts.slice(2).join(" "))) continue;
+        lines[l] = `${newSpecial}✔️ ${parts[1]} ${newTitle}`;
+        moved = true;
+      }
+      if (moved) calendarData[r][c] = lines.join("\n");
+    }
+  }
+  let movedUpcoming = false;
+  for (let f = 1; f < futureData.length; f++) {
+    let row = futureData[f];
+    let date = createSafeMidnight(row[2], true);
+    if (isNaN(date.getTime()) || date < today || !isOldTemp(row[3], row[0])) continue;
+    row[0] = newTitle;
+    row[3] = newSpecial + "✔️";
+    movedUpcoming = true;
+  }
+  if (movedUpcoming) combineSameUpcoming();
 }
 
 /* ---------- Tracker rows ---------- */
@@ -1616,21 +1689,10 @@ function renameAccountEntries(oldClean, newName) {
   }
 
   // Upcoming: rename, then combine any that now match another entry on the same day
-  let futureKept = [futureData[0]];
-  let futureByKey = new Map();
   for (let f = 1; f < futureData.length; f++) {
-    let row = futureData[f];
-    if (isAccountEntry(row[3], row[0])) row[0] = newName;
-    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + String(row[3]).trim();
-    let same = cleanString(row[0]) ? futureByKey.get(key) : undefined;
-    if (same) {
-      same[1] = formatMoney(parseAmount(same[1]) + parseAmount(row[1]));
-      continue;
-    }
-    futureByKey.set(key, row);
-    futureKept.push(row);
+    if (isAccountEntry(futureData[f][3], futureData[f][0])) futureData[f][0] = newName;
   }
-  futureData = futureKept;
+  combineSameUpcoming();
 
   for (let i = 2; i < recurringData.length; i++) {
     let row = recurringData[i];
@@ -1671,6 +1733,317 @@ function combineSameEntries(lines) {
     kept[at] = `${combineSprites(first[0], parts[0])} ${formatMoney(parseAmount(first[1]) + parseAmount(parts[1]))} ${first.slice(2).join(" ")}`;
   }
   return kept;
+}
+
+// The same for Upcoming: entries on one day with the same title and type become one, their amounts added
+function combineSameUpcoming() {
+  let kept = [futureData[0]];
+  let byKey = new Map();
+  for (let f = 1; f < futureData.length; f++) {
+    let row = futureData[f];
+    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + String(row[3]).trim();
+    let same = cleanString(row[0]) ? byKey.get(key) : undefined;
+    if (same) {
+      same[1] = formatMoney(parseAmount(same[1]) + parseAmount(row[1]));
+      continue;
+    }
+    byKey.set(key, row);
+    kept.push(row);
+  }
+  futureData = kept;
+}
+
+/* ---------- Connected spreadsheets ---------- */
+// Entries from the person's own spreadsheets (Google Sheets, Excel, ...), set up in Settings. Each one says
+// which cells hold the dates (always from the spreadsheet), and where the titles, amounts, refraction types,
+// and Other Accounts come from: cells too, or one typed in for all of them. Spreadsheets.js reads them (each
+// time Home or Settings opens) into entries kept here, and the budget writes those onto the calendar the same
+// way it writes recurring entries:
+//   - From today on, on the calendar only, behind a ➕ (➕❗️ Regular, ➕✖️ Hidden, ➕⭕️ Transfer), taken off
+//     and written again with every change, so a spreadsheet that changes an entry or drops one changes the
+//     calendar too
+//   - Changing one for its day (or deleting it) makes a temp, like ❗️➕, that keeps the spreadsheet's entry
+//     off that day; a unique entry with its title and type takes in its amount (it becomes a temp)
+//   - Once a day passes its entries stay as they were (they turn into temps, see performDailyUpdate)
+//   - The next 28 days after the calendar, Lowest, Search, reminders, and Dave count them too
+// A day has one entry per title and type, so an entry with the title and type of a recurring entry that lands
+// the same day is left out (Settings says so). A spreadsheet that's off keeps its entries (it's read again
+// when it's turned back on) and its temps; deleting one turns its temps from today on into unique entries.
+// sheetsData.list: [{ id, name, link, on, fields, entries: [[MM/DD/YYYY, type, amount, title]], problems: [text],
+// tabs: [tab names], access: "public" | "shared" }]. fields: { date, title, amount, type, account }, each
+// { tab, range: "B2:B50" } (cells; amount adds sign: "written" | "costs" | "gains") or { value } (typed).
+
+const SHEETS_VERSION = 1;
+const MAX_SHEETS = 10;
+const MAX_SHEET_NAME = 60;
+
+function normalizeApiSheets(rawData) {
+  let parsed = rawData;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed); } catch (e) { parsed = null; }
+  }
+  const list = parsed && Array.isArray(parsed.list) ? parsed.list : [];
+  return { version: SHEETS_VERSION, list: list.filter(item => item && typeof item === "object" && typeof item.id === "string" && item.id).map(normalizeSheetConnection) };
+}
+
+// One connection, with only what it should have (and always in the same order, so comparing copies works)
+function normalizeSheetConnection(item) {
+  const text = (value, max) => String(value ?? "").slice(0, max);
+  const isObject = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+  return {
+    id: text(item.id, 40),
+    name: text(item.name, MAX_SHEET_NAME).trim() || "Spreadsheet",
+    link: text(item.link, 2000).trim(),
+    on: item.on !== false,
+    fields: isObject(item.fields) ? JSON.parse(JSON.stringify(item.fields)) : {},
+    entries: (Array.isArray(item.entries) ? item.entries : [])
+      .filter(entry => Array.isArray(entry) && entry.length >= 4)
+      .map(entry => [text(entry[0], 10), getSpecialType(text(entry[1], 8)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], 100)]),
+    problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
+    tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
+    access: item.access === "shared" ? "shared" : "public"
+  };
+}
+
+function sheetConnectionById(id) {
+  return (sheetsData?.list || []).find(connection => connection.id === id) || null;
+}
+
+// New (id null) or changed connection. config: { name, link, fields }; read: { entries, problems, tabs, access },
+// what reading it just now found (Spreadsheets.js readConnection)
+function sheetConnection(config, read, id) {
+  const list = sheetsData.list;
+  const name = String(config.name || "").replace(/\s+/g, " ").trim();
+  if (!name) throw new BudgetInputError("Give the spreadsheet a name.");
+  if (name.length > MAX_SHEET_NAME) throw new BudgetInputError(`Spreadsheet names can be up to ${MAX_SHEET_NAME} characters.`);
+  if (!String(config.link || "").trim()) throw new BudgetInputError("Paste the spreadsheet's link.");
+  let index = id ? list.findIndex(connection => connection.id === id) : -1;
+  if (id && index === -1) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
+  if (!id && list.length >= MAX_SHEETS) throw new BudgetInputError(`You can connect up to ${MAX_SHEETS} spreadsheets.`);
+  const old = index === -1 ? null : list[index];
+  const connection = normalizeSheetConnection({
+    id: old ? old.id : newSheetId(),
+    name,
+    link: config.link,
+    on: old ? old.on : true,
+    fields: config.fields,
+    entries: read.entries,
+    problems: read.problems,
+    tabs: read.tabs,
+    access: read.access
+  });
+  if (old) list[index] = connection;
+  else list.push(connection);
+
+  formEntryRow[2] = old ? "➕ Change Spreadsheet" : "➕ Connect Spreadsheet";
+  formEntryRow[3] = "Spreadsheet: " + name;
+  formEntryRow[4] = "Entries: " + connection.entries.length;
+  formEntryRow[5] = "Problems: " + connection.problems.length;
+  return { sheetId: connection.id };
+}
+
+function switchSheet(id, on) {
+  const connection = sheetConnectionById(id);
+  if (!connection) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
+  connection.on = !!on;
+  formEntryRow[2] = on ? "➕ Spreadsheet On" : "➕ Spreadsheet Off";
+  formEntryRow[3] = "Spreadsheet: " + connection.name;
+  return {};
+}
+
+function removeSheet(id) {
+  const connection = sheetConnectionById(id);
+  if (!connection) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
+  sheetsData.list = sheetsData.list.filter(item => item !== connection);
+  formEntryRow[2] = "➕ Delete Spreadsheet";
+  formEntryRow[3] = "Spreadsheet: " + connection.name;
+  return {};
+}
+
+// What reading the spreadsheets just now found: [{ id, entries, problems, tabs, access }], or { id, failed }
+// (couldn't read it: it keeps its entries, and says why)
+function applySheetReads(reads) {
+  const names = [];
+  for (const read of Array.isArray(reads) ? reads : []) {
+    const connection = sheetConnectionById(read.id);
+    if (!connection) continue;
+    const updated = read.failed
+      ? normalizeSheetConnection({ ...connection, problems: [read.failed] })
+      : normalizeSheetConnection({ ...connection, entries: read.entries, problems: read.problems, tabs: read.tabs, access: read.access });
+    if (JSON.stringify(updated) === JSON.stringify(connection)) continue;
+    sheetsData.list[sheetsData.list.indexOf(connection)] = updated;
+    names.push(connection.name);
+  }
+  formEntryRow[2] = "➕ Spreadsheet Update";
+  formEntryRow[3] = "Updated: " + (names.join(", ") || "None");
+  return {};
+}
+
+function newSheetId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// The spreadsheets' entries from day from through day to, by day: Map(day's time -> Map(clean title|type ->
+// { title, clean, special, amount })). Entries with the same title and type on a day are one (amounts added).
+// Only spreadsheets that are on, without the entries a recurring entry keeps off (see above), unless
+// everything is asked for (includeOff: what can still land, for releaseSheetTemps).
+function sheetEntriesByDay(from, to, includeOff = false) {
+  const days = new Map();
+  if (!sheetsData || to < from) return days;
+  const fromTime = from.getTime();
+  const toTime = to.getTime();
+  for (const connection of sheetsData.list) {
+    if (!connection.on && !includeOff) continue;
+    for (const [dateText, sprite, amount, title] of connection.entries) {
+      const date = createSafeMidnight(dateText, true);
+      const time = date.getTime();
+      if (isNaN(time) || time < fromTime || time > toTime) continue;
+      const clean = cleanString(title);
+      const special = getSpecialType(sprite);
+      if (!clean) continue;
+      if (!includeOff && recurringHits(title, date, special) !== false) continue;
+      if (!days.has(time)) days.set(time, new Map());
+      const day = days.get(time);
+      const key = clean + "|" + special;
+      const same = day.get(key);
+      if (same) same.amount = Math.round((same.amount + amount) * 100) / 100;
+      else day.set(key, { title, clean, special, amount });
+    }
+  }
+  return days;
+}
+
+// The spreadsheets' entries that land on date (one per title and type), for unique(): the one with this
+// title (and type, when it's given) as { amount, sprite: "➕❗️", mark: "➕" }, or null. From today on only.
+function sheetHit(title, date, special = null) {
+  if (date < today) return null;
+  const day = sheetEntriesByDay(date, date).get(date.getTime());
+  if (!day) return null;
+  const clean = cleanString(title);
+  for (const entry of day.values()) {
+    if (entry.clean === clean && (!special || entry.special === special)) return { amount: entry.amount, sprite: SHEET_MARK + entry.special, mark: SHEET_MARK };
+  }
+  return null;
+}
+
+// What lands on date by itself with this title (and type): a recurring entry first, then a spreadsheet's.
+// mark limits it to one or the other. { amount, sprite, mark } or null.
+function scheduledHit(title, date, special = null, mark = null) {
+  if (mark !== SHEET_MARK) {
+    const index = recurringHits(title, date, special);
+    if (index !== false) return { amount: parseAmount(String(recurringData[index][1])), sprite: String(recurringData[index][5] || RECURRING_MARK), mark: RECURRING_MARK };
+  }
+  return mark === RECURRING_MARK ? null : sheetHit(title, date, special);
+}
+
+// Write the spreadsheets' entries onto every calendar day from today on
+function writeSheetEntries() {
+  const days = sheetEntriesByDay(today, gridEndDate);
+  if (days.size === 0) return;
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      const day = days.get(gridDates[r][c].getTime());
+      if (day) calendarData[r][c] = writeSheetsToCell(calendarData[r][c], day);
+    }
+  }
+}
+
+// One day's spreadsheet entries (a Map from sheetEntriesByDay) written into its cell: a temp with its title
+// and type (or a recurring entry's) keeps one off, and a unique entry takes in its amount
+function writeSheetsToCell(cellText, day) {
+  if (!day || day.size === 0) return cellText;
+  const lines = String(cellText).split("\n");
+  for (const entry of day.values()) {
+    const at = lines.findIndex((line, l) => {
+      if (l === 0) return false;
+      const read = readLine(line);
+      return !read.system && read.clean === entry.clean && getSpecialType(read.sprite) === entry.special;
+    });
+    if (at === -1) {
+      lines.push(`${SHEET_MARK}${entry.special} ${formatMoney(entry.amount)} ${entry.title}`);
+      continue;
+    }
+    const line = readLine(lines[at]);
+    if (entryMark(line.sprite)) continue;
+    lines[at] = `${entry.special}${SHEET_MARK} ${formatMoney(line.amount + entry.amount)} ${line.title}`;
+  }
+  return lines.join("\n");
+}
+
+// A spreadsheet temp (like ❗️➕) only keeps its entry off its day. Once no connected spreadsheet has that title
+// and type anymore (it was deleted, or the spreadsheet dropped it), its temps from today on (on the calendar
+// and in Upcoming) are just unique entries: they lose their ➕, and a $0.00 one (which only held the day) goes
+// away. Days that already passed keep theirs.
+function releaseSheetTemps() {
+  const known = new Set();
+  for (const connection of sheetsData?.list || []) {
+    for (const [, sprite, , title] of connection.entries) known.add(cleanString(title) + "|" + getSpecialType(sprite));
+  }
+  const isReleased = (sprite, title) => {
+    const special = getSpecialType(sprite);
+    return String(sprite).trim() === special + SHEET_MARK && !known.has(cleanString(title) + "|" + special);
+  };
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (gridDates[r][c] < today) continue;
+      let lines = String(calendarData[r][c]).split("\n");
+      let changed = false;
+      for (let l = lines.length - 1; l >= 1; l--) {
+        const parts = getParts(lines[l]);
+        if (parts.length < 3 || !isReleased(parts[0], parts.slice(2).join(" "))) continue;
+        if (parseAmount(parts[1]) === 0) lines.splice(l, 1);
+        else lines[l] = [getSpecialType(parts[0]), ...parts.slice(1)].join(" ");
+        changed = true;
+      }
+      if (changed) calendarData[r][c] = lines.join("\n");
+    }
+  }
+  for (let f = futureData.length - 1; f >= 1; f--) {
+    const row = futureData[f];
+    const date = createSafeMidnight(row[2], true);
+    if (isNaN(date.getTime()) || date < today || !isReleased(row[3], row[0])) continue;
+    if (parseAmount(row[1]) === 0) futureData.splice(f, 1);
+    else row[3] = getSpecialType(String(row[3]));
+  }
+}
+
+// How a spreadsheet's entries ([[MM/DD/YYYY, type, amount, title]]) land from today on, for Settings:
+// { landing: how many, keptOff: the ones a recurring entry keeps off (same title, type, and day), like
+// ["Rent on 10/20"] }
+function sheetLanding(entries) {
+  const result = { landing: 0, keptOff: [] };
+  for (const [dateText, sprite, , title] of entries) {
+    const date = createSafeMidnight(dateText, true);
+    if (isNaN(date.getTime()) || date < today) continue;
+    if (recurringHits(title, date, getSpecialType(sprite)) !== false) result.keptOff.push(`${title} on ${showDay(date)}`);
+    else result.landing++;
+  }
+  return result;
+}
+
+// The spreadsheets' costs that are "uncommon" for Dave's savings tip, like a recurring entry that lands every
+// 3 months or less often: no entry with its title and type comes 90 days before or after it. Keys:
+// "day's time|clean title|type".
+function uncommonSheetKeys() {
+  const keys = new Set();
+  const byTitle = new Map();
+  for (const [time, day] of sheetEntriesByDay(addDays(today, -400), addDays(today, 800))) {
+    for (const entry of day.values()) {
+      const key = entry.clean + "|" + entry.special;
+      if (!byTitle.has(key)) byTitle.set(key, []);
+      byTitle.get(key).push(time);
+    }
+  }
+  const span = 90 * 86400000;
+  for (const [key, times] of byTitle) {
+    times.sort((a, b) => a - b);
+    times.forEach((time, i) => {
+      const near = (i > 0 && time - times[i - 1] < span) || (i < times.length - 1 && times[i + 1] - time < span);
+      if (!near) keys.add(time + "|" + key);
+    });
+  }
+  return keys;
 }
 
 /* ---------- Edit mode: reorder, sections, delete (Recurring, Tracker, and Other Accounts) ---------- */
@@ -1760,15 +2133,16 @@ function deleteTableRows(tableName, indexes) {
 
 /* ---------- Search (the old Search tab, now the home page's search box) ---------- */
 
-// Find entries by title and date in History, the calendar, Future Dates, and recurring entries past
-// the calendar. terms: the search bar's list, one title per line, each with its own buttons (which
+// Find entries by title and date in History, the calendar, Future Dates, and recurring entries and connected
+// spreadsheets' entries past the calendar. terms: the search bar's list, one title per line, each with its own buttons (which
 // replace the spreadsheet's rent-, rent+ and car stuff=): match "all", "costs" (only costs), "gains"
 // (only gains), or "category" (the title is a tracker row: find what the row counts). With no titles,
 // the first line's buttons pick everything, every cost, or every gain. Blank From = from the start,
 // blank To = to the end.
 // query: { terms: [{ title, match }], from, to } as typed.
 // Returns { results: [{ date, amount, sprite, title, isTransfer, checked }], from, to, searchingFor }
-function search(query) {
+// calendar: the calendar's days as they show, recurring entries included (see searchBudget)
+function search(query, calendar = calendarData) {
   // 1. Date range
   let rawFrom = String(query.from || "").trim();
   let rawTo = String(query.to || "").trim();
@@ -1812,17 +2186,18 @@ function search(query) {
     addIfFound(cellDate, parseAmount(row[1]), String(row[3] || ""), String(row[0]), cleanString(row[0]));
   }
 
-  // 4. Recurring entries past the calendar (calendar days are searched directly below), skipping
-  //    days a Future Dates temp blocks. Projected up to two years ahead.
+  // 4. Recurring entries and spreadsheets' entries past the calendar (calendar days are searched directly
+  //    below), skipping days a Future Dates temp blocks. Projected up to two years ahead.
   if (toDate && toDate.getTime() > gridEndDate.getTime()) {
     let lastDay = new Date(Math.min(toDate.getTime(), addDays(today, 730).getTime()));
     let firstDay = addDays(gridEndDate, 1);
     if (fromDate && fromDate.getTime() > firstDay.getTime()) firstDay = fromDate;
     let recurringRows = getParsedRecurringRows();
+    let sheetDays = sheetEntriesByDay(firstDay, lastDay);
     let blockers = new Set();
     for (let f = 1; f < futureData.length; f++) {
       let futureSprite = String(futureData[f][3] || "");
-      if (!futureSprite.includes("✔️")) continue;
+      if (!entryMark(futureSprite)) continue;
       let blockDate = createSafeMidnight(futureData[f][2], true);
       if (!isNaN(blockDate.getTime())) {
         blockers.add(blockDate.getTime() + "|" + cleanString(futureData[f][0]) + "|" + getSpecialType(futureSprite));
@@ -1836,6 +2211,10 @@ function search(query) {
         shown.add(key);
         if (blockers.has(day.getTime() + "|" + key)) continue;
         addIfFound(new Date(day), row.amt, String(row.sprite || ""), row.title, row.parsed.cleanTitle);
+      }
+      for (let entry of sheetDays.get(day.getTime())?.values() || []) {
+        if (blockers.has(day.getTime() + "|" + entry.clean + "|" + entry.special)) continue;
+        addIfFound(new Date(day), entry.amount, SHEET_MARK + entry.special, entry.title, entry.clean);
       }
     }
   }
@@ -1851,7 +2230,7 @@ function search(query) {
   };
   for (let r = 3; r >= 0; r--) {
     for (let c = 6; c >= 0; c--) {
-      if (inRange(gridDates[r][c].getTime())) searchCellLines(calendarData[r][c], gridDates[r][c]);
+      if (inRange(gridDates[r][c].getTime())) searchCellLines(calendar[r][c], gridDates[r][c]);
     }
   }
   for (let r = 1; r < historyData.length; r++) {
@@ -2027,8 +2406,8 @@ function writeRecurring() {
           // Only an entry with this title and refraction type affects it (a title can have one recurring
           // entry of each type, and they land side by side)
           if (line.clean !== cleanTitle || getSpecialType(line.sprite) !== special) continue;
-          // A temp (checkmark entry) blocks it for the day
-          if (line.sprite.includes("✔️")) {
+          // A temp (checkmark entry) blocks it for the day (so does a spreadsheet's)
+          if (entryMark(line.sprite)) {
             hasTemp = true;
             break;
           }
@@ -2132,17 +2511,25 @@ function organizeCellEntries() {
     for (let c = 0; c < 7; c++) {
       let oldLines = combineSameEntries(calendarData[r][c].split("\n"));
       let newLines = [];
+      // (Connected spreadsheets' entries go right after recurring ones: their temps after recurring temps,
+      // and the ones just as they landed after recurring entries)
       let cellArray = {
         uncategorized: [],
         oneTimes: [],
         temps: [],
+        sheetTemps: [],
         hidTemps: [],
+        hidSheetTemps: [],
         hiddens: [],
         transferTemps: [],
+        transferSheetTemps: [],
         transfers: [],
         hidRecs: [],
         transferRecs: [],
-        recs: []
+        recs: [],
+        hidSheets: [],
+        transferSheets: [],
+        sheets: []
       };
       // Add date header
       newLines.push(oldLines[0] + "\n");
@@ -2152,13 +2539,19 @@ function organizeCellEntries() {
         if (!currentLine.trim()) continue;
         if (currentLine.startsWith("❗️ ")) cellArray.oneTimes.push(currentLine + "\n");
         else if (currentLine.startsWith("❗️✔️ ")) cellArray.temps.push(currentLine + "\n");
+        else if (currentLine.startsWith("❗️➕ ")) cellArray.sheetTemps.push(currentLine + "\n");
         else if (currentLine.startsWith("✖️✔️ ")) cellArray.hidTemps.push(currentLine + "\n");
+        else if (currentLine.startsWith("✖️➕ ")) cellArray.hidSheetTemps.push(currentLine + "\n");
         else if (currentLine.startsWith("✖️ ")) cellArray.hiddens.push(currentLine + "\n");
         else if (currentLine.startsWith("✔️✖️ ")) cellArray.hidRecs.push(currentLine + "\n");
         else if (currentLine.startsWith("⭕️✔️ ")) cellArray.transferTemps.push(currentLine + "\n");
+        else if (currentLine.startsWith("⭕️➕ ")) cellArray.transferSheetTemps.push(currentLine + "\n");
         else if (currentLine.startsWith("⭕️ ")) cellArray.transfers.push(currentLine + "\n");
         else if (currentLine.startsWith("✔️⭕️ ")) cellArray.transferRecs.push(currentLine + "\n");
         else if (currentLine.startsWith("✔️ ")) cellArray.recs.push(currentLine + "\n");
+        else if (currentLine.startsWith("➕✖️ ")) cellArray.hidSheets.push(currentLine + "\n");
+        else if (currentLine.startsWith("➕⭕️ ")) cellArray.transferSheets.push(currentLine + "\n");
+        else if (currentLine.startsWith("➕❗️ ")) cellArray.sheets.push(currentLine + "\n");
         else cellArray.uncategorized.push(currentLine + "\n");
       }
       // Sort and append each category sequentially
@@ -2238,10 +2631,12 @@ function dayMath(lines) {
   return { gains, costs, bankChange };
 }
 
-// The 28 days after the calendar: lowest balance (and when) and the balance on day 28.
-// Also counts uncommon recurring entries (every 3 months or less often) visible from today on.
+// The 28 days after the calendar: lowest balance (and when) and the balance on day 28, with recurring entries,
+// connected spreadsheets' entries, and Future Dates. Also counts uncommon recurring entries (every 3 months or
+// less often) visible from today on.
 function getPredictionData(lastInBank) {
   let recurringRows = getParsedRecurringRows();
+  let sheetDays = sheetEntriesByDay(nextFourStart, addDays(nextFourStart, 27));
   let visibleDay = createSafeMidnight(gridStartDate);
   let testDay = createSafeMidnight(nextFourStart);
   let todayTime = today.getTime();
@@ -2269,17 +2664,19 @@ function getPredictionData(lastInBank) {
     let currentTestTime = testDay.getTime();
     let currentVisibleTime = visibleDay.getTime();
 
+    // A Future Dates temp (like ❗️✔️ or ❗️➕) with its title and type that day replaces a recurring or
+    // spreadsheet entry
+    const overridden = (clean, special) => parsedFuture.some(future => future.time === currentTestTime && future.title === clean &&
+      entryMark(future.sprite) && future.special === special);
     for (let row of recurringRows) {
       if (isUncommonFrequency(row.parsed.frequency) && currentVisibleTime >= todayTime && recurringRowHits(row.parsed, visibleDay)) {
         visibleUncommons++;
       }
       if (String(row.sprite || "").includes("✖️")) continue;
-      if (recurringRowHits(row.parsed, testDay)) {
-        // A Future Dates temp (✔️) with its title and type that day replaces it
-        let hasNoOverride = !parsedFuture.some(future => future.time === currentTestTime && future.title === row.parsed.cleanTitle &&
-          future.sprite.includes("✔️") && future.special === row.parsed.special);
-        if (hasNoOverride) dayTotal += row.amt;
-      }
+      if (recurringRowHits(row.parsed, testDay) && !overridden(row.parsed.cleanTitle, row.parsed.special)) dayTotal += row.amt;
+    }
+    for (let entry of sheetDays.get(currentTestTime)?.values() || []) {
+      if (entry.special !== "✖️" && !overridden(entry.clean, entry.special)) dayTotal += entry.amount;
     }
 
     for (let f = 0; f < parsedFuture.length; f++) {
@@ -2312,7 +2709,7 @@ function commenceDave() {
     let todaysDay = getDayDifference(today, janFirst);
     // (A $0.00 temp only keeps a recurring entry off its day, so it isn't a payment; a $0.00 note, like "Add To
     // Savings", still counts)
-    let futureDatesAmount = futureData.slice(1).filter(row => String(row[0]).trim() !== "" && !(parseAmount(row[1]) === 0 && String(row[3]).includes("✔️"))).length;
+    let futureDatesAmount = futureData.slice(1).filter(row => String(row[0]).trim() !== "" && !(parseAmount(row[1]) === 0 && entryMark(row[3]))).length;
     let tempDaveMessage = greetingPresets[todaysDay % 6];
     tempDaveMessage += nicknamePresets[todaysDay % 5];
     // A budget with no recurring entries yet is brand new
@@ -2514,24 +2911,28 @@ function inBankTip() {
   return `Time for your weekly check! Look at today's In Bank here (${formatMoney(inBank)}), and compare it with what your bank account actually has. Try to find which purchases are causing any difference, and add them in (on the day they happened, or just to today). Anything you can't find, just put in as "Catchup -$??" to fix your In Bank.`;
 }
 
-// A paycheck: a gain from a recurring entry (its line has a ✔️) that's Regular (not Hidden or a transfer)
+// A paycheck: a gain from a recurring entry or a connected spreadsheet (its line has a ✔️ or ➕) that's
+// Regular (not Hidden or a transfer)
 function isPaycheckLine(line) {
   const { sprite, amount } = readLine(line);
-  return sprite.includes("✔️") && getSpecialType(sprite) === "❗️" && amount > 0;
+  return !!entryMark(sprite) && getSpecialType(sprite) === "❗️" && amount > 0;
 }
 
-// The days that land a paycheck from a recurring entry, from first through last
+// The days that land a paycheck from a recurring entry or a connected spreadsheet, from first through last
 function paycheckDays(first, last) {
   const paychecks = getParsedRecurringRows().filter(row => row.amt > 0 && row.parsed.special === "❗️");
+  const sheetDays = sheetEntriesByDay(first, last);
   const found = [];
   for (let day = first; day <= last; day = addDays(day, 1)) {
-    if (paychecks.some(row => recurringRowHits(row.parsed, day))) found.push(day);
+    const fromSheet = [...(sheetDays.get(day.getTime())?.values() || [])].some(entry => entry.special === "❗️" && entry.amount > 0);
+    if (fromSheet || paychecks.some(row => recurringRowHits(row.parsed, day))) found.push(day);
   }
   return found;
 }
 
 // Each day from 4 months ago through today, from History and the calendar: { spent, catchup, payday }, where spent
-// is what went out of In Bank besides recurring bills (Regular costs that didn't come from a recurring entry),
+// is what went out of In Bank besides recurring bills (Regular costs that didn't come from a recurring entry or a
+// connected spreadsheet),
 // and catchup is its Catchup costs. enough: History reaches back the whole 4 months. Worked out once per visit
 // (several tips use it: see startDaveVisit).
 function recentSpending() {
@@ -2550,7 +2951,7 @@ function recentSpending() {
       if (isPaycheckLine(text)) day.payday = true;
       if (line.amount >= 0) continue;
       const special = getSpecialType(line.sprite);
-      if (special === "❗️" && !line.sprite.includes("✔️")) day.spent -= line.amount;
+      if (special === "❗️" && !entryMark(line.sprite)) day.spent -= line.amount;
       if (special !== "⭕️" && /^catch ?up$/.test(line.clean)) day.catchup -= line.amount;
     }
     days.set(date.getTime(), day);
@@ -2636,24 +3037,28 @@ function catchupTip() {
   return `Your Catchup entries add up to ${formatMoney(Math.round(total))} in the last ${DAVE_CATCHUP_DAYS} days, so some purchases are slipping by. Try adding each one as it happens (the Quick Entry icon on your phone's home screen makes it quick), so your In Bank stays right without guessing.`;
 }
 
-// The next big uncommon bill: a recurring cost of $200 or more that lands every 3 months or less often, or a
-// one-time cost of $200 or more added for a later day (on the calendar or in Upcoming), in the next 60 days (not
-// transfers), and how much to set aside from each paycheck until then (today's counts)
+// The next big uncommon bill: a recurring cost of $200 or more that lands every 3 months or less often, a
+// connected spreadsheet's cost of $200 or more with no other like it within 90 days, or a one-time cost of $200
+// or more added for a later day (on the calendar or in Upcoming), in the next 60 days (not transfers), and how
+// much to set aside from each paycheck until then (today's counts)
 function savingsTip() {
   const lastDay = addDays(today, DAVE_BILL_DAYS);
   const uncommon = getParsedRecurringRows().filter(row => row.amt <= -DAVE_BIG_BILL && !isTransferEntry(row.sprite) && isUncommonFrequency(row.parsed.frequency));
   const uncommonKeys = new Set(uncommon.map(row => row.parsed.cleanTitle + "|" + row.parsed.special));
+  const uncommonSheets = uncommonSheetKeys(); // A spreadsheet's cost with no other like it within 90 days
   const bills = [];
 
-  // On the calendar after today: uncommon recurring ones as they are there (one changed for its day counts as
-  // changed), and one-time costs added for those days
+  // On the calendar after today: uncommon recurring and spreadsheet ones as they are there (one changed for its
+  // day counts as changed), and one-time costs added for those days
   for (let day = addDays(today, 1); day <= gridEndDate && day <= lastDay; day = addDays(day, 1)) {
     const spot = calendarSpot(day);
     for (const line of String(calendarData[spot.r][spot.c]).split("\n").slice(1)) {
       const parts = getParts(line);
       const amount = parseAmount(parts[1]);
       if (amount > -DAVE_BIG_BILL || systemEmojis.includes(parts[0]) || isTransferEntry(parts[0])) continue;
-      if (!parts[0].includes("✔️") || uncommonKeys.has(extractTitle(line) + "|" + getSpecialType(parts[0]))) {
+      const key = extractTitle(line) + "|" + getSpecialType(parts[0]);
+      const mark = entryMark(parts[0]);
+      if (!mark || (mark === RECURRING_MARK ? uncommonKeys.has(key) : uncommonSheets.has(day.getTime() + "|" + key))) {
         bills.push({ date: day, title: parts.slice(2).join(" "), amount });
       }
     }
@@ -2663,13 +3068,21 @@ function savingsTip() {
   const upcoming = futureData.slice(1)
     .map(row => ({ date: createSafeMidnight(row[2], true), title: String(row[0] ?? "").trim(), amount: parseAmount(row[1]), sprite: String(row[3] ?? "") }))
     .filter(row => row.title && !isNaN(row.date.getTime()));
-  const changed = new Set(upcoming.filter(row => row.sprite.includes("✔️")).map(row => row.date.getTime() + "|" + cleanString(row.title) + "|" + getSpecialType(row.sprite)));
+  const changed = new Set(upcoming.filter(row => entryMark(row.sprite)).map(row => row.date.getTime() + "|" + cleanString(row.title) + "|" + getSpecialType(row.sprite)));
   if (uncommon.length > 0) {
     for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
       for (const row of uncommon) {
         if (recurringRowHits(row.parsed, day) && !changed.has(day.getTime() + "|" + row.parsed.cleanTitle + "|" + row.parsed.special)) {
           bills.push({ date: day, title: row.title, amount: row.amt });
         }
+      }
+    }
+  }
+  for (const [time, day] of sheetEntriesByDay(nextFourStart, lastDay)) {
+    for (const entry of day.values()) {
+      const key = time + "|" + entry.clean + "|" + entry.special;
+      if (entry.amount <= -DAVE_BIG_BILL && entry.special !== "⭕️" && uncommonSheets.has(key) && !changed.has(key)) {
+        bills.push({ date: new Date(time), title: entry.title, amount: entry.amount });
       }
     }
   }
@@ -2979,6 +3392,7 @@ function buildReminderPlan() {
   let recurringRows = getParsedRecurringRows();
   let futureByDate = groupFutureRowsByDate();
   let lastDay = addDays(gridEndDate, 28);
+  let sheetDays = sheetEntriesByDay(nextFourStart, lastDay);
 
   // Uncommon recurring payments per day, through the end of the last day's 4-week calendar
   let uncommonRows = recurringRows.filter(row => isUncommonFrequency(row.parsed.frequency));
@@ -2998,12 +3412,13 @@ function buildReminderPlan() {
       cellText = calendarData[Math.floor(index / 7)][index % 7];
       dayInBank = readInBank(cellText) ?? 0;
     } else {
-      // Future Dates entries, then recurring entries, then the In Bank math (like the catch-up)
+      // Future Dates entries, then recurring entries and spreadsheets' entries, then the In Bank math (like
+      // the catch-up)
       let text = formatToMMDD(day);
       for (let f of futureByDate.get(day.getTime()) || []) {
         text += `\n${String(futureData[f][3])} ${formatMoney(parseAmount(futureData[f][1]))} ${String(futureData[f][0]).trim()}`;
       }
-      let math = applyCellBudgetMath(writeRecurringToCell(text, day, recurringRows), inBank);
+      let math = applyCellBudgetMath(writeSheetsToCell(writeRecurringToCell(text, day, recurringRows), sheetDays.get(day.getTime())), inBank);
       cellText = math.text;
       dayInBank = inBank = math.inBank;
     }
@@ -3071,11 +3486,10 @@ async function saveChanges() {
 
 async function saveChangedTables() {
   console.log("Saving data changes...");
-  // Grab the JWT token instead of the user ID
   const token = localStorage.getItem('prismal_jwt');
   if (!token) {
     console.error("No active session found. Changes not saved.");
-    return false; // Stop execution if logged out
+    return false;
   }
 
   // Never save before the real data has loaded: the empty placeholders would overwrite it
@@ -3087,8 +3501,7 @@ async function saveChangedTables() {
   // Becomes false if any section fails to save (returned to the caller)
   let allSaved = true;
 
-  // Reusable request helper with Authorization JWT headers.
-  // Non-critical tables (Change Logs) don't count against allSaved.
+  // Send one table. Change Logs aren't critical: a failed log save doesn't count against allSaved.
   async function sendUpdate(endpoint, payload, critical = true) {
     // Skip tables whose stored copy couldn't be read, so it isn't replaced
     const tableName = endpoint.replace('/api/data/update-', '');
@@ -3137,7 +3550,7 @@ async function budgetApi(endpoint, payload) {
       method: payload === undefined ? 'GET' : 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` // Standard JWT Bearer token format
+        'Authorization': `Bearer ${token}`
       },
       body: payload === undefined ? undefined : JSON.stringify(payload)
     });
@@ -3236,27 +3649,20 @@ function normalizeApiAccounts(rawData) {
   return { version: ACCOUNTS_VERSION, list, equity };
 }
 
+// The calendar as exactly rows x cols cells of text, whatever shape it was stored in (flat or rows)
 function normalizeApiGrid(rawData, rows, cols) {
   let parsed = rawData;
-  
-  // 1. If the DB returned stringified JSON, parse it
   if (typeof rawData === 'string') {
     try { parsed = JSON.parse(rawData); } catch(e) { parsed = []; }
   }
-  
-  // 2. Ensure it is an array
   if (!Array.isArray(parsed)) parsed = [];
-  
-  // 3. Flatten whatever shape the DB returned (1D or 2D) so we can safely reconstruct it
+
   let flatData = parsed.flat(Infinity);
-  
-  // 4. Rebuild into a perfect RxC 2D grid
   let grid = [];
   let index = 0;
   for (let r = 0; r < rows; r++) {
     let row = [];
     for (let c = 0; c < cols; c++) {
-      // Grab data, convert to string, default to empty string if missing
       row.push(flatData[index] !== undefined ? String(flatData[index]) : "");
       index++;
     }
@@ -3265,16 +3671,15 @@ function normalizeApiGrid(rawData, rows, cols) {
   return grid;
 }
 
+// A day (a Date, or stored text: "MM/DD", "MM/DD/YYYY", or "YYYY-MM-DD") as local midnight in this device's
+// time zone. Text it can't read is today, or an invalid Date when failable.
 function createSafeMidnight(input, failable = false) {
   if (!input) input = new Date();
 
-  // Helper: Creates a local Date object at exactly 00:00:00.000
-  // In the browser, this automatically uses the user's local timezone.
   const getLocalMidnight = (year, monthIndex, day) => {
     return new Date(year, monthIndex, day, 0, 0, 0, 0);
   };
 
-  // 1. If input is already a Date object
   if (input instanceof Date) {
     if (isNaN(input)) {
       return failable ? new Date("invalid") : getLocalMidnight(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -3282,48 +3687,45 @@ function createSafeMidnight(input, failable = false) {
     return getLocalMidnight(input.getFullYear(), input.getMonth(), input.getDate());
   }
 
-  // 2. If input is a string
   if (typeof input === 'string') {
     let trimmed = input.trim();
-    
-    // Match "MM/DD" or "M/D" (e.g., "12/25")
+
+    // "MM/DD" (a calendar day's first line): the nearest year, around New Year's too
     if (/^\d{1,2}\/\d{1,2}$/.test(trimmed)) {
       let [m, d] = trimmed.split("/").map(Number);
       let now = new Date();
       let currentYear = now.getFullYear();
-      let currentMonth = now.getMonth() + 1; // getMonth is 0-indexed (0-11)
-      
+      let currentMonth = now.getMonth() + 1;
+
       let targetYear = currentYear;
       if (m === 12 && currentMonth === 1) targetYear--;
       else if (m === 1 && currentMonth === 12) targetYear++;
-      
+
       return getLocalMidnight(targetYear, m - 1, d);
     }
-    
-    // Match "MM/DD/YYYY" or "M/D/YYYY"
+
+    // "MM/DD/YYYY" (or "M/D/YYYY")
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
       let [m, d, y] = trimmed.split("/").map(Number);
       return getLocalMidnight(y, m - 1, d);
     }
-    
-    // Match "YYYY-MM-DD"
+
+    // "YYYY-MM-DD"
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
       let [y, m, d] = trimmed.split("-").map(Number);
       return getLocalMidnight(y, m - 1, d);
     }
-    
-    // Fallback for random valid date strings (e.g. "Oct 12, 2026")
+
+    // Words, like "Oct 12, 2026"
     let parsedDate = new Date(trimmed);
     if (!isNaN(parsedDate.getTime())) {
       return getLocalMidnight(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
     }
   }
 
-  // 3. Fail states or final fallback
-  console.log("Create Safe Midnight function failed on input:", input);
+  console.log("createSafeMidnight couldn't read:", input);
   if (failable) return new Date("invalid");
-  
-  // Default to returning "Today at Midnight"
+
   let now = new Date();
   return getLocalMidnight(now.getFullYear(), now.getMonth(), now.getDate());
 }
@@ -3435,12 +3837,10 @@ function parseTypedDate(text) {
   return createSafeMidnight(date);
 }
 
+// The calendar's 28 days, 4 rows of Sunday through Saturday, starting with the budget's week (today)
 function getGridDates() {
-  // Uses global `today`
   let now = createSafeMidnight(today ? new Date(today.getTime()) : new Date());
-  
-  // native getDay(): 0 = Sun, 1 = Mon, ..., 6 = Sat
-  let dayOfWeek = now.getDay();
+  let dayOfWeek = now.getDay(); // 0 is Sunday
   let startDate = new Date(now);
   startDate.setDate(now.getDate() - dayOfWeek);
   
@@ -3457,8 +3857,8 @@ function getGridDates() {
   return datesArray;
 }
 
+// Days from date2 to date1 (rounded, so a daylight saving change's 23- or 25-hour day still counts as one)
 function getDayDifference(date1, date2) {
-	// Direct timestamp difference rounded to nearest day
 	return Math.round((date1.getTime() - date2.getTime()) / 86400000);
 }
 
@@ -3485,13 +3885,12 @@ function formatToMMDD(dateObj) {
     return "";
   }
 
-  // FAST PATH: Check cache by millisecond timestamp
+  // Remembered by the moment, since the same days are formatted over and over
   let cacheKey = dateObj.getTime();
   if (mmddCache.has(cacheKey)) {
     return mmddCache.get(cacheKey);
   }
 
-  // SLOW PATH: Native local browser formatting (MM/dd)
   let mm = String(dateObj.getMonth() + 1).padStart(2, '0');
   let dd = String(dateObj.getDate()).padStart(2, '0');
   let formattedDate = `${mm}/${dd}`;
@@ -3529,12 +3928,11 @@ function parseAmount(val) {
 	return parseFloat(str) || 0;
 }
 
+// An entry line's title ("❗️ -$5.00 Iced Coffee" -> "iced coffee", or as written with clean false)
 function extractTitle(line, clean = true) {
 	if (!line) return "";
-	// 1. Split the line into an array using any whitespace
 	let parts = getParts(line)
 	if (parts.length <= 2) return "";
-	// 2. Extract and join everything starting from index 2 (split[2] onwards)
 	let title = parts.slice(2)
 		.join(" ");
 	if (clean) title = cleanString(title);
@@ -3562,7 +3960,7 @@ function readLine(line) {
 // "Coffee", "coffee", and "COFFEE!" are one title while "Café", "Кофе", and "咖啡" stay themselves.
 // A title with no letters or numbers at all (like ☕) keeps its symbols, so different ones stay
 // different. The invisible "show as emoji" characters (variation selectors, like the one after the circle
-// in ⭕️) are dropped first: they count as marks, so "⭕️Food" used to compare as something other than "Food".
+// in ⭕️) are dropped first: they count as marks, so otherwise "⭕️Food" wouldn't compare as "Food".
 // The API's quick.js cleanTitle matches this. Cached: every change compares the same titles thousands of times.
 const cleanCache = new Map();
 function cleanString(title) {
@@ -3590,10 +3988,22 @@ function getSpecialType(emo) {
 	return "❗️";
 }
 
+// The existing entry's type, and its mark (✔️ or ➕) or the incoming one's
 function combineSprites(existingSprite, incomingSprite) {
 	let specialType = getSpecialType(existingSprite);
-	let check = (existingSprite.includes("✔️") || incomingSprite.includes("✔️")) ? "✔️" : "";
-	return specialType + check;
+	return specialType + (entryMark(existingSprite) || entryMark(incomingSprite));
+}
+
+// Where a sprite says an entry comes from: ✔️ a recurring entry, ➕ a connected spreadsheet, or "" (its own).
+// It comes before the type while the entry is just as it landed (✔️⭕️, ➕❗️), and after it once it's been
+// changed for its day (⭕️✔️, ❗️➕): a temp.
+const RECURRING_MARK = "✔️";
+const SHEET_MARK = "➕";
+function entryMark(sprite) {
+	let text = String(sprite || "");
+	if (text.includes(RECURRING_MARK)) return RECURRING_MARK;
+	if (text.includes(SHEET_MARK)) return SHEET_MARK;
+	return "";
 }
 
 // Local midnight N days after date (handles month/year/DST rollover)
@@ -3607,10 +4017,8 @@ function recurringHits(title, date, targetSpecial) {
 
   for (let i = 2; i < recurringData.length; i++) {
     const item = recurringData[i];
-    // 1. Quickest checks first
+    // The title and type first: they're quicker to check than the dates
     if (!item || item[0] === "-" || cleanString(item[0]) !== cleanTargetTitle) continue;
-
-    // 2. Check special type before doing date parsing (saves CPU)
     if (targetSpecial) {
       const emo = item[5] || "";
       if (getSpecialType(emo) !== targetSpecial) continue;
@@ -3763,46 +4171,36 @@ function countRecurringHits(row, first, last) {
   return hits;
 }
 
+// For fixing a cell by hand from the browser's console, like updateGridCell("calendar", 0, 3, "10/14\n❗️ -$5.00 Tea"):
+// sets one cell of a table and saves that table. It skips the budget math and the Change Logs, so reload the
+// page afterwards to see everything worked out again.
 window.updateGridCell = async function(gridName, row, col, textValue) {
-  // Map the string name to your actual global arrays and edit flags
-  const gridMap = {
-    'calendar':   { data: calendarData,   setFlag: () => calendarEdited = true },
-    'recurring':  { data: recurringData,  setFlag: () => recurringEdited = true },
-    'tracker':    { data: trackerData,    setFlag: () => trackerEdited = true },
-    'future':     { data: futureData,     setFlag: () => futureEdited = true },
-    'history':    { data: historyData,    setFlag: () => historyEdited = true },
-    'search':     { data: searchData,     setFlag: () => searchEdited = true },
-    'calculator': { data: calculatorData, setFlag: () => calculatorEdited = true }
+  const tables = {
+    calendar:   { data: calendarData,   markEdited: () => { calendarEdited = true; } },
+    recurring:  { data: recurringData,  markEdited: () => { recurringEdited = true; } },
+    tracker:    { data: trackerData,    markEdited: () => { trackerEdited = true; } },
+    future:     { data: futureData,     markEdited: () => { futureEdited = true; } },
+    history:    { data: historyData,    markEdited: () => { historyEdited = true; } },
+    search:     { data: searchData,     markEdited: () => { searchEdited = true; } },
+    calculator: { data: calculatorData, markEdited: () => { calculatorEdited = true; } }
   };
-
-  const target = gridMap[gridName];
-
+  const target = Object.prototype.hasOwnProperty.call(tables, gridName) ? tables[gridName] : null;
   if (!target) {
-    console.error(`❌ Grid "${gridName}" not found. Valid options are: ${Object.keys(gridMap).join(", ")}`);
-    return;
+    console.error(`There's no table called "${gridName}". The tables are: ${Object.keys(tables).join(", ")}.`);
+    return false;
   }
 
-  // 1. Update the 2D array safely
   if (!target.data[row]) target.data[row] = [];
   target.data[row][col] = textValue;
-
-  // 2. Set the correct "Edited" flag to true so saveChanges() picks it up
-  target.setFlag();
-
-  // 3. Optional UI Sync: If it's the calendar, try to update the DOM immediately
-  if (gridName === 'calendar') {
-    const index = (row * 7) + col;
-    const cell = document.querySelectorAll('.elastic-table .cell-content')[index];
+  target.markEdited();
+  if (gridName === "calendar") {
+    const cell = document.querySelectorAll(".elastic-table .cell-content")[row * 7 + col];
     if (cell) cell.innerText = textValue;
-  } else {
-    // For other tables, it will save in the background, but you might need to refresh to see it visually
-    console.log(`ℹ️ Background data for '${gridName}' updated. Refresh to see visual changes if it's currently on screen.`);
   }
 
-  // 4. Trigger the backend save
-  console.log(`⏳ Saving "${gridName}" cell [${row}][${col}]...`);
-  await saveChanges();
-  console.log(`✅ Update complete! Changed to: "${textValue}"`);
+  const saved = await saveChanges();
+  console.log(saved ? `Saved ${gridName} [${row}][${col}]. Reload the page to see it worked out again.` : `Couldn't save ${gridName}.`);
+  return saved;
 };
 
 //#endregion

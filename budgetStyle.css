@@ -1798,6 +1798,284 @@ a.budgetButton:hover {
   overflow-wrap: anywhere;
 }
 
+/* Connected spreadsheets (Settings): each one's button, On/Off switch, and Delete, with a box under it when
+   something needs a look */
+.sheetList {
+  margin: 0.8em 0 1em;
+  padding: 0;
+  list-style: none;
+}
+
+.sheetItem {
+  padding: 0.6em 0;
+  border-top: 1px solid var(--PANEL_BORDER);
+}
+
+.sheetItem:last-child {
+  border-bottom: 1px solid var(--PANEL_BORDER);
+}
+
+.sheetEmpty {
+  padding: 0.5em 0;
+  border: none;
+}
+
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.budgetButton.sheetButton {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1em;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45em 1em;
+  text-align: left;
+  border-radius: 14px;
+}
+
+.sheetName {
+  overflow-wrap: anywhere;
+}
+
+.sheetCount {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+.sheetItem.isOff .sheetButton {
+  opacity: 0.6;
+}
+
+.sheetSwitch,
+.budgetButton.sheetDelete {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.sheetProblems {
+  margin-top: 0.55em;
+  padding: 0.5em 0.8em;
+  font-size: 0.9em;
+  line-height: 1.4;
+  text-align: left;
+  background: rgba(120, 0, 0, 0.25);
+  border: 1px solid rgba(255, 90, 90, 0.55);
+  border-radius: 10px;
+}
+
+.sheetProblems ul {
+  margin: 0.3em 0 0;
+  padding-left: 1.1em;
+}
+
+.sheetProblems li + li {
+  margin-top: 0.3em;
+}
+
+/* Its panel: the link, then the entry form, which grows in once the spreadsheet opens */
+.sheetOpened {
+  margin: -0.3em 0 0;
+}
+
+.sheetForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+}
+
+.sheetForm.isOpening {
+  animation: sheetFormIn 0.5s ease-out;
+}
+
+@keyframes sheetFormIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheetForm.isOpening {
+    animation: none;
+  }
+}
+
+/* A part of an entry: its yellow ➕, then what's typed, or the cells it comes from */
+.sheetLine {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.sheetTyped {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sheetPick {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2em;
+  height: 2.2em;
+  margin: 0;
+  padding: 0;
+  font-size: 1em;
+  line-height: 1;
+  background: rgba(255, 205, 40, 0.12);
+  border: 2px solid rgba(255, 205, 40, 0.7);
+  border-radius: 50%;
+}
+
+.sheetPick .sprite {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.sheetPick:hover,
+.sheetPick:focus-visible {
+  transform: scale(1.08);
+  box-shadow: 0 0 10px rgba(255, 205, 40, 0.65);
+}
+
+/* Picked: filled in */
+.sheetPick.isLinked {
+  background: rgba(255, 205, 40, 0.38);
+  border-color: rgb(255, 205, 40);
+  box-shadow: 0 0 8px rgba(255, 205, 40, 0.5);
+}
+
+/* The cells it comes from (tap to change them) */
+.sheetCells {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45em 0.9em;
+  font-size: 1em;
+  text-align: left;
+  overflow-wrap: anywhere;
+  color: var(--BASE_COLOR);
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 205, 40, 0.7);
+  border-radius: 10px;
+}
+
+.sheetSign {
+  margin-left: 2.7em;
+}
+
+/* What it finds: entries from today on, and problems */
+.sheetPreview {
+  font-size: 0.95em;
+}
+
+.sheetPreviewHeading {
+  margin: 0 0 0.3em;
+  font-size: 1em;
+}
+
+.sheetPreviewList {
+  margin: 0;
+  padding: 0.45em 0.7em;
+  list-style: none;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.sheetPreviewList li {
+  line-height: 1.6;
+}
+
+.sheetPreviewList li.positive {
+  color: var(--POSITIVE_TEXT);
+}
+
+.sheetPreviewDate {
+  display: inline-block;
+  min-width: 3.2em;
+  opacity: 0.75;
+}
+
+/* The ➕ panel: the spreadsheet's tabs, and Column / Row boxes */
+.sheetTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.sheetTabs .budgetButton {
+  margin: 0;
+  padding: 0.3em 0.8em;
+  font-size: 0.9em;
+}
+
+.rangeBoxes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+}
+
+.rangeLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.rangeWord {
+  font-size: 0.9em;
+}
+
+.rangeWord:first-child {
+  min-width: 2.6em;
+  opacity: 0.75;
+}
+
+.budgetPanel input.rangeInput {
+  flex: 0 0 4.5em;
+  width: 4.5em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.budgetPanel input.rangeInput.rangeRow {
+  flex-basis: 5.5em;
+  width: 5.5em;
+}
+
+.sheetRangeFound {
+  margin: 0;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.sheetRangeFound.isProblem {
+  color: var(--NEGATIVE_TEXT);
+}
+
+/* A panel opened over another one: the one under it waits, dimmed */
+.budgetPanel.isUnder {
+  filter: brightness(0.55);
+}
+
+.budgetPanel.large.floating.stacked {
+  z-index: 1310;
+  top: calc(max(2vh, env(safe-area-inset-top, 0px)) + 1.2em);
+}
+
+/* Settings' age box */
+.budgetCard .settingsField .ageInput {
+  width: 6em;
+  align-self: flex-start;
+  text-align: center;
+}
+
 /* Help: the Help button at the bottom of a page opens the page's help, floating over a dimmed page. The
    word in a small pill (its padding follows the panels' text size, the word a little bigger on big screens). */
 .helpButton {
@@ -2082,5 +2360,120 @@ a.budgetButton:hover {
   .guide .toc ol {
     columns: 2;
     column-gap: 2.5em;
+  }
+}
+
+/*========================================*
+ *  FRONT PAGE (index.html for anyone signed out): what Prismal Budget is, readable without JavaScript.
+ *  html.frontPage (Boot.js) shows it, and Sign In and Create Account fixed to the window, instead of the
+ *  budget.
+ *========================================*/
+
+html:not(.frontPage) .frontView,
+html:not(.frontPage) .frontSignIn,
+.frontPage #transitionContainer > main > :not(.frontView),
+.frontPage header .navButtons {
+  display: none;
+}
+
+.frontView {
+  font-size: clamp(15px, 3vmin, 19px);
+}
+
+.frontHero {
+  padding: 1.6em 1.3em;
+  text-align: center;
+}
+
+.frontHero h1 {
+  margin: 0 0 0.6em;
+  font-size: clamp(26px, 5.5vmin, 44px);
+  font-weight: normal;
+  line-height: 1.25;
+  text-shadow: var(--SHADOW);
+}
+
+.frontHero p {
+  max-width: 40em;
+  margin: 0 auto 1em;
+}
+
+.frontButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.8em;
+  margin-top: 1.2em;
+}
+
+/* (Buttons, not .guide's plain links) */
+.frontButtons .budgetButton,
+.frontSignIn .budgetButton {
+  display: inline-flex;
+  padding: 0.45em 1.1em;
+  font-size: 1em;
+  text-decoration: none;
+}
+
+.frontFeatures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.8em;
+  padding: 0;
+  list-style: none;
+}
+
+.frontFeatures li {
+  margin: 0;
+  padding: 0.8em 1em;
+  background: var(--PANEL_DARK);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.frontFeatures strong {
+  display: block;
+  margin-bottom: 0.3em;
+}
+
+.frontSteps li {
+  margin-bottom: 0.6em;
+}
+
+/* Sign In and Create Account: top right, over everything, on a dark pill so they read over the page */
+.frontSignIn {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: calc(env(safe-area-inset-right, 0px) + 16px);
+  z-index: 100;
+  display: flex;
+  gap: 0.6em;
+  padding: 0.45em;
+  font-size: clamp(14px, 2.6vmin, 18px);
+  background: rgba(4, 0, 22, 0.75);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 9999px;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.4s ease;
+}
+
+/* They come and go with the page as it slides in and out */
+.homeJs #transitionContainer:not(.ready) ~ .frontSignIn,
+.homeJs #transitionContainer.slide-out ~ .frontSignIn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Phones: top center, with room for them above the page */
+@media (max-width: 700px) {
+  .frontSignIn {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .frontPage #transitionContainer {
+    padding-top: calc(2vh + 64px);
   }
 }

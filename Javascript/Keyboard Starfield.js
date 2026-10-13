@@ -1,4 +1,3 @@
-// thank heavens for chatGPT <3
 // Keyboard-driven impulse controller for the Starfield engine.
 // This file translates discrete key presses into one-frame forces
 // and sends them to the engine (Active Starfield, in a worker) as KEYBOARD messages.
@@ -309,6 +308,3 @@ function RUN_L() {
 }
 
 /* #endregion 5) OTHERS */
-
-// GPT Joke: If the keyboard were a spaceship, these functions are the tiny thrusters.
-// Not enough to warp-drive, but plenty to bonk a star into the next zip code. 🚀
