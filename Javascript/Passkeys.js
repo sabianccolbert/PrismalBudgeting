@@ -67,6 +67,7 @@ window.Passkeys = (() => {
     };
   }
 
+  // The API's options for making a passkey -> what navigator.credentials.create takes
   function addRequest(options) {
     return {
       ...options,
@@ -91,6 +92,7 @@ window.Passkeys = (() => {
     };
   }
 
+  // A new passkey -> what the API's /api/passkey/add takes
   function addAnswer(credential) {
     const response = credential.response;
     let transports = [];
@@ -153,6 +155,7 @@ window.Passkeys = (() => {
     return Uint8Array.from(binary, character => character.charCodeAt(0));
   }
 
+  // Bytes -> base64url text
   function toBase64Url(buffer) {
     let binary = "";
     for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte);

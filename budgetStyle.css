@@ -93,31 +93,47 @@
   overflow: visible;
 }
 
-/* How much a day is zoomed (the v inside stays the same size on screen): 2 on a computer; on phones,
-   whatever fills the screen (Process Budget.js sets it) */
+/* How much a day is zoomed: 2 on a computer (scaled, so the v inside divides by it to stay the same size on
+   screen); on phones, whatever fills the screen (Process Budget.js sets it) */
 .elastic-table td.is-editing,
 .elastic-table td.is-magnified {
   --zoom: 2;
 }
 
-/* Phones: a tapped day fills almost the whole screen (Process Budget.js works out the move and the size),
-   over a dimmed page, with all of its entries showing on a solid background */
+/* Phones: a tapped day fills almost the whole screen (Process Budget.js works out where and how big), over a
+   dimmed page, with all of its entries showing on a solid background. It's laid out at that size (its text,
+   spacing, and corners times --zoom) instead of scaled up from the tiny day, so its text is sharp. Only
+   Process Budget.js's grow and shrink animations scale it. */
 .elastic-table td.is-editing.is-fullZoom {
   transform: none;
   z-index: 60;
   background-color: transparent;
   box-shadow: none;
+  transition: none;
 }
 
 .elastic-table td.is-fullZoom .cell-content {
+  width: calc(100% * var(--zoom, 1));
   height: auto;
-  min-height: 100%;
+  min-height: calc(100% * var(--zoom, 1));
+  padding: calc(4px * var(--zoom, 1));
+  font-size: calc(1em * var(--zoom, 1));
+  pointer-events: auto; /* It's bigger than its day now, so taps on it land on it, not what's under it */
   background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(6, 0, 34));
-  /* An outline, not a border, so the v stays in the very corner; 1px on screen however far it's zoomed */
-  outline: calc(1px / var(--zoom, 1)) solid var(--PANEL_BORDER);
-  outline-offset: calc(-1px / var(--zoom, 1));
-  border-radius: 3px;
+  /* An outline, not a border, so the v stays in the very corner */
+  outline: 1px solid var(--PANEL_BORDER);
+  outline-offset: -1px;
+  border-radius: calc(3px * var(--zoom, 1));
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+/* Red days stay red when zoomed, on a solid background too */
+.elastic-table td.is-fullZoom.isNegative .cell-content {
+  background: linear-gradient(to bottom, rgb(95, 0, 20), rgb(30, 0, 8));
+}
+
+.elastic-table td.is-fullZoom.isToday.isNegative .cell-content {
+  background: linear-gradient(to bottom, rgb(170, 0, 0), rgb(40, 0, 6));
 }
 
 .dayZoomBackdrop {
@@ -134,6 +150,16 @@
 
 .elastic-table td:not(.is-editing) {
   z-index: 1;
+}
+
+/* Reduced motion: days zoom and magnify without easing into it */
+@media (prefers-reduced-motion: reduce) {
+  .elastic-table td,
+  .elastic-table td .cell-content,
+  .elastic-table td.is-editing,
+  .elastic-table td.is-magnified .cell-content {
+    transition: none;
+  }
 }
 
 /* Anchor the first column so it zooms to the right */
@@ -181,6 +207,13 @@
 .elastic-table td.is-editing .cell-action-btn {
   opacity: 1;
   visibility: visible;
+}
+
+/* A phone's zoomed day isn't scaled, so its v is just its size */
+.elastic-table td.is-fullZoom .cell-action-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
 }
 
 /*========================================*
@@ -394,13 +427,13 @@
   background: linear-gradient(to bottom, rgb(170, 0, 0), transparent);
 }
 
-/* Entries are tappable once their day is zoomed */
+/* Entries are tappable once their day is zoomed (sized with the text, so they look the same at any zoom) */
 .elastic-table td.is-editing .lineEntry {
   pointer-events: auto;
   cursor: pointer;
-  border-radius: 3px;
-  padding: 0 2px;
-  margin: 0 -2px;
+  border-radius: 0.3em;
+  padding: 0 0.2em;
+  margin: 0 -0.2em;
 }
 
 .elastic-table td.is-editing .lineEntry:hover {
@@ -1878,6 +1911,20 @@ a.budgetButton:hover {
   margin-top: 0.3em;
 }
 
+/* Connecting a spreadsheet needs a verified email: until it is, this note says so (with Send Verification Email) */
+.sheetsVerify {
+  margin-top: 0.8em;
+  padding: 0.5em 0.9em;
+  text-align: left;
+  background: rgba(255, 205, 40, 0.1);
+  border: 1px solid rgba(255, 205, 40, 0.6);
+  border-radius: 10px;
+}
+
+.sheetsVerify p {
+  margin: 0.2em 0 0.5em;
+}
+
 /* Its panel: the link, then the entry form, which grows in once the spreadsheet opens */
 .sheetOpened {
   margin: -0.3em 0 0;
@@ -2316,6 +2363,21 @@ a.budgetButton:hover {
 .guide pre code {
   padding: 0;
   background: none;
+}
+
+/* A key on the keyboard (the starfield's controls) */
+.guide kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0.05em 0.35em;
+  font-family: inherit;
+  font-size: 0.9em;
+  line-height: 1.3;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--PANEL_BORDER);
+  border-bottom-width: 2px;
+  border-radius: 5px;
 }
 
 .guide .tableScroll {

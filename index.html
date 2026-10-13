@@ -4,9 +4,9 @@
 <html lang="en" class="noJs frontPage">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=6871ba39c8">
+    <link rel="stylesheet" href="/stylesheet.css?v=77aad26b59">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=6b05fb8d32">
+    <link rel="stylesheet" href="/budgetStyle.css?v=5e4c67c948">
     <title>Prismal Budget - See Your Bank Balance Four Weeks Ahead</title>
     <meta name="description" content="Prismal Budget is a calendar budget that shows what will be in your bank account at the end of every day for the next four weeks. It fills in your paychecks and bills, and points out low days before they happen.">
     <link rel="canonical" href="https://prismalbudget.org/">
@@ -84,7 +84,7 @@
             <ul class="frontFeatures">
               <li><strong>Shows In Bank for every day.</strong> Each day on the calendar shows what your bank account will hold at the end of it, and a day that would go below $0 turns red, weeks before it happens.</li>
               <li><strong>Fills in your bills and paychecks.</strong> Add rent, a paycheck, or a subscription once, with how often it comes (every week, every 2 weeks, every month, and so on), and it lands on every day it should.</li>
-              <li><strong>Connects your own spreadsheet.</strong> Already keep bills or a pay schedule in Google Sheets or Excel? Connect it, pick which cells hold the dates and amounts, and its entries land on your calendar and follow the spreadsheet as it changes.</li>
+              <li><strong>Connects your own spreadsheet.</strong> Already keep bills or a pay schedule in Google Sheets or Excel? Verify your email, connect it, and pick which cells hold the dates and amounts, and its entries land on your calendar and follow the spreadsheet as it changes.</li>
               <li><strong>Looks past the calendar.</strong> Lowest in bank after today shows the lowest your balance gets, counting the 28 days after the calendar too.</li>
               <li><strong>Dave keeps an eye on it.</strong> Dave looks over your budget, points out days that go below $0 and big bills coming up, shares tips (like how much you tend to spend before payday), and has a new affirmation for you every day.</li>
               <li><strong>Tracks savings and other accounts.</strong> Keep Savings (and accounts like Cash) next to your budget. Moving money in or out keeps both balances right.</li>
@@ -99,7 +99,7 @@
           <section id="how" aria-labelledby="howTitle">
             <h2 id="howTitle">How It Works</h2>
             <ol class="frontSteps">
-              <li><strong>Create an account</strong> with a username, your email, and a password (Prismal Budget is for people 18 and older).</li>
+              <li><strong>Create an account</strong> with a username, your email, your age, and a password (Prismal Budget is for people 18 and older), then open the link we email you to verify your email.</li>
               <li><strong>Set your starting balance:</strong> what's in your bank account right now (and in savings, if you like).</li>
               <li><strong>Add your recurring entries</strong> once each: paychecks, rent, bills, and subscriptions.</li>
               <li><strong>Add what you spend as you go,</strong> from the calendar or the Quick Entry icon. In Bank updates for every day ahead, and each week moves into History as it passes.</li>
@@ -272,7 +272,7 @@
 
           <h4>Viewing The Calendar</h4>
           <ul>
-            <li><strong>Tap a day</strong> to zoom in on it. On a phone, it fills almost the whole screen and shows all of its entries; on a computer, it doubles in size. Tap its <strong>v</strong> (in its top right corner), or anywhere outside it, to zoom back out.</li>
+            <li><strong>Tap a day</strong> to zoom in on it. On a phone, it fills almost the whole screen, sharp and easy to read, and shows all of its entries; on a computer, it doubles in size. Tap its <strong>v</strong> (in its top right corner), or anywhere outside it, to zoom back out.</li>
             <li><strong>Pinch or stretch with two fingers</strong> on one day to zoom just that day out or in (it turns and moves with your fingers too), or across days to zoom and move the whole calendar. Let go, and it settles back.</li>
             <li><strong>On a computer,</strong> hold the mouse button down on a day to magnify it, and keep holding while you slide across the days to magnify each one you pass.</li>
             <li>To zoom the whole page, pinch anywhere else on a phone, or press Ctrl and + (⌘ and + on a Mac) on a computer.</li>
@@ -281,11 +281,11 @@
           <h4>Entry Types</h4>
           <p>The emojis at the start of each entry show what kind of entry it is.</p>
           <ul>
-            <li><strong>Recurring entries</strong> (✔️ ✔️✖️ ✔️⭕️) always start with a checkmark. They come from your Recurring Entries page (like paychecks and bills), and are added for you on today and every day after. Once a day passes, its recurring entries turn into unique entries, so later changes to a recurring entry never change days that already happened.</li>
-            <li><strong>Unique entries</strong> (❗️ ✖️ ⭕️ ❗️✔️ ✖️✔️ ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
-            <li><strong>Temporary recurring entries</strong> (❗️✔️ ✖️✔️ ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
+            <li><strong>Recurring entries</strong> (✔️, ✔️✖️, ✔️⭕️) always start with a checkmark. They come from your Recurring Entries page (like paychecks and bills), and are added for you on today and every day after. Once a day passes, its recurring entries turn into unique entries, so later changes to a recurring entry never change days that already happened.</li>
+            <li><strong>Unique entries</strong> (❗️, ✖️, ⭕️, ❗️✔️, ✖️✔️, ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
+            <li><strong>Temporary recurring entries</strong> (❗️✔️, ✖️✔️, ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
             <li>If a recurring entry's End Date moves before a day you changed (or you delete the recurring entry), that day's temporary entry from today on becomes a plain unique entry, like ❗️, since there's nothing left for it to hold back. A $0.00 one just goes away.</li>
-            <li><strong>Spreadsheet entries</strong> (➕❗️ ➕✖️ ➕⭕️) start with a yellow plus. They come from spreadsheets you connect in Settings, land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. Settings' Help has more.</li>
+            <li><strong>Spreadsheet entries</strong> (➕❗️, ➕✖️, ➕⭕️) start with a yellow plus. They come from spreadsheets you connect in Settings (once your email is verified), land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. Settings' Help has more.</li>
             <li>Adding an entry with the same title and refraction type as one already on that day adds the two together. So a day has at most three entries with the same title: one Regular, one Hidden, and one Transfer.</li>
           </ul>
 

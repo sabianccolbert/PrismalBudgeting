@@ -26,6 +26,7 @@ document.addEventListener("budget:updated", () => {
   if (workspaceLoaded) renderHome();
 });
 
+// Draw everything on Home from the budget
 function renderHome() {
   renderGettingStarted();
   renderCalendar();
@@ -51,6 +52,7 @@ function renderUndoButtons() {
   }
 }
 
+// The Undo and Redo buttons, and their keyboard shortcuts
 function wireUndoButtons() {
   document.getElementById("undoButton")?.addEventListener("click", () => takeHistoryStep("undo"));
   document.getElementById("redoButton")?.addEventListener("click", () => takeHistoryStep("redo"));
@@ -68,6 +70,7 @@ function wireUndoButtons() {
 }
 
 let historyBusy = false;
+// Undo or Redo one step, with a note saying what it did (or why it couldn't)
 async function takeHistoryStep(direction) {
   if (historyBusy || !undoInfo()[direction]) return;
   historyBusy = true;
@@ -95,6 +98,7 @@ const STARTING_BALANCE = "Starting Balance";
 // Hidden per account on this device
 const gettingStartedHiddenKey = () => `prismal_setup_hidden_${localStorage.getItem("prismal_username") || ""}`;
 
+// Which of Getting Started's steps are done: { balance, recurring }
 function gettingStartedSteps() {
   const hasHistory = historyData.slice(1).some(row => row.some(cell => String(cell ?? "").trim() !== ""));
   const hasStartingBalance = calendarData.some(row => row.some(cell =>
@@ -103,6 +107,7 @@ function gettingStartedSteps() {
   return { balance: hasHistory || hasStartingBalance, recurring: hasRecurring };
 }
 
+// The card shows (its done steps marked) until both are done or it's hidden
 function renderGettingStarted() {
   const card = document.getElementById("gettingStarted");
   if (!card) return;
@@ -119,6 +124,7 @@ function renderGettingStarted() {
   document.getElementById("startRecurringStep").classList.toggle("done", steps.recurring);
 }
 
+// The card's × and its starting balance form
 function wireGettingStarted() {
   document.getElementById("gettingStartedHide")?.addEventListener("click", () => {
     try { localStorage.setItem(gettingStartedHiddenKey(), "1"); } catch (e) {}
@@ -133,6 +139,7 @@ function readStartAmount(text) {
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : null;
 }
 
+// Set: today's ⭕️ Starting Balance, and savings as a ✖️ gain for the default account
 async function setStartingBalance(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -194,6 +201,7 @@ function renderCalendar() {
   });
 }
 
+// Taps on the calendar: filling a waiting date box, and an entry on a zoomed day
 function wireCalendar() {
   const calendarTable = document.querySelector(".elastic-table");
   if (!calendarTable) return;
@@ -208,12 +216,13 @@ function wireCalendar() {
     BudgetUI.pickDate(gridDates[td.dataset.row][td.dataset.col], td);
   }, true);
 
-  // Tapping an entry inside a zoomed day opens its options
+  // Tapping an entry inside a zoomed day opens its options (not while the day shrinks back: a tap then zooms it
+  // in again, see Process Budget.js)
   calendarTable.addEventListener("click", (event) => {
     const lineEl = event.target.closest(".lineEntry");
     if (!lineEl) return;
     const td = lineEl.closest("td");
-    if (!td || !td.classList.contains("is-editing")) return;
+    if (!td || !td.classList.contains("is-editing") || td.classList.contains("isZoomClosing")) return;
     openEntryOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col), Number(lineEl.dataset.line));
   });
 }
@@ -395,6 +404,7 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
         BudgetUI.submit(panel, () => changeCalendarEntry(change));
       });
 
+      // Delete: it comes off its day (one that landed there by itself leaves a $0.00 temp)
       function deleteEntry() {
         if (!window.confirm(`Delete ${title} on ${showDay(date)}?`)) return;
         BudgetUI.submit(panel, () => changeCalendarEntry({ title, sprite: refraction, date, action: "delete" }));

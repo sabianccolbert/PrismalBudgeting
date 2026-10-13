@@ -10,8 +10,11 @@
 //     href="/stylesheet.css?v=..." or url("/Fonts/MainFont-Latin.woff2?v=..."). An address without ?v= is
 //     left alone, so add ?v= to a new one to opt it in. A file that doesn't exist yet (like an image still
 //     to be made) gets an empty fingerprint until it does.
-//   - FILE_VERSIONS in Javascript/Boot.js: every script in Javascript/ and every image in Resources/Sprites/,
-//     which pages load through Boot.js's assetUrl.
+//   - FILE_VERSIONS in Javascript/Boot.js: every script in Javascript/, every image in Resources/Sprites/, and
+//     the starfield's Resources/Star.webp, which pages load through Boot.js's assetUrl.
+// A stylesheet can also carry a small image inside it, so it paints with the page's first frame instead of a
+// moment later: url("data:image/webp;base64,...") /* inline: /Resources/Background.webp */. The data is
+// rewritten from the named file, so the two always match.
 // Stylesheets are stamped first, since a stylesheet's fingerprint depends on the stamps inside it.
 //
 // --check reads the files as they're staged for the next commit (git's index), so a commit can't carry a
@@ -29,7 +32,7 @@ const CHECK = process.argv.includes("--check");
 const TEXT_FILES = /\.(html|css|js|mjs|json|svg|txt|xml|webmanifest)$/i;
 const STAMPED_LINK = /(["'(])(\/[^"'()?#\r\n]+?)\?v=([A-Za-z0-9._-]*)/g;
 const BOOT = "Javascript/Boot.js";
-const LOADED_BY_BOOT = /^(Javascript\/[^/]+\.js|Resources\/Sprites\/[^/]+\.(webp|png|svg))$/;
+const LOADED_BY_BOOT = /^(Javascript\/[^/]+\.js|Resources\/Sprites\/[^/]+\.(webp|png|svg)|Resources\/Star\.webp)$/;
 
 // The site's files (paths from the root, with /): what's staged when checking, what's on disk otherwise
 function siteFiles() {
@@ -79,6 +82,21 @@ function fingerprint(path) {
 }
 
 const missing = new Set();
+
+// Images inlined in a stylesheet (see the top): their data again, from the file each one names
+const INLINED = /url\("data:([a-z]+\/[a-z0-9.+-]+);base64,[A-Za-z0-9+/=]*"\)(\s*\/\* inline: (\/[^*\s]+) \*\/)/g;
+function stampInlined(text) {
+  return text.replace(INLINED, (match, type, comment, address) => {
+    let path;
+    try { path = decodeURI(address).slice(1); } catch { path = address.slice(1); }
+    if (!exists(path)) {
+      missing.add(path);
+      return match;
+    }
+    return `url("data:${type};base64,${read(path).toString("base64")}")${comment}`;
+  });
+}
+
 function stampLinks(text) {
   return text.replace(STAMPED_LINK, (match, quote, address) => {
     let path;
@@ -106,7 +124,7 @@ const problems = [];
 
 const sheets = [...files].filter(path => /\.css$/i.test(path)).sort();
 const pages = [...files].filter(path => /\.html$/i.test(path)).sort();
-for (const path of sheets) stampedText.set(path, stampLinks(read(path).toString("utf8")));
+for (const path of sheets) stampedText.set(path, stampLinks(stampInlined(read(path).toString("utf8"))));
 for (const path of pages) stampedText.set(path, stampLinks(read(path).toString("utf8")));
 if (files.has(BOOT)) stampedText.set(BOOT, stampBoot(read(BOOT).toString("utf8")));
 

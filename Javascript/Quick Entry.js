@@ -49,10 +49,9 @@ async function checkQuickKey() {
   // Offline, or the server is down: the form still shows, and adding an entry says what went wrong
   if (result.ok && result.data) {
     quickUsername = result.data.username;
-    // Names only (strings) from an API that doesn't send balances yet
+    // The account picker's accounts: each one's name and balance (null when it isn't known)
     if (Array.isArray(result.data.accounts)) {
       quickAccounts = result.data.accounts
-        .map(account => (typeof account === "string" ? { name: account, balance: null } : account))
         .filter(account => account && typeof account.name === "string" && account.name.trim())
         .map(account => ({ name: account.name, balance: typeof account.balance === "number" ? account.balance : null }));
     }
@@ -96,6 +95,7 @@ function openQuickEntryForm(mode = "entry", fill = null) {
   });
 }
 
+// Add Entry: queue it with the API, then a fresh form (Undo can take it back while it waits)
 async function addQuickEntry(panel, fields) {
   const { entry, error } = fields.read();
   if (error) return panel.setError(error);
@@ -159,6 +159,7 @@ document.getElementById("prismHelpButton").addEventListener("click", (event) => 
 
 document.getElementById("editPrismsButton").addEventListener("click", () => setPrismEditing(!editingPrisms));
 
+// Edit Prisms on or off (only with prisms to edit)
 function setPrismEditing(editing) {
   editingPrisms = editing && quickPrisms.length > 0;
   renderPrisms();
@@ -176,6 +177,7 @@ function renderPrisms() {
   edit.classList.toggle("primary", editingPrisms);
 }
 
+// A prism's button: tapping it fills in New Entry
 function prismButton(prism) {
   const item = BudgetUI.element("li", "prismItem");
   const button = BudgetUI.noTranslate(BudgetUI.element("button", "budgetButton prismButton", prismLabel(prism)));
@@ -185,6 +187,7 @@ function prismButton(prism) {
   return item;
 }
 
+// A prism in Edit Prisms: ≡ to drag it, and × to delete it
 function prismEditRow(prism, index) {
   const label = prismLabel(prism);
   const item = BudgetUI.element("li", "prismItem prismEditRow");
@@ -253,6 +256,7 @@ async function savePrismFromForm(panel, fields) {
   openQuickEntryForm(); // Back to New Entry
 }
 
+// Delete a prism (after asking)
 async function deletePrism(index) {
   const prism = quickPrisms[index];
   if (!prism || !window.confirm(`Delete the prism ${prismLabel(prism, true)}?`)) return;
@@ -321,6 +325,7 @@ function startPrismDrag(event, item) {
 document.getElementById("quickUndoButton").addEventListener("click", undoQuickEntry);
 document.getElementById("quickRedoButton").addEventListener("click", redoQuickEntry);
 
+// Undo and Redo show while there's something to take back or add again, and say what
 function renderQuickUndo() {
   const undoButton = document.getElementById("quickUndoButton");
   const redoButton = document.getElementById("quickRedoButton");
@@ -335,6 +340,7 @@ function renderQuickUndo() {
   redoButton.setAttribute("aria-label", redoButton.title);
 }
 
+// Undo: take back the newest entry added here, while it's still waiting
 async function undoQuickEntry() {
   const last = quickUndo.at(-1);
   if (!last) return;
@@ -356,6 +362,7 @@ async function undoQuickEntry() {
   renderQuickUndo();
 }
 
+// Redo: add the entry Undo took back again
 async function redoQuickEntry() {
   const next = quickRedo.at(-1);
   if (!next) return;
@@ -374,6 +381,7 @@ async function redoQuickEntry() {
   renderQuickUndo();
 }
 
+// Undo and Redo off while one is on its way
 function setQuickUndoBusy(busy) {
   document.getElementById("quickUndoButton").disabled = busy || !quickUndo.length;
   document.getElementById("quickRedoButton").disabled = busy || !quickRedo.length;
