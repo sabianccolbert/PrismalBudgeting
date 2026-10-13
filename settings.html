@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=77aad26b59">
+    <link rel="stylesheet" href="/stylesheet.css?v=afcc070542">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ec781d7373">
+    <link rel="stylesheet" href="/budgetStyle.css?v=921fc17a10">
     <title>Prismal Budget - Settings</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -57,24 +57,6 @@
       <hr>
       <main>
         <p id="dataStatus" class="dataStatus">Loading...</p>
-
-        <!-- Connected spreadsheets: each one's button (change it), On/Off, and Delete, with what's wrong under it
-             (Settings Page.js; reading them is Spreadsheets.js) -->
-        <section id="sheetsView" class="budgetCard settingsCard" aria-labelledby="sheetsHeading" hidden>
-          <h3 id="sheetsHeading">Connected Spreadsheets</h3>
-          <p>Keep entries in your own spreadsheet (Google Sheets, Excel, and more)? Connect it, and they land on your calendar from today on, behind a ➕ (➕❗️ Regular, ➕✖️ Hidden, ➕⭕️ Transfer), following the spreadsheet as it changes.</p>
-          <!-- Connecting spreadsheets needs a verified email (Settings Page.js shows this until it is) -->
-          <div id="sheetsVerify" class="sheetsVerify" role="status" hidden>
-            <p id="sheetsVerifyText"></p>
-            <div class="panelButtons">
-              <button id="sheetsVerifyButton" type="button" class="budgetButton primary">Send Verification Email</button>
-            </div>
-          </div>
-          <ul id="sheetList" class="sheetList"></ul>
-          <div class="panelButtons">
-            <button id="addSheetButton" type="button" class="budgetButton primary">Add Spreadsheet</button>
-          </div>
-        </section>
 
         <div id="settingsView" hidden>
           <section class="budgetCard settingsCard" aria-labelledby="reminderHeading">
@@ -146,15 +128,15 @@
           </section>
 
           <section class="budgetCard settingsCard" aria-labelledby="ageHeading">
-            <h3 id="ageHeading">Age</h3>
+            <h3 id="ageHeading">Birth Date</h3>
             <p id="ageStatus"></p>
             <form id="ageForm" class="settingsForm">
               <label class="settingsField">
-                <span class="fieldLabel">Your age</span>
-                <input id="ageInput" class="ageInput" type="text" inputmode="numeric" maxlength="3" autocomplete="off" required>
+                <span class="fieldLabel">Your birth date</span>
+                <input id="ageInput" class="ageInput" type="date" autocomplete="bday" required>
               </label>
               <div class="panelButtons">
-                <button id="ageButton" type="submit" class="budgetButton primary">Save Age</button>
+                <button id="ageButton" type="submit" class="budgetButton primary">Save Birth Date</button>
               </div>
             </form>
           </section>
@@ -251,44 +233,12 @@
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Settings Help</h3>
 
-          <h4>Connected Spreadsheets</h4>
-          <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
-          <ol>
-            <li>Verify your email first. We email a link when you make your account (it works for 24 hours), and Send Verification Email (under Email) sends a new one.</li>
-            <li>Share the spreadsheet one of two ways: "Anyone with the link" can view it, or add prismalbudget@gmail.com as a viewer (Google Sheets and Google Drive). For the second, share it from the Google account that uses your Prismal Budget email, so only you can connect it.</li>
-            <li>Tap Add Spreadsheet, paste its link, and tap Open Spreadsheet.</li>
-            <li>For each part of an entry, tap the yellow ➕ to pick its cells: a tab (from the list, or type its name), then column and row, like column B row 2 to column B row 50 (that's B2:B50). Leave "to" empty for just one cell.</li>
-            <li>Only the dates have to come from the spreadsheet. The title, amount, refraction type, and Other Account can come from cells too, or be typed in once for all of them. One cell works for all of them as well.</li>
-            <li>Check what it found under Entries, then tap Save.</li>
-          </ol>
-          <ul>
-            <li>Pick more rows than you use: empty rows are skipped, so entries you add later are picked up.</li>
-            <li>Amounts in cells: As Written reads -25 as a cost and 25 as a gain. Most bill lists write costs without a minus sign, so pick All Costs for those (or All Gains for paychecks).</li>
-            <li>Refraction types in cells: Regular, Hidden, or Transfer (an empty cell is Regular). Other Accounts in cells: the account's name, like Savings (an empty cell is none). If you rename an account, a spreadsheet with its name typed in follows it, but cells that name it need the new name.</li>
-            <li>Amounts can be up to $1,000,000,000, and titles up to 100 characters.</li>
-            <li>To keep the rest of a spreadsheet private, make a separate spreadsheet with only what Prismal Budget needs, filled from the first one (in Google Sheets, with =IMPORTRANGE), and connect that one instead.</li>
-          </ul>
-
-          <h4>Staying Up To Date</h4>
-          <ul>
-            <li>Your spreadsheets are read again each time you open Home or Settings, so changes, new rows, and deleted rows show on your calendar from today on.</li>
-            <li>To change one entry for one day, tap that day on the calendar, then tap the entry. That keeps your change for that day (like ❗️➕) even when the spreadsheet changes.</li>
-            <li>Once a day passes, its spreadsheet entries stay as they were (like ❗️➕), even if the spreadsheet changes later or you delete it.</li>
-            <li>An entry with the same title and refraction type as a recurring entry on the same day is left out (a day has one of each), and the spreadsheet's box says so.</li>
-            <li>They count everywhere your budget looks ahead: In Bank, Lowest, the 28 days after the calendar, Search, reminders, and Dave's tips.</li>
-          </ul>
-
-          <h4>On, Off, And Delete</h4>
-          <p>Tap a spreadsheet's name to change it. Turning one off takes its entries off your calendar until you turn it back on (days you changed keep their changes). Deleting one takes its entries off from today on; days you changed become plain entries, and days that passed stay as they were.</p>
-
-          <h4>Problems</h4>
-          <p>When a cell can't be read (like a date that isn't a date, or an Other Account you don't have), the box under that spreadsheet says which cell and how to fix it. The other entries still land.</p>
-
           <h4>Your Account</h4>
           <ul>
             <li><strong>Email:</strong> change it here (with your password). A new email gets a link to verify it, and until it's verified, spreadsheets can't be connected or read. Send Verification Email sends a new link.</li>
-            <li><strong>Age:</strong> Prismal Budget is for people 18 and older. If you typed the wrong age when you signed up, fix it here.</li>
+            <li><strong>Birth Date:</strong> Prismal Budget is for people 18 and older. If you typed the wrong birth date when you signed up, fix it here.</li>
             <li>Change your password, add passkeys, turn off Quick Entry icons, sign out everywhere, download your data, or delete your account.</li>
+            <li>Connected spreadsheets have their own page: open the menu, then Spreadsheets.</li>
           </ul>
         </section>
       </main>

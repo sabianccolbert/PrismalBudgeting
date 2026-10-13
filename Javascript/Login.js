@@ -4,7 +4,9 @@ const formHint = document.getElementById('form-hint');
 const usernameInput = document.getElementById('username');
 const usernameLabel = document.getElementById('username-label');
 const emailInput = document.getElementById('email');
-const ageInput = document.getElementById('age');
+const birthdateInput = document.getElementById('birthdate');
+// The date box can't pick a day after today (local time)
+birthdateInput.max = [new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()].map(n => String(n).padStart(2, '0')).join('-');
 const passwordInput = document.getElementById('password');
 const passwordLabel = document.getElementById('password-label');
 const verifyInput = document.getElementById('verify-password');
@@ -55,13 +57,18 @@ function passwordProblem(value) {
   return '';
 }
 
-// Prismal Budget is for people 18 and older (the API's readAge): an account can't be made for anyone younger
+// Prismal Budget is for people 18 and older (the API's readBirthdate): an account can't be made for anyone younger.
+// value: the date box's "YYYY-MM-DD".
 const MIN_AGE = 18;
 const MAX_AGE = 120;
-function ageProblem(value) {
-  const text = value.trim();
-  const age = /^\d{1,3}$/.test(text) ? Number(text) : NaN;
-  if (!Number.isInteger(age) || age > MAX_AGE) return 'Enter your age in years, like 34.';
+function birthdateProblem(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return 'Enter your birth date.';
+  const [year, month, day] = match.slice(1).map(Number);
+  const now = new Date();
+  let age = now.getFullYear() - year;
+  if (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day)) age--;
+  if (age < 0 || age > MAX_AGE) return 'Enter your birth date.';
   if (age < MIN_AGE) return `Prismal Budget is for people ${MIN_AGE} and older, so an account can't be made for someone younger.`;
   return '';
 }
@@ -147,11 +154,11 @@ const MODES = {
     primary: 'Yes, Turn It On',
     toggle: 'No Thanks'
   },
-  // The link in an email verification email (signed in here: on to Settings or Home; signed out: sign in)
+  // The link in an email verification email (signed in here: on to the Spreadsheets page or Home; signed out: sign in)
   verify: {
     title: 'Verify Your Email',
     groups: [],
-    primary: signedInHere ? 'Open Settings' : 'Sign In',
+    primary: signedInHere ? 'Open Spreadsheets' : 'Sign In',
     toggle: signedInHere ? 'Go Home' : ''
   }
 };
@@ -223,7 +230,7 @@ authForm.addEventListener('submit', async (e) => {
     return;
   }
   if (mode === 'verify') {
-    if (signedInHere) leaveTo('/settings.html');
+    if (signedInHere) leaveTo('/menu/spreadsheets.html');
     else setMode('login');
     return;
   }
@@ -256,7 +263,7 @@ authForm.addEventListener('submit', async (e) => {
     return;
   }
   if (mode === 'create') {
-    const problem = ageProblem(ageInput.value);
+    const problem = birthdateProblem(birthdateInput.value);
     if (problem) {
       setStatus(problem);
       return;
@@ -269,7 +276,7 @@ authForm.addEventListener('submit', async (e) => {
 
   const requests = {
     login: ['/api/login', { username, password }],
-    create: ['/api/register', { username, email, age: Number(ageInput.value.trim()), password, agreedToTerms: true }],
+    create: ['/api/register', { username, email, birthdate: birthdateInput.value, password, agreedToTerms: true }],
     forgot: ['/api/password/forgot', { email }],
     reset: ['/api/password/reset', { token: resetToken, password }]
   };
@@ -285,7 +292,7 @@ authForm.addEventListener('submit', async (e) => {
       // The username and password stay filled in, ready to log in
       setMode('login');
       setStatus(data.verificationSent
-        ? `Account created! We emailed a link to ${email} to verify it (it works for 24 hours). Please log in.`
+        ? `Account created! We emailed a link to ${email} to verify it (it works for 24 hours). If it isn't in your inbox, check your spam folder. Please log in.`
         : "Account created! Please log in.", true);
     } else if (mode === 'forgot') {
       setStatus("If an account uses that email, a reset link is on its way. It works for 1 hour, so check your inbox (and spam folder).", true);
@@ -354,7 +361,7 @@ async function verifyEmailLink(token) {
   const { ok, status, data } = await api('/api/email/verify', { token });
   primaryBtn.disabled = false;
   if (ok && data.success) {
-    setStatus(`Your email, ${data.email}, is verified! You can connect spreadsheets in Settings now.`, true);
+    setStatus(`Your email, ${data.email}, is verified! You can connect spreadsheets now (Menu, then Spreadsheets).`, true);
   } else if (data.expired) {
     setStatus(signedInHere
       ? "That verification link has expired, or your email changed since it was sent. Open Settings and tap Send Verification Email for a new one."

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css?v=afcc070542">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=921fc17a10">
+    <title>Prismal Budget - Spreadsheets</title>
+    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal Spreadsheets" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Budget - Spreadsheets">
+    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://prismalbudget.org">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="stacked">
+          <h1>Spreadsheets</h1>
+          <h2 translate="no">Prismal Budget</h2>
+        </div>
+        <nav class="navButtons">
+          <a id="normalBack" href="back">
+            <img src="/Resources/Back.webp?v=e8de49845b" alt="Back">
+          </a>
+          <a href="/">
+            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
+          </a>
+          <a id="logoutButton" href="logout">
+            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
+          </a>
+        </nav>
+      </header>
+      <hr>
+      <main>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+
+        <!-- Connected spreadsheets: each one's button (change it), On/Off, and Delete, with what's wrong under it
+             (Spreadsheets Page.js; reading them is Spreadsheets.js) -->
+        <section id="sheetsView" class="budgetCard settingsCard" aria-labelledby="sheetsHeading" hidden>
+          <h3 id="sheetsHeading">Connected Spreadsheets</h3>
+          <p>Keep entries in your own spreadsheet (Google Sheets, Excel, and more)? Connect it, and they land on your calendar from today on, behind a ➕ (➕❗️ Regular, ➕✖️ Hidden, ➕⭕️ Transfer), following the spreadsheet as it changes.</p>
+          <!-- Connecting spreadsheets needs a verified email (Spreadsheets Page.js shows this until it is) -->
+          <div id="sheetsVerify" class="sheetsVerify" role="status" hidden>
+            <p id="sheetsVerifyText"></p>
+            <div class="panelButtons">
+              <button id="sheetsVerifyButton" type="button" class="budgetButton primary">Send Verification Email</button>
+            </div>
+          </div>
+          <ul id="sheetList" class="sheetList"></ul>
+          <div class="panelButtons">
+            <button id="addSheetButton" type="button" class="budgetButton primary">Add Spreadsheet</button>
+          </div>
+        </section>
+
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Spreadsheets Help</h3>
+          <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
+          <ol>
+            <li>Verify your email first. We email a link when you make your account (it works for 24 hours), and Send Verification Email (on this page, or in Settings under Email) sends a new one. If it isn't in your inbox, check your spam folder.</li>
+            <li>Share the spreadsheet one of two ways: "Anyone with the link" can view it, or add prismalbudget@gmail.com as a viewer (Google Sheets and Google Drive). For the second, share it from the Google account that uses your Prismal Budget email, so only you can connect it.</li>
+            <li>Tap Add Spreadsheet, paste its link, and tap Open Spreadsheet.</li>
+            <li>For each part of an entry, tap the yellow ➕ to pick its cells: a tab (from the list, or type its name), then column and row, like column B row 2 to column B row 50 (that's B2:B50). Leave "to" empty for just one cell.</li>
+            <li>Only the dates have to come from the spreadsheet. The title, amount, refraction type, and Other Account can come from cells too, or be typed in once for all of them. One cell works for all of them as well.</li>
+            <li>The title and the Other Account are separate, like on the calendar: an entry reads "Rent → Savings", or "→ Savings" with no title. Each can come from its own cells, be typed in, or be left out (but not both).</li>
+            <li>Check what it found under Entries, then tap Save.</li>
+          </ol>
+          <ul>
+            <li>Pick more rows than you use: empty rows are skipped, so entries you add later are picked up.</li>
+            <li>Amounts in cells: As Written reads -25 as a cost and 25 as a gain. Most bill lists write costs without a minus sign, so pick All Costs for those (or All Gains for paychecks).</li>
+            <li>Refraction types in cells: Regular, Hidden, or Transfer (an empty cell is Regular). Other Accounts in cells: the account's name, like Savings (an empty cell is none). If you rename an account, a spreadsheet with its name typed in follows it, but cells that name it need the new name.</li>
+            <li>Amounts can be up to $1,000,000,000, and titles up to 100 characters.</li>
+            <li>To keep the rest of a spreadsheet private, make a separate spreadsheet with only what Prismal Budget needs, filled from the first one (in Google Sheets, with =IMPORTRANGE), and connect that one instead.</li>
+          </ul>
+
+          <h4>Staying Up To Date</h4>
+          <ul>
+            <li>Your spreadsheets are read again each time you open Home or this page, so changes, new rows, and deleted rows show on your calendar from today on.</li>
+            <li>To change one entry for one day, tap that day on the calendar, then tap the entry. That keeps your change for that day (like ❗️➕) even when the spreadsheet changes.</li>
+            <li>Once a day passes, its spreadsheet entries stay as they were (like ❗️➕), even if the spreadsheet changes later or you delete it.</li>
+            <li>An entry with the same title and refraction type as a recurring entry on the same day is left out (a day has one of each), and the spreadsheet's box says so.</li>
+            <li>They count everywhere your budget looks ahead: In Bank, Lowest, the 28 days after the calendar, Search, reminders, and Dave's tips.</li>
+          </ul>
+
+          <h4>On, Off, And Delete</h4>
+          <p>Tap a spreadsheet's name to change it. Turning one off takes its entries off your calendar until you turn it back on (days you changed keep their changes). Deleting one takes its entries off from today on; days you changed become plain entries, and days that passed stay as they were.</p>
+
+          <h4>Problems</h4>
+          <p>When a cell can't be read (like a date that isn't a date, or an Other Account you don't have), the box under that spreadsheet says which cell and how to fix it. The other entries still land.</p>
+
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

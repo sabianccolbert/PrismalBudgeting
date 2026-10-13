@@ -223,11 +223,51 @@ function wireCalendar() {
   // Tapping an entry inside a zoomed day opens its options (not while the day shrinks back: a tap then zooms it
   // in again, see Process Budget.js)
   calendarTable.addEventListener("click", (event) => {
-    const lineEl = event.target.closest(".lineEntry");
+    const lineEl = event.target.closest(".lineEntry, .lineInBank");
     if (!lineEl) return;
     const td = lineEl.closest("td");
     if (!td || !td.classList.contains("is-editing") || td.classList.contains("isZoomClosing")) return;
-    openEntryOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col), Number(lineEl.dataset.line));
+    if (lineEl.classList.contains("lineInBank")) openInBankOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col));
+    else openEntryOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col), Number(lineEl.dataset.line));
+  });
+}
+
+// The title of the entry that makes a day's In Bank match the bank's (search() and the spending numbers know it
+// as "catch up" in any spelling)
+const CATCHUP_TITLE = "Catchup";
+
+// In Bank tapped on a zoomed day: type what the bank says, and the difference goes on that day as a Regular
+// Catchup entry (adding into one that's already there), so that day and the ones after it follow
+function openInBankOptions(lineEl, r, c) {
+  const date = gridDates[r][c];
+  const current = readInBank(calendarData[r][c]);
+  if (current === null) return;
+  BudgetUI.openPanel({
+    origin: lineEl,
+    size: "small",
+    title: `${showDay(date)} In Bank`,
+    build(form, panel) {
+      const balance = BudgetUI.textField({
+        label: "In Bank",
+        value: current.toFixed(2),
+        placeholder: "0.00",
+        hint: `What your bank says for this day. The difference goes on it as a Regular ${CATCHUP_TITLE} entry, and the days after it follow.`
+      });
+      balance.input.inputMode = "decimal";
+      form.append(balance.el, BudgetUI.buttonRow([
+        { label: "Save", kind: "primary", type: "submit" },
+        { label: "Cancel", onClick: () => panel.close() }
+      ]));
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const typed = readMoneyInput(balance.value());
+        if (!Number.isFinite(typed)) return panel.setError("Enter what's in the bank, like 1250.00 (or -40.00 when it's below zero).");
+        if (Math.abs(typed) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+        const difference = Math.round((typed - current) * 100) / 100;
+        if (difference === 0) return panel.close(); // Already right
+        BudgetUI.submit(panel, () => addCalendarEntry({ title: CATCHUP_TITLE, sprite: "❗️", amount: difference, date }));
+      });
+    }
   });
 }
 
@@ -322,7 +362,7 @@ function openQuickEntrySetup(origin) {
       form.append(
         text("Put an icon on your phone's home screen that opens a New Entry form, with no login needed."),
         text("The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, or you turn icons off in Settings, it stops working."),
-        text("On the next page, add it to your home screen: on iPhone, tap Share, then Add to Home Screen. On Android, tap ⋮, then Add to Home screen."),
+        text("On the next page, add it to your home screen: on iPhone, in Safari, tap Share, then Add to Home Screen. On Android, in Chrome, tap ⋮, then Add to Home screen. Use Safari or Chrome itself, not Prismal Budget opened inside another app (like Gmail or Instagram)."),
         BudgetUI.buttonRow([
           { label: "Set It Up", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }
@@ -383,7 +423,15 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
       );
       const moveTo = BudgetUI.dateField({ label: "Move to", optional: true });
 
-      form.append(display, ...(accountNote ? [accountNote] : []), BudgetUI.field("Change the amount", modeToggle.el), amount.el, moveTo.el, BudgetUI.buttonRow([
+      // Its refraction type and Other Account can change too. Then it comes off as it is and goes on as the new
+      // one, adding into an entry already on that day with the same title and type (changeEntryKind).
+      const { title: ownTitle } = splitAccount(title);
+      const type = BudgetUI.refractionField({ value: refraction, allowAuto: false, onChange: (key) => accountPicker.setVisible(BudgetUI.isAccountType(key)) });
+      const accountPicker = BudgetUI.accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "" });
+      accountPicker.setVisible(BudgetUI.isAccountType(refraction));
+      const startAccount = accountPicker.value();
+
+      form.append(display, ...(accountNote ? [accountNote] : []), type.el, accountPicker.el, BudgetUI.field("Change the amount", modeToggle.el), amount.el, moveTo.el, BudgetUI.buttonRow([
         { label: "Save", kind: "primary", type: "submit" },
         { label: "Delete", kind: "danger", onClick: deleteEntry },
         { label: "Cancel", onClick: () => panel.close() }
@@ -396,6 +444,19 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
         if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
         if (newAmount !== null && Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+
+        const newSprite = type.value();
+        const newAccount = accountPicker.value();
+        if (newSprite !== refraction || newAccount !== startAccount) {
+          const total = mode === "set" ? (newAmount === null ? currentAmount : newAmount) : currentAmount + (newAmount || 0);
+          if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+          const newTitle = withAccount(ownTitle, newAccount);
+          // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
+          if (!newTitle) return panel.setError("This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
+          const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total };
+          if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
+          return BudgetUI.submit(panel, () => changeEntryKind(kind));
+        }
 
         const change = { title, sprite: refraction, date, action: "set", amount: "" };
         const amountChanged = newAmount !== null && (mode === "set" ? newAmount !== currentAmount : newAmount !== 0);

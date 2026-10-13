@@ -697,6 +697,16 @@ input[type="password"] {
   letter-spacing: 0.12em;
 }
 
+/* Date boxes (the birth date): iPhones draw an empty one shorter than the other boxes and put a date at the
+   left, so they get a line's height and center like the rest */
+input[type="date"] {
+  min-height: 1.2em;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: center;
+}
+
 /* Hover and focus states (the border turns into the gradient: GRADIENT BORDERS) */
 input:hover,
 input:focus {

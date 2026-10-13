@@ -665,6 +665,7 @@ const BudgetUI = (() => {
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
       },
       read() {
+        if (title.value().includes(ACCOUNT_ARROW)) return { error: TITLE_ARROW };
         const entry = { title: withAccount(title.value(), account.value()), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
         if (!entry.title) return { error: "Give the entry a title." };
         if (entry.amount === null || Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
@@ -799,6 +800,8 @@ const BudgetUI = (() => {
       if (amount < 0) el.classList.add("negative");
       // "✅ $812.40 Lowest: 11/14": the day shows in this device's date format
       const words = parts.slice(2).join(" ");
+      // The day's In Bank can be tapped on a zoomed day to set it (Calendar Page.js openInBankOptions)
+      if (lineIndex === 1 && words === "In Bank") el.classList.add("lineInBank");
       const day = words.match(/^(.*?)(\d{1,2}\/\d{1,2})$/);
       el.append(noTranslate(element("span", "", `${parts[0]} ${parts[1]} `)), day ? day[1] : words);
       if (day) el.appendChild(noTranslate(element("span", "", showStoredDate(day[2]))));

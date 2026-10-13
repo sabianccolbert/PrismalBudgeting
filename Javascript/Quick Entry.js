@@ -228,6 +228,10 @@ function applyPrism(prism) {
   if (!quickForm || quickForm.mode !== "entry") openQuickEntryForm("entry");
   const { fields } = quickForm;
   fields.fill({ title: prism.title, amount: prism.amount, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "" });
+  // An account renamed or deleted since the prism was saved isn't in the list, so it says to pick one
+  if (prism.account && !quickAccounts.some(account => cleanString(account.name) === cleanString(prism.account))) {
+    BudgetUI.showToast(`${prism.account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
+  }
   highlightForm();
   const next = [fields.inputs.title, fields.inputs.amount].find(input => !input.value.trim());
   if (next) next.focus({ preventScroll: true });
@@ -248,6 +252,7 @@ function highlightForm() {
 // Save Prism: whatever's filled in or picked (Auto counts as nothing picked), and at least one thing
 async function savePrismFromForm(panel, fields) {
   const { title, amount, sprite, account } = fields.values();
+  if (title.includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
   if (Number.isNaN(amount)) return panel.setError("Enter an amount, like 12.50, or leave it blank.");
   if (amount !== null && Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
   // The title and the Other Account are kept apart, so the title is never the account's name unless it was typed

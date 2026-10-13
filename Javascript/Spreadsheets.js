@@ -1,10 +1,10 @@
-// Spreadsheets: reading connected spreadsheets (set up in Settings; CONNECTED SPREADSHEETS in Process Budget.js
+// Spreadsheets: reading connected spreadsheets (set up on the Spreadsheets page, in the menu; CONNECTED SPREADSHEETS in Process Budget.js
 // says what happens to their entries). The API downloads one by its link (its sheets.js), and it's read here:
 // Excel's .xlsx (Google Sheets downloads as one too), OpenDocument's .ods (LibreOffice), or .csv.
 //   - readSheetFile(link): the file's tabs and cells, its name, and how it's shared
 //   - readConnection(fields, workbook): the entries its cells make, and what's wrong with any of them
 //   - Cells are picked as columns and rows ("column B row 2 to column B row 50"), kept as "B2:B50"
-//   - Home and Settings read every spreadsheet that's on again when they open (Home at most every minute and
+//   - Home and the Spreadsheets page read every spreadsheet that's on again when they open (Home at most every minute and
 //     a half per spreadsheet, on this device), and the budget only changes when something in them did
 
 const Spreadsheets = (() => {
@@ -21,7 +21,7 @@ const Spreadsheets = (() => {
   const TOO_BIG_TO_READ = "That spreadsheet is too big to read. Connect a smaller one, like a new spreadsheet with just the cells for Prismal Budget.";
 
   // A problem reading a spreadsheet. lasting: the server answered (like "not shared", or the account's email
-  // isn't verified yet), so it's worth showing in Settings; a dropped connection isn't (the next read tries again).
+  // isn't verified yet), so it's worth showing on the Spreadsheets page; a dropped connection isn't (the next read tries again).
   class SheetReadError extends Error {
     constructor(message, lasting = false) {
       super(message);
@@ -730,11 +730,11 @@ const Spreadsheets = (() => {
     return updateSheetReads(changed);
   }
 
-  // Home and Settings keep them up to date: when they open, and when they come back into view
-  const KEEPS_UP = ["home", "settings"];
+  // Home and the Spreadsheets page keep them up to date: when they open, and when they come back into view
+  const KEEPS_UP = ["home", "spreadsheets"];
   if (KEEPS_UP.includes(window.PAGE) && window.workspaceReady) {
     window.workspaceReady.then((loaded) => {
-      if (loaded) refresh({ force: window.PAGE === "settings" });
+      if (loaded) refresh({ force: window.PAGE === "spreadsheets" });
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") refresh();
