@@ -28,18 +28,27 @@ const BudgetUI = (() => {
   // =====================================================================
 
   let currentPanel = null;
+  const panelsUnder = []; // Panels with another one open over them (stacked), newest last
   const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Open a panel. "large" panels float over the top of the screen: nothing on the page moves, and the
   // page under them can still be scrolled and tapped (like a calendar day for a date field). "small"
   // floats next to its origin. inline: true puts a large one in the page's #panelSlot instead, for a page
   // that is just the panel (Quick Entry). build(form, panel) adds the fields and buttons.
-  // closable: false leaves out the × and Escape.
-  function openPanel({ origin, size = "large", title, build, closable = true, inline = false }) {
-    closePanel(true);
+  // closable: false leaves out the × and Escape. stacked: true opens it over the open panel (which waits
+  // under it, and comes back when it closes) instead of closing that one.
+  function openPanel({ origin, size = "large", title, build, closable = true, inline = false, stacked = false }) {
+    if (stacked && currentPanel) {
+      currentPanel.panel.inert = true;
+      currentPanel.panel.classList.add("isUnder");
+      panelsUnder.push(currentPanel);
+      currentPanel = null;
+    } else {
+      closeAllPanels(true);
+    }
 
     const floating = size === "large" && !inline;
-    const panel = element("section", `budgetPanel ${size}${floating ? " floating" : ""}`);
+    const panel = element("section", `budgetPanel ${size}${floating ? " floating" : ""}${panelsUnder.length > 0 ? " stacked" : ""}`);
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", title);
 
@@ -82,7 +91,9 @@ const BudgetUI = (() => {
     };
 
     build(form, api);
-    form.insertBefore(error, form.querySelector(".panelButtons"));
+    const buttons = form.querySelector(".panelButtons");
+    if (buttons) buttons.parentNode.insertBefore(error, buttons);
+    else form.append(error);
     closeButton.addEventListener("click", () => closePanel());
 
     // Floating panels go in <body>: the page's #transitionContainer is transformed, which would make a
@@ -109,6 +120,7 @@ const BudgetUI = (() => {
     return api;
   }
 
+  // Close the open panel (the top one); a panel it was opened over comes back
   function closePanel(immediate = false) {
     const api = currentPanel;
     if (!api) return;
@@ -121,6 +133,19 @@ const BudgetUI = (() => {
     // It shrinks back into what opened it, then goes (right away when it can't, or shouldn't, zoom)
     if (immediate || !window.FloatingWindows) panel.remove();
     else window.FloatingWindows.zoomClose(panel, api.origin, () => panel.remove());
+
+    const under = panelsUnder.pop();
+    if (under) {
+      under.panel.inert = false;
+      under.panel.classList.remove("isUnder");
+      currentPanel = under;
+      if (api.origin && under.panel.contains(api.origin) && api.origin.isConnected) api.origin.focus({ preventScroll: true });
+    }
+  }
+
+  // Close every open panel, stacked ones too
+  function closeAllPanels(immediate = false) {
+    while (currentPanel) closePanel(immediate);
   }
 
   // Small panels sit just below their origin (or above it near the bottom of the screen)
@@ -170,7 +195,7 @@ const BudgetUI = (() => {
   // Leaving the page closes the panel, any date box's waiting for a day, and notes, right away, so the
   // browser's Back button never brings the page back with them still up (see FloatingWindows in Layout.js)
   window.FloatingWindows?.closeOnPageExit(() => {
-    closePanel(true);
+    closeAllPanels(true);
     setPickTarget(null);
     if (toastStack) toastStack.replaceChildren();
   });
@@ -277,7 +302,7 @@ const BudgetUI = (() => {
     item("✖️", "Hidden", "money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same. With an Other Account picked, that account changes by the same amount: a cost takes from it, and a gain adds to it.");
     item("⭕️", "Transfer", "money moving between your own accounts, like depositing cash. It changes In Bank, but it isn't a cost or gain, so the day's Gains and Costs leave it out, and in the tracker only the Transfers row (and rows set to count transfers) count it. With an Other Account picked, that account gets the opposite: a cost here adds to it, and a gain takes from it.");
     if (allowAuto) item("", "Auto", "uses the type of an entry with this title already on that day, or Regular if there isn't one.");
-    else list.appendChild(element("li", "", "Recurring entries show these behind a ✔️ (✔️ is Regular)."));
+    else list.appendChild(element("li", "", "Recurring entries show these behind a ✔️ (✔️ is Regular), and connected spreadsheets' entries behind a ➕."));
     return list;
   }
 
@@ -841,6 +866,7 @@ const BudgetUI = (() => {
     isSystemLine,
     openPanel,
     closePanel,
+    closeAllPanels,
     submit,
     warnIfUnsaved,
     element,
@@ -848,6 +874,7 @@ const BudgetUI = (() => {
     textField,
     amountField,
     refractionField,
+    addFieldHelp,
     dateField,
     selectField,
     checkboxField,

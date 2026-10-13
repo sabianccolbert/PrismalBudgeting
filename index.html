@@ -1,12 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" class="noJs">
+<!-- Starts as the front page (what Prismal Budget is), which is what anyone signed out sees, search engines
+     included. Boot.js turns it into the budget for anyone signed in. -->
+<html lang="en" class="noJs frontPage">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=97b6527c38">
+    <link rel="stylesheet" href="/stylesheet.css?v=6871ba39c8">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=f5cf7f9192">
-    <title>Prismal Budget - Home</title>
-    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <link rel="stylesheet" href="/budgetStyle.css?v=6b05fb8d32">
+    <title>Prismal Budget - See Your Bank Balance Four Weeks Ahead</title>
+    <meta name="description" content="Prismal Budget is a calendar budget that shows what will be in your bank account at the end of every day for the next four weeks. It fills in your paychecks and bills, and points out low days before they happen.">
+    <link rel="canonical" href="https://prismalbudget.org/">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -17,11 +20,11 @@
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Budget - Home">
-    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta property="og:title" content="Prismal Budget - See Your Bank Balance Four Weeks Ahead">
+    <meta property="og:description" content="A calendar budget that shows what will be in your bank account at the end of every day for the next four weeks.">
     <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://prismalbudget.org">
+    <meta property="og:url" content="https://prismalbudget.org/">
     <!-- Modern Favicons -->
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
@@ -58,6 +61,65 @@
       </header>
       <hr>
       <main>
+        <!-- The front page: what Prismal Budget is, for anyone signed out. Everything after it in <main> is the
+             budget, for anyone signed in (html.frontPage picks which shows, see Boot.js). -->
+        <article id="frontView" class="guide frontView">
+          <section class="frontHero" aria-labelledby="frontTitle">
+            <h1 id="frontTitle">Know what's in your bank account every day, four weeks ahead</h1>
+            <p>Prismal Budget is a budget built around a calendar. Add what you spend and what you earn, and it works out what will be in your bank account at the end of every day, so you can see a tight week coming long before it gets here.</p>
+            <div class="frontButtons">
+              <a class="budgetButton primary" href="/login.html?new">Create Account</a>
+              <a class="budgetButton" href="#how">See How It Works</a>
+            </div>
+          </section>
+
+          <section aria-labelledby="whatTitle">
+            <h2 id="whatTitle">What It Is</h2>
+            <p>Prismal Budget is a web app for planning your money day by day. Instead of sorting last month's spending into categories, it looks ahead: a four-week calendar where each day lists its entries (costs and gains) and <strong>In Bank</strong>, what your bank account will hold at the end of that day.</p>
+            <p>It runs in any web browser, on your phone or your computer, with nothing to install. Your budget is saved with your account, so it's the same everywhere you sign in.</p>
+          </section>
+
+          <section aria-labelledby="doesTitle">
+            <h2 id="doesTitle">What It Does</h2>
+            <ul class="frontFeatures">
+              <li><strong>Shows In Bank for every day.</strong> Each day on the calendar shows what your bank account will hold at the end of it, and a day that would go below $0 turns red, weeks before it happens.</li>
+              <li><strong>Fills in your bills and paychecks.</strong> Add rent, a paycheck, or a subscription once, with how often it comes (every week, every 2 weeks, every month, and so on), and it lands on every day it should.</li>
+              <li><strong>Connects your own spreadsheet.</strong> Already keep bills or a pay schedule in Google Sheets or Excel? Connect it, pick which cells hold the dates and amounts, and its entries land on your calendar and follow the spreadsheet as it changes.</li>
+              <li><strong>Looks past the calendar.</strong> Lowest in bank after today shows the lowest your balance gets, counting the 28 days after the calendar too.</li>
+              <li><strong>Dave keeps an eye on it.</strong> Dave looks over your budget, points out days that go below $0 and big bills coming up, shares tips (like how much you tend to spend before payday), and has a new affirmation for you every day.</li>
+              <li><strong>Tracks savings and other accounts.</strong> Keep Savings (and accounts like Cash) next to your budget. Moving money in or out keeps both balances right.</li>
+              <li><strong>Shows where your money goes.</strong> The tracker adds up your spending and income by category over the last 4 weeks, 3 months, and 365 days. Search finds any entry, and History keeps every week that's passed.</li>
+              <li><strong>Adds entries in seconds.</strong> Put a Quick Entry icon on your phone's home screen that opens a New Entry form with no sign-in, and save the entries you add often.</li>
+              <li><strong>Reminds you.</strong> A daily "Check Budget" reminder on the days your budget needs a look, as a notification or on Google Calendar, Apple Calendar, or most calendar apps.</li>
+              <li><strong>Works out a paycheck.</strong> The Paycheck Calculator figures your take-home pay from your hours, overtime, taxes, and deductions.</li>
+              <li><strong>Keeps you in control.</strong> Sign in with a passkey (Face ID, Touch ID, or Windows Hello) if you like, download everything in your budget anytime, or delete your account and all of its data.</li>
+            </ul>
+          </section>
+
+          <section id="how" aria-labelledby="howTitle">
+            <h2 id="howTitle">How It Works</h2>
+            <ol class="frontSteps">
+              <li><strong>Create an account</strong> with a username, your email, and a password (Prismal Budget is for people 18 and older).</li>
+              <li><strong>Set your starting balance:</strong> what's in your bank account right now (and in savings, if you like).</li>
+              <li><strong>Add your recurring entries</strong> once each: paychecks, rent, bills, and subscriptions.</li>
+              <li><strong>Add what you spend as you go,</strong> from the calendar or the Quick Entry icon. In Bank updates for every day ahead, and each week moves into History as it passes.</li>
+            </ol>
+            <h3>Three Kinds Of Entries</h3>
+            <p>Every entry has a type, so the budget knows how it changes your money:</p>
+            <ul>
+              <li>❗️ <strong>Regular:</strong> everyday costs and gains, like groceries or a paycheck. They change In Bank.</li>
+              <li>✖️ <strong>Hidden:</strong> money spent or received outside your budget's account, like spending cash. It counts as a cost or gain, but In Bank stays the same.</li>
+              <li>⭕️ <strong>Transfer:</strong> money moving between your own accounts, like putting $100 into savings. It changes In Bank, but it isn't a cost or gain.</li>
+            </ul>
+            <p>Recurring entries start with a ✔️, and entries from a connected spreadsheet with a ➕. Change one on a single day, and only that day changes.</p>
+            <p>Want every detail? <a href="/how-it-works.html">How Prismal Budget Works</a> explains every page, rule, and feature.</p>
+            <div class="frontButtons">
+              <a class="budgetButton primary" href="/login.html?new">Create Account</a>
+              <a class="budgetButton" href="/login.html">Sign In</a>
+            </div>
+          </section>
+        </article>
+
         <!-- A new budget's first steps: Calendar Page.js shows this until they're done or it's hidden -->
         <section id="gettingStarted" class="budgetCard gettingStarted" aria-labelledby="gettingStartedTitle" hidden>
           <button id="gettingStartedHide" type="button" class="panelClose" aria-label="Hide getting started">×</button>
@@ -95,7 +157,7 @@
           <button id="searchButton" class="budgetButton homeSearch" type="button" aria-haspopup="dialog" aria-controls="searchBox" aria-expanded="false">🔎 Search</button>
         </div>
 
-        <!-- Search floats over the page from the Search button (Calendar Page.js moves it into <body> and fills
+        <!-- Search floats over the page from the Search button (Budget Search.js moves it into <body> and fills
              in its working title list). Tapping a day on the calendar fills From or To too. -->
         <section id="searchBox" class="searchBar searchBox" role="dialog" aria-labelledby="searchTitle" hidden>
           <header class="panelHeader">
@@ -104,7 +166,7 @@
           </header>
           <form id="searchForm" autocomplete="off">
             <!-- Titles to search for, one per line, each with its own All / Costs / Gains / Tracker
-                 buttons. Calendar Page.js swaps in the working list, which looks the same. -->
+                 buttons. Budget Search.js swaps in the working list, which looks the same. -->
             <div id="searchTerms" class="searchTerms">
               <div class="termList" role="group" aria-label="Titles to search for">
                 <div class="termRow">
@@ -223,11 +285,12 @@
             <li><strong>Unique entries</strong> (❗️ ✖️ ⭕️ ❗️✔️ ✖️✔️ ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
             <li><strong>Temporary recurring entries</strong> (❗️✔️ ✖️✔️ ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
             <li>If a recurring entry's End Date moves before a day you changed (or you delete the recurring entry), that day's temporary entry from today on becomes a plain unique entry, like ❗️, since there's nothing left for it to hold back. A $0.00 one just goes away.</li>
+            <li><strong>Spreadsheet entries</strong> (➕❗️ ➕✖️ ➕⭕️) start with a yellow plus. They come from spreadsheets you connect in Settings, land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. Settings' Help has more.</li>
             <li>Adding an entry with the same title and refraction type as one already on that day adds the two together. So a day has at most three entries with the same title: one Regular, one Hidden, and one Transfer.</li>
           </ul>
 
           <h4>Refraction Types</h4>
-          <p>Besides the checkmark, an entry's emoji is its refraction type (a recurring entry with only ✔️ is Regular):</p>
+          <p>Besides the checkmark (or plus), an entry's emoji is its refraction type (a recurring entry with only ✔️ is Regular):</p>
           <ul>
             <li>❗️ <strong>Regular</strong>: a normal cost or gain. It changes In Bank, and the tracker counts it.</li>
             <li>✖️ <strong>Hidden</strong>: money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same.</li>
@@ -279,5 +342,12 @@
         </section>
       </main>
     </div>
+
+    <!-- The front page's Sign In and Create Account, fixed to the window (top right, top center on phones). Outside
+         #transitionContainer, which is transformed while it slides, so it stays put. -->
+    <nav id="frontSignIn" class="frontSignIn" aria-label="Sign in">
+      <a class="budgetButton" href="/login.html">Sign In</a>
+      <a class="budgetButton primary" href="/login.html?new">Create Account</a>
+    </nav>
   </body>
 </html>

@@ -51,7 +51,7 @@
     });
   };
 
-  // 3) Catch sliders added later (if your UI is injected)
+  // 3) Sliders added to the page later
   const watchForNewSliders = () => {
     const obs = new MutationObserver((mutations) => {
       let sawSomething = false;
@@ -81,10 +81,9 @@
     WIRE_LIVE(document);
     PAINT_ALL(document);
 
-    // Optional but nice if controls appear later
     watchForNewSliders();
 
-    // Also repaint once after everything settles (covers late “restore settings”)
+    // Once more after everything settles (the starfield restores its saved settings into the sliders)
     requestAnimationFrame(() => PAINT_ALL(document));
     setTimeout(() => PAINT_ALL(document), 0);
   };

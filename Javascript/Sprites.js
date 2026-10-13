@@ -1,11 +1,12 @@
-// Sprites: the four special emoji, ❗️ (Regular), ✖️ (Hidden), ⭕️ (Transfer), and ✔️ (Recurring), show as the
-// site's own small images everywhere, on every page, instead of each device's own emoji (which look different
-// everywhere, and some are black on the dark background). Only what's shown changes: the stored budget, the
-// text in boxes, and anything copied or read aloud still have the emoji (each image's alt text is its emoji).
+// Sprites: the five special emoji, ❗️ (Regular), ✖️ (Hidden), ⭕️ (Transfer), ✔️ (Recurring), and ➕ (a connected
+// spreadsheet's), show as the site's own small images everywhere, on every page, instead of each device's own
+// emoji (which look different everywhere, and some are black on the dark background). Only what's shown changes:
+// the stored budget, the text in boxes, and anything copied or read aloud still have the emoji (each image's alt
+// text is its emoji).
 //
 // The images are Resources/Sprites/*.webp, one color per type, all drawn as thick rounded lines with the same
-// soft shadow: Regular red (a ! as a line and a dot), Hidden purple (an X), Transfer green (a ring), and
-// Recurring orange (a check). To change one, replace its file (any square image with a transparent background
+// soft shadow: Regular red (a ! as a line and a dot), Hidden purple (an X), Transfer green (a ring), Recurring
+// orange (a check), and Spreadsheet yellow (a plus: Hidden's X turned). To change one, replace its file (any square image with a transparent background
 // works; around 128x128 is plenty), then stamp the site (node _tools/stamp.mjs) so browsers get the new one.
 // If an image can't load, its emoji shows instead. Text that can't hold an image (dialogs, suggestion lists,
 // text boxes) shows the device's own emoji in its own colors, so the site words those spots instead where it
@@ -19,10 +20,11 @@
     ["\u2757", "/Resources/Sprites/Regular.webp"],   // ❗️
     ["\u2716", "/Resources/Sprites/Hidden.webp"],    // ✖️
     ["\u2B55", "/Resources/Sprites/Transfer.webp"],  // ⭕️
-    ["\u2714", "/Resources/Sprites/Recurring.webp"]  // ✔️
+    ["\u2714", "/Resources/Sprites/Recurring.webp"], // ✔️
+    ["\u2795", "/Resources/Sprites/Spreadsheet.webp"] // ➕
   ]);
-  const FIND = /([\u2757\u2716\u2B55\u2714])\uFE0F?/g;
-  const HAS = /[\u2757\u2716\u2B55\u2714]/;
+  const FIND = /([\u2757\u2716\u2B55\u2714\u2795])\uFE0F?/g;
+  const HAS = /[\u2757\u2716\u2B55\u2714\u2795]/;
 
   // Text that can't hold an image (or shouldn't change): page titles, scripts, form controls, and the
   // words a missing image shows instead (Layout.js)

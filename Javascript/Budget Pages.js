@@ -572,14 +572,28 @@ const DELETE_NOTES = {
 };
 
 async function deleteSelected(tableName) {
-  const count = selectedRows.size;
-  if (!count) return;
+  const indexes = [...selectedRows];
+  if (indexes.length === 0) return;
   const note = DELETE_NOTES[tableName] || "";
-  if (!window.confirm(`Delete ${count} row${count > 1 ? "s" : ""}?${note}`)) return;
-  const result = await deleteBudgetRows(tableName, [...selectedRows]);
-  if (!result.ok) return BudgetUI.showToast(result.message, true);
+  if (!window.confirm(`Delete ${indexes.length} row${indexes.length > 1 ? "s" : ""}?${note}`)) return;
+  // The page redraws as part of the change, with the rows below the deleted ones moved up, so nothing may
+  // still be checked by then
   selectedRows.clear();
+  const result = await deleteBudgetRows(tableName, indexes);
+  if (!result.ok) {
+    indexes.forEach(index => selectedRows.add(index)); // Nothing was deleted, so they're still checked
+    renderCurrentPage();
+    return BudgetUI.showToast(result.message, true);
+  }
   BudgetUI.warnIfUnsaved(result);
+}
+
+// Checked rows stay checked when rows move: moved(index) is the row's new index. The page redraws as part
+// of each change, so this happens before it starts; undo() puts them back when the change didn't happen.
+function followCheckedRows(moved) {
+  const before = new Set(selectedRows);
+  selectedRows = new Set([...before].map(moved));
+  return () => { selectedRows = before; };
 }
 
 // Rows for a table: entries and sections, with a move bar + delete checkbox in edit mode,
@@ -705,8 +719,8 @@ function selectCell(index, selectable = true) {
 // =====================================================================
 // Hold a row's move bar and drag. Rows reorder live under the pointer. The page scrolls only
 // while the pointer is in the top or bottom 25% of the screen, faster closer to the edge. The pointer is
-// followed on the whole page: moving the row in the table makes the browser let go of a pointer capture,
-// which used to stop the drag after the first row it passed.
+// followed on the whole page, not with a pointer capture: moving the row in the table makes the browser let
+// go of one, which would stop the drag after the first row it passed.
 
 const EDGE_ZONE = 0.25;  // Fraction of the screen height at each edge that scrolls
 const MAX_SCROLL = 22;   // Pixels per frame at the very edge
@@ -766,8 +780,12 @@ function startRowDrag(event, bar, tableEl, tableName) {
 
     const order = rowOrder(body);
     if (order.join() === startOrder.join()) return;
+    // The rows land in this order right after the table's header rows (see reorderTableRows)
+    const firstRow = ROW_TABLES[tableName].headerRows;
+    const undoChecks = followCheckedRows(index => (order.includes(index) ? firstRow + order.indexOf(index) : index));
     moveBudgetRows(tableName, order, Number(row.dataset.index)).then((result) => {
       if (!result.ok) {
+        undoChecks();
         BudgetUI.showToast(result.message, true);
         renderCurrentPage(); // Put the rows back where they really are
       } else {
@@ -977,12 +995,17 @@ function openCategoryPanel(tableName, origin, index, atIndex) {
         : [{ label: "Add Section", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
       form.append(title.el, BudgetUI.buttonRow(buttons));
 
-      form.addEventListener("submit", (event) => {
+      form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!title.value()) return panel.setError("Give the section a title.");
-        BudgetUI.submit(panel, () => existing
-          ? renameCategoryRow(tableName, index, title.value())
-          : addCategoryRow(tableName, atIndex, title.value()));
+        if (existing) return BudgetUI.submit(panel, () => renameCategoryRow(tableName, index, title.value()));
+        // Rows from the new section on move down one (in Edit, where rows can be checked)
+        const undoChecks = followCheckedRows(row => (row >= atIndex ? row + 1 : row));
+        const result = await BudgetUI.submit(panel, () => addCategoryRow(tableName, atIndex, title.value()));
+        if (!result.ok) {
+          undoChecks();
+          renderCurrentPage();
+        }
       });
 
       function deleteSection() {

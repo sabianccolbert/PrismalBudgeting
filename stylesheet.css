@@ -55,36 +55,33 @@
 /*========================================*
  *  1) DESIGN TOKENS (ROOT VARIABLES)
  *========================================*
- *  These are your “global knobs”.
- *  Step-by-step:
- *   1) Define default values here.
- *   2) Reference them everywhere else with var(--NAME).
- *   3) JS can overwrite specific ones (slide distance/duration).
+ *  The site's shared values, used everywhere else with var(--NAME). Layout.js sets the slide
+ *  distance for each page transition.
  */
 
 :root {
-  /* Step 1: Slide system defaults (JS overwrites per page/transition) */
+  /* Page slides (Layout.js sets the distance for each transition) */
   --SLIDE_DISTANCE: 100vh;
   --SLIDE_DURATION: 0.6s;
 
-  /* Step 2: Shared glow recipe (used for text-shadow + box-shadow) */
+  /* The red glow on text and boxes */
   --SHADOW: 0 0 20px rgba(200, 0, 0, 1);
 
-  /* Step 3: Brand colors (links and neutral UI color) */
+  /* Brand colors: links, and the neutral color of text and borders */
   --LINK_LIGHT: #ee0000;
   --LINK_DARK:  #550000;
   --BASE_COLOR: #bdbdbd;
 
-  /* Step 4: Transition speeds (grouped so everything “feels” consistent) */
+  /* Transition speeds, shared so every control moves the same way */
   --SLOW_TRANSFORM: 0.3s ease-out;
   --SLOW_BORDER:    0.3s ease-out;
   --SLOW_SHADOW:    0.7s ease-out;
   --SLOW_COLOR:     0.5s ease-out;
-  
+
   /* Placeholders */
   --PLACEHOLDER_COLOR: rgba(90, 90, 90, 0.5);
 
-  /* Step 5: the red-orange diagonal gradient on the borders of chosen, hovered, and focused controls
+  /* The red-orange diagonal gradient on the borders of chosen, hovered, and focused controls
      (see GRADIENT BORDERS at the end) */
   --EDGE_GRADIENT: linear-gradient(135deg, #ee0000 0%, #ff4500 55%, #ff9a1a 100%);
 }
@@ -97,17 +94,11 @@
 /*========================================*
  *  2) DOCUMENT BASE + BACKGROUND
  *========================================*
- *  Important: scroll ownership is intentionally unusual.
- *  JS swaps between html/body/container as the scroller.
+ *  Which element scrolls changes: Boot.js holds the page still until it has slid in, then Layout.js
+ *  gives scrolling back to the document. Changing overflow or height here can break the page
+ *  transitions, and scrolling on iPhones.
  *
- *  This section is the foundation:
- *   1) Remove default browser margins/padding.
- *   2) Set a safe black background behind everything.
- *   3) Set base font + default text color.
- *
- *  The "DONT TOUCH" notes are real:
- *   - changing overflow/height here can break the transition system
- *   - and can also break iOS scroll behavior
+ *  No default margins or padding, a black background behind everything, and the base font and color.
  */
 
 /*---------- Root document ----------*/
@@ -134,7 +125,6 @@
 }
 
 html {
-  /* Step 1: eliminate default spacing */
   margin: 0;
   padding: 0;
   inset: 0;
@@ -142,36 +132,33 @@ html {
   width: 100vw;
   overflow-x: hidden;
   overflow-y: auto;
-    
-  /* Step 3: edge color visible during transitions */
+
+  /* The color at the edges while a page slides */
   background-color: black;
 }
 
 /*---------- Body (content wrapper) ----------*/
 body {
-  /* Step 1: establish a vertical flex layout so footer/page structure behaves */
+  /* A column, so the footer stays under the page */
   display: flex;
   flex-direction: column;
   align-items: stretch;
-
-  /* Step 2: ensure body covers the screen height */
   min-height: 100vh;
 
-  /* Step 3: default is “no body scroll” (JS may change this) */
+  /* The body doesn't scroll by itself (Boot.js and Layout.js decide who does) */
   height: auto;
   width: 100vw;
   overflow-x: hidden;
   overflow-y: visible;
 
-  /* Step 4: remove default spacing */
   margin: 0;
   padding: 0;
   inset: 0;
 
-  /* Step 5: keep body visually transparent so canvas/background shows */
+  /* See-through, so the starfield and background show */
   background: transparent;
 
-  /* Step 6: base typography */
+  /* Base typography */
   text-align: center;
   font-family: 'Main Font', sans-serif; /* Letters the font doesn't have (like ñ) use a plain sans-serif */
   font-size: 7vmin;
@@ -189,7 +176,7 @@ body {
   padding:2vh 2vw;
   inset: 0;
 
-  /* DONT TOUCH: JS swaps scroll responsibility */
+  /* Boot.js and Layout.js switch which element scrolls, so keep these as they are */
   overflow-x: hidden;
   overflow-y: hidden;
 }
@@ -202,16 +189,8 @@ body {
 /*========================================*
  *  3) CANVAS LAYER
  *========================================*
- *  The canvas is both:
- *   - the starfield drawing surface
- *   - and the background image layer
- *
- *  Step-by-step:
- *   1) Fix it to the viewport so it never scrolls.
- *   2) Stretch it to full size.
- *   3) Put the background image here.
- *   4) Send it behind content (z-index:-1).
- *   5) Disable pointer events so it never steals taps.
+ *  The canvas is both the starfield's drawing surface and the background image. It's fixed to the
+ *  screen at full size behind everything, and taps go through it.
  */
 
 /* Full-screen starfield canvas (above bg, below content) */
@@ -240,14 +219,8 @@ body {
 /*========================================*
  *  4) PAGE STRUCTURE + TYPOGRAPHY
  *========================================*
- *  This section controls content spacing + text sizes.
- *
- *  Step-by-step:
- *   1) main gets padding so text doesn't touch edges.
- *   2) headings and paragraphs get consistent sizing.
- *   3) footer uses smaller text.
- *   4) hr is decorative (image-based divider).
- *   5) .divider is a narrower hr variant.
+ *  Text sizes and spacing. The footer's text is smaller, and dividers (hr, and the narrower .divider)
+ *  are an image instead of a line.
  */
 
  .logo{
@@ -263,26 +236,23 @@ h4 {
 }
 
 p {
-  /* Step 3: tight paragraph layout (no extra margin) */
   margin: 0;
   font-size: 6vmin;
 }
 
 
 footer p, footer a{
-  /* Step 4: footer text is smaller and padded */
   font-size: 3vmin;
   padding: 2vmin;
 }
 
 /* Divider art */
 hr {
-  /* Step 5: divider sizing */
   width: 75vw;
   height: 4px;
   border: none;
 
-  /* Step 6: hr is image-driven instead of a plain line */
+  /* An image instead of a plain line */
   background-image: url("/Resources/Hr.webp?v=7c2fbe9896");
   background-size: cover;
   background-repeat: no-repeat;
@@ -302,29 +272,19 @@ hr {
 /*========================================*
  *  5) CONTENT CONTAINERS
  *========================================*
- *  Articles are your “content cards”.
- *
- *  Step-by-step:
- *   1) stack content vertically
- *   2) center it
- *   3) shrink-wrap to its contents
- *   4) allow hiding with [hidden]
+ *  An article stacks its content in a column, as wide as its content, centered on the page.
  */
 
 article {
-  /* Step 1: vertical stacking */
   display: flex;
   flex-direction: column;
   align-items: center;
-
-  /* Step 2: shrink to content and center on page */
   width: fit-content;
   margin: 0 auto 3vmin;
 }
 
-/* Hide anything with [hidden] (chapters, etc.), even elements given a display (like inputs) */
+/* Anything with [hidden] stays hidden, even elements given a display (like inputs) */
 [hidden] {
-  /* Step 3: hard-hide for safety */
   display: none !important;
 }
 
@@ -336,24 +296,15 @@ article {
 /*========================================*
  *  6) LINKS
  *========================================*
- *  Links are styled like “interactive text buttons”.
- *
- *  Step-by-step:
- *   1) inline-block so transform works nicely
- *   2) default neutral color
- *   3) hover grows slightly + glows + turns red
+ *  Links are the neutral color, and grow a little, glow, and turn red on hover.
  */
 
 a {
-  /* Step 1: give the link a box so scaling doesn't break layout */
+  /* A box of its own, so growing on hover doesn't move anything around it */
   display: inline-block;
   margin: 0 auto;
   padding-bottom: 1vmin;
-
-  /* Step 2: default color */
   color: var(--BASE_COLOR);
-
-  /* Step 3: smooth transitions */
   transition:
     transform var(--SLOW_TRANSFORM),
     color var(--SLOW_COLOR),
@@ -361,7 +312,6 @@ a {
 }
 
 a:hover {
-  /* Step 4: hover treatment */
   transform: scale(1.05);
   text-shadow: var(--SHADOW);
   color: var(--LINK_LIGHT);
@@ -380,11 +330,8 @@ a:hover {
  */
 
 img {
-  /* Step 1: default avatar sizing */
   width: 40vmin;
   height: 40vmin;
-
-  /* Step 2: circular crop */
   border-radius: 50%;
   object-fit: cover;
   overflow: hidden;
@@ -398,7 +345,7 @@ img {
 /*========================================*
  *  8) BUTTONS
  *========================================*
- *  Button typography and hover “personality” live here (the gradient border: GRADIENT BORDERS).
+ *  Pill-shaped buttons, and how they look on hover (the gradient border: GRADIENT BORDERS).
  */
 
 button {
@@ -410,20 +357,17 @@ button {
   margin: 3vmin auto 1vmin;
   padding: 0.5em 1.5em;
   height: auto;
-  
+
   object-fit: contain;
 
-  /* Step 3: pill */
   border: 3px solid var(--BASE_COLOR);
   border-radius: 9999px;
   background: transparent;
 
-  /* Step 4: typography */
   color: var(--BASE_COLOR);
   font-family: 'Main Font', sans-serif;
   font-size: 5vmin;
 
-  /* Step 8: smooth transitions */
   transition:
     transform var(--SLOW_TRANSFORM),
     box-shadow var(--SLOW_SHADOW),
@@ -432,7 +376,7 @@ button {
 }
 
 button:hover {
-  /* Step 6: scale + glow + brand color (the border turns into the gradient: GRADIENT BORDERS) */
+  /* It grows, glows, and turns red (the border turns into the gradient: GRADIENT BORDERS) */
   transform: scale(1.05);
 
   text-shadow: var(--SHADOW);
@@ -479,8 +423,8 @@ header .brand {
   gap: 3vw;
 }
 
-/* Shrink the main logo image. It never gets narrower than it is tall (a skinny screen used to squish it
-   sideways, since the header's row shrank it but not its height). */
+/* Shrink the main logo image. It never gets narrower than it is tall (the header's row would shrink its
+   width on a skinny screen, but not its height). */
 header .brand-icon {
   flex-shrink: 0;
   width: 12vmin;
@@ -556,15 +500,10 @@ header .stacked h2 {
 /*========================================*
  *  11) SLIDE-IN PAGE TRANSITION SYSTEM
  *========================================*
- *  This is the animation shell.
- *
- *  Step-by-step:
- *   1) #transitionContainer holds the entire page content
- *   2) JS toggles classes on it:
- *        .ready     -> resting position (translateY(0))
- *        .slide-out -> leaving position (translateY(var(--SLIDE_DISTANCE)))
- *   3) html has either .homeJs or .otherJs depending on page type
- *   4) .noJs (JavaScript is off) hides the page and asks for JavaScript instead
+ *  #transitionContainer holds the whole page. Layout.js gives it .ready once it has slid in (its
+ *  resting place) and .slide-out when a link is followed. Boot.js gives html .homeJs on Home and
+ *  .otherJs everywhere else, which pick the direction. .noJs (JavaScript is off) hides the page and
+ *  asks for JavaScript instead.
  */
 
 /* Homepage: slides DOWN into view, OUT up */
@@ -596,14 +535,15 @@ header .stacked h2 {
   transform: translateY(var(--SLIDE_DISTANCE));
 }
 
-/* No javascript fallback: nothing works without it, so the page only asks for it. The same goes for a
-   browser that blocks site data (Boot.js adds .noStorage): signing in needs it. */
-.noJs #transitionContainer,
+/* No javascript fallback: nothing works without it, so the page only asks for it (the front page, which is
+   just reading, shows as it is). The same goes for a browser that blocks site data (Boot.js adds
+   .noStorage): signing in needs it. */
+.noJs:not(.frontPage) #transitionContainer,
 .noStorage #transitionContainer {
   display: none;
 }
 
-.noJs body::before {
+.noJs:not(.frontPage) body::before {
   content: "Prismal Budget needs JavaScript to work. Please turn on JavaScript in your browser's settings, then reload this page.";
 }
 
@@ -732,15 +672,14 @@ input {
   border: 3px solid var(--BASE_COLOR);
   border-radius: 9999px;
   
-  /* Match typography. A steady size (it used to grow with the screen and got huge on wide ones); 16px at
+  /* Match typography. A steady size (one that grows with the screen gets huge on wide ones); 16px at
      least, so phones don't zoom in when a box is tapped. */
   color: var(--BASE_COLOR);
   font-family: 'Main Font', sans-serif;
   font-size: clamp(16px, 3.4vmin, 21px);
   text-align: center;
-  
-  /* FIXED: Explicitly define transform transition parameters */
-  transition: 
+
+  transition:
     transform 0.3s ease-out,
     box-shadow var(--SLOW_SHADOW), 
     border-color var(--SLOW_BORDER), 

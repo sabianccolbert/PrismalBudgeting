@@ -1,4 +1,3 @@
-// thank heavens for chatGPT <3
 // Starfield Setup: the main-thread side of the starfield. Builds window.STARFIELD as a small bridge,
 // starts the engine (Active Starfield.js) in a Web Worker on an OffscreenCanvas, and forwards page
 // input to it: pointer, resize, sliders, freeze/unfreeze. Also owns saving to localStorage.

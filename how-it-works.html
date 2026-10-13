@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- No "noJs" class here: this page is readable without JavaScript (search engines and AI crawlers often don't run it) -->
+<!-- No "noJs" class here: this page is readable without JavaScript (search engines and other crawlers often don't run it) -->
 <html lang="en">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=97b6527c38">
+    <link rel="stylesheet" href="/stylesheet.css?v=6871ba39c8">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=f5cf7f9192">
+    <link rel="stylesheet" href="/budgetStyle.css?v=6b05fb8d32">
     <title>How Prismal Budget Works: Pages, Features, Rules, and Data</title>
     <meta name="description" content="A complete guide to Prismal Budget, the calendar-based budget that projects your bank balance for every day of the next four weeks: every page, every feature, how the math works, and how the data is stored.">
     <meta charset="UTF-8">
@@ -34,7 +34,7 @@
       "headline": "How Prismal Budget Works",
       "description": "A complete guide to Prismal Budget: every page, every feature, how the budget math works, and how the data is stored.",
       "url": "https://prismalbudget.org/how-it-works.html",
-      "dateModified": "2026-10-10",
+      "dateModified": "2026-10-12",
       "inLanguage": "en",
       "about": {
         "@type": "WebApplication",
@@ -70,9 +70,9 @@
 
           <section id="overview" aria-labelledby="overviewTitle">
             <h2 id="overviewTitle">What Prismal Budget Is</h2>
-            <p>Prismal Budget (<a href="https://prismalbudget.org">prismalbudget.org</a>) is a web budgeting app built around a four-week calendar. Every day on the calendar lists that day's entries (costs and gains), and the budget adds them up into <strong>In Bank</strong>: how much money will be in your budget's bank account at the end of each day. Recurring entries like paychecks and bills fill themselves in, so you can see days where your balance would go negative before they happen, and the lowest your balance gets in the 28 days after the calendar.</p>
-            <p>This page explains every page, feature, rule, and data format in detail. It's written to be read by people, by AI assistants, and by search engines, so it uses plain words, exact formats, and examples. Prismal Budget started as a Google Sheets budget; the website keeps its ideas (like refraction types, temporary recurring entries, and tracker aliases), but some rules changed on purpose, and this page describes the website as it works now.</p>
-            <p class="guideUpdated">Last updated: October 11, 2026 (site version 10.11.2026.A).</p>
+            <p>Prismal Budget (<a href="https://prismalbudget.org">prismalbudget.org</a>) is a web budgeting app built around a four-week calendar. Every day on the calendar lists that day's entries (costs and gains), and the budget adds them up into <strong>In Bank</strong>: how much money will be in your budget's bank account at the end of each day. Recurring entries like paychecks and bills fill themselves in, and so do entries from spreadsheets you connect (like a list of bills you already keep in Google Sheets or Excel), so you can see days where your balance would go negative before they happen, and the lowest your balance gets in the 28 days after the calendar. Prismal Budget is for people 18 and older.</p>
+            <p>This page explains every page, feature, rule, and data format in detail, in plain words, with exact formats and examples. Prismal Budget started as a Google Sheets budget; the website keeps its ideas (like refraction types, temporary recurring entries, and tracker aliases), but some rules changed on purpose, and this page describes the website as it works now.</p>
+            <p class="guideUpdated">Last updated: October 12, 2026 (site version 10.12.2026.A).</p>
           </section>
 
           <nav class="toc" aria-labelledby="tocTitle">
@@ -82,6 +82,7 @@
               <li><a href="#entries">Entries and refraction types</a></li>
               <li><a href="#calendar">The calendar and the budget math</a></li>
               <li><a href="#recurring">Recurring entries</a></li>
+              <li><a href="#spreadsheets">Connected spreadsheets</a></li>
               <li><a href="#daily-update">The daily update</a></li>
               <li><a href="#other-accounts">Other Accounts (like Savings)</a></li>
               <li><a href="#tracker">The tracker</a></li>
@@ -95,7 +96,7 @@
               <li><a href="#architecture">How the website is built</a></li>
               <li><a href="#api">API reference</a></li>
               <li><a href="#decisions">Why it works this way</a></li>
-              <li><a href="#developers">Notes for developers and AI assistants</a></li>
+              <li><a href="#developers">Notes for developers</a></li>
               <li><a href="#glossary">Glossary</a></li>
             </ol>
           </nav>
@@ -106,8 +107,9 @@
               <table>
                 <thead><tr><th>Page</th><th>Address</th><th>Sign-in</th><th>What it's for</th></tr></thead>
                 <tbody>
-                  <tr><td>Login</td><td><code>/login.html</code></td><td>Public</td><td>Sign in (with the username or email and the password, or a passkey), create an account, Forgot Password, the form a password reset link opens, and the one-time question about passkey sign-in.</td></tr>
-                  <tr><td>Home</td><td><code>/</code> (<code>/index.html</code>)</td><td>Required</td><td>The Getting Started card (new budgets), the buttons above the calendar (Undo, Redo, New Entry, Quick Entry, and Search), the calendar, then (under a divider) Lowest in bank after today, Dave, and Upcoming, and (for now) Bring Over A Spreadsheet Budget at the very bottom.</td></tr>
+                  <tr><td>Front Page</td><td><code>/</code> (<code>/index.html</code>), signed out</td><td>Public</td><td>What Prismal Budget is, what it does, and how it works, with Sign In and Create Account fixed at the top of the window (top right, top center on phones). Anyone signed out sees it at the site's address, search engines included, and it reads the same without JavaScript.</td></tr>
+                  <tr><td>Login</td><td><code>/login.html</code></td><td>Public</td><td>Sign in (with the username or email and the password, or a passkey), create an account (18 and older; <code>/login.html?new</code>, the front page's Create Account, opens straight to it), Forgot Password, the form a password reset link opens, and the one-time question about passkey sign-in. Its Home button goes to the front page.</td></tr>
+                  <tr><td>Home</td><td><code>/</code> (<code>/index.html</code>), signed in</td><td>Required</td><td>The Getting Started card (new budgets), the buttons above the calendar (Undo, Redo, New Entry, Quick Entry, and Search), the calendar, then (under a divider) Lowest in bank after today, Dave, and Upcoming, and (for now) Bring Over A Spreadsheet Budget at the very bottom.</td></tr>
                   <tr><td>Menu</td><td><code>/menu/</code></td><td>Required</td><td>Links to the pages below.</td></tr>
                   <tr><td>Recurring Entries</td><td><code>/menu/recurring.html</code></td><td>Required</td><td>Paychecks, bills, and anything else that repeats.</td></tr>
                   <tr><td>History</td><td><code>/menu/history.html</code></td><td>Required</td><td>Every past week, newest first, and the same Search as Home's.</td></tr>
@@ -115,8 +117,8 @@
                   <tr><td>Tracker</td><td><code>/menu/tracker.html</code></td><td>Required</td><td>Spending and income by category over the last 4 weeks, 3 months, and 365 days, with a Search through its rows.</td></tr>
                   <tr><td>Paycheck Calculator</td><td><code>/menu/calculator.html</code></td><td>Required</td><td>Works out take-home pay from hours, pay rate, deductions, and taxes.</td></tr>
                   <tr><td>Change Logs</td><td><code>/menu/logs.html</code></td><td>Required</td><td>A record of every change to the budget, with a Search through it.</td></tr>
-                  <tr><td>Settings</td><td><code>/settings.html</code></td><td>Required</td><td>Daily reminders (push notifications and a calendar link), email, password (change it, or email a reset link), passkeys, signed-in devices (Quick Entry icons, Sign Out Everywhere), your data and privacy (Download My Data, analytics on this device), and deleting the account.</td></tr>
-                  <tr><td>Quick Entry</td><td><code>/quick.html?key=…</code></td><td>Its key</td><td>A New Entry form for a phone's home screen, with no login.</td></tr>
+                  <tr><td>Settings</td><td><code>/settings.html</code></td><td>Required</td><td>Connected spreadsheets (first), daily reminders (push notifications and a calendar link), language and dates, email, age, password (change it, or email a reset link), passkeys, signed-in devices (Quick Entry icons, Sign Out Everywhere), your data and privacy (Download My Data, analytics on this device), and deleting the account.</td></tr>
+                  <tr><td>Quick Entry</td><td><code>/quick.html?key=…</code></td><td>Its key</td><td>A New Entry form for a phone's home screen, with no login. Without a key, or with one that stopped working, it goes to the login page.</td></tr>
                   <tr><td>Privacy Policy &amp; Terms of Use</td><td><code>/privacy and terms.html</code></td><td>Public</td><td>The policy and terms.</td></tr>
                   <tr><td>How It Works</td><td><code>/how-it-works.html</code></td><td>Public</td><td>This page.</td></tr>
                   <tr><td>Not Found (404)</td><td>any other address</td><td>Public</td><td>Shown for missing pages. Far below the first screen (so it looks empty until it's scrolled), a card of starfield controls: a box to type in that pushes the stars, live readouts, and Attract and Repel sliders, styled like the rest of the site.</td></tr>
@@ -128,16 +130,17 @@
             <ul>
               <li><strong>Header:</strong> the page title and image buttons (Back, Home, Menu, Settings, Logout, depending on the page; Logout only shows while signed in, so the public pages don't offer it to visitors).</li>
               <li><strong>Gradient borders:</strong> chosen, hovered, and focused controls (like a primary button, the picked refraction type, or the box being typed in) have a red-orange diagonal gradient border.</li>
-              <li><strong>Pill switches:</strong> on/off choices (agreeing to the Privacy Policy & Terms of Use, Turn on passkey sign-in, and a tracker row's Count ⭕️ Transfers) are pill-shaped switches: off is a dark pill with its knob at the left, on fills with the red-orange gradient with its knob at the right. Tapping the words flips them too. Checkboxes that pick rows from a list (search results, and the rows to delete in Edit) stay checkboxes.</li>
+              <li><strong>Pill switches:</strong> on/off choices (agreeing to the Privacy Policy & Terms of Use, Turn on passkey sign-in, a tracker row's Count ⭕️ Transfers, and each connected spreadsheet's On/Off in Settings) are pill-shaped switches: off is a dark pill with its knob at the left, on fills with the red-orange gradient with its knob at the right. Tapping the words flips them too. Checkboxes that pick rows from a list (search results, and the rows to delete in Edit) stay checkboxes.</li>
               <li><strong>Animated starfield background</strong> and <strong>page transitions:</strong> pages slide in and out instead of flashing. The starfield's stars carry over from page to page.</li>
               <li><strong>Footer:</strong> trademark note, contact, Privacy Policy &amp; Terms of Use, and How Prismal Budget Works.</li>
-              <li><strong>Help button</strong> (the word Help, in a small pill) at the very bottom of Home, Other Accounts, Recurring Entries, Tracker, History, and Paycheck Calculator. It opens that page's help in a box that floats over a dimmed page; ×, Escape, or tapping outside closes it.</li>
-              <li><strong>Floating boxes:</strong> boxes like New Entry, an entry's options, and the panels for recurring entries, tracker rows, and accounts float over the page, so nothing under them moves. So do Search (with its results under its form) and Help. Each one zooms out of the button (or entry) that opened it and back into it when it closes, and has a purple to blue diagonal background. Leaving the page closes them right away (and zooms a zoomed day back out), so the browser's Back button never brings a page back with one still open.</li>
-              <li><strong>Without JavaScript,</strong> pages other than this one only ask you to turn it on, since nothing works without it. The same goes for a browser that blocks site data (cookies and site data turned off): signing in is kept there, so the login and budget pages say how to allow it, while this page, the Privacy Policy, Quick Entry, and Not Found still work.</li>
+              <li><strong>Help button</strong> (the word Help, in a small pill) at the very bottom of Home, Other Accounts, Recurring Entries, Tracker, History, Paycheck Calculator, and Settings (its Help is mostly about connected spreadsheets). It opens that page's help in a box that floats over a dimmed page; ×, Escape, or tapping outside closes it.</li>
+              <li><strong>Floating boxes:</strong> boxes like New Entry, an entry's options, and the panels for recurring entries, tracker rows, and accounts float over the page, so nothing under them moves. So do Search (with its results under its form) and Help. Each one zooms out of the button (or entry) that opened it and back into it when it closes, and has a purple to blue diagonal background. One can open over another (a connected spreadsheet's ➕ boxes open over its panel): the one under it waits, dimmed, and comes back when the top one closes; Escape closes only the top one. Leaving the page closes them right away (and zooms a zoomed day back out), so the browser's Back button never brings a page back with one still open.</li>
+              <li><strong>Signed out,</strong> a page that needs signing in goes to the login page. The site's own address shows the front page instead.</li>
+              <li><strong>Without JavaScript,</strong> pages other than this one and the front page only ask you to turn it on, since nothing works without it. The same goes for a browser that blocks site data (cookies and site data turned off): signing in is kept there, so the login and budget pages say how to allow it, while the front page, this page, the Privacy Policy, Quick Entry, and Not Found still work.</li>
               <li><strong>Less motion:</strong> when the device asks for reduced motion, pages appear without sliding, links go right away, and the starfield doesn't run.</li>
               <li><strong>Notes</strong> (like "Undone: …") show at the bottom of the screen for a few seconds; two at once stack instead of covering each other.</li>
               <li><strong>Missing images</strong> show their words instead of a broken-image icon, so a button still says what it does.</li>
-              <li><strong>Sprites:</strong> the four special emoji show as the site's own small images on every page, the same on every device, each in its own color: <code>❗️</code> Regular is red, <code>✖️</code> Hidden purple, <code>⭕️</code> Transfer green, and <code>✔️</code> Recurring orange (see <a href="#sprites">Sprites</a>). The text underneath keeps the emoji.</li>
+              <li><strong>Sprites:</strong> the five special emoji show as the site's own small images on every page, the same on every device, each in its own color: <code>❗️</code> Regular is red, <code>✖️</code> Hidden purple, <code>⭕️</code> Transfer green, <code>✔️</code> Recurring orange, and <code>➕</code> (a connected spreadsheet's) yellow (see <a href="#sprites">Sprites</a>). The text underneath keeps the emoji.</li>
               <li><strong>Other languages:</strong> the site is written in English, and the browser's own translation (in Chrome, Edge, Safari, or Firefox) shows it in another language. The person's entries, names, amounts, and dates are marked to stay just as they were typed (<code>translate="no"</code>), and the site's own words translate. Settings says how to turn it on.</li>
               <li><strong>Dates</strong> show, and are typed, in the device's date format (like 10/05/2026, 05/10/2026, or 2026-10-05), or the one picked in Settings. They're always stored the same way (see <a href="#dates">Dates, time zones, and formats</a>).</li>
               <li><strong>Links</strong> within the site slide the page out first. Links to a spot on the same page (like this page's Contents) just scroll there, and links opened in a new tab (Ctrl or ⌘ click, or the middle button) open there as usual.</li>
@@ -147,14 +150,14 @@
 
             <h3>Login</h3>
             <ul>
-              <li><strong>Create an account:</strong> a username (5 to 30 characters, and any characters you can see work: letters in any language, numbers, symbols, emoji, and spaces), an email address, a password of at least 8 characters (any characters, typed twice), and agreeing to the Privacy Policy &amp; Terms of Use. Usernames and passwords follow the rules in <a href="#account-security">Accounts, sign-in, and security</a>; in short, "Sam" and "sam" are the same username, and a password known from data breaches is refused.</li>
+              <li><strong>Create an account:</strong> a username (5 to 30 characters, and any characters you can see work: letters in any language, numbers, symbols, emoji, and spaces), an email address, your age (Prismal Budget is for people 18 and older: under 18, no account is made, and the server refuses it too), a password of at least 8 characters (any characters, typed twice), and agreeing to the Privacy Policy &amp; Terms of Use. Usernames and passwords follow the rules in <a href="#account-security">Accounts, sign-in, and security</a>; in short, "Sam" and "sam" are the same username, and a password known from data breaches is refused.</li>
               <li><strong>Signing in:</strong> the username (in any capitals) or the account's email, and the password. Wrong passwords are limited (see <a href="#account-security">security</a>).</li>
               <li><strong>Forgot Password:</strong> enter the account's email and a one-time reset link is emailed (it works for an hour). The page says the same thing whether or not an account uses that email.</li>
               <li><strong>Reset form:</strong> the emailed link opens <code>/login.html?reset=…</code> to choose a new password, which signs out every device and turns passkey sign-in off. The page takes the code out of its address right away and keeps it only in that tab (<code>sessionStorage</code>) until the new password is saved, so it doesn't stay in the browser's history or reach analytics.</li>
               <li><strong>Sign In With A Passkey:</strong> signs in with Face ID, Touch ID, Windows Hello, a fingerprint, or the device's PIN, with no username or password to type (see <a href="#passkeys">Passkeys</a>). Browsers with passkey autofill also list the site's passkeys under the username box.</li>
               <li><strong>Turn on passkey sign-in:</strong> a switch under the password, named for the device (like "(Face ID or Touch ID)" on an iPhone or "(Windows Hello)" on Windows). When it's on, signing in with the password goes to "Turn On Passkey Sign-In?" and makes a passkey for this device right away (Safari only makes one right in a tap, so there it says to press Yes, Turn It On). Off, signing in goes straight to the budget, and nothing about passkeys changes. It doesn't need to be on to sign in with a passkey.</li>
               <li>The switch and the passkey button only show in browsers that can use passkeys.</li>
-              <li>Signing in keeps you signed in for up to 24 hours, but 15 minutes without activity signs you out. Logout (and the idle sign-out) also ends the session on the server, so its sign-in stops working everywhere, even if a copy of it was kept. After a sign-out the site did (15 idle minutes, a session that ended, or Sign Out Everywhere), the login page says why.</li>
+              <li>Signing in keeps you signed in for up to 24 hours, but 15 minutes without activity signs you out. Logout (and the idle sign-out) also ends the session on the server, so its sign-in stops working everywhere, even if a copy of it was kept. After a sign-out the site did (15 idle minutes, a session that ended, or Sign Out Everywhere), or a Quick Entry icon that stopped working, the login page says why.</li>
             </ul>
 
             <h3>Home</h3>
@@ -174,11 +177,13 @@
 
             <h3>Settings</h3>
             <ul>
+              <li><strong>Connected Spreadsheets</strong> (at the top): each spreadsheet is a button with its name and how many entries it lands from today on (tap it to change it), an On/Off pill switch to its right, and Delete at the very right, with a "Needs a look" box under it when a cell can't be read or a recurring entry keeps one of its entries off. Add Spreadsheet connects another (up to 10). See <a href="#spreadsheets">Connected spreadsheets</a>.</li>
               <li><strong>Daily Reminder:</strong> the time of day, and the time zone it uses (see <a href="#reminders">Daily reminders</a>).</li>
               <li><strong>Push Notifications:</strong> always a Turn On or Turn Off button for this device (with Send Test while it's on). Where push can't work on the device (the server isn't set up for it, the browser can't, an iPhone or iPad not opened from its Home Screen, or notifications are blocked), the status says why, and so does Turn On.</li>
               <li><strong>Calendar Link:</strong> a private link for Google Calendar, Apple Calendar, or other calendar apps; it can be copied, replaced with a new one, or turned off.</li>
               <li><strong>Language And Dates:</strong> how to have the browser translate the site, and this device's date format: its own (from its language and region), MM/DD/YYYY, DD/MM/YYYY, or YYYY-MM-DD. It's kept on the device, even after signing out, and works without the server.</li>
               <li><strong>Email:</strong> add or change it (needs the password). The new address gets a note, and the old one gets a security notice.</li>
+              <li><strong>Age:</strong> shows the account's age, and changes it (18 or older; it can't be changed to younger). Accounts made before ages were asked for can add one here.</li>
               <li><strong>Passkeys (Face ID, Touch ID, Windows Hello):</strong> turn passkey sign-in On or Off for the account; see each passkey (its name, when it was added and last used, and whether it's synced) and remove it; or add one for this or another device (needs the password). With no passkeys yet, adding the first one (the Turn On button) is what turns it on. See <a href="#passkeys">Passkeys</a>.</li>
               <li><strong>Password:</strong> change it with the current password and the new one (typed twice; at least 8 characters, any characters, not the current one, and not one known from data breaches). It signs out every other device and turns off Quick Entry icons; this device stays signed in, and a security notice is emailed. "Forgot It?" emails a one-time reset link to the account's email instead.</li>
               <li><strong>Signed-In Devices:</strong> how many Quick Entry icons work, with Turn Off Icons (they stop at once; entries already made with them are still added), and <strong>Sign Out Everywhere</strong>, which signs out every device and browser (this one too) and turns off the icons, for a lost phone or a computer that isn't yours.</li>
@@ -215,11 +220,12 @@
             <ul>
               <li><strong>Recurring entries</strong> (<code>✔️</code>, <code>✔️✖️</code>, <code>✔️⭕️</code>) start with a checkmark. They come from the Recurring Entries page and are written onto today and every later day they land on.</li>
               <li><strong>Unique entries</strong> (<code>❗️</code>, <code>✖️</code>, <code>⭕️</code>) are ones you add or change yourself.</li>
+              <li><strong>Connected spreadsheets' entries</strong> (<code>➕❗️</code>, <code>➕✖️</code>, <code>➕⭕️</code>) start with a yellow plus. They come from spreadsheets connected in Settings and are written onto today and every later day of the calendar they're dated on (see <a href="#spreadsheets">Connected spreadsheets</a>). Their temps (<code>❗️➕</code>, <code>✖️➕</code>, <code>⭕️➕</code>, the plus second) work just like recurring entries' temps.</li>
               <li><strong>Temporary recurring entries</strong> ("temps": <code>❗️✔️</code>, <code>✖️✔️</code>, <code>⭕️✔️</code>) are unique entries made from a recurring entry, with the checkmark second. A recurring entry becomes a temp when its day passes, or when it's changed on the calendar for that day only. A temp keeps the recurring entry from being written again on its day (for its refraction type). Moving or deleting a recurring entry's day leaves a <code>$0.00</code> temp behind as a "blocker" for the same reason. Once the recurring entry can't land on a temp's day anymore (its End Date moved before it, or it was deleted), the temp from today on becomes a plain unique entry, and a blocker goes away.</li>
             </ul>
 
             <h3>One Entry Per Title And Type, Per Day</h3>
-            <p>A day has at most one entry for each title and refraction type, so a title can appear at most three times on a day: once as Regular, once as Hidden, and once as Transfer. Adding an entry that matches one already there adds the two amounts together. Recurring entries landing on a day with a matching unique entry are added into it too (it becomes a temp). If matching entries ever end up on the same day another way (like renaming an account to a title already on that day), they're combined the next time the budget refreshes.</p>
+            <p>A day has at most one entry for each title and refraction type, so a title can appear at most three times on a day: once as Regular, once as Hidden, and once as Transfer. Adding an entry that matches one already there adds the two amounts together. Recurring entries and spreadsheets' entries landing on a day with a matching unique entry are added into it too (it becomes a temp). A spreadsheet's entry with the same title and type as a recurring entry landing that day is left out (Settings says so). If matching entries ever end up on the same day another way (like renaming an account to a title already on that day), they're combined the next time the budget refreshes.</p>
 
             <h3>Changing An Entry</h3>
             <p>Tapping an entry on a zoomed day offers: <strong>Set to</strong> a new amount, <strong>Add to it</strong>, <strong>Move to</strong> another day (it combines with a matching entry there), and <strong>Delete</strong>. If the entry is for an Other Account, its options say so.</p>
@@ -238,7 +244,7 @@
               <li>The first line is the date, stored as MM/DD and shown in the device's date format (like 10/05 or 05/10).</li>
               <li><strong>In Bank</strong> (<code>✅</code>, or <code>⛔️</code> below $0): what will be in the budget's account at the end of that day.</li>
               <li><strong>Gains</strong> (<code>❇️</code>) and <strong>Costs</strong> (<code>✴️</code>): that day's gains and costs added up, Regular and Hidden (shown only when not $0). Transfers are left out.</li>
-              <li>Then the entries, grouped by kind (unique, temps, hidden, transfers, recurring) and in title order within each group.</li>
+              <li>Then the entries, grouped by kind (unique, temps, hidden, transfers, recurring, then connected spreadsheets') and in title order within each group.</li>
               <li>Today is highlighted. A day turns red when its In Bank is below $0.</li>
             </ul>
 
@@ -246,7 +252,7 @@
             <p>In Bank is a running total. It starts from the In Bank of the last day in History (the most recent Saturday), or $0 for a new budget. Each day: In Bank = the day before's In Bank + that day's Regular gains − Regular costs + transfers. Hidden entries show in the day's Gains and Costs, but never change In Bank (they happen outside the budget's account). It's worked out again after every change, so it's always up to date.</p>
 
             <h3>The Last Day's Extra Lines</h3>
-            <p>The calendar's last day has two more lines, right under its In Bank, looking at the 28 days after the calendar (recurring entries and Upcoming entries, but not Hidden ones):</p>
+            <p>The calendar's last day has two more lines, right under its In Bank, looking at the 28 days after the calendar (recurring entries, connected spreadsheets' entries, and Upcoming entries, but not Hidden ones):</p>
             <ul>
               <li><code>✅ $812.40 Lowest: 11/14</code>: the lowest In Bank in those 28 days, and the day it happens.</li>
               <li><code>✅ $1650.00 Day 28 In Bank</code>: In Bank on the 28th day.</li>
@@ -266,9 +272,9 @@
             <h3 id="dave-tips">Dave's Tips</h3>
             <p>Besides that everyday message, Dave has tips. The first time Home opens on a day, he shows one of the day's tips for 10 minutes: his card gets the red-orange gradient border, a slow glow, and a "Dave's Tip" label. Each later visit to Home (once the tip before has had its 10 minutes) shows the next one, until every tip for that day has been shown; then he's back to his everyday message. Left open, the page goes back to the everyday message by itself when the 10 minutes are up. Which tips were shown is kept on that device (in its browser storage), and they're worked out once per visit, never on every change, so they can't slow anything down. In this order:</p>
             <ul>
-              <li><strong>Payday:</strong> when today has a paycheck (a gain from a recurring entry, Regular), "Hey, you just got paid! Keep in mind, besides your recurring bills, you tend to spend about $X in the next N days, so be careful what you spend it on!" N is the days until the next payday from a recurring entry, at least 4 days away, since paychecks a few days apart (like two people's, a day apart) are one payday (14 if there isn't one). $X is the average of what went out of In Bank in the N days after each payday in the last 4 months, besides recurring bills (Regular costs that didn't come from a recurring entry). It only shows when History reaches back 4 months.</li>
+              <li><strong>Payday:</strong> when today has a paycheck (a Regular gain from a recurring entry or a connected spreadsheet), "Hey, you just got paid! Keep in mind, besides your recurring bills, you tend to spend about $X in the next N days, so be careful what you spend it on!" N is the days until the next payday from a recurring entry, at least 4 days away, since paychecks a few days apart (like two people's, a day apart) are one payday (14 if there isn't one). $X is the average of what went out of In Bank in the N days after each payday in the last 4 months, besides recurring bills (Regular costs that didn't come from a recurring entry or a connected spreadsheet). It only shows when History reaches back 4 months.</li>
               <li><strong>Spending pace:</strong> when the last 7 days (today too) added up, besides recurring bills, are at least $50 and 25% over a usual week (the 4 months before them, averaged), Dave says how much was spent and how much more than usual that is. It also needs 4 months of History.</li>
-              <li><strong>Savings:</strong> when a big uncommon bill is coming up in the next 60 days (a recurring cost of $200 or more that lands every 3 months or less often, or a one-time cost of $200 or more added for a later day, on the calendar or in Upcoming, not a transfer), Dave names the soonest one (and how many more there are), says to make sure you're saving enough to afford it, and says how much to set aside from each paycheck (from recurring entries, today's too) until then: the bill divided by those paychecks, rounded up to a dollar. If it lands before the next paycheck, he says to check that what's there now covers it.</li>
+              <li><strong>Savings:</strong> when a big uncommon bill is coming up in the next 60 days (a recurring cost of $200 or more that lands every 3 months or less often, a connected spreadsheet's cost of $200 or more with no other one like it (same title and type) within 90 days, or a one-time cost of $200 or more added for a later day, on the calendar or in Upcoming, not a transfer), Dave names the soonest one (and how many more there are), says to make sure you're saving enough to afford it, and says how much to set aside from each paycheck (from recurring entries, today's too) until then: the bill divided by those paychecks, rounded up to a dollar. If it lands before the next paycheck, he says to check that what's there now covers it.</li>
               <li><strong>Weekly In Bank check:</strong> once a week, Dave asks to compare today's In Bank with the real bank account, find the purchases that make up any difference and add them (on the day they happened, or just today), and put in anything that can't be found as "Catchup -$??".</li>
               <li><strong>Catchup trend:</strong> at most once a week, when entries titled Catchup (or Catch Up) add up to $100 or more in costs over the last 30 days, Dave says purchases are slipping by and suggests adding each one as it happens, with the Quick Entry icon.</li>
               <li><strong>Refund:</strong> when a purchase (a Regular cost added with New Entry or the Quick Entry icon, dated on the calendar or later) takes Lowest in bank after today below $0, or further below, Dave says "Hey, that purchase (its title, amount, and day) seems to risk your budget balance. Is a refund possible?" right away on Home (from the Quick Entry icon, on the next visit to Home), for its own 10 minutes.</li>
@@ -309,6 +315,7 @@
               <li>Recurring entries are written onto today and every later day of the calendar they land on. Their amount counts in In Bank like any entry of their type.</li>
               <li>Once a day passes, its recurring entries become temps (<code>❗️✔️</code> and so on), so later changes to a recurring entry never change days that already happened.</li>
               <li>Changing a recurring entry on the calendar changes only that day (it becomes a temp). Moving or deleting it leaves a <code>$0.00</code> blocker on its day.</li>
+              <li>Changing a recurring entry's title or refraction type takes those changed days along: from today on, its temps and <code>$0.00</code> blockers (on the calendar and in Upcoming) get the new title and type, so a changed day keeps its amount and a deleted day stays deleted. Days that passed keep theirs.</li>
               <li>Moving a recurring entry's End Date earlier lets go of the days after it: from today on, its temps there (on the calendar and in Upcoming) become plain unique entries and its <code>$0.00</code> blockers go away, since there's nothing left for them to hold back. (If the End Date moves later again, the recurring entry lands on those days again and adds into a matching unique entry there, like on any day.)</li>
               <li>Deleting a recurring entry ends it yesterday: it stops from today on, its temps from today on become plain unique entries (and its blockers go away), and days that passed keep theirs.</li>
             </ul>
@@ -322,12 +329,74 @@
             <p>Neither counts gains or transfers (transferred money is still yours). Hidden costs count, like any cost.</p>
           </section>
 
+          <section id="spreadsheets" aria-labelledby="spreadsheetsTitle">
+            <h2 id="spreadsheetsTitle">5. Connected Spreadsheets</h2>
+            <p>A spreadsheet you already keep, like a list of bills, paychecks, or a shift schedule, can be connected in Settings. Its entries then land on your calendar by themselves, from today on, like recurring entries, behind a yellow plus: <code>➕❗️</code> Regular, <code>➕✖️</code> Hidden, or <code>➕⭕️</code> Transfer. When the spreadsheet changes (an amount, a date, a new row, a deleted row), the calendar follows it. Settings' Help explains it in short.</p>
+
+            <h3>Sharing It</h3>
+            <ul>
+              <li><strong>Anyone with the link (Viewer):</strong> works for Google Sheets (its sharing link, or a File &gt; Share &gt; Publish to web link), files in Google Drive (like an Excel file kept there), Excel in OneDrive or SharePoint, and Dropbox. Anyone who has a public link can see the whole spreadsheet, so the link's <strong>?</strong> suggests a separate spreadsheet with only what Prismal Budget needs, filled from the main one (in Google Sheets, <code>=IMPORTRANGE("main spreadsheet's link", "Bills!A2:C50")</code> brings those cells over and keeps them up to date).</li>
+              <li><strong>Shared with prismalbudget@gmail.com (Viewer):</strong> for Google Sheets and Google Drive files, nothing has to be public. Prismal Budget's Google account reads it, but only for the Prismal Budget account whose email is the email of the Google account that owns the spreadsheet or shared it with prismalbudget@gmail.com, so knowing a link isn't enough for anyone else to connect it. (This needs the server's Google sign-in for that account, set up once; see <a href="#developers">Notes for developers</a>. Until then, links anyone can open work.)</li>
+              <li><strong>Apple Numbers</strong> doesn't share a spreadsheet in a way another site can read, so its links say to keep the spreadsheet in Google Sheets or Excel instead (in Numbers, File &gt; Export To &gt; Excel). Older Excel files (<code>.xls</code>) are asked to be saved as <code>.xlsx</code>.</li>
+              <li>The server only downloads from those sites (every redirect is checked too), only passes back a spreadsheet file (never a web page, like a sign-in page), and never keeps it. Microsoft doesn't say how a sharing link downloads, so the server tries the known ways in turn (the link with <code>download=1</code>, OneDrive's shares address, and the older download address).</li>
+            </ul>
+
+            <h3>Adding One</h3>
+            <ol>
+              <li><strong>Add Spreadsheet</strong> opens a box that asks for the link. <strong>Open Spreadsheet</strong> downloads it, says what it found (its name, how many tabs, and how it's shared), and the box grows into the entry form, named after the file (the name can be changed).</li>
+              <li>Each part of an entry has a <strong>yellow ➕</strong> to the left of its box: Date, Title, Amount, Refraction Type, and Other Account (which shows for Hidden or Transfer, or when the type or the account comes from cells). Tapping ➕ opens a second box over the first: the tab (a box to type its name, with the spreadsheet's tabs under it to tap, hidden ones too) and the cells, typed as columns and rows: <strong>From Column B Row 2 To Column B Row 50</strong>, which is <code>B2:B50</code>. The "To" boxes are optional (just one cell), a column can be letters or its number (2 is B), and typing <code>B2:B50</code> into the first box fills all four. As it's typed, the box shows the range and what's in it ("= Bills!B2:B50: 49 cells, like Rent, Phone, Internet"). <strong>Use These Cells</strong> puts the range where the part's box was ("Bills · B2:B50"; tap it to change it), and the ➕ fills in. <strong>Type It Instead</strong> goes back to typing.</li>
+              <li><strong>Only the dates have to come from the spreadsheet.</strong> The title, amount (with Cost or Gain), refraction type, and Other Account can come from cells, or be typed (or picked) once for every entry. A part from cells needs as many cells as the dates, or just one cell, which then goes with every entry.</li>
+              <li>Each date cell makes one entry, with the cells in the same spot of the other parts (cells are read row by row, left to right). Empty date cells are skipped, so picking more rows than are used now picks up rows added later.</li>
+              <li>Under the parts, <strong>Entries</strong> shows what it finds from today on (the first 8, and how many), and <strong>Needs a look</strong> lists anything it can't read. <strong>Save Spreadsheet</strong> connects it. With nothing to add and something that needs a look, it says to fix that first.</li>
+            </ol>
+
+            <h3>How Cells Are Read</h3>
+            <ul>
+              <li><strong>Dates:</strong> date cells are dates (whatever format they show in). A number in a date column is a date's serial number (a date without a date format). Text is read like a typed date: the device's date order, <code>YYYY-MM-DD</code>, or words like "Oct 20, 2026" (a weekday in front is fine). A cell that isn't a date is listed under Needs a look.</li>
+              <li><strong>Amounts:</strong> number cells as they are; text with a currency sign or code, thousands separators, a minus before or after, or accountants' parentheses (<code>($45.50)</code> is a cost). <strong>As Written</strong> reads a minus as a cost and anything else as a gain; most bill lists write costs without a minus, so <strong>All Costs</strong> makes every one a cost (and <strong>All Gains</strong> every one a gain).</li>
+              <li><strong>Refraction types:</strong> Regular, Hidden, or Transfer (any capitals, or just R, H, or T, or the emoji); an empty cell is Regular.</li>
+              <li><strong>Other Accounts:</strong> the account's name (any capitals); an empty cell is none. The entry is titled with the account's name, so it changes that account like any entry for it (a Transfer by the opposite of its amount, a Hidden entry by its own). It has to be one of your Other Accounts, and the entry has to be Hidden or Transfer.</li>
+              <li><strong>Titles</strong> get each word's first letter capitalized, like any entry, up to 100 characters. Formulas count as what they show, and text with formatting in it reads as plain text.</li>
+            </ul>
+
+            <h3>On The Calendar</h3>
+            <ul>
+              <li>Its entries are written onto today and every later day of the calendar (never days before today), and taken off and written again with every change, from the spreadsheet as it was last read. Entries with the same title and type on the same day are one entry, their amounts added.</li>
+              <li>They work like recurring entries: a unique entry with the same title and type on that day takes in the amount (it becomes a temp, like <code>❗️➕</code>); changing one for its day (Set to, Add to it, Move to) makes a temp that keeps the spreadsheet's entry off that day even when the spreadsheet changes; deleting one leaves a <code>$0.00</code> temp; and Undo works on them like any calendar change.</li>
+              <li>An entry with the same title and refraction type as a recurring entry that lands the same day is left out (a day has one of each), and the spreadsheet's box in Settings names it.</li>
+              <li><strong>Once a day passes,</strong> its spreadsheet entries become temps, so they stay as they were, even if the spreadsheet changes later or is deleted.</li>
+              <li>They count everywhere the budget looks ahead: In Bank, Lowest in bank after today and the 28 days after the calendar, Search (past the calendar too), the daily reminders, Other Accounts' balances, and Dave (his payday tip counts their Regular gains as paychecks, his spending tips leave their costs out like recurring bills, and his savings tip counts a big one with no other like it within 90 days). Like recurring entries, they aren't listed in Upcoming.</li>
+            </ul>
+
+            <h3>Staying Up To Date</h3>
+            <ul>
+              <li>Every spreadsheet that's on is read again when Home opens (at most every minute and a half each, on that device) or comes back into view, and every time Settings opens. The budget only changes when something in a spreadsheet did, and the change is logged as "➕ Spreadsheet Update".</li>
+              <li>A row the spreadsheet drops comes off the calendar from today on. A day changed for it becomes a plain unique entry (a <code>$0.00</code> one goes away), since there's nothing left for it to hold back.</li>
+              <li>If a spreadsheet can't be read (sharing turned off, say), its last entries stay, and its box says why. A dropped connection isn't shown; it's just read again next time.</li>
+            </ul>
+
+            <h3>On, Off, And Delete</h3>
+            <ul>
+              <li><strong>Off</strong> takes its entries off the calendar (and it isn't read) until it's turned back <strong>On</strong>, which reads it again right away. Days changed for it keep their changes.</li>
+              <li><strong>Delete</strong> takes its entries off from today on; days changed for it become plain unique entries, its <code>$0.00</code> temps go away, and days that passed keep theirs. The spreadsheet itself is never touched.</li>
+            </ul>
+
+            <h3>Needs A Look</h3>
+            <p>Each problem names its cell (like <code>Bills!A5</code>) and says how to fix it: a date or amount that can't be read, a refraction type that isn't one, an Other Account you don't have (add it on the Other Accounts page, or fix the cell), an account on a Regular entry, a missing tab, parts whose cells aren't the same size as the dates, or a spreadsheet that isn't shared or is too big. A cell's problem only leaves out its own entry; the first 6 are listed, then how many more. A recurring entry keeping one off is listed too.</p>
+
+            <h3>Files And Limits</h3>
+            <ul>
+              <li>Files: <code>.xlsx</code> (Excel; Google Sheets downloads as one, which keeps real dates), <code>.ods</code> (LibreOffice and others), and <code>.csv</code> (comma, tab, or semicolon separated). The browser reads them itself (the zip inside an <code>.xlsx</code> or <code>.ods</code> is opened with the browser's own <code>DecompressionStream</code>), so a browser from before 2023 can't.</li>
+              <li>Up to 10 spreadsheets, 8 MB each, and 5,000 cells for each part. Entries are kept from 100 days before today (Dave's savings tip looks for ones like them) to 800 days after, up to 3,000 each, and only today's and later ones land. Reading is limited to 150 an hour per account.</li>
+            </ul>
+          </section>
+
           <section id="daily-update" aria-labelledby="dailyTitle">
-            <h2 id="dailyTitle">5. The Daily Update</h2>
+            <h2 id="dailyTitle">6. The Daily Update</h2>
             <p>The first time the budget opens on a new day, it brings everything up to date, no matter how many days were missed, in one pass:</p>
             <ol>
-              <li>Days that joined the calendar while you were away get their Upcoming entries, then their recurring entries.</li>
-              <li>Every day that passed has its recurring entries turned into temps.</li>
+              <li>Days that joined the calendar while you were away get their Upcoming entries, then their recurring entries, then their connected spreadsheets' entries (as they were last read).</li>
+              <li>Every day that passed has its recurring and spreadsheet entries turned into temps (<code>❗️✔️</code>, <code>❗️➕</code>, and so on), so they stay as they were that day.</li>
               <li>In Bank keeps going from the last known balance.</li>
               <li>Every week before the current week moves to History (newest on top), and the calendar becomes the current four weeks.</li>
               <li>The change is logged as "🕛 Daily Update", and the date it's done through is saved only after the data itself is saved, so a failed save simply happens again next time.</li>
@@ -359,7 +428,7 @@
           </section>
 
           <section id="other-accounts" aria-labelledby="accountsTitle">
-            <h2 id="accountsTitle">6. Other Accounts (Like Savings)</h2>
+            <h2 id="accountsTitle">7. Other Accounts (Like Savings)</h2>
             <p>Other Accounts keeps track of money outside the budget's bank account, like savings, cash, or investments.</p>
             <ul>
               <li><strong>Linking:</strong> a Hidden or Transfer entry titled with an account's name moves money into or out of that account. When you pick Hidden or Transfer for a new entry (on the calendar, in Recurring Entries, or with the Quick Entry icon), an <strong>Other Account</strong> list appears, showing each account's balance today; picking one titles the entry with the account's name, and typing an account's name picks it.</li>
@@ -375,7 +444,7 @@
           </section>
 
           <section id="tracker" aria-labelledby="trackerTitle">
-            <h2 id="trackerTitle">7. The Tracker</h2>
+            <h2 id="trackerTitle">8. The Tracker</h2>
             <p>The tracker adds up entries by category over the <strong>last 4 weeks</strong> (today and the 27 days before), <strong>last 3 months</strong> (90 days), and <strong>last 365 days</strong>. It counts today and every earlier day, from the calendar and History.</p>
             <ul>
               <li><strong>Rows and aliases:</strong> each row counts the entries its aliases point to. An alias is an entry title, set to count All of its amounts, only its Costs, or only its Gains. If several rows have the same alias, each counts it.</li>
@@ -392,8 +461,8 @@
           </section>
 
           <section id="search" aria-labelledby="searchTitle">
-            <h2 id="searchTitle">8. Search</h2>
-            <p>Search (the 🔎 Search button above the calendar opens it, floating over the page; ×, Escape, or the button again closes it) finds entries by title in History, the calendar, Upcoming, and (when the To date is after the calendar) recurring entries projected up to two years ahead.</p>
+            <h2 id="searchTitle">9. Search</h2>
+            <p>Search (the 🔎 Search button above the calendar opens it, floating over the page; ×, Escape, or the button again closes it) finds entries by title in History, the calendar, Upcoming, and (when the To date is after the calendar) recurring entries projected up to two years ahead and connected spreadsheets' entries after the calendar.</p>
             <ul>
               <li>Each title is its own line, with its own buttons: <strong>All</strong> (every entry with that title), <strong>Costs</strong> (only its costs), <strong>Gains</strong> (only its gains), or <strong>Tracker</strong> (the title is a tracker row: find what that row counts, each alias with its own All, Costs, or Gains setting).</li>
               <li>Enter (or + Add Title) starts the next line; × takes a line out. Enter on an empty line, or the Search button, searches.</li>
@@ -408,7 +477,7 @@
           </section>
 
           <section id="quick-entry" aria-labelledby="quickTitle">
-            <h2 id="quickTitle">9. Quick Entry (Home Screen Icon)</h2>
+            <h2 id="quickTitle">10. Quick Entry (Home Screen Icon)</h2>
             <p>The Quick Entry button (on Home, above the calendar) sets up an icon for a phone's home screen that opens a New Entry form with no login.</p>
             <ul>
               <li>Setting it up makes a random 256-bit key, and the page opens at <code>/quick.html?key=…</code> to be added to the home screen. Only a scrambled (SHA-256 hashed) copy of the key is stored. An account can have 10 icons; making an 11th stops the oldest one.</li>
@@ -416,14 +485,14 @@
               <li><strong>Undo and Redo on the Quick Entry page:</strong> after adding an entry, Undo takes back the newest one added there while it's still waiting (only the icon that added an entry can take it back), and Redo adds it again. Once the budget has added it, the page says to undo it on the calendar instead, where it's an ordinary Undo step ("quick entry Tea (-$3.00) on 10/05"). The page forgets its Undo list when it's closed.</li>
               <li>Up to 100 entries can wait. The next time the budget opens, each is added like a New Entry (to History if it's dated in the past, to Upcoming if it's after the calendar). Each one leaves the waiting list in the same database transaction that saves the table it was added to, so none are lost or added twice. One that can't be added (like a date before History begins) is dropped, and a message says why.</li>
               <li><strong>Prisms:</strong> entries someone adds often, saved as presets under the form. A prism keeps any of a title, an amount (cost or gain), and a refraction type (an Other Account is its title with Hidden or Transfer), at least one of them, and never a date. Tapping a prism only fills those into New Entry (it adds nothing by itself), scrolls to it, and puts the cursor in the first box still empty, so the rest can be filled in, or Add Entry tapped. <strong>Add Prism</strong> turns New Entry into New Prism (it glows; what's already filled in counts), and Save Prism keeps what's filled in or picked (Auto counts as no type). <strong>Edit Prisms</strong> drags them into order by their ≡ and deletes them with ×. The ? next to Add Prism explains them. Prisms are saved with the account (up to 30, the whole list with every change), so every icon, and a new one after a password change, has the same ones.</li>
-              <li>A key stops working when the password is changed or reset, on Sign Out Everywhere, when Settings turns the icons off, or when the account is deleted. Settings shows how many icons work.</li>
+              <li>A key stops working when the password is changed or reset, on Sign Out Everywhere, when Settings turns the icons off, or when the account is deleted. Settings shows how many icons work. An icon whose key stopped working goes to the login page, which says to delete it and make a new one; the page opened without a key goes there too.</li>
               <li><strong>Why the key is in the link:</strong> it's what lets the icon skip logging in, and iPhones only save a home screen icon's address (not anything stored in the browser). So the key is protected in other ways: it's too long to guess, tries with keys that don't work are limited per network (30 in 15 minutes), it's sent to the server in the request body (never in an address), it can only add entries (and keep prisms), and changing the password stops it.</li>
               <li>The page isn't linked anywhere, is kept out of search engines, loads no analytics, never sends its address to other sites (<code>no-referrer</code>), and isn't tied to the web app manifest (so iPhones save its own link, key included).</li>
             </ul>
           </section>
 
           <section id="calculator" aria-labelledby="calculatorTitle">
-            <h2 id="calculatorTitle">10. Paycheck Calculator</h2>
+            <h2 id="calculatorTitle">11. Paycheck Calculator</h2>
             <p>The calculator works out a paycheck's take-home pay. Its 17 inputs come in four groups, and each calculation's inputs are saved to start the next one.</p>
             <ul>
               <li><strong>Earnings:</strong> Base Pay ($/hr), Regular Hours, Overtime Multiplier (1.5× to start) and Hours, Premium Multiplier (2× to start) and Hours, Taxable Allowances.</li>
@@ -435,12 +504,12 @@
           </section>
 
           <section id="change-logs" aria-labelledby="logsTitle">
-            <h2 id="logsTitle">11. Change Logs</h2>
-            <p>Every change is logged, newest first: the time it was asked for, how long it took (from then until the page had drawn it; the page shows a change right away and saves it right after; for the daily update, from asking the server for the budget until it's caught up), the action (like "❗️ Create Unique", "✔️ Create Recurring", "🔧 Tracker Entries", "🏦 New Account", "🔎 Search", "🧮 Calculator", "↩️ Undo", "↪️ Redo", or "🕛 Daily Update"), and up to four details (an undo or redo says what it took back or put back, and which days). A change that couldn't be made is logged in red as an Error (and nothing was changed); one that didn't find its entry is marked Not Found. The newest 1,000 are kept.</p>
+            <h2 id="logsTitle">12. Change Logs</h2>
+            <p>Every change is logged, newest first: the time it was asked for, how long it took (from then until the page had drawn it; the page shows a change right away and saves it right after; for the daily update, from asking the server for the budget until it's caught up), the action (like "❗️ Create Unique", "✔️ Create Recurring", "🔧 Tracker Entries", "🏦 New Account", "➕ Connect Spreadsheet", "➕ Spreadsheet Update", "🔎 Search", "🧮 Calculator", "↩️ Undo", "↪️ Redo", or "🕛 Daily Update"), and up to four details (an undo or redo says what it took back or put back, and which days). A change that couldn't be made is logged in red as an Error (and nothing was changed); one that didn't find its entry is marked Not Found. The newest 1,000 are kept.</p>
           </section>
 
           <section id="reminders" aria-labelledby="remindersTitle">
-            <h2 id="remindersTitle">12. Daily Reminders</h2>
+            <h2 id="remindersTitle">13. Daily Reminders</h2>
             <p>On days the budget needs a look, a "🗓️ Check Budget" reminder can arrive at a chosen time (8:00 AM to start, in the device's time zone). A day needs one when:</p>
             <ul>
               <li><code>⛔️</code> its In Bank is below $0;</li>
@@ -455,8 +524,9 @@
           </section>
 
           <section id="account-security" aria-labelledby="securityTitle">
-            <h2 id="securityTitle">13. Accounts, Sign-In, And Security</h2>
+            <h2 id="securityTitle">14. Accounts, Sign-In, And Security</h2>
             <ul>
+              <li><strong>18 and older:</strong> Prismal Budget is intended for people 18 and older. Creating an account asks for an age, a whole number from 18 to 120; under 18, the page says an account can't be made, and the server refuses it too (403 with <code>underAge</code>). The age is stored with the account, Settings can change it (never to under 18), and accounts made before ages were asked for can add one there. The Privacy Policy &amp; Terms of Use say so too.</li>
               <li><strong>Usernames:</strong> 5 to 30 characters, counted the way a person would (an accented letter, or an emoji, even one made of several joined emoji, is one). Any characters you can see work: letters in any language, numbers, symbols, emoji, @, and spaces (extra spaces are tidied). Characters you can't see, or that change which way text runs, are refused, because they could make one username pass for another: control and formatting characters (like zero-width spaces, soft hyphens, and direction marks and overrides), the ones Unicode says to show as nothing (like the Hangul filler), and the blank Braille pattern. The joiners, variation selectors, and tags inside emoji (and some languages' letters) are fine. Two usernames are the same one when they match without regard to capital letters, compatibility forms (like full-width letters), or the invisible joiners and selectors inside emoji, so "Sam", "sam", and "ＳＡＭ" can't all exist. The server keeps that form as <code>username_key</code>, with a unique index.</li>
               <li><strong>Signing in</strong> works with the username (in any capitals) or the account's email. A username can have an @, so a name that's one account's email and another account's username is checked against both (the email's account first), and the password decides.</li>
               <li><strong>Passwords:</strong> at least 8 characters and at most 256, and any characters work (spaces, symbols, emoji, other languages). They're counted as Unicode characters after normalizing (NFKC), so the same password typed on another keyboard or device still matches. A new password (making an account, changing it, or resetting it) that has shown up in data breaches is refused: the server asks Have I Been Pwned's Pwned Passwords range API with only the first 5 characters of the password's SHA-1 hash (k-anonymity, with padding), so the password never leaves the server. If that service can't be reached within 3 seconds, the password is allowed.</li>
@@ -500,7 +570,7 @@
           </section>
 
           <section id="storage" aria-labelledby="storageTitle">
-            <h2 id="storageTitle">14. How The Data Is Stored</h2>
+            <h2 id="storageTitle">15. How The Data Is Stored</h2>
             <p>Data lives in a Cloudflare D1 (SQLite) database. Each part of a budget is one table, holding one row per user whose content is the whole part as JSON text. When something changes, only the parts that changed are saved, each in one piece. If a part's stored copy can't be read when the budget opens, it's never overwritten, so it can still be recovered.</p>
             <p>Every date in these tables is stored the same way whatever the device's language, region, or time zone (see <a href="#dates">Dates, time zones, and formats</a>). Each device also keeps its own choices in the browser (<code>localStorage</code>), and they stay after signing out: the date format (<code>prismal_date_format</code>: <code>mdy</code>, <code>dmy</code>, or <code>ymd</code>, or none for the device's own) and analytics (<code>prismal_analytics</code>).</p>
             <div class="tableScroll">
@@ -515,8 +585,9 @@
                   <tr><td><code>accounts</code></td><td>Other Accounts</td><td><code>{ "version": 3, "list": [[column titles], [name, balance today, "default" or ""], …], "equity": {…} }</code>. The balance is filled in from the entries (for Quick Entry); "default" marks Savings. <code>equity</code> keeps the spreadsheet's business-version tables.</td></tr>
                   <tr><td><code>calculator</code></td><td>Paycheck Calculator</td><td>Rows of <code>[label, value]</code>: rows 0–2 the last results, rows 4–20 the last inputs.</td></tr>
                   <tr><td><code>logs</code></td><td>Change Logs</td><td>Row 0: column titles; then <code>[time, how long, action, 4 details, status]</code>, newest first.</td></tr>
+                  <tr><td><code>sheets</code></td><td>Connected spreadsheets</td><td><code>{ "version": 1, "list": [{ id, name, link, on, fields, entries, problems, tabs, access }] }</code>. <code>fields</code> has <code>date</code>, <code>title</code>, <code>amount</code>, <code>type</code>, and <code>account</code>, each <code>{ tab, range: "B2:B50" }</code> (cells; <code>amount</code> adds <code>sign</code>: <code>written</code>, <code>costs</code>, or <code>gains</code>) or <code>{ value }</code> (typed: a title, a signed amount, a type emoji, or an account's name). <code>entries</code> are what it read last, <code>[date MM/DD/YYYY, type emoji, amount, title]</code>; <code>problems</code> what needs a look; <code>tabs</code> its tabs' names; <code>access</code> <code>public</code> or <code>shared</code> (with prismalbudget@gmail.com). When each device last read each one is kept on that device (<code>prismal_sheet_reads</code>), not here.</td></tr>
                   <tr><td><code>search</code></td><td>(unused)</td><td>Kept from the spreadsheet's Search tab.</td></tr>
-                  <tr><td><code>users</code></td><td>Accounts</td><td>Username; <code>username_key</code> (the form that decides whether two usernames are the same one; unique); the password hash (<code>pbkdf2-sha256-pepper$100000$&lt;salt&gt;$&lt;hash&gt;</code>, with the salt also in its own <code>salt</code> column, from the older format); email; when the terms were agreed to; a session version (it goes up when the password changes, and on Sign Out Everywhere); the passkey setting (<code>passkeys_on</code>: empty until asked, then 1 for on or 0 for off); and the random ID the account's passkeys carry.</td></tr>
+                  <tr><td><code>users</code></td><td>Accounts</td><td>Username; <code>username_key</code> (the form that decides whether two usernames are the same one; unique); the password hash (<code>pbkdf2-sha256-pepper$100000$&lt;salt&gt;$&lt;hash&gt;</code>, with the salt also in its own <code>salt</code> column, from the older format); email; age (empty for accounts from before ages were asked for); when the terms were agreed to; a session version (it goes up when the password changes, and on Sign Out Everywhere); the passkey setting (<code>passkeys_on</code>: empty until asked, then 1 for on or 0 for off); and the random ID the account's passkeys carry.</td></tr>
                   <tr><td><code>sessions</code></td><td>Signed-in devices</td><td>One row per session: a random ID (also in its sign-in token), the account, and when it started and ends. Deleted on logout, when it ends (24 hours), when the password changes or is reset, on Sign Out Everywhere, and past an account's newest 20.</td></tr>
                   <tr><td><code>data_revisions</code></td><td>Saving safely</td><td>One number per account that goes up with every saved budget table. Saves send the number their page has, and one from an older copy is refused (see <a href="#architecture">How the website is built</a>).</td></tr>
                   <tr><td><code>rate_limits</code></td><td>Limits</td><td>A key (like an account, or a scrambled network), a count, and when the window ends. Deleted when the window ends (the 5-minute scheduled job clears any left).</td></tr>
@@ -532,11 +603,11 @@
           </section>
 
           <section id="architecture" aria-labelledby="architectureTitle">
-            <h2 id="architectureTitle">15. How The Website Is Built</h2>
+            <h2 id="architectureTitle">16. How The Website Is Built</h2>
             <ul>
               <li><strong>The website</strong> is plain HTML, CSS, and JavaScript with no build step, hosted on GitHub Pages at prismalbudget.org.</li>
               <li><strong>The budget's logic runs in the browser.</strong> When the budget opens, the website loads every table, runs the daily update, and works out everything that's computed (In Bank, the 28-day lines, Dave, the tracker, account balances). Every change goes through one function that runs changes one at a time, takes a snapshot first (and puts it back if anything fails, so half-made changes are never saved), refreshes the computed parts, logs the change, saves the tables that changed, and tells the page to redraw.</li>
-              <li><strong>The server</strong> is a Cloudflare Worker (an API) with a D1 database. It handles accounts, sign-in (passwords and passkeys), storing tables, Quick Entry, reminders and cleaning up expired records (a scheduled job every 5 minutes), and email (through Resend). It doesn't do budget math.</li>
+              <li><strong>The server</strong> is a Cloudflare Worker (an API) with a D1 database. It handles accounts, sign-in (passwords and passkeys), storing tables, Quick Entry, reminders and cleaning up expired records (a scheduled job every 5 minutes), email (through Resend), and downloading connected spreadsheets (which the page reads itself). It doesn't do budget math.</li>
               <li><strong>Saving safely:</strong> each account's budget has a revision number that goes up with every saved table. The page keeps the number it loaded (and each save's new one), and sends it with every save. The server writes a table only when the number still matches, all in one transaction; otherwise nothing is written, the reply is 409, and the page reloads with the newest budget and says the last change needs to be made again. A page that comes back into view (another tab, a phone waking up) checks the number and reloads when the budget changed elsewhere. A save that couldn't reach the server stays marked, is sent again when the connection comes back (and every 30 seconds), and leaving before then asks first.</li>
               <li><strong>Undo and Redo:</strong> a calendar change or quick entry gives <code>runBudgetAction</code> an undo label and the days it touches. Before and after the change, it keeps each of those days' own entry lines (<code>❗️</code>, <code>✖️</code>, <code>⭕️</code>, and temps; never the lines the budget writes itself), plus the Other Accounts' <code>equity</code> tables if the change touched them, and only the days that changed become the step. Undo puts each day's "before" lines back, but only while every one of those days still holds its "after" lines (Redo is the same the other way); then everything computed is rebuilt like after any change, and it's saved and logged like one. A step that no longer matches is refused and dropped. Steps are kept per tab in <code>sessionStorage</code> (<code>prismal_undo_&lt;username&gt;</code>), 25 at most, and cleared on sign-out. The Quick Entry page keeps its own list in memory and takes entries back with <code>/api/quick/unqueue</code>.</li>
               <li><strong>Loading and updates:</strong> every page starts with <code>Boot.js</code>, which works out which page it is, sends signed-out visitors to the login page (except on public pages), and loads that page's scripts. GitHub Pages shows <code>404.html</code> at any missing address, so that page marks itself (<code>data-page="notfound"</code>) to be recognized. A browser that blocks site data gets a message saying how to allow it instead of a blank page.</li>
@@ -547,17 +618,18 @@
               <table>
                 <thead><tr><th>Script</th><th>What it does</th></tr></thead>
                 <tbody>
-                  <tr><td><code>Boot.js</code></td><td>Page detection, sign-in redirects, loading scripts (at their fingerprinted addresses), the site version.</td></tr>
-                  <tr><td><code>Sprites.js</code></td><td>Shows the four special emoji as the site's own images on every page (see <a href="#sprites">Sprites</a>).</td></tr>
+                  <tr><td><code>Boot.js</code></td><td>Page detection, sign-in redirects, the front page or the budget at <code>/</code> (<code>html.frontPage</code>), loading scripts (at their fingerprinted addresses), the site version.</td></tr>
+                  <tr><td><code>Sprites.js</code></td><td>Shows the five special emoji as the site's own images on every page (see <a href="#sprites">Sprites</a>).</td></tr>
                   <tr><td><code>Layout.js</code></td><td>Page transitions, the back button, floating Help, the footer, and signing out (it ends the session on the server, forgets the tab's Undo steps, and keeps the device's own choices, like analytics off). It also hides Logout while signed out.</td></tr>
                   <tr><td><code>Session.js</code></td><td>Signs out after 15 minutes without activity (ending the session on the server too), with a counting-down notice in the last minute.</td></tr>
                   <tr><td><code>Login.js</code></td><td>The login page's modes: sign in (password, passkey, and passkey autofill), create, forgot, reset (the link's code moves out of the address into the tab's <code>sessionStorage</code>), and the question about turning on passkey sign-in. It checks the username and password rules before sending (the server checks them again).</td></tr>
                   <tr><td><code>Passkeys.js</code></td><td>Passkey helpers for the login page and Settings: whether the browser can use passkeys, what the device calls its check (like Face ID), and turning the API's options and the device's answers into each other's formats.</td></tr>
                   <tr><td><code>Process Budget.js</code></td><td>The budget engine: loading, the daily update, every change, Undo and Redo, the math, Dave, the tracker, Search, Other Accounts, the calculator, reminders, dates (stored, shown, and typed), saving (with the revision check, retries, and the warning before leaving).</td></tr>
-                  <tr><td><code>Budget UI.js</code></td><td>Shared pieces: floating panels, fields (amount, date with 📅, refraction type, account picker, frequency, title lists), toasts.</td></tr>
+                  <tr><td><code>Budget UI.js</code></td><td>Shared pieces: floating panels (one can open over another: <code>stacked</code>), fields (amount, date with 📅, refraction type, account picker, frequency, title lists), toasts.</td></tr>
+                  <tr><td><code>Spreadsheets.js</code></td><td>Connected spreadsheets (on every budget page but Quick Entry): downloading one through the API, reading <code>.xlsx</code>, <code>.ods</code>, and <code>.csv</code> files (a small zip reader with the browser's <code>DecompressionStream</code>, and <code>DOMParser</code>), ranges (columns and rows to <code>B2:B50</code>), the entries a connection's cells make and what needs a look, and reading them again when Home or Settings opens.</td></tr>
                   <tr><td><code>Calendar Page.js</code></td><td>The home page: the Getting Started card, calendar (and zooming a day), the buttons above it, the search box and results, info row, entry panels, Undo and Redo (buttons and shortcuts), Quick Entry setup.</td></tr>
                   <tr><td><code>Budget Pages.js</code></td><td>Recurring Entries, History, Other Accounts, Tracker, Paycheck Calculator, Change Logs.</td></tr>
-                  <tr><td><code>Settings Page.js</code></td><td>Reminders, push notifications, calendar link, email, password (change it or email a reset link), passkeys, Quick Entry icons, Sign Out Everywhere, Download My Data, analytics on this device, delete account.</td></tr>
+                  <tr><td><code>Settings Page.js</code></td><td>Connected spreadsheets (the list, and the Add Spreadsheet and ➕ boxes), reminders, push notifications, calendar link, email, age, password (change it or email a reset link), passkeys, Quick Entry icons, Sign Out Everywhere, Download My Data, analytics on this device, delete account.</td></tr>
                   <tr><td><code>Quick Entry.js</code></td><td>The Quick Entry page: its form (New Entry, or New Prism), prisms, and its Undo and Redo.</td></tr>
                   <tr><td><code>Starfield Setup.js</code>, <code>Active Starfield.js</code>, <code>Keyboard Starfield.js</code></td><td>The animated starfield (it runs in a background worker, and keys nudge the stars).</td></tr>
                   <tr><td><code>Analytics.js</code></td><td>Google Analytics (not on the Quick Entry page): skipped when the device turned it off or the browser sends Global Privacy Control or Do Not Track, and given page addresses without their <code>?query</code> or <code>#hash</code>. Google Signals and ad personalization are off (the site shows no ads).</td></tr>
@@ -567,20 +639,20 @@
               </table>
             </div>
             <h3 id="sprites">Sprites</h3>
-            <p><code>Sprites.js</code>, on every page, swaps the four special emoji for the images in <code>Resources/Sprites/</code>: <code>Regular.webp</code> (❗️, red: a ! drawn as a rounded line and a dot), <code>Hidden.webp</code> (✖️, purple: an X), <code>Transfer.webp</code> (⭕️, green: a ring), and <code>Recurring.webp</code> (✔️, orange: a check). All four are thick rounded lines with the same soft shadow, 128×128 with a transparent background. It only changes what's shown: each image's alt text is its emoji, and the stored budget keeps the emoji. Anything added to the page later (a redrawn calendar, a panel, a toast, or a browser's translation) is swapped as it appears, and an image that can't load shows its emoji again. To change one, replace its file with art of the same name, then stamp the site.</p>
+            <p><code>Sprites.js</code>, on every page, swaps the five special emoji for the images in <code>Resources/Sprites/</code>: <code>Regular.webp</code> (❗️, red: a ! drawn as a rounded line and a dot), <code>Hidden.webp</code> (✖️, purple: an X), <code>Transfer.webp</code> (⭕️, green: a ring), <code>Recurring.webp</code> (✔️, orange: a check), and <code>Spreadsheet.webp</code> (➕, yellow: a plus, Hidden's X turned an eighth of a turn). All five are thick rounded lines with the same soft shadow, 128×128 with a transparent background. It only changes what's shown: each image's alt text is its emoji, and the stored budget keeps the emoji. Anything added to the page later (a redrawn calendar, a panel, a toast, or a browser's translation) is swapped as it appears, and an image that can't load shows its emoji again. To change one, replace its file with art of the same name, then stamp the site.</p>
             <p>Some text can't hold an image: the browser's own dialogs (like "Delete …?"), suggestion and select lists, and the text in boxes. Those show the device's own emoji in its own colors, so the site words those spots instead where a type would show: a tracker row that counts transfers is "Food (counts transfers)" in Search's suggestions and "the Food row (the one that counts transfers)" when deleting it, and a prism's type is a word ("(Hidden)") when deleting it. The daily reminders (push notifications and calendar events) are the device's too, so their <code>✔️</code> and <code>❗️</code> are the device's emoji.</p>
 
-            <p>For search engines, <code>robots.txt</code> points to <code>sitemap.xml</code>, which lists the public pages (Home, this page, Login, and the Privacy Policy); the signed-in pages are left out, and the Quick Entry page keeps itself out with a <code>noindex</code> tag. The web app manifest (<code>Favicon/site.webmanifest</code>) makes an installed app open Home.</p>
+            <p>For search engines, <code>robots.txt</code> points to <code>sitemap.xml</code>, which lists the public pages (the front page, this page, Login, and the Privacy Policy); the signed-in pages are left out, and the Quick Entry page keeps itself out with a <code>noindex</code> tag. The web app manifest (<code>Favicon/site.webmanifest</code>) makes an installed app open Home.</p>
           </section>
 
           <section id="api" aria-labelledby="apiTitle">
-            <h2 id="apiTitle">16. API Reference</h2>
+            <h2 id="apiTitle">17. API Reference</h2>
             <p>The API is at <code>https://prismal-budget-api.prismalbudget.workers.dev</code>. Requests and replies are JSON. Signed-in routes need an <code>Authorization: Bearer &lt;token&gt;</code> header for a session that's still open. Routes that check the password in Settings answer 429 after 10 wrong passwords in 15 minutes. Routes that set a new password answer 400 when it breaks the rules or is known from data breaches. Without its <code>JWT_SECRET</code> or <code>PASSWORD_PEPPER</code>, the server answers 503 to anything that signs in or sets a password, and an unexpected error is a 500 with no details.</p>
             <div class="tableScroll">
               <table>
                 <thead><tr><th>Route</th><th>Sign-in</th><th>What it does</th></tr></thead>
                 <tbody>
-                  <tr><td><code>POST /api/register</code></td><td>No</td><td>Create an account: username (5 to 30 characters you can see), password (8 to 256 characters, not from data breaches), email, agreedToTerms. 429 after 10 new accounts from one network in an hour, or 20 tries with a username or email that's taken.</td></tr>
+                  <tr><td><code>POST /api/register</code></td><td>No</td><td>Create an account: username (5 to 30 characters you can see), password (8 to 256 characters, not from data breaches), email, age (a whole number from 18 to 120; under 18 is 403 <code>{ underAge: true }</code>), agreedToTerms. 429 after 10 new accounts from one network in an hour, or 20 tries with a username or email that's taken.</td></tr>
                   <tr><td><code>POST /api/login</code></td><td>No</td><td><code>{ username, password }</code>, where username can also be the account's email; starts a session and returns its token, and <code>passkeysOn</code> (the account's passkey setting: true, false, or null while it's unset; the login page doesn't need it). 429 while a wrong-password limit is reached.</td></tr>
                   <tr><td><code>POST /api/passkey/login/options</code></td><td>No</td><td>A sign-in challenge for the browser, and the site's ID.</td></tr>
                   <tr><td><code>POST /api/passkey/login</code></td><td>No</td><td>The device's signed answer: <code>{ id, response: { clientDataJSON, authenticatorData, signature, userHandle } }</code> (base64url). Returns a token, like <code>/api/login</code>.</td></tr>
@@ -592,12 +664,14 @@
                   <tr><td><code>POST /api/quick/prisms</code></td><td>Key</td><td><code>{ key, prisms }</code>: the account's prisms, in order, replacing the list (after every add, move, or delete). Each needs at least one of a title (up to 100 characters), an amount, and a type; up to 30. Returns the saved <code>prisms</code>; 400 when one can't be read.</td></tr>
                   <tr><td><code>GET /calendar/&lt;code&gt;.ics</code></td><td>Its code</td><td>The reminders calendar feed.</td></tr>
                   <tr><td><code>POST /api/logout</code></td><td>Yes</td><td>End this session on the server, so its token stops working everywhere (Logout and the idle sign-out call it).</td></tr>
-                  <tr><td><code>GET /api/data/load</code></td><td>Yes</td><td>Every table, the last daily update date, the waiting quick entries, and the budget's <code>revision</code>.</td></tr>
-                  <tr><td><code>POST /api/data/update-&lt;table&gt;</code></td><td>Yes</td><td>Save one table whole (calendar, recurring, tracker, future, history, search, calculator, accounts, logs): <code>{ data, revision, quickEntriesDone }</code>. Returns the new <code>revision</code>, or 409 <code>{ conflict: true }</code> without writing anything when <code>revision</code> is from an older copy.</td></tr>
+                  <tr><td><code>GET /api/data/load</code></td><td>Yes</td><td>Every table (connected spreadsheets too), the last daily update date, the waiting quick entries, and the budget's <code>revision</code>.</td></tr>
+                  <tr><td><code>POST /api/data/update-&lt;table&gt;</code></td><td>Yes</td><td>Save one table whole (calendar, recurring, tracker, future, history, search, calculator, accounts, logs, sheets): <code>{ data, revision, quickEntriesDone }</code>. Returns the new <code>revision</code>, or 409 <code>{ conflict: true }</code> without writing anything when <code>revision</code> is from an older copy.</td></tr>
                   <tr><td><code>GET /api/data/revision</code></td><td>Yes</td><td>The budget's current revision (pages check it when they come back into view).</td></tr>
                   <tr><td><code>POST /api/data/save_date</code></td><td>Yes</td><td>Save the day the daily update is done through.</td></tr>
                   <tr><td><code>POST /api/import/sheet</code></td><td>Yes</td><td>For now: <code>{ url }</code>, a shared Google Sheets budget's link. Returns each part of the budget as rows of cells, read from its real (C) tab or else its display copy, plus the form's answers (the Change Logs tab) (<code>{ sheets: { "Budget": [[…]], …, "Change Logs": [[…]] }, from: { "Budget": "C Budget", … }, missing, tabs }</code>; <code>tabs</code>: every tab's name, in lowercase) for Home to bring over (see <a href="#sheet-import">Bringing Over A Spreadsheet Budget</a>); 400 when it isn't a Google Sheets link or isn't shared; 20 an hour per account.</td></tr>
-                  <tr><td><code>GET /api/account</code></td><td>Yes</td><td>Username, email, whether emails can be sent, and how many Quick Entry icons work (<code>quickIcons</code>).</td></tr>
+                  <tr><td><code>POST /api/sheets/read</code></td><td>Yes</td><td><code>{ link }</code>: a connected spreadsheet's file, downloaded from Google, Microsoft, or Dropbox (as a link anyone can open, or through prismalbudget@gmail.com for whoever shared it with that account), passed back as it is, with <code>X-Sheet-Format</code> (<code>xlsx</code>, <code>ods</code>, or <code>csv</code>), <code>X-Sheet-Name</code> (URI-encoded), and <code>X-Sheet-Access</code> (<code>public</code> or <code>shared</code>). 400 <code>{ error }</code> when the link isn't from those sites (an Apple Numbers link says what to do instead), it isn't shared, or it isn't a spreadsheet; 413 over 8 MB; 150 reads an hour per account.</td></tr>
+                  <tr><td><code>GET /api/account</code></td><td>Yes</td><td>Username, email, age (null for accounts from before ages were asked for), whether emails can be sent, and how many Quick Entry icons work (<code>quickIcons</code>).</td></tr>
+                  <tr><td><code>POST /api/account/age</code></td><td>Yes</td><td><code>{ age }</code>: change the account's age (18 to 120). Returns the account, like <code>GET /api/account</code>.</td></tr>
                   <tr><td><code>POST /api/account/email</code></td><td>Yes</td><td>Change the email (needs the password). 409 when another account uses it; 429 after 20 of those (with sign-ups' taken usernames and emails) from one network in an hour.</td></tr>
                   <tr><td><code>POST /api/account/password</code></td><td>Yes</td><td><code>{ password, newPassword }</code>: a new password. Signs out every other device and stops Quick Entry icons; returns a new token for this device.</td></tr>
                   <tr><td><code>POST /api/account/password-reset</code></td><td>Yes</td><td>Email a reset link.</td></tr>
@@ -622,7 +696,7 @@
           </section>
 
           <section id="decisions" aria-labelledby="decisionsTitle">
-            <h2 id="decisionsTitle">17. Why It Works This Way</h2>
+            <h2 id="decisionsTitle">18. Why It Works This Way</h2>
             <ul>
               <li><strong>A calendar instead of categories first:</strong> knowing which day the balance dips is what keeps you from overdrafting; the tracker covers categories.</li>
               <li><strong>Entries are lines of text:</strong> it's how the original spreadsheet worked, it's easy to read and store, and a day's whole story is in one cell.</li>
@@ -650,15 +724,18 @@
               <li><strong>Temps let go when their recurring entry ends:</strong> a temp only keeps its recurring entry from landing on its day, so once the recurring entry can't land there anymore, the temp is just an entry.</li>
               <li><strong>Days stored as text, the same way everywhere:</strong> a budget day is a calendar day, not a moment in time, so a time zone or a date format can never move an entry. Only what's shown and typed follows the person's format.</li>
               <li><strong>The browser's translation instead of translated pages:</strong> every major browser can translate a page, on the person's own device and into their language, and it keeps up with every change to the site with nothing to maintain. Keeping the person's entries, names, amounts, and dates out of it means their budget never changes under them.</li>
+              <li><strong>Connected spreadsheets work like recurring entries:</strong> they're written from today on and taken off and written again with every change, so a spreadsheet that changes or drops an entry changes the calendar, while a day changed here (a temp) and days that passed never change under you.</li>
+              <li><strong>The server downloads a spreadsheet, and the browser reads it:</strong> the page can't fetch other sites itself, but reading a file takes work, and the budget's other work already runs in the browser. The server just passes the file along, never keeping it, so it costs little and holds nothing.</li>
+              <li><strong>Shared with prismalbudget@gmail.com only for whoever shared it:</strong> Prismal Budget's Google account can open everything shared with it, so a link alone must never be enough. Matching the email that owns or shared the spreadsheet with the account's email keeps one person's spreadsheet from being connected by anyone else.</li>
               <li><strong>Fingerprinted files instead of a reload per release:</strong> pages are always fresh, so they always point at exactly the right files, and a release only downloads again the files that changed.</li>
             </ul>
           </section>
 
           <section id="developers" aria-labelledby="developersTitle">
-            <h2 id="developersTitle">18. Notes For Developers And AI Assistants</h2>
+            <h2 id="developersTitle">19. Notes For Developers</h2>
             <ul>
-              <li>The engine is <code>Javascript/Process Budget.js</code>. The page calls these, and each runs through <code>runBudgetAction</code> (queued, snapshot and rollback, refresh, log, save, then a <code>budget:updated</code> event): <code>addCalendarEntry</code>, <code>changeCalendarEntry</code>, <code>saveRecurringEntry</code>, <code>saveTrackerEntry</code>, <code>saveAccount</code>, <code>moveBudgetRows</code>, <code>addCategoryRow</code>, <code>renameCategoryRow</code>, <code>deleteBudgetRows</code>, <code>searchBudget</code>, and <code>savePaycheck</code>. Results look like <code>{ ok, saved, notFound, message }</code>; a <code>BudgetInputError</code> becomes a message for the person instead of an error.</li>
-              <li><code>refreshBudgetData</code> rebuilds everything computed, in order: frequencies rewritten the new way, Upcoming moved onto the calendar, recurring entries written, expired ones removed, each day's entries combined and sorted, In Bank and the 28-day lines, Dave, the tracker and the recurring summary, then account balances.</li>
+              <li>The engine is <code>Javascript/Process Budget.js</code>. The page calls these, and each runs through <code>runBudgetAction</code> (queued, snapshot and rollback, refresh, log, save, then a <code>budget:updated</code> event): <code>addCalendarEntry</code>, <code>changeCalendarEntry</code>, <code>saveRecurringEntry</code>, <code>saveTrackerEntry</code>, <code>saveAccount</code>, <code>moveBudgetRows</code>, <code>addCategoryRow</code>, <code>renameCategoryRow</code>, <code>deleteBudgetRows</code>, <code>searchBudget</code>, <code>savePaycheck</code>, and for connected spreadsheets <code>saveSheetConnection</code>, <code>turnSheetConnection</code>, <code>deleteSheetConnection</code>, and <code>updateSheetReads</code>. Results look like <code>{ ok, saved, notFound, message }</code>; a <code>BudgetInputError</code> becomes a message for the person instead of an error.</li>
+              <li><code>refreshBudgetData</code> rebuilds everything computed, in order: frequencies rewritten the new way, Upcoming moved onto the calendar, recurring entries written, connected spreadsheets' entries written (<code>writeSheetEntries</code>), temps let go (<code>releaseEndedTemps</code>, <code>releaseSheetTemps</code>), expired recurring entries removed, each day's entries combined and sorted, In Bank and the 28-day lines, Dave, the tracker and the recurring summary, then account balances.</li>
               <li>Rules to keep: one entry per title and refraction type per day; one recurring entry per title and refraction type; one tracker row per title and transfer setting; an entry is for an Other Account when it's Hidden or Transfer and titled with the account's name, and the account changes by <code>accountChange</code> (a Transfer the opposite of its amount, a Hidden entry its own; the API's <code>readAccounts</code> in <code>src/quick.js</code> has to match it); Hidden entries are costs and gains (the day's lines, the tracker, Search) but never change In Bank, and transfers change In Bank but aren't costs or gains (<code>dayMath</code>, <code>isTransferEntry</code>); titles compare with <code>cleanString</code> (lowercase letters and numbers in any language, and single spaces; symbols only when there are no letters or numbers; the invisible "show as emoji" variation selectors are dropped first, so "⭕️Food" compares as "food"), and the API's <code>cleanTitle</code> in <code>src/quick.js</code> has to match it. Typed amounts go through <code>readMoneyInput</code> (which reads a decimal comma).</li>
               <li>Frequencies parse with <code>parseFrequency</code> and are written with <code>formatFrequency</code>; a recurring entry lands when <code>recurringRowHits</code> says so.</li>
               <li>Lookups keyed by titles use <code>Map</code>, never plain objects, so titles like "constructor" or "__proto__" are just titles.</li>
@@ -674,9 +751,13 @@
               <li>Dates: tables store <code>MM/DD/YYYY</code> (written with <code>formatToMMDDYYYY</code> and <code>formatToMMDD</code>, read with <code>createSafeMidnight</code>). People see <code>showDate</code>, <code>showDay</code>, or <code>showStoredDate</code>, and what they type goes through <code>parseTypedDate</code> (with <code>datePattern()</code> as the box's hint), all following <code>dateFormat()</code>. Never show a stored date as it is, and never read a typed one with <code>createSafeMidnight</code>. Step days with <code>addDays</code>, never by adding 86,400,000 ms. <code>pageDay</code> is the device's date when the page loaded; <code>today</code> is the budget's, set by <code>setBudgetDay</code> (see <a href="#dates">Dates</a>).</li>
               <li>Zooming a day is in Process Budget.js's LAYOUT FUNCTIONS (<code>zoomDay</code>, <code>fitZoomedDay</code>, <code>closeZoomedDay</code>): on phones it scales and moves the day with a transform measured with its zoom briefly off, and sets <code>--zoom</code> so the v stays the same size on screen. The dimming backdrop sits in <code>#transitionContainer</code>, just under the day.</li>
               <li>Change Logs timing: <code>runBudgetAction</code> notes when a change was asked for, and <code>processBudgetAction</code> draws the change (<code>budget:updated</code>), waits for the next paint (<code>afterNextPaint</code>), then finishes the log row and saves.</li>
+              <li>A change runs after <code>stripRecurringEntries</code> has taken the recurring entries off the calendar, and gets the tables as they were before (<code>change(before)</code>, from <code>snapshotTables</code>). Search reads that calendar, so it finds the recurring entries the calendar shows.</li>
               <li>The starfield measures its canvas (<code>STARFIELD.canvasBox</code>) for its size and for where a tap lands, never <code>innerWidth</code>/<code>innerHeight</code>, which Safari shrinks while pinch-zoomed.</li>
               <li>Translation: an element that shows the person's entries, names, amounts, or dates gets <code>translate="no"</code> (<code>BudgetUI.noTranslate</code>); the site's own words don't.</li>
-              <li>Temps: <code>releaseEndedTemps</code> (in <code>refreshBudgetData</code>, before expired recurring entries are removed) turns temps after their recurring entry's last day, from today on, into plain entries.</li>
+              <li>Temps: <code>releaseEndedTemps</code> (in <code>refreshBudgetData</code>, before expired recurring entries are removed) turns temps after their recurring entry's last day, from today on, into plain entries, and <code>releaseSheetTemps</code> does the same for spreadsheet temps whose title and type no connected spreadsheet has anymore.</li>
+              <li>Marks: a sprite's <code>entryMark</code> says where an entry comes from: <code>✔️</code> a recurring entry, <code>➕</code> a connected spreadsheet, or none. Before the type it's still as it landed (<code>✔️⭕️</code>, <code>➕❗️</code>); after it, it's a temp (<code>⭕️✔️</code>, <code>❗️➕</code>). <code>unique()</code> finds what lands on a day by itself with <code>scheduledHit</code> (a recurring entry first, then a spreadsheet's, <code>sheetHit</code>), and keeps that entry's mark on the temps and <code>$0.00</code> blockers it makes. A spreadsheet's entries by day come from <code>sheetEntriesByDay</code> (only spreadsheets that are on, without the ones a recurring entry keeps off), which the daily update, the 28-day lines, Search, reminders, and Dave all use.</li>
+              <li>Connected spreadsheets: the API's <code>src/sheets.js</code> downloads (<code>readLink</code> says what a link is; only the allowed sites, every redirect checked; <code>fileFormat</code> checks it's a spreadsheet), and the site's <code>Spreadsheets.js</code> reads (<code>readWorkbook</code>, <code>readConnection</code>). Test files for <code>.xlsx</code> and <code>.ods</code> can be made by hand: a zip of a few XML files is enough.</li>
+              <li><strong>Prismal Budget's Google account</strong> (prismalbudget@gmail.com, for spreadsheets shared with it) needs three Worker secrets, made once while signed in to that account: in the Google Cloud console, make a project, turn on the Google Drive API, set up the OAuth consent screen (External, published to production, so its permission doesn't run out after 7 days) with the scope <code>https://www.googleapis.com/auth/drive.readonly</code>, and make an OAuth client (Web application, with <code>https://developers.google.com/oauthplayground</code> as a redirect address). Then, in the OAuth 2.0 Playground, use your own OAuth credentials (the ⚙ menu), authorize <code>drive.readonly</code> as prismalbudget@gmail.com, and exchange the code for tokens. Save them with <code>npx wrangler secret put GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and <code>GOOGLE_REFRESH_TOKEN</code>. Without them, spreadsheets shared by link still work.</li>
               <li><strong>Releasing:</strong> change <code>SITE_VERSION</code> in <code>Boot.js</code> (the name in the corner, and in this page's "Last updated"), run <code>node _tools/stamp.mjs</code> to update every fingerprint, then commit. The pre-commit hook (<code>_tools/hooks/pre-commit</code>, turned on with <code>git config core.hooksPath _tools/hooks</code>) runs <code>node _tools/stamp.mjs --check</code> on what's staged and refuses a commit whose fingerprints don't match its files. To give a new link in a page or stylesheet a fingerprint, end it with <code>?v=</code>; scripts loaded by <code>Boot.js</code> and images in <code>Resources/Sprites/</code> are listed by themselves. An image linked before it exists gets its fingerprint once it's added and stamped. Jekyll doesn't publish <code>_tools/</code>.</li>
               <li>Update <code>sitemap.xml</code>'s <code>lastmod</code> when a public page changes.</li>
               <li>When a feature changes, update this page and the page's Help.</li>
@@ -684,7 +765,7 @@
           </section>
 
           <section id="glossary" aria-labelledby="glossaryTitle">
-            <h2 id="glossaryTitle">19. Glossary</h2>
+            <h2 id="glossaryTitle">20. Glossary</h2>
             <dl>
               <dt>In Bank</dt>
               <dd>The money in the budget's bank account at the end of a day, worked out from the last History balance and each day's entries.</dd>
@@ -699,7 +780,9 @@
               <dt>Temporary recurring entry (temp)</dt>
               <dd>A unique entry made from a recurring entry on one day (❗️✔️, ✖️✔️, ⭕️✔️). It keeps the recurring entry of its type from being written again that day, and becomes a plain unique entry once that recurring entry can't land there anymore.</dd>
               <dt>Blocker</dt>
-              <dd>A <code>$0.00</code> temp left when a recurring entry's day is moved or deleted.</dd>
+              <dd>A <code>$0.00</code> temp left when a recurring (or spreadsheet) entry's day is moved or deleted.</dd>
+              <dt>Connected spreadsheet</dt>
+              <dd>A spreadsheet (Google Sheets, Excel, and others) connected in Settings, whose entries land on the calendar from today on behind a ➕ (➕❗️, ➕✖️, ➕⭕️) and follow it as it changes.</dd>
               <dt>Upcoming (Future Dates)</dt>
               <dd>Entries dated after the calendar, waiting for their day to join it.</dd>
               <dt>History</dt>

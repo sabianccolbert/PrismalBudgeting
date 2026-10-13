@@ -6,7 +6,7 @@
          its code until Login.js takes it out) -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=97b6527c38">
+    <link rel="stylesheet" href="/stylesheet.css?v=6871ba39c8">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
     <title>Prismal Budget - Login</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
@@ -44,6 +44,11 @@
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <h2 class="logo">Sign In To Prismal Budget</h2>
         </div>
+        <nav class="navButtons">
+          <a href="/">
+            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
+          </a>
+        </nav>
       </header>
       <main>
         <article>
@@ -60,6 +65,12 @@
             <div id="email-group" class="hidden">
               <label for="email">Email</label>
               <input type="email" id="email" required autocomplete="email" disabled>
+            </div>
+
+            <!-- New accounts: Prismal Budget is for people 18 and older -->
+            <div id="age-group" class="hidden">
+              <label for="age">Age</label>
+              <input type="text" id="age" inputmode="numeric" maxlength="3" required autocomplete="off" disabled>
             </div>
 
             <div id="password-group">
