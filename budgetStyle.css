@@ -271,13 +271,14 @@
   opacity: 0.7;
 }
 
-/* Horizontal scroll for wide tables (phones) */
+/* Horizontal scroll for wide tables (phones). Only sideways: a box that can scroll up and down too (overflow-x
+   alone makes overflow-y auto) takes an up or down swipe from the page on iPhones, so the page doesn't move. */
 .dataScroll {
   width: 94vw;
   max-width: 100%;
   margin: 0 auto 4vmin;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: hidden;
 }
 
 /* Base data table */
@@ -2352,6 +2353,7 @@ a.budgetButton:hover {
 
 .guide pre {
   overflow-x: auto;
+  overflow-y: hidden;
   margin: 0 0 0.9em;
   padding: 0.7em 0.9em;
   font-size: 0.9em;
@@ -2382,6 +2384,7 @@ a.budgetButton:hover {
 
 .guide .tableScroll {
   overflow-x: auto;
+  overflow-y: hidden;
   margin: 0 0 1em;
 }
 

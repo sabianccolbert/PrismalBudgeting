@@ -545,6 +545,7 @@ function prepareNewPasskey() {
 // signing in waited on the server, so there it's refused at once, and Yes (a tap) makes it.
 async function addPasskey(firstTry = false) {
   setStatus('');
+  const hadToWait = firstTry || !addReady || Date.now() - addReady.at >= Passkeys.FRESH_MS;
   if (!addReady || Date.now() - addReady.at >= Passkeys.FRESH_MS) {
     primaryBtn.disabled = true;
     const error = await (addPreparing || prepareNewPasskey());
@@ -563,7 +564,8 @@ async function addPasskey(firstTry = false) {
       await alreadyHasPasskey();
       return;
     }
-    if (firstTry && error.name === 'NotAllowedError' && Date.now() - started < Passkeys.INSTANT_MS) {
+    console.warn("The device didn't make a passkey:", error);
+    if (hadToWait && error.name === 'NotAllowedError' && Date.now() - started < Passkeys.INSTANT_MS) {
       setStatus("One more step: press Yes, Turn It On, and your device asks for your face, fingerprint, or PIN to make the passkey.", true);
       return;
     }

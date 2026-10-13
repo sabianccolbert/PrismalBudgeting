@@ -27,7 +27,8 @@
 //     into savings is "⭕️ $100.00 Savings", and In Bank goes down $100. Here a Transfer is stored from In
 //     Bank's side, and the account gets the opposite (accountChange), so that's "⭕️ -$100.00 Savings": each
 //     Savings transfer flips sign, and In Bank and Savings come out the same. A Hidden one is the account's
-//     own amount in both, so it stays as it is.
+//     own amount in both, so it stays as it is. Both are written "→ Savings" here (the Savings account picked
+//     under Other Account), since a title alone doesn't link an entry to an account.
 //   - Amounts are written the website's way ("$274" is $274.00, "$-29.98" is -$29.98), and types the
 //     standard way (a recurring entry's ✔️ comes first, a temp's second).
 //   - The daily update brings the budget up to today from the calendar's first day (sheetTables says why).
@@ -280,6 +281,13 @@ function isSheetSavingsTransfer(sprite, title) {
   return getSpecialType(sprite) === "⭕️" && cleanString(title) === "savings";
 }
 
+// The sheet's Hidden and Transfer entries titled Savings are for its savings account, so here they're for the
+// Savings account: "→ Savings" (only an entry with an Other Account picked changes one, see linkedAccount)
+function sheetTitle(sprite, title) {
+  const special = getSpecialType(sprite);
+  return (special === "✖️" || special === "⭕️") && cleanString(title) === "savings" ? withAccount("", title) : title;
+}
+
 // One line of a day's cell, the website's way: kind "entry" ("❗️ -$5.00 Coffee"), "system" (a line the budget
 // writes itself: In Bank, Gains, Costs, the last day's extra lines, all worked out again once it loads), or "odd"
 // (anything else, kept as it is)
@@ -291,7 +299,7 @@ function sheetLine(line, flips) {
   const title = parts.slice(2).join(" ");
   const flip = isSheetSavingsTransfer(parts[0], title);
   if (flip) flips.count++;
-  return { text: `${parts[0]} ${formatMoney(flip ? -amount : amount)} ${title}`, kind: "entry" };
+  return { text: `${parts[0]} ${formatMoney(flip ? -amount : amount)} ${sheetTitle(parts[0], title)}`, kind: "entry" };
 }
 
 // A day's cell: header first (the website's way), then its lines without stray spaces or blank lines.
@@ -417,7 +425,7 @@ function sheetRecurringRow(row, problems, flips) {
   const sprite = SHEET_RECURRING_TYPES[getSpecialType(type)];
   const flip = isSheetSavingsTransfer(sprite, title);
   if (flip) flips.count++;
-  return [title, amount === null ? row[1].trim() : formatMoney(flip ? -amount : amount), start, frequency ? formatFrequency(frequency) : row[3].trim(), end || endText, sprite];
+  return [sheetTitle(sprite, title), amount === null ? row[1].trim() : formatMoney(flip ? -amount : amount), start, frequency ? formatFrequency(frequency) : row[3].trim(), end || endText, sprite];
 }
 
 // Tracker: the column titles, then its rows and "-" sections. Its sums (and what Undefined lists) are worked out
@@ -453,7 +461,7 @@ function sheetFuture(rows, problems, flips) {
     const sprite = getSpecialType(typed) + (typed.includes("✔️") ? "✔️" : "");
     const flip = isSheetSavingsTransfer(sprite, title);
     if (flip) flips.count++;
-    return [[title, amount === null ? row[1].trim() : formatMoney(flip ? -amount : amount), date, sprite]];
+    return [[sheetTitle(sprite, title), amount === null ? row[1].trim() : formatMoney(flip ? -amount : amount), date, sprite]];
   });
 }
 
@@ -641,7 +649,7 @@ function reportSheetImport() {
 
   const savings = accountSummaries().find(summary => isDefaultAccount(accountsData.list[summary.index]));
   if (savings && typeof note.savingsTotal === "number" && Math.abs(savings.today - note.savingsTotal) >= 0.005) {
-    messages.push(`The spreadsheet's Savings tab said ${formatMoney(note.savingsTotal)}, and ${savings.name} here is ${formatMoney(savings.today)} (it adds up Hidden and Transfer entries titled ${savings.name}). To match, add a ✖️ Hidden entry titled ${savings.name} for the difference.`);
+    messages.push(`The spreadsheet's Savings tab said ${formatMoney(note.savingsTotal)}, and ${savings.name} here is ${formatMoney(savings.today)} (it adds up Hidden and Transfer entries for it). To match, add a ✖️ Hidden entry for the difference, with ${savings.name} picked under Other Account.`);
   }
 
   sheetImportSay(messages.join(" "));

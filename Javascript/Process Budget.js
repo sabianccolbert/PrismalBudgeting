@@ -39,6 +39,11 @@ const MAX_AMOUNT = 1000000000;
 const AMOUNT_TOO_BIG = "Amounts can be up to $1,000,000,000.";
 const MAX_TITLE = 100;
 
+// An entry for an Other Account keeps its own title, with the account after an arrow: "Payday Transfer → Savings"
+// (see splitAccount). One with no title of its own is just the account's name, like "Savings".
+const ACCOUNT_ARROW = "→";
+const MAX_ENTRY_TITLE = 170; // A title (100), the arrow, and an account's name (60)
+
 // Load/Save Safety
 let workspaceLoaded = false;      // saveChanges refuses to run until real data has loaded
 let unsavableTables = new Set();  // Tables whose stored content failed to parse (never overwritten)
@@ -1592,12 +1597,15 @@ function accountTitleMap() {
   return byTitle;
 }
 
-// The account an entry changes (a Hidden or Transfer entry titled with its name), or null.
-// accounts: accountTitleMap(), passed in by loops so it's built once.
-function linkedAccount(sprite, cleanTitle, accounts = accountTitleMap()) {
+// The account an entry changes, or null: a Hidden or Transfer entry with an Other Account picked, which is kept
+// after its title ("Payday → Savings", or "→ Savings" with no title of its own). A title that's only an account's
+// name ("Savings") isn't for the account. titleText: the title as written. accounts: accountTitleMap(), passed in
+// by loops so it's built once.
+function linkedAccount(sprite, titleText, accounts = accountTitleMap()) {
   let special = getSpecialType(String(sprite || ""));
   if (special !== "✖️" && special !== "⭕️") return null;
-  return accounts.get(cleanTitle) || null;
+  const { account } = splitAccount(titleText);
+  return account ? accounts.get(cleanString(account)) || null : null;
 }
 
 // How much an account entry changes its account: a Transfer the opposite of its amount (the money moved
@@ -1635,7 +1643,7 @@ function accountSummaries() {
     for (let l = 1; l < lines.length; l++) {
       const line = readLine(lines[l]);
       if (!line.title || line.system) continue;
-      const account = linkedAccount(line.sprite, line.clean, accounts);
+      const account = linkedAccount(line.sprite, line.title, accounts);
       const change = account ? accountChange(line.sprite, line.amount) : 0;
       if (!account || change === 0) continue;
       date = date || dayOf(lines);
@@ -1666,6 +1674,8 @@ function accountEntry(fields, index) {
   let clean = cleanString(name);
   if (!clean) throw new BudgetInputError("Give the account a name, like Cash or Investments.");
   if (name.length > MAX_ACCOUNT_NAME) throw new BudgetInputError(`Account names can be up to ${MAX_ACCOUNT_NAME} characters.`);
+  // The arrow is what goes between an entry's title and its account ("Payday → Savings")
+  if (name.includes(ACCOUNT_ARROW)) throw new BudgetInputError(`Account names can't have ${ACCOUNT_ARROW} in them.`);
 
   let list = accountsData.list;
   let isNew = index === null || index === undefined;
@@ -1691,20 +1701,25 @@ function accountEntry(fields, index) {
   return {};
 }
 
-// A renamed account keeps its entries: Hidden and Transfer entries with the old name (on the calendar,
-// in History, Upcoming, and Recurring) and tracker aliases for it get the new name
+// A renamed account keeps its entries: Hidden and Transfer entries for it (on the calendar, in History, Upcoming,
+// and Recurring) and tracker aliases for it get the new name
 function renameAccountEntries(oldClean, newName) {
-  const isAccountEntry = (sprite, title) => {
+  // An entry's title with the account's new name ("Payday → Savings" -> "Payday → Rainy Day"), or null when the
+  // entry isn't for this account
+  const renamedTitle = (sprite, text) => {
     let special = getSpecialType(String(sprite || ""));
-    return (special === "✖️" || special === "⭕️") && cleanString(title) === oldClean;
+    if (special !== "✖️" && special !== "⭕️") return null;
+    const { title, account } = splitAccount(text);
+    return account && cleanString(account) === oldClean ? withAccount(title, newName) : null;
   };
   const renameCell = (cellText) => {
     let lines = String(cellText ?? "").split("\n");
     let renamed = false;
     for (let l = 1; l < lines.length; l++) {
       let parts = getParts(lines[l]);
-      if (parts.length < 3 || systemEmojis.includes(parts[0]) || !isAccountEntry(parts[0], parts.slice(2).join(" "))) continue;
-      lines[l] = `${parts[0]} ${parts[1]} ${newName}`;
+      const newTitle = parts.length >= 3 && !systemEmojis.includes(parts[0]) ? renamedTitle(parts[0], parts.slice(2).join(" ")) : null;
+      if (newTitle === null) continue;
+      lines[l] = `${parts[0]} ${parts[1]} ${newTitle}`;
       renamed = true;
     }
     return renamed ? combineSameEntries(lines).join("\n") : cellText;
@@ -1719,13 +1734,15 @@ function renameAccountEntries(oldClean, newName) {
 
   // Upcoming: rename, then combine any that now match another entry on the same day
   for (let f = 1; f < futureData.length; f++) {
-    if (isAccountEntry(futureData[f][3], futureData[f][0])) futureData[f][0] = newName;
+    const newTitle = renamedTitle(futureData[f][3], futureData[f][0]);
+    if (newTitle !== null) futureData[f][0] = newTitle;
   }
   combineSameUpcoming();
 
   for (let i = 2; i < recurringData.length; i++) {
     let row = recurringData[i];
-    if (String(row[0]).trim() !== "-" && isAccountEntry(row[5], row[0])) row[0] = newName;
+    const newTitle = String(row[0]).trim() !== "-" ? renamedTitle(row[5], row[0]) : null;
+    if (newTitle !== null) row[0] = newTitle;
   }
 
   for (let i = 1; i < trackerData.length; i++) {
@@ -1737,18 +1754,18 @@ function renameAccountEntries(oldClean, newName) {
     row[4] = normalizeAliases(aliases.map(alias => ({ title: alias.clean === oldClean ? newName : alias.title, count: alias.count })));
   }
 
-  // Connected spreadsheets: one set up with this account typed in (for every entry) follows it, and so does a
-  // typed Hidden or Transfer title with its name, so the next read still finds the account. The entries each one
-  // read last move with it too. (One whose cells name the account needs those cells changed: its Needs a look says so.)
+  // Connected spreadsheets: one set up with this account typed in (for every entry) follows it, so the next read
+  // still finds the account. The entries each one read last move with it too. (One whose cells name the account
+  // needs those cells changed: its Needs a look says so.)
   const typed = (field) => !!field && typeof field === "object" && typeof field.range !== "string";
   for (let connection of sheetsData?.list || []) {
     let fields = connection.fields || {};
     if (typed(fields.account) && cleanString(fields.account.value) === oldClean) fields.account.value = newName;
-    if (typed(fields.title) && cleanString(fields.title.value) === oldClean && typed(fields.type) && isAccountEntry(fields.type.value, fields.title.value)) {
-      fields.title.value = newName;
-    }
-    if (connection.entries.some(entry => isAccountEntry(entry[1], entry[3]))) {
-      connection.entries = connection.entries.map(entry => (isAccountEntry(entry[1], entry[3]) ? [entry[0], entry[1], entry[2], newName] : entry));
+    if (connection.entries.some(entry => renamedTitle(entry[1], entry[3]) !== null)) {
+      connection.entries = connection.entries.map(entry => {
+        const newTitle = renamedTitle(entry[1], entry[3]);
+        return newTitle === null ? entry : [entry[0], entry[1], entry[2], newTitle];
+      });
     }
   }
 }
@@ -1843,7 +1860,7 @@ function normalizeSheetConnection(item) {
     fields: isObject(item.fields) ? JSON.parse(JSON.stringify(item.fields)) : {},
     entries: (Array.isArray(item.entries) ? item.entries : [])
       .filter(entry => Array.isArray(entry) && entry.length >= 4)
-      .map(entry => [text(entry[0], 10), getSpecialType(text(entry[1], 8)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], MAX_TITLE)])
+      .map(entry => [text(entry[0], 10), getSpecialType(text(entry[1], 8)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], MAX_ENTRY_TITLE)])
       .filter(entry => Math.abs(entry[2]) <= MAX_AMOUNT), // Spreadsheets.js never reads a bigger one
     problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
     tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
@@ -2231,12 +2248,15 @@ function search(query, calendar = calendarData) {
     else targetsByTitle.set(target.clean, [...(targetsByTitle.get(target.clean) || []), target]);
   }
 
-  // An entry is found when a target for its title counts its amount. Transfers start unchecked, unless a
-  // tracker row that counts transfers found them.
+  // An entry is found when a target for its title counts its amount: "Payday → Savings" is found by Payday,
+  // Savings, or the whole thing. Transfers start unchecked, unless a tracker row that counts transfers found them.
   let searchResults = [];
-  const addIfFound = (date, amount, sprite, title, cleanTitle) => {
+  const addIfFound = (date, amount, sprite, title) => {
     let isTransfer = isTransferEntry(sprite);
-    let found = [...everyTitle, ...(targetsByTitle.get(cleanTitle) || [])].filter(target => aliasCounts(target.count, amount) && (!target.onlyTransfers || isTransfer));
+    let { title: own, account } = splitAccount(title);
+    let keys = new Set(account ? [cleanString(title), cleanString(own), cleanString(account)] : [cleanString(title)]);
+    let named = [...keys].flatMap(key => targetsByTitle.get(key) || []);
+    let found = [...everyTitle, ...new Set(named)].filter(target => aliasCounts(target.count, amount) && (!target.onlyTransfers || isTransfer));
     if (found.length === 0) return;
     searchResults.push({ date, amount, sprite, title, isTransfer, checked: !isTransfer || found.some(target => target.withTransfers) });
   };
@@ -2247,7 +2267,7 @@ function search(query, calendar = calendarData) {
     if (!row || !String(row[0]).trim()) continue;
     let cellDate = createSafeMidnight(row[2], true);
     if (isNaN(cellDate.getTime()) || !inRange(cellDate.getTime())) continue;
-    addIfFound(cellDate, parseAmount(row[1]), String(row[3] || ""), String(row[0]), cleanString(row[0]));
+    addIfFound(cellDate, parseAmount(row[1]), String(row[3] || ""), String(row[0]));
   }
 
   // 4. Recurring entries and spreadsheets' entries past the calendar (calendar days are searched directly
@@ -2274,11 +2294,11 @@ function search(query, calendar = calendarData) {
         if (shown.has(key) || !recurringRowHits(row.parsed, day)) continue;
         shown.add(key);
         if (blockers.has(day.getTime() + "|" + key)) continue;
-        addIfFound(new Date(day), row.amt, String(row.sprite || ""), row.title, row.parsed.cleanTitle);
+        addIfFound(new Date(day), row.amt, String(row.sprite || ""), row.title);
       }
       for (let entry of sheetDays.get(day.getTime())?.values() || []) {
         if (blockers.has(day.getTime() + "|" + entry.clean + "|" + entry.special)) continue;
-        addIfFound(new Date(day), entry.amount, SHEET_MARK + entry.special, entry.title, entry.clean);
+        addIfFound(new Date(day), entry.amount, SHEET_MARK + entry.special, entry.title);
       }
     }
   }
@@ -2289,7 +2309,7 @@ function search(query, calendar = calendarData) {
     for (let l = 1; l < lines.length; l++) {
       const line = readLine(lines[l]);
       if (line.system || !line.title) continue;
-      addIfFound(cellDate, line.amount, line.sprite, line.title, line.clean);
+      addIfFound(cellDate, line.amount, line.sprite, line.title);
     }
   };
   for (let r = 3; r >= 0; r--) {
@@ -3020,7 +3040,7 @@ function recentSpending() {
       if (line.amount >= 0) continue;
       const special = getSpecialType(line.sprite);
       if (special === "❗️" && !entryMark(line.sprite)) day.spent -= line.amount;
-      if (special !== "⭕️" && /^catch ?up$/.test(line.clean)) day.catchup -= line.amount;
+      if (special !== "⭕️" && /^catch ?up$/.test(line.titleClean)) day.catchup -= line.amount;
     }
     days.set(date.getTime(), day);
   };
@@ -3266,7 +3286,7 @@ function updateTrackerTab() {
     for (let l = 1; l < lines.length; l++) {
       const line = readLine(lines[l]);
       if (line.system || line.amount === 0) continue;
-      const lineTitle = line.clean;
+      const lineTitle = line.titleClean;
       const lineAmt = line.amount;
 
       // Transfers move money between your own accounts, so they aren't costs or gains (Hidden entries are):
@@ -4039,8 +4059,8 @@ function extractTitle(line, clean = true) {
 }
 
 // One line of a day ("❗️ -$5.00 Coffee") read once: { sprite, amount, title (as written, "" without one),
-// clean (the title as compared, cleanString), system (a line the budget writes itself: In Bank, Gains, Costs),
-// blank }. Cached by its text: every change reads the same lines again (all of History, for the tracker and
+// clean (the title as compared, cleanString), titleClean (without its Other Account, titleKey), system (a line
+// the budget writes itself: In Bank, Gains, Costs), blank }. Cached by its text: every change reads the same lines again (all of History, for the tracker and
 // the accounts), so each is only split up the first time.
 const lineCache = new Map();
 function readLine(line) {
@@ -4049,7 +4069,7 @@ function readLine(line) {
   if (read) return read;
   const parts = getParts(text);
   const title = parts.slice(2).join(" ");
-  read = { sprite: parts[0], amount: parseAmount(parts[1]), title, clean: title ? cleanString(title) : "", system: systemEmojis.includes(parts[0]), blank: !text.trim() };
+  read = { sprite: parts[0], amount: parseAmount(parts[1]), title, clean: title ? cleanString(title) : "", titleClean: title ? titleKey(title) : "", system: systemEmojis.includes(parts[0]), blank: !text.trim() };
   if (lineCache.size >= 20000) lineCache.clear();
   lineCache.set(text, read);
   return read;
@@ -4061,23 +4081,58 @@ function readLine(line) {
 // different. The invisible "show as emoji" characters (variation selectors, like the one after the circle
 // in ⭕️) are dropped first: they count as marks, so otherwise "⭕️Food" wouldn't compare as "Food".
 // The API's quick.js cleanTitle matches this. Cached: every change compares the same titles thousands of times.
+// An entry's Other Account is compared on its own: "Payday → Savings" is "payday → savings", so it's a different
+// entry from "Payday" or "Payday → HSA" (the tracker and Search compare titles without it, see titleKey).
 const cleanCache = new Map();
 function cleanString(title) {
   if (!title) return "";
   const text = String(title);
   let clean = cleanCache.get(text);
   if (clean !== undefined) return clean;
-  const lower = text.normalize("NFKC").toLowerCase().replace(/\p{Variation_Selector}/gu, "");
-  const tidy = (pattern) => lower.replace(pattern, "").replace(/\s+/g, " ").trim();
-  clean = tidy(/[^\p{L}\p{M}\p{N}\s]/gu) || tidy(/[^\p{L}\p{M}\p{N}\p{S}\s]/gu);
+  const { title: own, account } = splitAccount(text);
+  clean = account ? [tidyTitle(own), ACCOUNT_ARROW, tidyTitle(account)].filter(Boolean).join(" ") : tidyTitle(text);
   if (cleanCache.size >= 5000) cleanCache.clear();
   cleanCache.set(text, clean);
   return clean;
 }
+function tidyTitle(text) {
+  const lower = text.normalize("NFKC").toLowerCase().replace(/\p{Variation_Selector}/gu, "");
+  const tidy = (pattern) => lower.replace(pattern, "").replace(/\s+/g, " ").trim();
+  return tidy(/[^\p{L}\p{M}\p{N}\s]/gu) || tidy(/[^\p{L}\p{M}\p{N}\p{S}\s]/gu);
+}
 
-// Each word's first letter (in any language) capitalized: "coffee shop" -> "Coffee Shop", "école" -> "École"
+// A title as the tracker and Search compare it, without its Other Account: "Groceries → Cash" is "groceries", so
+// the Groceries row counts it. One with no title of its own ("→ Savings") goes by the account's name.
+function titleKey(title) {
+  const { title: own, account } = splitAccount(title);
+  return cleanString(own || account);
+}
+
+// Each word's first letter (in any language) capitalized: "coffee shop" -> "Coffee Shop", "école" -> "École". An
+// Other Account after the title keeps its name as it is.
 function capitalize(string) {
-  return getParts(string).map(word => word.replace(/\p{L}/u, char => char.toUpperCase())).join(" ");
+  const { title, account } = splitAccount(getParts(string).join(" "));
+  const words = getParts(title).map(word => word.replace(/\p{L}/u, char => char.toUpperCase())).join(" ");
+  return account ? withAccount(words, account) : words;
+}
+
+// "Payday Transfer → Savings" -> { title: "Payday Transfer", account: "Savings" }, "→ Savings" -> { title: "",
+// account: "Savings" }; without an arrow, the whole text is the title and account is ""
+function splitAccount(text) {
+  const value = ` ${String(text ?? "").trim()}`;
+  const at = value.lastIndexOf(` ${ACCOUNT_ARROW} `);
+  const account = at >= 0 ? value.slice(at + 3).trim() : "";
+  return account ? { title: value.slice(0, at).trim(), account } : { title: value.trim(), account: "" };
+}
+
+// An entry's title with the Other Account picked for it, which never changes the title: "Payday → Savings", or
+// "→ Savings" with no title of its own. Only an entry with one is for an account (linkedAccount), even if its
+// title is an account's name.
+function withAccount(title, account) {
+  const own = String(title ?? "").replace(/\s+/g, " ").trim();
+  const name = String(account ?? "").trim();
+  if (!name) return own;
+  return own ? `${own} ${ACCOUNT_ARROW} ${name}` : `${ACCOUNT_ARROW} ${name}`;
 }
 
 // An entry's refraction type from its sprite: ✖️ Hidden, ⭕️ Transfer, or ❗️ Regular

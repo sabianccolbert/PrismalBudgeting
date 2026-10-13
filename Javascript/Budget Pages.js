@@ -635,7 +635,17 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
   }
   if (editMode && sections) body.appendChild(sectionButtonRow(ROW_TABLES[tableName].get().length, headers.length));
 
+  // Where a press started: a swipe that starts on a row scrolls the page, and only a tap (one that barely moved,
+  // with the page still in place) opens the row
+  let pressed = null;
+  body.addEventListener("pointerdown", (event) => {
+    pressed = { x: event.clientX, y: event.clientY, scrollY: window.scrollY };
+  }, { passive: true });
+
   body.addEventListener("click", (event) => {
+    const swiped = event.detail > 0 && pressed &&
+      (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 10 || Math.abs(window.scrollY - pressed.scrollY) > 10);
+    if (swiped) return;
     const sectionButton = event.target.closest(".sectionButton");
     if (sectionButton) {
       openCategoryPanel(tableName, sectionButton, null, Number(sectionButton.dataset.insertAt));
@@ -833,13 +843,15 @@ function openRecurringPanel(origin, index) {
       const existingEnd = existing && String(existing[4]).trim().toLowerCase() !== "none" ? createSafeMidnight(existing[4], true) : null;
       const existingStart = existing ? createSafeMidnight(existing[2], true) : null;
 
-      const title = BudgetUI.textField({ label: "Title", value: existing ? existing[0] : "", placeholder: "Rent, paycheck, phone...", maxLength: MAX_TITLE });
+      // Its title and its Other Account ("Payday → Savings") are separate boxes
+      const existingTitle = splitAccount(existing ? String(existing[0]).trim() : "");
+      const title = BudgetUI.textField({ label: "Title", value: existingTitle.title, placeholder: "Rent, paycheck, phone...", maxLength: MAX_TITLE });
       const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : null });
       const frequency = BudgetUI.frequencyField({ value: existing ? existing[3] : "Every Month" });
       const start = BudgetUI.dateField({ label: "Start Date", date: existing ? (isNaN(existingStart) ? null : existingStart) : today });
       const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : null, optional: true });
       // Hidden and Transfer entries can move money into or out of an Other Account (like a savings transfer)
-      const account = BudgetUI.accountField({ accounts: otherAccounts(), title, amount, type: () => refraction.value() });
+      const account = BudgetUI.accountField({ accounts: otherAccounts(), amount, type: () => refraction.value(), account: existingTitle.account });
       const refraction = BudgetUI.refractionField({
         value: existing ? getSpecialType(existing[5]) : "❗️",
         allowAuto: false,
@@ -854,7 +866,7 @@ function openRecurringPanel(origin, index) {
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const fields = { title: title.value(), amount: amount.value(), startDate: start.value(), endDate: end.value() };
+        const fields = { title: withAccount(title.value(), account.value()), amount: amount.value(), startDate: start.value(), endDate: end.value() };
         if (!fields.title) return panel.setError("Give the recurring entry a title.");
         if (Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
         if (!existing && fields.amount === null) return panel.setError("Enter an amount, like 12.50.");

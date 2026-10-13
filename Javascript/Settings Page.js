@@ -1301,7 +1301,8 @@ async function addPasskey(event) {
   const name = document.getElementById("passkeyName").value.trim() || Passkeys.deviceName();
   // A challenge already checked against the password starts the device's check right away (Safari
   // wants that to happen right after the tap), so trying again doesn't wait on the server
-  if (!passkeyAdd || Date.now() - passkeyAdd.at >= Passkeys.FRESH_MS) {
+  const hadToWait = !passkeyAdd || Date.now() - passkeyAdd.at >= Passkeys.FRESH_MS;
+  if (hadToWait) {
     setFormBusy(form, true);
     const result = await budgetApi("/api/passkey/add/options", { password: document.getElementById("passkeyPassword").value });
     setFormBusy(form, false);
@@ -1313,10 +1314,18 @@ async function addPasskey(event) {
   }
 
   let credential;
+  const started = Date.now();
   try {
     credential = await navigator.credentials.create({ publicKey: Passkeys.addRequest(passkeyAdd.options) });
   } catch (error) {
     if (error.name === "InvalidStateError") passkeyAdd = null;
+    console.warn("The device didn't make a passkey:", error);
+    // Refused at once after waiting on the server: the browser (like Safari) only opens its passkey sheet right in
+    // a tap, and the next tap starts it right away (its challenge is ready now)
+    if (hadToWait && error.name === "NotAllowedError" && Date.now() - started < Passkeys.INSTANT_MS) {
+      BudgetUI.showToast(`One more step: press ${button} again, and your device will ask for your face, fingerprint, or PIN.`);
+      return;
+    }
     const message = Passkeys.problem(error, true);
     if (message) BudgetUI.showToast(error.name === "NotAllowedError" ? `${message} Press ${button} to try again.` : message, true);
     return;

@@ -332,13 +332,14 @@ const BudgetUI = (() => {
     fieldEl.insertBefore(help, fieldEl.children[1].nextSibling);
   }
 
-  // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked.
-  // An entry changes an account when it's titled with the account's name, so picking one fills in the
-  // title (and typing an account's name picks it). A Transfer changes the account by the opposite of its
-  // amount (the money moved from or to In Bank), a Hidden entry by its own amount (see accountChange).
+  // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked. It's picked on
+  // its own and never changes the title: the entry is saved as "Title → Account" (withAccount in Process Budget.js).
+  // Only a picked account links the entry: a title that's an account's name doesn't pick it. A Transfer changes the
+  // account by the opposite of its amount (the money moved from or to In Bank), a Hidden entry by its own amount
+  // (accountChange).
   // accounts: in order, [{ name, balance }] (each shows its balance today), or just names.
-  // title, amount: the form's textField and amountField. type(): the picked refraction type.
-  function accountField({ accounts = [], title, amount, type = () => "⭕️" }) {
+  // amount: the form's amountField. type(): the picked refraction type. account: picked to start.
+  function accountField({ accounts = [], amount, type = () => "⭕️", account = "" }) {
     const list = accounts.map(account => (typeof account === "string" ? { name: account, balance: null } : account));
     const select = element("select", "selectInput accountSelect");
     select.appendChild(new Option("None", ""));
@@ -368,30 +369,21 @@ const BudgetUI = (() => {
       }
     }
 
-    select.addEventListener("change", () => {
-      if (select.value) {
-        title.input.value = select.value;
-      } else if (accountTitled(title.input.value)) {
-        // Titled with an account's name, it would still change that account
-        title.input.value = "";
-        title.input.focus();
-      }
-      describe();
-    });
-    title.input.addEventListener("input", () => {
-      select.value = accountTitled(title.input.value);
-      describe();
-    });
+    // Pick an account by name (any capitals), or none
+    const pick = (name) => { select.value = accountTitled(name); };
+    pick(account);
+
+    select.addEventListener("change", describe);
     amount.el.addEventListener("input", describe);
     amount.el.addEventListener("click", describe); // The Cost / Gain buttons
 
     return {
       el: wrapper,
       select,
+      pick,
       // Shown for Hidden and Transfer (when there are accounts to pick)
       setVisible(visible) {
         wrapper.hidden = !visible || list.length === 0;
-        select.value = accountTitled(title.input.value);
         describe();
       },
       value: () => (wrapper.hidden ? "" : select.value)
@@ -644,35 +636,36 @@ const BudgetUI = (() => {
   // The New Entry form's fields: title, amount (cost or gain), date, optional refraction type, and for
   // Hidden or Transfer, the Other Account it moves money into or out of (accounts: their names).
   // The calendar's New Entry panel and the Quick Entry page share it, so they always match.
-  // read(): { entry: { title, amount, date, sprite } } when it's filled in right, otherwise { error }
+  // read(): { entry: { title, amount, date, sprite } } when it's filled in right, otherwise { error }. The title
+  //   carries the Other Account picked: "Title → Account" (or just the account's name when no title is typed).
   // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
-  //   unreadable), sprite ("" for Auto) }
-  // fill({ title, amount, sprite }): puts these in, leaving the fields they don't have as they are
+  //   unreadable), sprite ("" for Auto), account ("" for none) }
+  // fill({ title, amount, sprite, account }): puts these in, leaving the fields they don't have as they are
   //   (the Quick Entry page's prisms). dateEl: the date field, for a form that doesn't need one.
   function newEntryFields({ date = today, accounts = [] } = {}) {
     const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas...", maxLength: MAX_TITLE });
     const amount = amountField();
     const dateInput = dateField({ label: "Date", date });
-    const account = accountField({ accounts, title, amount, type: () => refraction.value() });
+    const account = accountField({ accounts, amount, type: () => refraction.value() });
     const refraction = refractionField({ onChange: (key) => account.setVisible(isAccountType(key)) });
     return {
       els: [title.el, amount.el, dateInput.el, refraction.el, account.el],
       dateEl: dateInput.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value() }),
-      fill({ title: newTitle = "", amount: newAmount = null, sprite = "" } = {}) {
+      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value(), account: account.value() }),
+      fill({ title: newTitle = "", amount: newAmount = null, sprite = "", account: newAccount = "" } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
           amount.input.value = Math.abs(newAmount).toFixed(2);
           amount.setSign(newAmount > 0 ? 1 : -1);
         }
         if (sprite) refraction.set(sprite);
-        // The account picker follows the title (and shows for Hidden or Transfer)
+        if (newAccount) account.pick(newAccount);
         title.input.dispatchEvent(new Event("input", { bubbles: true }));
-        account.setVisible(isAccountType(refraction.value()));
+        account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
       },
       read() {
-        const entry = { title: title.value(), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
+        const entry = { title: withAccount(title.value(), account.value()), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
         if (!entry.title) return { error: "Give the entry a title." };
         if (entry.amount === null || Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
         if (Math.abs(entry.amount) > MAX_AMOUNT) return { error: AMOUNT_TOO_BIG };
