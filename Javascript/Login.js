@@ -30,6 +30,7 @@ const MAX_PASSWORD = 256;
 // except the joiners, variation selectors, and tags inside emoji (the API's HIDDEN_CHARACTERS)
 const HIDDEN_CHARACTERS = /(?![\u200C\u200D\uFE00-\uFE0F\u{E0020}-\u{E007F}\u{E0100}-\u{E01EF}])[\p{Cc}\p{Cf}\p{Cs}\p{Default_Ignorable_Code_Point}\u2800]/u;
 
+// Characters as a person counts them (an accented letter or an emoji is one)
 function countCharacters(text) {
   if (typeof Intl === 'object' && typeof Intl.Segmenter === 'function') {
     return [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(text)].length;
@@ -37,6 +38,7 @@ function countCharacters(text) {
   return [...text].length;
 }
 
+// What's wrong with a new username, or '' when it's fine
 function usernameProblem(value) {
   const name = value.normalize('NFC').replace(/\s+/g, ' ').trim();
   if (HIDDEN_CHARACTERS.test(name)) return "Usernames can't have invisible characters, or ones that change which way text runs.";
@@ -45,6 +47,7 @@ function usernameProblem(value) {
   return '';
 }
 
+// What's wrong with a new password, or '' when it's fine
 function passwordProblem(value) {
   const length = [...value.normalize('NFKC')].length;
   if (length < MIN_PASSWORD) return `Password must be at least ${MIN_PASSWORD} characters.`;
@@ -77,16 +80,24 @@ document.getElementById('passkey-label').textContent = `Turn on passkey sign-in$
 
 // The link in a password reset email is /login.html?reset=<token>. The code moves out of the address
 // right away (into this tab's session storage, so a reload still works), so it isn't left showing in the
-// address bar or saved in the browser's history.
+// address bar or saved in the browser's history. The link in an email verification email,
+// /login.html?verify=<token>, is checked with the API as soon as the page opens, and leaves the address too.
 const pageParams = new URLSearchParams(location.search);
 const RESET_TOKEN_KEY = 'prismal_reset_token';
 let resetToken = pageParams.get('reset');
+const verifyToken = pageParams.get('verify');
 try {
   if (resetToken) sessionStorage.setItem(RESET_TOKEN_KEY, resetToken);
-  else resetToken = sessionStorage.getItem(RESET_TOKEN_KEY);
+  else if (!verifyToken) resetToken = sessionStorage.getItem(RESET_TOKEN_KEY);
 } catch (e) {}
-if (pageParams.has('reset')) history.replaceState(null, '', location.pathname);
+if (pageParams.has('reset') || pageParams.has('verify')) history.replaceState(null, '', location.pathname);
 
+// Signed in on this device (a verification link can be opened either way)
+const signedInHere = (() => {
+  try { return !!localStorage.getItem('prismal_jwt'); } catch (e) { return false; }
+})();
+
+// The reset code is used up (or given up on): forget it
 function forgetResetToken() {
   resetToken = null;
   try { sessionStorage.removeItem(RESET_TOKEN_KEY); } catch (e) {}
@@ -135,11 +146,19 @@ const MODES = {
     groups: [],
     primary: 'Yes, Turn It On',
     toggle: 'No Thanks'
+  },
+  // The link in an email verification email (signed in here: on to Settings or Home; signed out: sign in)
+  verify: {
+    title: 'Verify Your Email',
+    groups: [],
+    primary: signedInHere ? 'Open Settings' : 'Sign In',
+    toggle: signedInHere ? 'Go Home' : ''
   }
 };
 
 let mode = 'login';
 
+// Switch the page to a mode: its title, hint, fields, and buttons
 function setMode(newMode) {
   mode = newMode;
   const config = MODES[mode];
@@ -164,12 +183,14 @@ function setMode(newMode) {
   usernameInput.maxLength = 400; // Room for 30 emoji; the rule itself is checked on submit
   primaryBtn.textContent = config.primary;
   toggleBtn.textContent = config.toggle;
+  toggleBtn.classList.toggle('hidden', !config.toggle);
   forgotBtn.classList.toggle('hidden', !config.showForgot);
   passkeyBtn.classList.toggle('hidden', !(config.passkeys && Passkeys.supported));
   if (config.passkeys) startPasskeyAutofill();
   else stopPasskeyAutofill();
 }
 
+// The message under the form (light for good news, red otherwise)
 function setStatus(message, isSuccess = false) {
   statusMessage.textContent = message;
   statusMessage.style.color = isSuccess ? 'var(--BASE_COLOR)' : 'var(--LINK_LIGHT)';
@@ -185,6 +206,10 @@ toggleBtn.addEventListener('click', () => {
     declinePasskeys();
     return;
   }
+  if (mode === 'verify') {
+    leaveTo('/index.html');
+    return;
+  }
   if (mode === 'reset') forgetResetToken();
   setMode(mode === 'login' ? 'create' : 'login');
 });
@@ -195,6 +220,11 @@ authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (mode === 'offer') {
     addPasskey();
+    return;
+  }
+  if (mode === 'verify') {
+    if (signedInHere) leaveTo('/settings.html');
+    else setMode('login');
     return;
   }
   setStatus('');
@@ -254,7 +284,9 @@ authForm.addEventListener('submit', async (e) => {
     } else if (mode === 'create') {
       // The username and password stay filled in, ready to log in
       setMode('login');
-      setStatus("Account created! Please log in.", true);
+      setStatus(data.verificationSent
+        ? `Account created! We emailed a link to ${email} to verify it (it works for 24 hours). Please log in.`
+        : "Account created! Please log in.", true);
     } else if (mode === 'forgot') {
       setStatus("If an account uses that email, a reset link is on its way. It works for 1 hour, so check your inbox (and spam folder).", true);
     } else {
@@ -298,12 +330,37 @@ function saveSession(data) {
   localStorage.setItem('prismal_last_activity', Date.now().toString());
 }
 
+// On to the budget (Home), signed in
 function goToBudget() {
   stopPasskeyAutofill();
   if (typeof window.transitionTo === 'function') {
     window.transitionTo("/index.html", true);
   } else {
     window.location.replace("/index.html");
+  }
+}
+
+// Off to another page of the site (it slides out like any link)
+function leaveTo(path) {
+  if (typeof window.transitionTo === 'function') window.transitionTo(path, true);
+  else window.location.replace(path);
+}
+
+// The link in a verification email: the API verifies the address it was sent to (signed in or not)
+async function verifyEmailLink(token) {
+  setMode('verify');
+  setStatus('Verifying your email...', true);
+  primaryBtn.disabled = true;
+  const { ok, status, data } = await api('/api/email/verify', { token });
+  primaryBtn.disabled = false;
+  if (ok && data.success) {
+    setStatus(`Your email, ${data.email}, is verified! You can connect spreadsheets in Settings now.`, true);
+  } else if (data.expired) {
+    setStatus(signedInHere
+      ? "That verification link has expired, or your email changed since it was sent. Open Settings and tap Send Verification Email for a new one."
+      : "That verification link has expired, or your email changed since it was sent. Sign in, then tap Send Verification Email in Settings for a new one.");
+  } else {
+    setStatus(status === 0 ? "Failed to connect to the server. Open the link again to try once more." : (data.error || "An error occurred."));
   }
 }
 
@@ -324,6 +381,7 @@ async function prepareSignIn() {
   return status === 0 ? "Failed to connect to the server." : (data.error || "Passkey sign-in isn't available right now.");
 }
 
+// Is the challenge fetched ahead still fresh enough to use?
 const signInIsFresh = () => !!signInReady && Date.now() - signInReady.at < Passkeys.FRESH_MS;
 
 // Keeps a challenge ready while the login page is up (a new one before it gets old), for the button and for
@@ -545,7 +603,9 @@ function declinePasskeys() {
 //#endregion
 
 // Start in the mode the link asked for (?new: the front page's Create Account)
-if (resetToken) {
+if (verifyToken) {
+  verifyEmailLink(verifyToken);
+} else if (resetToken) {
   setMode('reset');
 } else {
   setMode(pageParams.has('new') ? 'create' : 'login');

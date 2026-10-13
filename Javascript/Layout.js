@@ -85,6 +85,7 @@ function freezeAndSaveStarfield() {
 // bring a page back exactly as it was left) never shows one still open.
 const PAGE_EXIT_CLOSERS = new Set();
 
+// Does the device ask for less motion?
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -98,6 +99,7 @@ function zoomedToButton(EL, BUTTON) {
   return `translate(${FROM.left - TO.left}px, ${FROM.top - TO.top}px) scale(${SCALE_X}, ${SCALE_Y})`;
 }
 
+// Can EL zoom out of BUTTON? (animations work, the button is on the page, and motion is allowed)
 function canZoom(EL, BUTTON) {
   return !!(EL.animate && BUTTON && BUTTON.isConnected && BUTTON.getClientRects().length && !prefersReducedMotion());
 }
@@ -289,6 +291,7 @@ function enableDocumentScroll() {
 const SLIDE_IN_AT_THE_LATEST_MS = 1500;
 let HAS_SLID_IN = false;
 
+// The page slides in (once)
 function slideIn() {
   if (HAS_SLID_IN) return;
   HAS_SLID_IN = true;
@@ -601,6 +604,7 @@ const HELP_BACKDROP = document.createElement("div");
 HELP_BACKDROP.className = "overlayBackdrop";
 HELP_BACKDROP.hidden = true;
 
+// A page's Help moves into <body> as a floating dialog, with its ×
 function setupFloatingHelp(BUTTON, HELP) {
   document.body.append(HELP_BACKDROP, HELP);
   HELP.setAttribute("role", "dialog");
@@ -615,6 +619,7 @@ function setupFloatingHelp(BUTTON, HELP) {
   HELP.helpButton = BUTTON;
 }
 
+// Open a page's Help: it zooms out of its button, over a dimmed page
 function openHelp(HELP) {
   OPEN_HELP = HELP;
   HELP.hidden = false;

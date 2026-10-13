@@ -18,8 +18,8 @@ const Spreadsheets = (() => {
   const MAX_COLUMNS = 16384; // Column XFD, the last one Excel has
   const MAX_UNZIPPED = 80000000; // A file inside the spreadsheet that would unzip bigger than this isn't read
 
-  // A problem reading a spreadsheet. lasting: the server answered (like "not shared"), so it's worth showing
-  // in Settings; a dropped connection isn't (the next read tries again).
+  // A problem reading a spreadsheet. lasting: the server answered (like "not shared", or the account's email
+  // isn't verified yet), so it's worth showing in Settings; a dropped connection isn't (the next read tries again).
   class SheetReadError extends Error {
     constructor(message, lasting = false) {
       super(message);
@@ -49,7 +49,7 @@ const Spreadsheets = (() => {
     if (!response.ok) {
       let message = "";
       try { message = (await response.json()).error || ""; } catch (e) {}
-      const lasting = response.status === 400 || response.status === 413;
+      const lasting = response.status === 400 || response.status === 403 || response.status === 413;
       throw new SheetReadError(message || "Couldn't read that spreadsheet just now. Please try again.", lasting);
     }
     const format = response.headers.get("X-Sheet-Format") || "";
@@ -151,6 +151,7 @@ const Spreadsheets = (() => {
 
   // Excel number formats that are dates, by their built-in IDs
   const BUILT_IN_DATES = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
+  // Does an Excel number format show a date? (outside quotes and brackets: d or y, or m without h or s)
   function isDateFormat(code) {
     const plain = String(code || "").replace(/"[^"]*"/g, "").replace(/\\./g, "").replace(/\[[^\]]*\]/g, "").replace(/[_*]./g, "");
     if (/^\s*general\s*$/i.test(plain)) return false;
@@ -171,6 +172,7 @@ const Spreadsheets = (() => {
     return match ? { col: columnNumber(match[1]), row: Number(match[2]) } : null;
   }
 
+  // An .xlsx file's tabs (see readWorkbook): its shared strings, which styles are dates, and each sheet's cells
   async function readXlsx(zip) {
     // The workbook is where the package's relationships say (almost always xl/workbook.xml)
     const rootRels = await readRels(zip, "_rels/.rels");
@@ -224,6 +226,7 @@ const Spreadsheets = (() => {
     return { tabs };
   }
 
+  // One <c> of an .xlsx sheet -> a cell (see readWorkbook), or null when it's empty
   function xlsxCell(c, strings, dateStyles, from1904) {
     const type = c.getAttribute("t") || "n";
     if (type === "inlineStr") {
@@ -252,6 +255,7 @@ const Spreadsheets = (() => {
     return { t: "n", v: number };
   }
 
+  // An .ods file's tabs (see readWorkbook), from content.xml; repeated rows and cells are spread out
   async function readOds(zip) {
     const TABLE = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
     const OFFICE = "urn:oasis:names:tc:opendocument:xmlns:office:1.0";
@@ -297,6 +301,7 @@ const Spreadsheets = (() => {
     return null;
   }
 
+  // One OpenDocument cell -> a cell (see readWorkbook), or null when it's empty
   function odsCell(cell, OFFICE) {
     const type = cell.getAttributeNS(OFFICE, "value-type");
     if (type === "float" || type === "currency" || type === "percentage") {
@@ -315,7 +320,7 @@ const Spreadsheets = (() => {
   // A .csv (or tab-separated) file: one tab, every cell text. The separator is whichever of comma, tab, or
   // semicolon (Europe's spreadsheets use it) the first line has most of.
   function readCsv(bytes, name) {
-    const text = new TextDecoder().decode(bytes).replace(/^﻿/, "");
+    const text = new TextDecoder().decode(bytes).replace(/^\uFEFF/, "");
     const firstLine = text.slice(0, text.search(/\r?\n|$/));
     const counts = [",", "\t", ";"].map(separator => [separator, firstLine.split(separator).length]);
     const separator = counts.sort((a, b) => b[1] - a[1])[0][1] > 1 ? counts[0][0] : ",";
@@ -352,6 +357,7 @@ const Spreadsheets = (() => {
     return { tabs: [tab] };
   }
 
+  // Put a cell in its tab (rows and columns from 1)
   function setCell(tab, row, col, cell) {
     if (!tab.cells.has(row)) tab.cells.set(row, new Map());
     tab.cells.get(row).set(col, cell);
@@ -430,6 +436,7 @@ const Spreadsheets = (() => {
 
   // Tab names match without regard to capitals or extra spaces
   const tabKey = (name) => String(name ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  // The tab with this name (exactly, then without regard to capitals or spaces), or null
   function findTab(workbook, name) {
     return workbook.tabs.find(tab => tab.name === name) || workbook.tabs.find(tab => tabKey(tab.name) === tabKey(name)) || null;
   }
@@ -490,7 +497,7 @@ const Spreadsheets = (() => {
 
   // A refraction type cell -> "❗️" | "✖️" | "⭕️"; "" when it's empty (Regular), null when it isn't one
   function cellType(cell) {
-    const text = cellText(cell).toLowerCase().replace(/️/g, "");
+    const text = cellText(cell).toLowerCase().replace(/\uFE0F/g, "");
     if (text === "") return "";
     if (["regular", "r", "❗", "!"].includes(text)) return "❗️";
     if (["hidden", "h", "✖", "x"].includes(text)) return "✖️";
@@ -650,6 +657,7 @@ const Spreadsheets = (() => {
     return refreshing;
   }
 
+  // The reading itself (see refresh)
   async function refreshNow(force) {
     if (typeof workspaceLoaded === "undefined" || !workspaceLoaded || !sheetsData) return null;
     const reads = lastReads();

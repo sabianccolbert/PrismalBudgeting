@@ -1,15 +1,16 @@
 // Settings Page: connected spreadsheets first (their entries land on the calendar: add one, change it, turn
 // it on or off, delete it, and see what's wrong with any of its cells; see CONNECTED SPREADSHEETS in Process
-// Budget.js, and Spreadsheets.js for the reading). Then the daily "🗓️ Check Budget" reminder (the
-// spreadsheet's Google Calendar notification). Pick the reminder time, then turn on push notifications (per
-// device) and/or a calendar link for Google or Apple Calendar. Both are optional. Which days get a reminder
-// comes from the budget (buildReminderPlan in Process Budget.js); the API sends and serves them.
-// Then the account: change the email, the age (18 or older), or the password (the email and password need the
-// password), or email a password
-// reset link; passkeys (Face ID, Touch ID, Windows Hello: add or remove them, and turn passkey sign-in
-// on or off; see Passkeys.js); signed-in devices (turn off Quick Entry icons, Sign Out Everywhere);
-// your data and privacy (Download My Data, analytics on or off for this device); and deleting the
-// account (needs the password). Emails go out through Resend (see account.js in the API).
+// Budget.js, and Spreadsheets.js for the reading). Connecting one needs a verified email. Then the daily
+// "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification). Pick the reminder time, then
+// turn on push notifications (per device) and/or a calendar link for Google or Apple Calendar. Both are
+// optional. Which days get a reminder comes from the budget (buildReminderPlan in Process Budget.js); the API
+// sends and serves them.
+// Then the account: the email (change it, which needs the password, and verify it), the age (18 or older:
+// fix one typed wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID,
+// Windows Hello: add or remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices
+// (turn off Quick Entry icons, Sign Out Everywhere); your data and privacy (Download My Data, analytics on or
+// off for this device); and deleting the account (needs the password). Emails go out through Resend (see
+// account.js in the API).
 
 // =====================================================================
 // #region SETUP
@@ -18,7 +19,7 @@
 let reminderSettings = null; // From the API: { time, timezone, calendarUrl, push: { available, publicKey, devices } }
 let pushSubscription = null; // This device's push subscription, while push is on here
 let timeSaveTimer = null;
-let account = null;          // From the API: { username, email, canEmail (reset emails are set up), quickIcons }
+let account = null;          // From the API: { username, email, emailVerified, age, canEmail (emails are set up), quickIcons }
 let passkeyInfo = null;      // From the API: { on, userHandle, passkeys: [{ id, name, site, synced, createdAt, lastUsedAt }] }
 let passkeyLoadStatus = 0;   // The list's HTTP status, when it didn't load (404: the API doesn't have passkeys yet)
 let passkeyAdd = null;       // { options, at }: a password-checked challenge, kept so trying again starts right away
@@ -47,6 +48,7 @@ window.workspaceReady.then(async (loaded) => {
     wireAccount();
     renderAccount();
     renderPasskeys();
+    if (loaded) renderSheets(); // Now that it's known whether the email is verified
     document.getElementById("accountView").hidden = false;
   }
 
@@ -86,11 +88,14 @@ const MAX_SHEET_CONNECTIONS = 10;
 const SHEET_PREVIEW_LINES = 8;
 const SHARING_EMAIL = "prismalbudget@gmail.com";
 
+// Add Spreadsheet, the verification note's button, and redrawing after every change
 function wireSheets() {
   document.getElementById("addSheetButton").addEventListener("click", (event) => openSheetPanel(null, event.currentTarget));
+  document.getElementById("sheetsVerifyButton").addEventListener("click", sendVerification);
   document.addEventListener("budget:updated", renderSheets);
 }
 
+// The connected spreadsheets, and whether one can be added (a verified email, and fewer than 10)
 function renderSheets() {
   const view = document.getElementById("sheetsView");
   if (!view || !sheetsData) return;
@@ -99,7 +104,17 @@ function renderSheets() {
   list.replaceChildren();
   if (sheetsData.list.length === 0) list.append(BudgetUI.element("li", "sheetEmpty panelHint", "No spreadsheets connected yet."));
   for (const connection of sheetsData.list) list.append(sheetItem(connection));
-  document.getElementById("addSheetButton").disabled = sheetsData.list.length >= MAX_SHEET_CONNECTIONS;
+  // Connecting one needs a verified email (until the account loads, the server says so if it isn't)
+  const unverified = !!account && !account.emailVerified;
+  const note = document.getElementById("sheetsVerify");
+  note.hidden = !unverified;
+  if (unverified) {
+    document.getElementById("sheetsVerifyText").textContent = !account.email
+      ? "Connecting a spreadsheet needs a verified email. Add your email under Email below, then open the link we send it."
+      : `Connecting a spreadsheet needs a verified email. Open the link we emailed to ${account.email} (check your spam folder too), or send a new one.`;
+    document.getElementById("sheetsVerifyButton").hidden = !account.email || !account.canEmail;
+  }
+  document.getElementById("addSheetButton").disabled = unverified || sheetsData.list.length >= MAX_SHEET_CONNECTIONS;
 }
 
 // One spreadsheet: its button, On/Off, Delete, and its problems
@@ -164,6 +179,7 @@ function keptOffProblem(keptOff) {
   return `${named} ${keptOff.length === 1 ? "is" : "are"} left out: a recurring entry with the same title and refraction type lands that day. Give one of them another title.`;
 }
 
+// A "Needs a look" box listing what's wrong
 function problemBox(problems) {
   const box = BudgetUI.element("div", "sheetProblems");
   box.setAttribute("role", "status");
@@ -366,6 +382,7 @@ function openSheetPanel(id, origin) {
         if (problems.length > 0) preview.append(problemBox(problems));
       }
 
+      // Open Spreadsheet: download and read it, then show the entry form
       async function openLink() {
         const typed = link.value();
         panel.setError("");
@@ -398,6 +415,7 @@ function openSheetPanel(id, origin) {
         updatePreview();
       }
 
+      // Save Spreadsheet: check the form, read the spreadsheet with it, and save the connection
       function save() {
         panel.setError("");
         const fields = currentFields();
@@ -597,6 +615,7 @@ function wireReminderTime() {
   });
 }
 
+// Save a new reminder time (with this device's time zone)
 async function saveReminderTime(time) {
   if (time === reminderSettings.time) return;
   if (!TIME_PATTERN.test(time)) {
@@ -617,6 +636,7 @@ async function saveReminderTime(time) {
   renderReminderTime();
 }
 
+// The reminder time, and the time zone it goes by
 function renderReminderTime() {
   document.getElementById("reminderTime").value = reminderSettings.time;
   const zone = (reminderSettings.timezone || currentTimeZone()).replace(/_/g, " ");
@@ -661,6 +681,7 @@ function wireDateFormat() {
   });
 }
 
+// An example of how dates show (and are read) in the format in use
 function renderDateFormatNote() {
   document.getElementById("dateFormatNote").textContent =
     `October 5, 2026 shows as ${showDate(new Date(2026, 9, 5))}, and dates you type are read the same way (${DATE_FORMATS.ymd.pattern} always works too).`;
@@ -738,6 +759,7 @@ function pushBlockedReason() {
   return Notification.permission === "denied" ? PUSH_BLOCKED_TEXT : "";
 }
 
+// Turn On: allow notifications, subscribe this device, and tell the server
 async function turnOnPush(event) {
   event.currentTarget.disabled = true;
   try {
@@ -774,6 +796,7 @@ async function turnOnPush(event) {
   }
 }
 
+// Turn Off: drop this device's subscription, here and on the server
 async function turnOffPush(event) {
   event.currentTarget.disabled = true;
   const subscription = pushSubscription;
@@ -786,6 +809,7 @@ async function turnOffPush(event) {
   renderPush();
 }
 
+// Send Test: a notification to this device now
 async function sendTestPush(event) {
   const button = event.currentTarget;
   button.disabled = true;
@@ -856,6 +880,7 @@ async function setCalendarLink(action) {
   renderCalendarLink();
 }
 
+// Copy Link (or select it where copying isn't allowed)
 async function copyCalendarLink() {
   const input = document.getElementById("calendarUrl");
   try {
@@ -883,12 +908,14 @@ function wireAccount() {
   document.getElementById("deleteForm").addEventListener("submit", deleteAccount);
 }
 
+// The account cards: email (and whether it's verified), age, the reset link, Quick Entry icons, and analytics
 function renderAccount() {
   document.getElementById("emailStatus").textContent = account.email
     ? `Signed in as ${account.username}, with the email ${account.email}. Password reset links go there.`
     : `Signed in as ${account.username}. Your account doesn't have an email yet. Add one so you can reset your password if you forget it.`;
   document.getElementById("emailButton").textContent = account.email ? "Change Email" : "Add Email";
   document.getElementById("passwordFormUsername").value = account.username;
+  renderVerification();
   renderAge();
 
   const status = document.getElementById("passwordStatus");
@@ -938,6 +965,7 @@ async function changePassword(event) {
   BudgetUI.showToast(`Password changed. Your other devices were signed out${hadIcons ? ", and your Quick Entry icons were turned off" : ""}.${noted}`);
 }
 
+// Change Email (needs the password): the new one gets a link to verify it
 async function changeEmail(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -952,30 +980,76 @@ async function changeEmail(event) {
     return;
   }
   const added = !account.email;
-  const before = account.email;
+  const changed = result.data.email !== account.email;
   account = result.data;
   form.reset();
   renderAccount();
-  // The API emails the new address (and the old one, when there was one) to say it changed
-  const noted = account.canEmail && account.email !== before;
-  BudgetUI.showToast(added
-    ? `Email added: ${account.email}.${noted ? " We sent it a note, so you can check that it works." : ""}`
-    : `Email changed to ${account.email}.${noted ? " We sent a note to it and to your old email." : ""}`);
+  renderSheets();
+  // A new email needs verifying: the API emails it a link (and the old one a note that it changed)
+  const verify = !changed ? "" : account.verificationSent
+    ? " We emailed it a link to verify it (it works for 24 hours)."
+    : " Verify it with Send Verification Email above.";
+  BudgetUI.showToast(added ? `Email added: ${account.email}.${verify}` : `Email changed to ${account.email}.${verify}`);
 }
 
-// Prismal Budget is for people 18 and older. Accounts from before ages were asked for can add one here.
+// Whether the email is verified, and Send Verification Email while it isn't (connecting spreadsheets needs it)
+function renderVerification() {
+  const status = document.getElementById("verifyStatus");
+  const buttons = document.getElementById("verifyButtons");
+  buttons.replaceChildren();
+  status.hidden = !account.email;
+  if (!account.email) return;
+  if (account.emailVerified) {
+    status.textContent = "Your email is verified.";
+    return;
+  }
+  if (!account.canEmail) {
+    status.textContent = "Your email isn't verified yet, and verification emails aren't set up on the server yet.";
+    return;
+  }
+  status.textContent = "Your email isn't verified yet. Connecting spreadsheets needs a verified email, so open the link we emailed you (check your spam folder too), or send a new one. It works for 24 hours.";
+  buttons.append(settingsButton("Send Verification Email", "primary", sendVerification));
+}
+
+// Email a new verification link (Email's button, or the one on Connected Spreadsheets)
+async function sendVerification(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  const result = await budgetApi("/api/account/verify-email", {});
+  button.disabled = false;
+  if (!result.ok || !result.data) {
+    BudgetUI.showToast(accountError(result, "Couldn't send the verification email. Please try again."), true);
+    return;
+  }
+  account = result.data;
+  renderVerification();
+  renderSheets();
+  BudgetUI.showToast(account.alreadyVerified ? "Your email is already verified." : `Verification link sent to ${account.email}. It works for 24 hours.`);
+}
+
+// Back on this page after opening the link (another tab or app): check whether the email is verified now
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || !account || !account.email || account.emailVerified) return;
+  const result = await budgetApi("/api/account");
+  if (!result.ok || !result.data || !result.data.emailVerified) return;
+  account = result.data;
+  renderVerification();
+  renderSheets();
+  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets now.");
+});
+
+// Prismal Budget is for people 18 and older. The age given when signing up can be fixed here (like a typo),
+// never to under 18.
 const MIN_AGE = 18;
 const MAX_AGE = 120;
 
+// The Age card
 function renderAge() {
-  const hasAge = Number.isInteger(account.age);
-  document.getElementById("ageStatus").textContent = hasAge
-    ? `You're ${account.age}. Prismal Budget is for people ${MIN_AGE} and older.`
-    : `Your account doesn't have an age yet. Prismal Budget is for people ${MIN_AGE} and older, so please add yours.`;
-  document.getElementById("ageInput").value = hasAge ? String(account.age) : "";
-  document.getElementById("ageButton").textContent = hasAge ? "Change Age" : "Add Age";
+  document.getElementById("ageStatus").textContent = `Prismal Budget is for people ${MIN_AGE} and older. Typed the wrong age when you signed up? Fix it here.`;
+  document.getElementById("ageInput").value = Number.isInteger(account.age) ? String(account.age) : "";
 }
 
+// Save Age (18 to 120)
 async function changeAge(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -993,9 +1067,10 @@ async function changeAge(event) {
   }
   account = result.data;
   renderAge();
-  BudgetUI.showToast("Your age is saved.");
+  BudgetUI.showToast(`Your age is saved: ${account.age}.`);
 }
 
+// Email Me A Reset Link
 async function sendResetLink(event) {
   const button = event.currentTarget;
   button.disabled = true;
@@ -1008,6 +1083,7 @@ async function sendResetLink(event) {
   }
 }
 
+// Delete Account (with the password and a confirmation), then off to the login page
 async function deleteAccount(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1035,6 +1111,7 @@ function accountError(result, fallback) {
   return (result.data && result.data.error) || fallback;
 }
 
+// A form's boxes and buttons off while it sends (and back on after)
 function setFormBusy(form, busy) {
   form.querySelectorAll("input, button").forEach(control => { control.disabled = busy; });
 }
@@ -1058,6 +1135,7 @@ function renderQuickIcons() {
   buttons.append(settingsButton(count === 1 ? "Turn Off The Icon" : "Turn Off Icons", "danger", turnOffQuickIcons));
 }
 
+// Turn Off Icons (after asking): every Quick Entry icon stops working
 async function turnOffQuickIcons(event) {
   const count = account.quickIcons;
   if (!window.confirm(`Turn off ${count === 1 ? "your Quick Entry icon" : `all ${count} of your Quick Entry icons`}? ${count === 1 ? "It stops" : "They stop"} working right away (entries already made with ${count === 1 ? "it" : "them"} still get added). You can make a new one on Home.`)) return;
@@ -1134,6 +1212,7 @@ function renderAnalytics() {
   }
 }
 
+// Analytics on or off for this device
 function setAnalytics(on) {
   try {
     if (on) localStorage.removeItem("prismal_analytics");
@@ -1256,6 +1335,7 @@ async function addPasskey(event) {
   BudgetUI.showToast(`Passkey added: ${passkeyInfo.added}. Passkey sign-in is on.${noted}`);
 }
 
+// Passkey sign-in on or off for the account
 async function turnPasskeys(on) {
   document.querySelectorAll("#passkeyButtons button").forEach(button => { button.disabled = true; });
   const result = await budgetApi("/api/passkey/turn", { on });
@@ -1268,6 +1348,7 @@ async function turnPasskeys(on) {
   renderPasskeys();
 }
 
+// Remove a passkey (after asking), and tell the browser it's gone where it can
 async function removePasskey(passkey) {
   if (!window.confirm(`Remove the passkey "${passkey.name}"? It won't be able to sign in anymore. To clear it off the device too, delete it in that device's passwords (or passkeys) settings.`)) return;
   document.querySelectorAll("#passkeyList button").forEach(button => { button.disabled = true; });
@@ -1311,6 +1392,7 @@ function settingsLink(label, href, newTab) {
   return link;
 }
 
+// Bytes <-> base64url text (push keys)
 function bytesToBase64Url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);

@@ -124,11 +124,10 @@ S.saveStarfieldToStorage = function saveStarfieldToStorage() {
   if (!S.isCanvasReady || !S.latestSnapshot) return;
 
   try {
-    // Save the star list under a stable key (kept for compatibility).
+    // Save the star list.
     localStorage.setItem("constellationStars", JSON.stringify(S.latestSnapshot.stars));
 
-    // Save meta under a stable key (kept for compatibility).
-    // Canvas size, pointer + timers come from the engine's snapshot.
+    // Save meta: canvas size, pointer + timers (from the engine's snapshot), and the slider settings.
     localStorage.setItem(
       "constellationMeta",
       JSON.stringify({
@@ -575,7 +574,8 @@ S.startEngine = function startEngine() {
   // Read saved stars first (this also restores slider settings before the sliders bind).
   const SAVED = S.readSavedStarfield();
 
-  // Everything the engine needs to begin (the canvas's size: see canvasBox, in section 5).
+  // Everything the engine needs to begin (the canvas's size: see canvasBox, in section 5). The star image's
+  // address carries its fingerprint, so browsers keep it until it changes (the worker can't ask Boot.js).
   const CANVAS_BOX = S.canvasBox();
   const INIT_MESSAGE = {
     type: "INIT",
@@ -583,7 +583,8 @@ S.startEngine = function startEngine() {
     height: Math.round(CANVAS_BOX.height),
     settings: { ...S.interactionSettings },
     saved: SAVED,
-    wantsDebug: Object.values(S.debugReadouts).some(Boolean)
+    wantsDebug: Object.values(S.debugReadouts).some(Boolean),
+    starImage: S.getVersionedUrl("/Resources/Star.webp")
   };
 
   /* GROUP: Worker path */
@@ -596,16 +597,24 @@ S.startEngine = function startEngine() {
     // Hand drawing control to the worker. After this the page can't draw on (or resize) the canvas.
     const OFFSCREEN = S.constellationCanvas.transferControlToOffscreen();
 
-    S.worker = new Worker(S.getVersionedUrl(S.engineScriptUrl));
+    // Boot.js usually started the worker and the star image already (its head start), so both are ready sooner
+    const HEAD_START = window.STARFIELD_HEAD_START || null;
+    S.worker = HEAD_START ? HEAD_START.worker : new Worker(S.getVersionedUrl(S.engineScriptUrl));
     S.worker.onmessage = (EVENT) => S.handleEngineMessage(EVENT.data);
     S.worker.onerror = (EVENT) => console.error("Starfield worker error:", EVENT.message, EVENT);
 
     // postMessage queues until the worker script has loaded, so it's safe to send right away.
     S.sendToEngine = (MESSAGE, TRANSFER) => S.worker.postMessage(MESSAGE, TRANSFER || []);
 
-    // The OffscreenCanvas must be in the transfer list (it moves, it can't be copied).
+    // The OffscreenCanvas must be in the transfer list (it moves, it can't be copied). With the head start, the
+    // star image follows in its own message once it's decoded (moved too, not copied); without one, the engine
+    // fetches it itself.
     INIT_MESSAGE.canvas = OFFSCREEN;
+    INIT_MESSAGE.starImagePending = !!HEAD_START;
     S.sendToEngine(INIT_MESSAGE, [OFFSCREEN]);
+    if (HEAD_START) {
+      HEAD_START.starImage.then((BITMAP) => S.sendToEngine({ type: "STAR_IMAGE", bitmap: BITMAP || null }, BITMAP ? [BITMAP] : []));
+    }
     return;
   }
 

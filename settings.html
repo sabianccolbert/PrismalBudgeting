@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=6871ba39c8">
+    <link rel="stylesheet" href="/stylesheet.css?v=77aad26b59">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=6b05fb8d32">
+    <link rel="stylesheet" href="/budgetStyle.css?v=5e4c67c948">
     <title>Prismal Budget - Settings</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -63,6 +63,13 @@
         <section id="sheetsView" class="budgetCard settingsCard" aria-labelledby="sheetsHeading" hidden>
           <h3 id="sheetsHeading">Connected Spreadsheets</h3>
           <p>Keep entries in your own spreadsheet (Google Sheets, Excel, and more)? Connect it, and they land on your calendar from today on, behind a ➕ (➕❗️ Regular, ➕✖️ Hidden, ➕⭕️ Transfer), following the spreadsheet as it changes.</p>
+          <!-- Connecting spreadsheets needs a verified email (Settings Page.js shows this until it is) -->
+          <div id="sheetsVerify" class="sheetsVerify" role="status" hidden>
+            <p id="sheetsVerifyText"></p>
+            <div class="panelButtons">
+              <button id="sheetsVerifyButton" type="button" class="budgetButton primary">Send Verification Email</button>
+            </div>
+          </div>
           <ul id="sheetList" class="sheetList"></ul>
           <div class="panelButtons">
             <button id="addSheetButton" type="button" class="budgetButton primary">Add Spreadsheet</button>
@@ -121,6 +128,8 @@
           <section class="budgetCard settingsCard" aria-labelledby="emailHeading">
             <h3 id="emailHeading">Email</h3>
             <p id="emailStatus"></p>
+            <p id="verifyStatus" hidden></p>
+            <div id="verifyButtons" class="panelButtons"></div>
             <form id="emailForm" class="settingsForm">
               <label class="settingsField">
                 <span class="fieldLabel">New email</span>
@@ -245,6 +254,7 @@
           <h4>Connected Spreadsheets</h4>
           <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
           <ol>
+            <li>Verify your email first. We email a link when you make your account (it works for 24 hours), and Send Verification Email (under Email) sends a new one.</li>
             <li>Share the spreadsheet one of two ways: "Anyone with the link" can view it, or add prismalbudget@gmail.com as a viewer (Google Sheets and Google Drive). For the second, share it from the Google account that uses your Prismal Budget email, so only you can connect it.</li>
             <li>Tap Add Spreadsheet, paste its link, and tap Open Spreadsheet.</li>
             <li>For each part of an entry, tap the yellow ➕ to pick its cells: a tab (from the list, or type its name), then column and row, like column B row 2 to column B row 50 (that's B2:B50). Leave "to" empty for just one cell.</li>
@@ -274,7 +284,11 @@
           <p>When a cell can't be read (like a date that isn't a date, or an Other Account you don't have), the box under that spreadsheet says which cell and how to fix it. The other entries still land.</p>
 
           <h4>Your Account</h4>
-          <p>Prismal Budget is for people 18 and older. Change your age, email, or password here, add passkeys, turn off Quick Entry icons, download your data, or delete your account.</p>
+          <ul>
+            <li><strong>Email:</strong> change it here (with your password). A new email gets a link to verify it, and until it's verified, spreadsheets can't be connected or read. Send Verification Email sends a new link.</li>
+            <li><strong>Age:</strong> Prismal Budget is for people 18 and older. If you typed the wrong age when you signed up, fix it here.</li>
+            <li>Change your password, add passkeys, turn off Quick Entry icons, sign out everywhere, download your data, or delete your account.</li>
+          </ul>
         </section>
       </main>
     </div>

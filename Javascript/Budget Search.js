@@ -1,6 +1,7 @@
 // Budget Search: Home's and History's Search (the same one on both). It finds entries by title in History,
-// the calendar, Upcoming, and (with a To date after the calendar) recurring entries still to come; see search()
-// in Process Budget.js. The 🔎 Search button opens it, floating over the page, and its results show under it.
+// the calendar, Upcoming, and (with a To date after the calendar) recurring entries and connected spreadsheets'
+// entries still to come; see search() in Process Budget.js. The 🔎 Search button opens it, floating over the
+// page, and its results show under it.
 
 wireSearch(); // Works right away (a search before the budget loads says it's still loading)
 
@@ -99,6 +100,7 @@ function wireSearch() {
   });
 }
 
+// Say something in place of the results (like why a search couldn't run)
 function showSearchMessage(message) {
   const container = document.getElementById("searchResults");
   container.replaceChildren(BudgetUI.element("p", "searchMessage", message));

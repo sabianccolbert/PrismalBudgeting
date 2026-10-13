@@ -642,6 +642,7 @@ function addCategoryRow(tableName, atIndex, title) {
   return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Categories`, () => insertCategory(tableName, atIndex, title));
 }
 
+// Edit mode: rename a section heading
 function renameCategoryRow(tableName, index, title) {
   return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Categories`, () => renameCategory(tableName, index, title));
 }
@@ -674,14 +675,17 @@ function saveSheetConnection(config, read, id = null) {
   return runBudgetAction("", () => sheetConnection(config, read, id));
 }
 
+// Turn a connected spreadsheet on or off
 function turnSheetConnection(id, on) {
   return runBudgetAction("", () => switchSheet(id, on));
 }
 
+// Delete a connected spreadsheet (its temps from today on become plain entries)
 function deleteSheetConnection(id) {
   return runBudgetAction("", () => removeSheet(id));
 }
 
+// What reading the connected spreadsheets again found (Spreadsheets.js)
 function updateSheetReads(reads) {
   return runBudgetAction("", () => applySheetReads(reads));
 }
@@ -842,12 +846,14 @@ function afterNextPaint() {
   });
 }
 
+// Every table as JSON text, to roll back to or compare with
 function snapshotTables() {
   const snapshot = {};
   for (const [name, table] of Object.entries(BUDGET_TABLES)) snapshot[name] = JSON.stringify(table.get());
   return snapshot;
 }
 
+// Put every table back the way a snapshot has it
 function restoreTables(snapshot) {
   for (const [name, table] of Object.entries(BUDGET_TABLES)) table.set(JSON.parse(snapshot[name]));
 }
@@ -871,6 +877,7 @@ function beginChangeLog(type, startedAt = performance.now()) {
   formEntryRow = [formatLogTime(new Date(Date.now() - (performance.now() - startedAt))), "", type || "", "", "", "", ""];
 }
 
+// Finish the change's log row (how long it took, and its status) and add it, newest first
 function finishChangeLog() {
   formEntryRow[1] = ((performance.now() - changeLogStart) / 1000).toFixed(2) + " Seconds";
   const status = hadError ? "Error" : (notFound ? "Not Found" : "");
@@ -1111,6 +1118,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
   let targetMMDD = formatToMMDD(dateObj);
   let cleanNewTitle = cleanString(String(title));
 
+  // Take the line with this title (and type) off the day's lines, and say what it held and what goes back
   function mergeMatchingLine(lines, currentAmt, currentTitle, currentSprite) {
     let cellHasBlocker = false;
     let incomingSpecial = currentSprite === "" ? null : getSpecialType(currentSprite);
@@ -1298,6 +1306,7 @@ function recurringTwin(title, special, exceptIndex = -1) {
     cleanString(row[0]) === clean && getSpecialType(String(row[5] || "")) === special);
 }
 
+// Refuse a recurring entry whose title and type another one already has
 function refuseRecurringTwin(title, sprite, exceptIndex = -1) {
   let twin = recurringTwin(title, getSpecialType(sprite), exceptIndex);
   if (twin === -1) return;
@@ -1528,6 +1537,7 @@ const ACCOUNTS_VERSION = 3;
 const DEFAULT_ACCOUNT = "Savings";
 const MAX_ACCOUNT_NAME = 60;
 
+// The default account (Savings), which can't be deleted
 function isDefaultAccount(row) {
   return String(row?.[2] ?? "").trim() === "default";
 }
@@ -1777,6 +1787,7 @@ const SHEETS_VERSION = 1;
 const MAX_SHEETS = 10;
 const MAX_SHEET_NAME = 60;
 
+// The stored connected spreadsheets, checked and tidied: { version, list }
 function normalizeApiSheets(rawData) {
   let parsed = rawData;
   if (typeof parsed === "string") {
@@ -1805,6 +1816,7 @@ function normalizeSheetConnection(item) {
   };
 }
 
+// The connection with this ID, or null
 function sheetConnectionById(id) {
   return (sheetsData?.list || []).find(connection => connection.id === id) || null;
 }
@@ -1842,6 +1854,7 @@ function sheetConnection(config, read, id) {
   return { sheetId: connection.id };
 }
 
+// A connection on or off (off takes its entries off the calendar)
 function switchSheet(id, on) {
   const connection = sheetConnectionById(id);
   if (!connection) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
@@ -1851,6 +1864,7 @@ function switchSheet(id, on) {
   return {};
 }
 
+// Delete a connection (releaseSheetTemps then lets go of its temps from today on)
 function removeSheet(id) {
   const connection = sheetConnectionById(id);
   if (!connection) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
@@ -1879,6 +1893,7 @@ function applySheetReads(reads) {
   return {};
 }
 
+// A random ID for a new connection (12 hex digits)
 function newSheetId() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
@@ -1895,13 +1910,8 @@ function sheetEntriesByDay(from, to, includeOff = false) {
   const toTime = to.getTime();
   for (const connection of sheetsData.list) {
     if (!connection.on && !includeOff) continue;
-    for (const [dateText, sprite, amount, title] of connection.entries) {
-      const date = createSafeMidnight(dateText, true);
-      const time = date.getTime();
-      if (isNaN(time) || time < fromTime || time > toTime) continue;
-      const clean = cleanString(title);
-      const special = getSpecialType(sprite);
-      if (!clean) continue;
+    for (const { date, time, title, clean, special, amount } of parsedSheetEntries(connection)) {
+      if (time < fromTime || time > toTime) continue;
       if (!includeOff && recurringHits(title, date, special) !== false) continue;
       if (!days.has(time)) days.set(time, new Map());
       const day = days.get(time);
@@ -1912,6 +1922,23 @@ function sheetEntriesByDay(from, to, includeOff = false) {
     }
   }
   return days;
+}
+
+// A connection's entries read once (each date as its day, each title as it's compared), and again only once
+// they change (reading the spreadsheet again, or a change being rolled back, makes a new list). Entries
+// without a real date or a title are left out.
+const parsedSheetCache = new WeakMap();
+function parsedSheetEntries(connection) {
+  let parsed = parsedSheetCache.get(connection.entries);
+  if (parsed) return parsed;
+  parsed = [];
+  for (const [dateText, sprite, amount, title] of connection.entries) {
+    const date = createSafeMidnight(dateText, true);
+    const clean = cleanString(title);
+    if (!isNaN(date.getTime()) && clean) parsed.push({ date, time: date.getTime(), title, clean, special: getSpecialType(sprite), amount });
+  }
+  parsedSheetCache.set(connection.entries, parsed);
+  return parsed;
 }
 
 // The spreadsheets' entries that land on date (one per title and type), for unique(): the one with this
@@ -1978,7 +2005,7 @@ function writeSheetsToCell(cellText, day) {
 function releaseSheetTemps() {
   const known = new Set();
   for (const connection of sheetsData?.list || []) {
-    for (const [, sprite, , title] of connection.entries) known.add(cleanString(title) + "|" + getSpecialType(sprite));
+    for (const entry of parsedSheetEntries(connection)) known.add(entry.clean + "|" + entry.special);
   }
   const isReleased = (sprite, title) => {
     const special = getSpecialType(sprite);
@@ -2074,6 +2101,7 @@ function reorderTableRows(tableName, order, movedIndex) {
   return {};
 }
 
+// Edit mode: add a section heading before row atIndex
 function insertCategory(tableName, atIndex, title) {
   let table = ROW_TABLES[tableName];
   if (!table.categoryRow) throw new BudgetInputError("Sections can't be added here.");
@@ -2087,6 +2115,7 @@ function insertCategory(tableName, atIndex, title) {
   return {};
 }
 
+// Rename the section heading at index
 function renameCategory(tableName, index, title) {
   let rows = ROW_TABLES[tableName].get();
   let row = rows[index];
@@ -2454,7 +2483,7 @@ function releaseEndedTemps() {
     let endText = String(row[4] ?? "").trim();
     let endDate = endText && endText.toLowerCase() !== "none" ? createSafeMidnight(endText, true) : null;
     if (endDate && isNaN(endDate.getTime())) endDate = null;
-    // (Older budgets can have two rows for one title and type: the later End Date wins)
+    // (A budget brought over from the spreadsheet can have two rows for one title and type: the later End Date wins)
     if (!lastDays.has(key)) lastDays.set(key, endDate);
     else if (lastDays.get(key) === null || endDate === null) lastDays.set(key, null);
     else if (endDate > lastDays.get(key)) lastDays.set(key, endDate);
@@ -2504,6 +2533,7 @@ function releaseEndedTemps() {
 // Order each day's entries by type, then alphabetize within each type
 function organizeCellEntries() {
   let orderingData = calendarData.map(row => row.map(() => ""));
+  // A line's title as it sorts
   function extractSortingTitle(wholeLine) {
     return cleanString(getParts(wholeLine).slice(2).join(" "));
   }
@@ -2822,6 +2852,7 @@ const DAVE_CATCHUP_DAYS = 30;
 const DAVE_TIPS = [["payday", paydayTip], ["pace", paceTip], ["savings", savingsTip], ["inBank", inBankTip], ["catchup", catchupTip]];
 const DAVE_WEEKLY_TIPS = ["inBank", "catchup"]; // Shown at most once every 7 days
 
+// Where this device keeps Dave's tips for the signed-in account
 const daveStorageKey = () => `prismal_dave_${localStorage.getItem("prismal_username") || ""}`;
 
 // { day, shown: [today's tips shown so far], current: { id, text, until } | null, weekly: { tip id: the last day
@@ -2838,6 +2869,7 @@ function readDaveState() {
   return state;
 }
 
+// Save Dave's tips on this device (best effort)
 function writeDaveState(state) {
   try { localStorage.setItem(daveStorageKey(), JSON.stringify(state)); } catch (e) {}
 }
@@ -2902,6 +2934,7 @@ function weeklyTipDue(state, id) {
   return !last || isNaN(last.getTime()) || getDayDifference(today, last) >= 7;
 }
 
+// The weekly check: compare today's In Bank with the bank (once there are entries to check)
 function inBankTip() {
   const spot = calendarSpot(today);
   const inBank = spot ? readInBank(calendarData[spot.r][spot.c]) : null;
@@ -2970,13 +3003,15 @@ function recentSpending() {
   return spending;
 }
 
+// On a payday: about how much usually goes out, besides recurring bills, before the next one
 function paydayTip() {
   const todaySpot = calendarSpot(today);
   if (!todaySpot || !String(calendarData[todaySpot.r][todaySpot.c]).split("\n").slice(1).some(isPaycheckLine)) return null;
   const { days, enough } = recentSpending();
   if (!enough) return null;
 
-  // "The next N days": until the next payday from a recurring entry (two weeks if there isn't one). Paychecks
+  // "The next N days": until the next payday from a recurring entry or a connected spreadsheet (two weeks if
+  // there isn't one). Paychecks
   // within a few days of each other (like two people's, a day apart) are one payday, so the next one counted
   // is at least DAVE_PAYDAY_DAYS away.
   const next = paycheckDays(addDays(today, DAVE_PAYDAY_DAYS), addDays(today, 62))[0];
@@ -3445,6 +3480,7 @@ function queueReminderPlanSync(force = false) {
   return reminderSync;
 }
 
+// Send the reminder plan when it isn't the one this browser sent last (or force)
 async function syncReminderPlan(force) {
   if (!workspaceLoaded) return false;
   const payload = { plan: buildReminderPlan(), timezone: currentTimeZone() };
@@ -3484,6 +3520,7 @@ async function saveChanges() {
   }
 }
 
+// Send every table that changed (see saveChanges); resolves to true when they all saved
 async function saveChangedTables() {
   console.log("Saving data changes...");
   const token = localStorage.getItem('prismal_jwt');
@@ -3616,11 +3653,10 @@ function normalizeApiTable(rawData, shape) {
 
 // Rebuild the Other Accounts store: { version: 3, list, equity }
 //   list: [0] column titles, then [name, balance today, "default" | ""] (see Other Accounts in BUDGET
-//         LOGIC). The default account, Savings, is added if it's missing. Version 2 kept a typed-in
-//         starting balance in [1]; balances now come only from entries, so that's dropped.
+//         LOGIC). The default account, Savings, is added if it's missing. Balances come only from entries,
+//         so a version 2 store's typed-in balance in [1] isn't kept.
 //   equity: the spreadsheet's business-version (LLC) equity tables, { tabName: table }, kept as stored
-//           (the website doesn't change them).
-//           Before version 2, the whole store was these tables.
+//           (the website doesn't change them). A store without a version is only these tables.
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
   if (typeof parsed === 'string') {
@@ -3723,8 +3759,9 @@ function createSafeMidnight(input, failable = false) {
     }
   }
 
-  console.log("createSafeMidnight couldn't read:", input);
+  // (A caller that can fail says so itself, like a spreadsheet cell that isn't a date)
   if (failable) return new Date("invalid");
+  console.warn("createSafeMidnight couldn't read:", input);
 
   let now = new Date();
   return getLocalMidnight(now.getFullYear(), now.getMonth(), now.getDate());
@@ -3806,35 +3843,56 @@ function showStoredDate(text) {
 // A typed date as local midnight, or an invalid Date when it isn't a real day (31/02 doesn't quietly roll
 // over into March). Numbers go in this device's date order (dateFormat), split by /, ., -, or spaces; a
 // 4-digit year first is always year-month-day. Without a year, it's the nearest one (12/30 typed in January
-// is last December). A 2-digit year is in the 2000s. Words, like "Oct 5, 2026", are read too.
+// is last December). A 2-digit year is in the 2000s. Month names work too, either way around and with or
+// without a year or a weekday ("Oct 5", "5 October 2026", "Mon, Oct 5, 2026"), the same in every browser.
 function parseTypedDate(text) {
   const trimmed = String(text || "").trim();
   const invalid = new Date("invalid");
   if (!trimmed) return invalid;
   let year, month, day;
   let numbers = trimmed.match(/^(\d{4})[\/.\-\s](\d{1,2})[\/.\-\s](\d{1,2})$/);
+  const named = numbers ? null : namedDate(trimmed);
   if (numbers) {
     [year, month, day] = numbers.slice(1).map(Number);
+  } else if (named) {
+    ({ month, day } = named);
+    year = named.year ?? nearestYear(month);
   } else {
     numbers = trimmed.match(/^(\d{1,2})[\/.\-\s](\d{1,2})(?:[\/.\-\s](\d{2}|\d{4}))?\.?$/);
     if (!numbers) {
-      if (/^[\d\s\/.\-]+$/.test(trimmed)) return invalid;
-      return createSafeMidnight(trimmed, true); // Words, like "Oct 5, 2026"
+      // Anything else only when it says its year (browsers guess one differently, like 2001)
+      if (/^[\d\s\/.\-]+$/.test(trimmed) || !/\d{4}/.test(trimmed)) return invalid;
+      return createSafeMidnight(trimmed, true);
     }
     const [first, second] = [Number(numbers[1]), Number(numbers[2])];
     [month, day] = dateFormat() === "dmy" ? [second, first] : [first, second];
-    if (numbers[3]) {
-      year = Number(numbers[3]) + (numbers[3].length === 2 ? 2000 : 0);
-    } else {
-      // The nearest year: this one, or next or last year around New Year's
-      year = today.getFullYear();
-      if (month === 12 && today.getMonth() === 0) year--;
-      else if (month === 1 && today.getMonth() === 11) year++;
-    }
+    year = numbers[3] ? Number(numbers[3]) + (numbers[3].length === 2 ? 2000 : 0) : nearestYear(month);
   }
   const date = new Date(year, month - 1, day);
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return invalid;
   return createSafeMidnight(date);
+}
+
+// The year a date typed without one is in: this one, or next or last year around New Year's (month: 1-12)
+function nearestYear(month) {
+  if (month === 12 && today.getMonth() === 0) return today.getFullYear() - 1;
+  if (month === 1 && today.getMonth() === 11) return today.getFullYear() + 1;
+  return today.getFullYear();
+}
+
+// "Oct 5", "October 5th, 2026", "5 Oct 2026", or "Monday, Oct 5" -> { month (1-12), day, year (or null) };
+// null when it isn't a date written with its month's name
+const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+function namedDate(text) {
+  const words = text.replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+/i, "");
+  const monthFirst = words.match(/^([a-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?$/i);
+  const dayFirst = monthFirst ? null : words.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,})\.?,?(?:\s+(\d{4}))?$/i);
+  if (!monthFirst && !dayFirst) return null;
+  const [name, dayText] = monthFirst ? [monthFirst[1], monthFirst[2]] : [dayFirst[2], dayFirst[1]];
+  const month = MONTH_NAMES.findIndex(full => full.startsWith(name.toLowerCase())) + 1;
+  if (month === 0) return null;
+  const yearText = (monthFirst || dayFirst)[3];
+  return { month, day: Number(dayText), year: yearText ? Number(yearText) : null };
 }
 
 // The calendar's 28 days, 4 rows of Sunday through Saturday, starting with the budget's week (today)
@@ -3862,10 +3920,12 @@ function getDayDifference(date1, date2) {
 	return Math.round((date1.getTime() - date2.getTime()) / 86400000);
 }
 
+// A line's words: [sprite, amount, ...title]
 function getParts(line) {
   return String(line).trim().split(/\s+/);
 }
 
+// A day as stored: MM/DD/YYYY
 function formatToMMDDYYYY(dateObj) {
   const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
   const dd = String(dateObj.getDate()).padStart(2, '0');
@@ -3880,6 +3940,7 @@ function formatToYMD(dateObj) {
   return `${dateObj.getFullYear()}-${mm}-${dd}`;
 }
 
+// A calendar day's first line: MM/DD
 function formatToMMDD(dateObj) {
   if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
     return "";
@@ -3899,6 +3960,7 @@ function formatToMMDD(dateObj) {
   return formattedDate;
 }
 
+// An amount as stored and shown: -$1234.56 or $1234.56
 function formatMoney(amount) {
 	let rounded = Math.round(amount * 100) / 100;
 	let isNegative = rounded < 0;
@@ -3918,6 +3980,7 @@ function readMoneyInput(text) {
   return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(clean) ? Number(clean) : NaN;
 }
 
+// A stored amount ("-$1234.56") -> -1234.56; 0 when there isn't one
 function parseAmount(val) {
 	if (!val) return 0;
 	let str = String(val)
@@ -3981,6 +4044,7 @@ function capitalize(string) {
   return getParts(string).map(word => word.replace(/\p{L}/u, char => char.toUpperCase())).join(" ");
 }
 
+// An entry's refraction type from its sprite: ✖️ Hidden, ⭕️ Transfer, or ❗️ Regular
 function getSpecialType(emo) {
 	if (!emo) return "❗️";
 	if (emo.includes("✖️")) return "✖️";
@@ -4219,6 +4283,7 @@ let targetEl = null;
 let startDist = 0, startAngle = 0;
 let startCenterX = 0, startCenterY = 0;
 
+// Two fingers: how far apart they are, at what angle, and the point between them
 const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
 const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
@@ -4265,6 +4330,7 @@ table?.addEventListener('touchmove', (e) => {
   }
 }, { passive: false });
 
+// The fingers let go: the day (or the calendar) settles back
 const endTransform = (e) => {
   if (isTransforming && e.touches.length < 2) {
     isTransforming = false;
@@ -4282,17 +4348,28 @@ table?.addEventListener('touchend', endTransform);
 table?.addEventListener('touchcancel', endTransform);
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
-// A tapped day zooms in and stays zoomed until its v, or anything outside it, is tapped. On phones (touch
-// screens and narrow windows) it fills almost the whole screen, centered over a dimmed page; on a computer
-// it doubles in size. --zoom (how much it's scaled) keeps its v the same small size on screen.
+// A tapped day zooms in and stays zoomed until its v, or anything outside it, is tapped. On a computer it
+// doubles in size (scaled, see budgetStyle.css). On phones (touch screens and narrow windows) it fills almost
+// the whole screen, centered over a dimmed page. There it's laid out at that size (--zoom times its own: its
+// text, sprites, and spacing), not scaled up from the tiny day, so everything in it stays sharp; a scale only
+// runs while it grows out of the day and shrinks back into it.
 
 window.editingCell = false;
 let activeEditCell = null;
 const fullZoomQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)");
+// Does the device ask for less motion?
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let zoomBackdrop = null;
 
+// Zoom a day in (closing any other): doubled on a computer, laid out to fill the screen on a phone
 function zoomDay(cell) {
   if (activeEditCell) closeZoomedDay();
+  // A day tapped again while it was shrinking back stops shrinking
+  if (cell.zoomClose) {
+    cell.zoomClose.cancel();
+    cell.zoomClose = null;
+  }
+  cell.classList.remove('isZoomClosing');
   window.editingCell = true;
   activeEditCell = cell;
   cell.classList.add('is-editing');
@@ -4308,50 +4385,67 @@ function zoomDay(cell) {
   fitZoomedDay(true);
 }
 
-function closeZoomedDay() {
+// immediate: no shrinking back into the day (leaving the page)
+function closeZoomedDay(immediate = false) {
   const cell = activeEditCell;
   window.editingCell = false;
   activeEditCell = null;
   if (zoomBackdrop) zoomBackdrop.classList.remove('shown');
   if (!cell) return;
-  cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom');
-  cell.style.removeProperty('transform');
-  cell.style.removeProperty('transform-origin');
-  cell.style.removeProperty('transition');
-  cell.style.removeProperty('--zoom');
+  const finish = () => {
+    cell.zoomClose = null;
+    if (activeEditCell === cell) return; // Zoomed again in the meantime
+    cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom', 'isZoomClosing');
+    for (const property of ['transform', 'transform-origin', '--zoom']) cell.style.removeProperty(property);
+  };
+  const scale = Number(cell.style.getPropertyValue('--zoom')) || 1;
+  if (immediate || !cell.classList.contains('is-fullZoom') || !cell.animate || reducedMotion()) {
+    finish();
+    return;
+  }
+  // It shrinks back into its day (still laid out big, scaled down to the day's size), then is the day again.
+  // A tap on it meanwhile zooms it right back in (zoomDay), and its entries don't open (Calendar Page.js).
+  cell.classList.add('isZoomClosing');
+  cell.zoomClose = cell.animate(
+    [{ transform: cell.style.transform }, { transform: `translate(0px, 0px) scale(${1 / scale})` }],
+    { duration: 200, easing: 'ease-in' }
+  );
+  cell.zoomClose.onfinish = finish;
 }
 
 // A zoomed day zooms back out when the page is left (so Back never shows it still zoomed)
-window.FloatingWindows?.closeOnPageExit(closeZoomedDay);
+window.FloatingWindows?.closeOnPageExit(() => closeZoomedDay(true));
 
-// Scale and move the zoomed day so it fills almost the whole screen, centered. It's measured where it sits
-// unzoomed (the zoom is taken off just for the measuring, which nothing draws in between). Again, without
-// the slide, when the page scrolls or resizes, or the day's entries change.
+// Lay the zoomed day out so it fills almost the whole screen, centered: how big (--zoom) from its size where
+// it sits (measured at its own size, which nothing draws in between), then moved there. animate: it grows out
+// of the day (opening); without, it just moves (when the page scrolls or resizes, or the day's entries change).
 function fitZoomedDay(animate = false) {
   const cell = activeEditCell;
   if (!cell || !cell.classList.contains('is-fullZoom')) return;
-  const before = cell.style.transform;
-  cell.style.transition = 'none';
   cell.style.transform = 'none';
+  cell.style.setProperty('--zoom', '1');
   const box = cell.getBoundingClientRect();
   const content = cell.querySelector('.cell-content');
   const height = Math.max(box.height, content ? content.offsetHeight : 0); // A long day shows all of it
-  cell.style.transform = before;
   const viewWidth = document.documentElement.clientWidth || window.innerWidth;
   const viewHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   const scale = Math.min((viewWidth * 0.92) / box.width, (viewHeight * 0.84) / height);
   const toLeft = (viewWidth - box.width * scale) / 2;
   const toTop = (viewHeight - height * scale) / 2;
-  if (animate) {
-    void cell.offsetWidth; // Start the slide from where it is now
-    cell.style.removeProperty('transition');
-  }
+  const moved = `translate(${toLeft - box.left}px, ${toTop - box.top}px)`;
   cell.style.transformOrigin = '0 0';
   cell.style.setProperty('--zoom', String(scale));
-  cell.style.transform = `translate(${toLeft - box.left}px, ${toTop - box.top}px) scale(${scale})`;
+  cell.style.transform = moved;
+  if (animate && cell.animate && !reducedMotion()) {
+    cell.animate(
+      [{ transform: `translate(0px, 0px) scale(${1 / scale})` }, { transform: moved }],
+      { duration: 250, easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)' }
+    );
+  }
 }
 
 let refitFrame = 0;
+// Lay the zoomed day out again on the next frame (once, however often it's asked)
 const refitZoomedDay = () => {
   cancelAnimationFrame(refitFrame);
   refitFrame = requestAnimationFrame(() => fitZoomedDay(false));
@@ -4457,8 +4551,10 @@ class StaleHistoryError extends BudgetInputError {
   }
 }
 
+// Where this tab keeps Undo's steps for the signed-in account
 const undoStorageKey = () => `prismal_undo_${localStorage.getItem("prismal_username") || ""}`;
 
+// This tab's Undo and Redo steps: { undo, redo }, oldest first
 function readUndoHistory() {
   try {
     const stored = JSON.parse(sessionStorage.getItem(undoStorageKey()) || "null");
@@ -4467,6 +4563,7 @@ function readUndoHistory() {
   return { undo: [], redo: [] };
 }
 
+// Save them for this tab (best effort)
 function writeUndoHistory(history) {
   try { sessionStorage.setItem(undoStorageKey(), JSON.stringify(history)); } catch (e) {}
 }
@@ -4477,10 +4574,12 @@ function undoInfo() {
   return { undo: history.undo.at(-1)?.label ?? null, redo: history.redo.at(-1)?.label ?? null };
 }
 
+// Undo the newest step (it runs, and is logged, like any change)
 function undoCalendarChange() {
   return runBudgetAction("↩️ Undo", () => stepThroughHistory("undo"));
 }
 
+// Redo the newest step that was undone
 function redoCalendarChange() {
   return runBudgetAction("↪️ Redo", () => stepThroughHistory("redo"));
 }
@@ -4523,6 +4622,7 @@ function moveHistoryStep(direction) {
   writeUndoHistory(history);
 }
 
+// Forget a step that can't be taken anymore
 function dropHistoryStep(direction) {
   const history = readUndoHistory();
   (direction === "undo" ? history.undo : history.redo).pop();
@@ -4541,6 +4641,7 @@ function captureEntryDays(dates) {
   return { days, equity: JSON.stringify(accountsData?.equity ?? null) };
 }
 
+// A change's step: the days whose entries it changed, before and after (null when there's nothing to put back)
 function makeUndoStep(label, before) {
   const after = captureEntryDays(before.days.map(day => createSafeMidnight(day.date)));
   const days = before.days
@@ -4586,21 +4687,25 @@ function setDayEntries(date, lines) {
   }
 }
 
+// A cell's own entry lines (not its date, or the lines the budget writes)
 function ownEntryLines(cellText) {
   return String(cellText ?? "").split("\n").slice(1).map(line => line.trim()).filter(isOwnEntryLine);
 }
 
+// An entry someone added or changed (a unique entry or a temp), not one as it landed
 function isOwnEntryLine(line) {
   const text = String(line).trim();
   return OWN_ENTRY_SPRITES.some(sprite => text.startsWith(sprite));
 }
 
+// Is this Upcoming row an entry on date?
 function isUpcomingOn(row, date) {
   if (String(row[0] ?? "").trim() === "" || systemEmojis.includes(String(row[3] ?? "").trim())) return false;
   const rowDate = createSafeMidnight(row[2], true);
   return !isNaN(rowDate.getTime()) && rowDate.getTime() === date.getTime();
 }
 
+// Where a day is on the calendar: { r, c }, or null
 function calendarSpot(date) {
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
@@ -4610,6 +4715,7 @@ function calendarSpot(date) {
   return null;
 }
 
+// Where a day is in History: { r, c }, or null
 function historySpot(date) {
   const target = formatToMMDDYYYY(date);
   for (let r = 1; r < historyData.length; r++) {
@@ -4662,10 +4768,12 @@ const BUDGET_NOTICES = {
   refreshed: ["Your budget was changed on another device or tab, so this page refreshed to show it.", false]
 };
 
+// A note for the page to show once it reloads
 function rememberBudgetNotice(kind) {
   try { sessionStorage.setItem("prismal_budget_notice", kind); } catch (e) {}
 }
 
+// Show the note a reload left (once)
 function showRememberedBudgetNotice() {
   let kind = null;
   try {
@@ -4695,8 +4803,12 @@ async function checkForNewerBudget() {
   }
   if (Date.now() - lastRevisionCheck < 10000) return;
   lastRevisionCheck = Date.now();
+  const known = dataRevision;
   const result = await budgetApi("/api/data/revision");
   if (!result.ok || !result.data || !Number.isInteger(result.data.revision)) return;
+  // (A save from this page while the answer was on its way, like a connected spreadsheet's update, moved the
+  // revision on itself: that's not a change from somewhere else)
+  if (dataRevision !== known) return;
   if (result.data.revision !== dataRevision && workspaceLoaded && !savingNow && !hasUnsavedChanges()) {
     reloadingBudget = true;
     workspaceLoaded = false;

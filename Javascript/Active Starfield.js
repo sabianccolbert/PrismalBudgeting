@@ -256,13 +256,18 @@ const STAR_SPRITES = {
   ready: false,
 
   // The ImageBitmap used by drawImage().
-  img: null
+  img: null,
+
+  // True while it's downloading (so it's only asked for once).
+  loading: false
 };
 
-// Load the star sprite immediately so it is ready by the time rendering starts.
-// Workers have no Image(), so fetch the file and decode it into an ImageBitmap.
-(function loadStarSpriteNow() {
-  fetch("/Resources/Star.webp")                                           // Sprite path (same origin as the worker)
+// Load the star sprite as soon as INIT says where it is (its fingerprinted address), so it's ready by the
+// time rendering starts. Workers have no Image(), so fetch the file and decode it into an ImageBitmap.
+function loadStarSprite(URL) {
+  if (STAR_SPRITES.img || STAR_SPRITES.loading) return;                   // Once is enough
+  STAR_SPRITES.loading = true;
+  fetch(URL || "/Resources/Star.webp")                                    // Sprite path (same origin as the worker)
     .then((RESPONSE) => {                                                 // Check the download
       if (!RESPONSE.ok) throw new Error("HTTP " + RESPONSE.status);       // Treat 404 etc. as a failure
       return RESPONSE.blob();                                             // Raw image bytes
@@ -274,9 +279,10 @@ const STAR_SPRITES = {
     })
     .catch((ERROR) => {                                                   // Download or decode failed
       STAR_SPRITES.ready = false;                                         // Keep ready false on error
+      STAR_SPRITES.loading = false;                                       // A later INIT can try again
       console.warn("Could not load star sprite:", ERROR);                 // Say why stars aren't drawing
     });
-})();
+}
 
 /* GROUP: Link throttle state */
 // Count frames so we can rebuild link geometry every N frames.
@@ -390,7 +396,7 @@ S.updateStarPhysics = function updateStarPhysics() {
   const SCALE = S.screenScalePowers;
 
   /* GROUP: Time-based decays */
-  // Convert legacy “per frame” decays into time-based multipliers.
+  // Turn each "per frame at 60 FPS" decay into one for this frame's real length.
   const MOMENTUM_DECAY = decayPerFrameToDt(0.98, DT_FRAMES);
   const WHITE_DECAY = decayPerFrameToDt(0.98, DT_FRAMES);                 // White flash decay per dt
   const POINTER_SPEED_DECAY = decayPerFrameToDt(0.5, DT_FRAMES);          // Pointer energy decay per dt
@@ -872,6 +878,7 @@ function bounceVertical(
   return true;
 }
 
+// The same bounce for a horizontal wall (the top or bottom edge)
 function bounceHorizontal(
   STAR,
   WALL_Y,
@@ -1335,13 +1342,7 @@ S.createNewStars = function createNewStars() {
       momentumY: 0,
 
       // Cached edge fade factor used by link brightness.
-      edge: 1,
-
-      // Keyboard force X (legacy/optional).
-      keyboardForceX: 0,
-
-      // Keyboard force Y (legacy/optional).
-      keyboardForceY: 0
+      edge: 1
     });
   }
 
@@ -1458,9 +1459,6 @@ function postSnapshot() {
       // Save pointer Y so ring resumes at correct position.
       userY: S.pointerClientY,
 
-      // Save pointer time baseline (legacy/optional field).
-      userTime: S.lastPointerTimeMs,
-
       // Save ring timer so ring resumes smoothly.
       ringTimer: S.pointerRingTimer
     }
@@ -1516,9 +1514,10 @@ function startEngineIfReady() {
   }
 
   /* GROUP: Start loop */
+  // The first frame is drawn right away (not on the next frame), so the stars show as soon as they can
   if (!S.hasAnimationLoopStarted) {
     S.hasAnimationLoopStarted = true;
-    requestFrame(runAnimationLoop);
+    runAnimationLoop();
   }
 }
 
@@ -1549,6 +1548,9 @@ function handleMainMessage(MESSAGE) {
       Object.assign(S.interactionSettings, MESSAGE.settings);
       S.wantsDebug = !!MESSAGE.wantsDebug;
       S.pendingSave = MESSAGE.saved || null;
+      // The star image: on its way from the page already decoded (STAR_IMAGE), or fetched here
+      S.starImageUrl = MESSAGE.starImage;
+      if (!MESSAGE.starImagePending) loadStarSprite(S.starImageUrl);
 
       S.resizeStarfieldCanvas(width, height);
       startEngineIfReady();
@@ -1593,6 +1595,16 @@ function handleMainMessage(MESSAGE) {
     case "REBUILD_LINKS":
       // Forces links to disappear and fade back in over time.
       S.linkRebuildTimer = 300;
+      break;
+
+    case "STAR_IMAGE":
+      // The star image the page decoded while it loaded (Boot.js's head start), or null when it couldn't
+      if (MESSAGE.bitmap) {
+        STAR_SPRITES.img = MESSAGE.bitmap;
+        STAR_SPRITES.ready = true;
+      } else {
+        loadStarSprite(S.starImageUrl);
+      }
       break;
   }
 }

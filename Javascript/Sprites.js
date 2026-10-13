@@ -6,8 +6,9 @@
 //
 // The images are Resources/Sprites/*.webp, one color per type, all drawn as thick rounded lines with the same
 // soft shadow: Regular red (a ! as a line and a dot), Hidden purple (an X), Transfer green (a ring), Recurring
-// orange (a check), and Spreadsheet yellow (a plus: Hidden's X turned). To change one, replace its file (any square image with a transparent background
-// works; around 128x128 is plenty), then stamp the site (node _tools/stamp.mjs) so browsers get the new one.
+// orange (a check), and Spreadsheet yellow (a plus: Hidden's X turned). To change one, replace its file (any
+// square image with a transparent background works; around 128x128 is plenty), then stamp the site
+// (node _tools/stamp.mjs) so browsers get the new one.
 // If an image can't load, its emoji shows instead. Text that can't hold an image (dialogs, suggestion lists,
 // text boxes) shows the device's own emoji in its own colors, so the site words those spots instead where it
 // can (like "(counts transfers)" in Search's suggestions).
@@ -32,6 +33,7 @@
 
   const url = (path) => (typeof window.assetUrl === "function" ? window.assetUrl(path) : path);
 
+  // The image for one emoji (its alt text is the emoji, so copying and screen readers still get it)
   function spriteImage(character) {
     const img = document.createElement("img");
     img.className = "sprite";

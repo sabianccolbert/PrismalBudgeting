@@ -8,7 +8,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.12.2026.A";
+  const SITE_VERSION = "10.13.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -20,30 +20,31 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "23a44ae782",
+    "/Javascript/Active Starfield.js": "558a7e0f16",
     "/Javascript/Analytics.js": "dac605ae19",
-    "/Javascript/Budget Pages.js": "04733b80e1",
-    "/Javascript/Budget Search.js": "ccd0b54452",
-    "/Javascript/Budget UI.js": "8714407d69",
-    "/Javascript/Calendar Page.js": "4d04a01de9",
-    "/Javascript/Debug.js": "2661348b4b",
+    "/Javascript/Budget Pages.js": "381b372560",
+    "/Javascript/Budget Search.js": "25dc57d117",
+    "/Javascript/Budget UI.js": "581d3e1633",
+    "/Javascript/Calendar Page.js": "2cab0844a7",
+    "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "c627653108",
-    "/Javascript/Layout.js": "df6b6e4d98",
-    "/Javascript/Login.js": "456ef5d0df",
-    "/Javascript/Passkeys.js": "57181546e2",
-    "/Javascript/Process Budget.js": "b959bd6db3",
-    "/Javascript/Quick Entry.js": "e8b4cd28f4",
-    "/Javascript/Session.js": "ff5a8f1a97",
-    "/Javascript/Settings Page.js": "a7d30885ff",
+    "/Javascript/Layout.js": "1d4cd5a7ea",
+    "/Javascript/Login.js": "ff9d2b2fbd",
+    "/Javascript/Passkeys.js": "67a10905c2",
+    "/Javascript/Process Budget.js": "83a4c3002c",
+    "/Javascript/Quick Entry.js": "9d91ce521a",
+    "/Javascript/Session.js": "ec241e0ce9",
+    "/Javascript/Settings Page.js": "788ff1e6ee",
     "/Javascript/Sheet Import.js": "2dda717131",
-    "/Javascript/Spreadsheets.js": "09c4338f30",
-    "/Javascript/Sprites.js": "9dd3752085",
-    "/Javascript/Starfield Setup.js": "fece082597",
+    "/Javascript/Spreadsheets.js": "705aaf25d2",
+    "/Javascript/Sprites.js": "4f0c83ae83",
+    "/Javascript/Starfield Setup.js": "d728f1054f",
     "/Resources/Sprites/Hidden.webp": "9c3afd2c80",
     "/Resources/Sprites/Recurring.webp": "f35a230cbd",
     "/Resources/Sprites/Regular.webp": "11a1321f81",
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
-    "/Resources/Sprites/Transfer.webp": "0b848dff24"
+    "/Resources/Sprites/Transfer.webp": "0b848dff24",
+    "/Resources/Star.webp": "f2d3021d0b"
   };
   // </stamp:files>
 
@@ -120,16 +121,6 @@
     return;
   }
 
-  // Before October 2026, every release reloaded each page once with ?v= added to its address. Pages are
-  // always fresh now, so that's taken back out of the address (old bookmarks keep working), and the
-  // version those releases kept here is forgotten.
-  if (new URLSearchParams(location.search).has("v")) {
-    const cleanUrl = new URL(location.href);
-    cleanUrl.searchParams.delete("v");
-    history.replaceState(history.state, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
-  }
-  try { if (storage) storage.removeItem("LOCAL_SITE_VERSION"); } catch (e) {}
-
   /* ===============================
    *  3) AUTHENTICATION REDIRECT
    * =============================== */
@@ -139,36 +130,63 @@
     ? 'http://127.0.0.1:8787'
     : "https://prismal-budget-api.prismalbudget.workers.dev";
 
-  // The link in a password reset email (/login.html?reset=...) opens the login page even when signed in.
-  // Login.js moves the code into this tab's session storage, so a reload of that page still counts.
+  // The links in a password reset email (/login.html?reset=...) and an email verification email
+  // (/login.html?verify=...) open the login page even when signed in. Login.js moves a reset code into this
+  // tab's session storage, so a reload of that page still counts.
   let hasResetCode = false;
   try { hasResetCode = !!sessionStorage.getItem("prismal_reset_token"); } catch (e) {}
-  const isResetLink = PAGE === "login" && (new URLSearchParams(location.search).has("reset") || hasResetCode);
+  const pageParams = new URLSearchParams(location.search);
+  const isEmailLink = PAGE === "login" && (pageParams.has("reset") || pageParams.has("verify") || hasResetCode);
 
   // If they are not logged in, and not already on a page that works without it, redirect them.
   if (!isLoggedIn && !IS_PUBLIC) {
     window.location.replace("/login.html");
     return;
   }
-  if (isLoggedIn && PAGE === "login" && !isResetLink) {
+  if (isLoggedIn && PAGE === "login" && !isEmailLink) {
     window.location.replace("/index.html");
     return;
   }
 
   /* ===============================
-   *  4) CSS mode flip
+   *  4) STARFIELD HEAD START
+   * =============================== */
+  // The starfield's engine (a worker running Active Starfield.js) and its star image start loading now, while
+  // the page itself is still loading, instead of after it: Starfield Setup.js picks them both up, so the stars
+  // are drawn as soon as the page shows instead of a moment later. Not when the device asks for reduced motion
+  // (there's no starfield then), or in a browser that can't hand the canvas to a worker (Setup draws on the page).
+  const reducedMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  if (!reducedMotion && typeof Worker === "function" && window.HTMLCanvasElement && "transferControlToOffscreen" in HTMLCanvasElement.prototype) {
+    try {
+      window.STARFIELD_HEAD_START = {
+        worker: new Worker(window.assetUrl("/Javascript/Active Starfield.js")),
+        // The star image, decoded and ready to hand over (null if it couldn't be: the engine fetches it then)
+        starImage: typeof createImageBitmap === "function"
+          ? fetch(window.assetUrl("/Resources/Star.webp"))
+              .then(response => (response.ok ? response.blob() : null))
+              .then(blob => (blob ? createImageBitmap(blob) : null))
+              .catch(() => null)
+          : Promise.resolve(null)
+      };
+    } catch (e) {
+      window.STARFIELD_HEAD_START = null;
+    }
+  }
+
+  /* ===============================
+   *  5) CSS mode flip
    * =============================== */
   document.documentElement.classList.add(PAGE === "home" ? "homeJs" : "otherJs");
 
   /* ===============================
-   *  5) Append page scripts at END
+   *  6) Append page scripts at END
    * =============================== */
-  // Starfield Setup starts the worker (Active Starfield.js) itself, so Active isn't listed here.
-  // Setup must come before Keyboard and Layout, which use window.STARFIELD. Sprites goes first, so the
+  // Starfield Setup goes first, so the stars start right away (Boot.js has already started its worker, see
+  // above), and it has to come before Keyboard and Layout, which use window.STARFIELD. Then Sprites, so the
   // ❗️ ✖️ ⭕️ ✔️ ➕ images are in before the page slides in.
   const GLOBAL_SCRIPTS = [
-    "/Javascript/Sprites.js",
     "/Javascript/Starfield Setup.js",
+    "/Javascript/Sprites.js",
     "/Javascript/Layout.js",
     "/Javascript/Keyboard Starfield.js",
     "/Javascript/Analytics.js"
@@ -184,6 +202,7 @@
     quick: "/Javascript/Quick Entry.js"
   };
 
+  // Add a script at the end of the page, at its fingerprinted address (they run in the order they're added)
   function appendScript(src){
     const s = document.createElement("script");
     s.src = window.assetUrl(src);
@@ -191,6 +210,7 @@
     document.body.appendChild(s);
   }
 
+  // The scripts this page needs: the shared ones, sign-in, then the budget and the page's own
   function loadPageScripts(){
     // Quick Entry's link carries its key, so that page never loads analytics
     GLOBAL_SCRIPTS.filter(src => PAGE !== "quick" || !src.endsWith("/Analytics.js")).forEach(appendScript);
@@ -224,7 +244,7 @@
   }
 
   /* ===============================
-   *  6) Add version badge
+   *  7) Add version badge
    * =============================== */
   function addVersionBadge(){
     if (document.getElementById("versionBadge")) return;
@@ -235,7 +255,7 @@
   }
 
   /* ===============================
-   *  7) Init
+   *  8) Init
    * =============================== */
   function onDOMReady(fn) {
     if (document.readyState === "loading") {

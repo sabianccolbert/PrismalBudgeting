@@ -181,6 +181,7 @@ const BudgetUI = (() => {
     return result;
   }
 
+  // A change that worked but couldn't reach the server yet (offline) says it'll be sent when it can
   function warnIfUnsaved(result) {
     if (result && result.ok && result.saved === false) {
       showToast("Couldn't reach the server, so that change isn't saved yet. It'll be saved as soon as the connection comes back (leaving the page before then asks first).", true);
@@ -225,6 +226,7 @@ const BudgetUI = (() => {
     return wrapper;
   }
 
+  // A text box with its label. value(): what's typed, tidied (single spaces, trimmed).
   function textField({ label, value = "", placeholder = "", optional = false, multiline = false, hint = "", disabled = false }) {
     const input = element(multiline ? "textarea" : "input", "textInput");
     if (!multiline) input.type = "text";
@@ -245,6 +247,7 @@ const BudgetUI = (() => {
 
     let sign = amount !== null && amount > 0 ? 1 : -1;
     const toggle = segmented([{ key: -1, label: "− Cost" }, { key: 1, label: "+ Gain" }], sign, (key) => setSign(key));
+    // Cost (-1) or Gain (1); a gain's box shows green
     function setSign(key) {
       sign = key;
       toggle.set(key);
@@ -346,6 +349,7 @@ const BudgetUI = (() => {
     wrapper.hidden = true;
 
     const accountTitled = (text) => list.find(account => cleanString(account.name) === cleanString(text))?.name || "";
+    // The hint under the picker: what the entry does to the account
     function describe() {
       const name = select.value;
       const value = amount.value();
@@ -454,6 +458,7 @@ const BudgetUI = (() => {
     };
   }
 
+  // A drop-down list of plain text options
   function selectField({ label, options, value }) {
     const select = element("select", "selectInput");
     for (const option of options) {
@@ -625,6 +630,7 @@ const BudgetUI = (() => {
       group.appendChild(button);
       return [option.key, button];
     });
+    // Pick one (without running onChange)
     function set(key) {
       current = key;
       for (const [optionKey, button] of buttons) button.setAttribute("aria-checked", String(optionKey === key));
@@ -742,6 +748,7 @@ const BudgetUI = (() => {
     document.body.classList.toggle("datePicking", !!pickTarget && hasCalendar());
   }
 
+  // Is a date box waiting for a day to be tapped?
   function datePickActive() {
     return !!pickTarget && pickTarget.isConnected && hasCalendar();
   }
@@ -815,6 +822,7 @@ const BudgetUI = (() => {
     ? new ResizeObserver(entries => entries.forEach(entry => placeHeaderBar(entry.target)))
     : null;
 
+  // Measure one table's column titles and give each its piece of the bar
   function placeHeaderBar(table) {
     if (!table.isConnected) {
       headerBarObserver?.unobserve(table); // Gone from the page (redrawn)
@@ -831,6 +839,7 @@ const BudgetUI = (() => {
     }
   }
 
+  // One bar across a table's column titles, placed now and whenever the table changes size
   function spanHeaderBar(table) {
     if (headerBarObserver) headerBarObserver.observe(table);
     else requestAnimationFrame(() => placeHeaderBar(table));

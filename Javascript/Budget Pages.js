@@ -37,6 +37,7 @@ document.addEventListener("budget:updated", () => {
   if (workspaceLoaded) renderCurrentPage();
 });
 
+// Draw this page from the budget (and its open Search results)
 function renderCurrentPage() {
   const render = PAGE_RENDERERS[window.PAGE];
   const view = document.getElementById("dataView");
@@ -396,6 +397,7 @@ const PAGE_SEARCHES = {
 
 let pageSearch = null; // { box, input, results, isOpen }, made the first time it opens
 
+// The 🔎 Search button on the Tracker and Change Logs toolbars
 function pageSearchButton() {
   const button = toolbarButton("🔎 Search", "", () => setPageSearchOpen(!(pageSearch && pageSearch.isOpen)));
   button.id = "pageSearchButton";
@@ -532,7 +534,7 @@ function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMo
     bar.append(toolbarButton("Edit", newInEditMode ? "primary" : "", () => {
       editMode = true;
       selectedRows.clear();
-      BudgetUI.closePanel(true);
+      BudgetUI.closeAllPanels(true);
       setPageSearchOpen(false, true);
       renderCurrentPage();
     }));
@@ -546,12 +548,13 @@ function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMo
   bar.append(deleteButton, toolbarButton("Done", "primary", () => {
     editMode = false;
     selectedRows.clear();
-    BudgetUI.closePanel(true);
+    BudgetUI.closeAllPanels(true);
     renderCurrentPage();
   }));
   updateDeleteButton();
 }
 
+// One button for the page's toolbar
 function toolbarButton(label, kind, onClick) {
   const button = BudgetUI.element("button", `budgetButton ${kind}`.trim(), label);
   button.type = "button";
@@ -559,6 +562,7 @@ function toolbarButton(label, kind, onClick) {
   return button;
 }
 
+// Delete Selected says how many rows are checked, and is off with none
 function updateDeleteButton() {
   const button = document.getElementById("deleteSelectedButton");
   if (!button) return;
@@ -571,6 +575,7 @@ const DELETE_NOTES = {
   accounts: " Their entries stay on your calendar, but they won't change an account anymore."
 };
 
+// Edit mode's Delete Selected: delete the checked rows (after asking)
 async function deleteSelected(tableName) {
   const indexes = [...selectedRows];
   if (indexes.length === 0) return;
@@ -662,6 +667,7 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
   return tableEl;
 }
 
+// Check or uncheck a row for deleting
 function toggleSelected(index, checked, tr) {
   if (checked) selectedRows.add(index);
   else selectedRows.delete(index);
@@ -669,6 +675,7 @@ function toggleSelected(index, checked, tr) {
   updateDeleteButton();
 }
 
+// Edit mode's "+ Section" button, as its own row, before row insertAt
 function sectionButtonRow(insertAt, span) {
   const tr = document.createElement("tr");
   tr.className = "sectionInsertRow";
@@ -682,6 +689,7 @@ function sectionButtonRow(insertAt, span) {
   return tr;
 }
 
+// Edit mode's ≡ bar, held to drag a row
 function moveBarCell() {
   const td = document.createElement("td");
   td.className = "moveBar";
@@ -725,6 +733,7 @@ function selectCell(index, selectable = true) {
 const EDGE_ZONE = 0.25;  // Fraction of the screen height at each edge that scrolls
 const MAX_SCROLL = 22;   // Pixels per frame at the very edge
 
+// Start dragging a row by its ≡ bar; the new order saves when it's let go
 function startRowDrag(event, bar, tableEl, tableName) {
   event.preventDefault();
   const row = bar.closest("tr");
@@ -800,6 +809,7 @@ function startRowDrag(event, bar, tableEl, tableName) {
   frame = requestAnimationFrame(autoScroll);
 }
 
+// The rows' indexes, top to bottom, as the table shows them now
 function rowOrder(body) {
   return [...body.querySelectorAll("tr[data-index]")].map(tr => Number(tr.dataset.index));
 }
@@ -856,6 +866,7 @@ function openRecurringPanel(origin, index) {
         BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
       });
 
+      // Delete: it stops from today on (it ends yesterday), and days that passed keep it
       function deleteEntry() {
         if (!window.confirm(`Delete ${existing[0]}? It stops from today on; days that already passed keep it.`)) return;
         BudgetUI.submit(panel, () => deleteBudgetRows("recurring", [index]));
@@ -948,6 +959,7 @@ function openAccountPanel(origin, index) {
         BudgetUI.submit(panel, () => saveAccount({ name: name.value() }, index));
       });
 
+      // Delete: the account goes, and its entries stay where they are
       function deleteAccount() {
         if (!window.confirm(`Delete ${existing[0]}? Its entries stay on your calendar, but they won't change an account anymore.`)) return;
         BudgetUI.submit(panel, () => deleteBudgetRows("accounts", [index]));
@@ -1008,6 +1020,7 @@ function openCategoryPanel(tableName, origin, index, atIndex) {
         }
       });
 
+      // Delete the section heading (the rows under it stay)
       function deleteSection() {
         if (!window.confirm(`Delete the ${existing[1]} section? The entries under it stay.`)) return;
         BudgetUI.submit(panel, () => deleteBudgetRows(tableName, [index]));
@@ -1060,6 +1073,7 @@ function indexedRows(table, headerRows) {
   return rows;
 }
 
+// A page's message when it has nothing to show yet
 function emptyMessage(text) {
   return BudgetUI.element("p", "dataEmpty", text);
 }
@@ -1072,6 +1086,7 @@ function wrapScroll(tableEl) {
   return wrapper;
 }
 
+// A section heading row: ["-", heading, ...]
 function isSeparatorRow(row) {
   return String(row[0] ?? "").trim() === "-";
 }
@@ -1100,6 +1115,7 @@ function autoRowNote(row) {
   return `Entries that no other row counts${titles ? ": " + titles : " (there aren't any right now)"}. This row fills in by itself.`;
 }
 
+// A row with nothing in any of its cells
 function isBlankRow(row) {
   return row.every(value => String(value ?? "").trim() === "");
 }

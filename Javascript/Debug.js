@@ -1,4 +1,9 @@
+// Debug: the Not Found page's starfield controls (a hidden extra far below its first screen, see 404.html).
+// Each slider's track fills with the red-orange gradient up to its value, whether it's dragged, stepped, or set
+// by Starfield Setup.js, and the controller box empties itself as it's typed in (the keys push the stars).
+
 (function rangeFillSync(){
+  // One slider's track: the gradient up to its value
   const PAINT = (slider) => {
     if (!slider || slider.type !== "range") return;
 
