@@ -119,7 +119,9 @@
   padding: calc(4px * var(--zoom, 1));
   font-size: calc(1em * var(--zoom, 1));
   pointer-events: auto; /* It's bigger than its day now, so taps on it land on it, not what's under it */
-  background: linear-gradient(to bottom, rgb(15, 0, 80), rgb(6, 0, 34));
+  /* Like every day: its color at the top, fading to black at the bottom (mostly opaque here, so the page behind
+     doesn't show through its entries) */
+  background: linear-gradient(to bottom, rgb(15, 0, 80), rgba(0, 0, 0, 0.85));
   /* An outline, not a border, so the v stays in the very corner */
   outline: 1px solid var(--PANEL_BORDER);
   outline-offset: -1px;
@@ -127,13 +129,13 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
-/* Red days stay red when zoomed, on a solid background too */
+/* Red days stay red when zoomed */
 .elastic-table td.is-fullZoom.isNegative .cell-content {
-  background: linear-gradient(to bottom, rgb(95, 0, 20), rgb(30, 0, 8));
+  background: linear-gradient(to bottom, rgb(95, 0, 20), rgba(0, 0, 0, 0.85));
 }
 
 .elastic-table td.is-fullZoom.isToday.isNegative .cell-content {
-  background: linear-gradient(to bottom, rgb(170, 0, 0), rgb(40, 0, 6));
+  background: linear-gradient(to bottom, rgb(170, 0, 0), rgba(0, 0, 0, 0.85));
 }
 
 .dayZoomBackdrop {
@@ -428,8 +430,10 @@
   background: linear-gradient(to bottom, rgb(170, 0, 0), transparent);
 }
 
-/* Entries are tappable once their day is zoomed (sized with the text, so they look the same at any zoom) */
-.elastic-table td.is-editing .lineEntry {
+/* Entries (and the day's In Bank) are tappable once their day is zoomed (sized with the text, so they look the
+   same at any zoom) */
+.elastic-table td.is-editing .lineEntry,
+.elastic-table td.is-editing .lineInBank {
   pointer-events: auto;
   cursor: pointer;
   border-radius: 0.3em;
@@ -437,7 +441,8 @@
   margin: 0 -0.2em;
 }
 
-.elastic-table td.is-editing .lineEntry:hover {
+.elastic-table td.is-editing .lineEntry:hover,
+.elastic-table td.is-editing .lineInBank:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -1087,6 +1092,19 @@ input.dateInput.isPickTarget {
   margin-left: 0;
 }
 
+/* Search's filters: a refraction type and an Other Account, side by side */
+.searchFilters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6em;
+  margin-top: 0.6em;
+}
+
+.searchFilters .selectInput {
+  width: 100%;
+  min-width: 0;
+}
+
 /* + Add Title, From, To, and Search stay together when the bar wraps (on phones, they wrap under each other) */
 .searchDates {
   display: flex;
@@ -1696,6 +1714,7 @@ input.dateInput.isPickTarget {
 /* Inputs inside cards (the global input style is a big centered pill) */
 .budgetCard input[type="text"],
 .budgetCard input[type="time"],
+.budgetCard input[type="date"],
 .budgetCard input[type="email"],
 .budgetCard input[type="password"],
 .budgetCard select {
@@ -1719,6 +1738,8 @@ input.dateInput.isPickTarget {
 .budgetCard input[type="text"]:focus,
 .budgetCard input[type="time"]:hover,
 .budgetCard input[type="time"]:focus,
+.budgetCard input[type="date"]:hover,
+.budgetCard input[type="date"]:focus,
 .budgetCard input[type="email"]:hover,
 .budgetCard input[type="email"]:focus,
 .budgetCard input[type="password"]:hover,
@@ -1832,7 +1853,7 @@ a.budgetButton:hover {
   overflow-wrap: anywhere;
 }
 
-/* Connected spreadsheets (Settings): each one's button, On/Off switch, and Delete, with a box under it when
+/* Connected spreadsheets (the Spreadsheets page): each one's button, On/Off switch, and Delete, with a box under it when
    something needs a look */
 .sheetList {
   margin: 0.8em 0 1em;
@@ -2117,9 +2138,9 @@ a.budgetButton:hover {
   top: calc(max(2vh, env(safe-area-inset-top, 0px)) + 1.2em);
 }
 
-/* Settings' age box */
+/* Settings' birth date box */
 .budgetCard .settingsField .ageInput {
-  width: 6em;
+  width: 11em;
   align-self: flex-start;
   text-align: center;
 }

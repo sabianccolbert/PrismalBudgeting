@@ -649,7 +649,7 @@ function reportSheetImport() {
 
   const savings = accountSummaries().find(summary => isDefaultAccount(accountsData.list[summary.index]));
   if (savings && typeof note.savingsTotal === "number" && Math.abs(savings.today - note.savingsTotal) >= 0.005) {
-    messages.push(`The spreadsheet's Savings tab said ${formatMoney(note.savingsTotal)}, and ${savings.name} here is ${formatMoney(savings.today)} (it adds up Hidden and Transfer entries for it). To match, add a ✖️ Hidden entry for the difference, with ${savings.name} picked under Other Account.`);
+    messages.push(`The spreadsheet's Savings tab said ${formatMoney(note.savingsTotal)}, and ${savings.name} here is ${formatMoney(savings.today)} (it adds up Hidden and Transfer entries for it). To match, tap ${savings.name} on the Other Accounts page and type in its balance.`);
   }
 
   sheetImportSay(messages.join(" "));

@@ -174,9 +174,9 @@ function trackerCells(tr, row) {
   tr.appendChild(isAuto && !["undefined", "transfers"].includes(cleanString(row[0])) ? aliases : noTranslate(aliases));
 }
 
-// Other Accounts: [0] column titles, then [name, balance, "default" | ""] (see Other Accounts in Process
-// Budget.js). Balances come from each account's entries (Hidden and Transfer entries titled with its
-// name): today, and on the calendar's last day. Savings can't be deleted.
+// Other Accounts: [0] column titles, then [name, balance, "default" | "", starting amount] (see Other Accounts
+// in Process Budget.js). Balances are each account's starting amount plus its entries (Hidden and Transfer entries
+// with it picked): today, and on the calendar's last day. Savings can't be deleted.
 function renderAccountsPage(view) {
   renderToolbar("accounts", (origin) => openAccountPanel(origin, null), { newLabel: "New Account", newInEditMode: true });
   view.replaceChildren();
@@ -937,8 +937,8 @@ function openTrackerPanel(origin, index) {
   });
 }
 
-// New account (index null, from edit mode) or rename the tapped one, with its balance and the entries
-// that changed it. Balances come only from entries (there's no balance to type in).
+// New account (index null, from edit mode) or change the tapped one: its name, its balance today (typing one sets
+// its starting amount, so no entry is made), and the entries that changed it.
 function openAccountPanel(origin, index) {
   const existing = index === null ? null : accountsData.list[index];
   const summary = existing ? accountSummaries().find(account => account.index === index) : null;
@@ -949,16 +949,9 @@ function openAccountPanel(origin, index) {
     title: existing ? "Change Account" : "New Account",
     build(form, panel) {
       const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Cash, investments, HSA...", maxLength: MAX_ACCOUNT_NAME });
-      const fields = [name.el];
-      const howToSet = "To put what's already in the account here, add a Hidden entry for it on the calendar: a gain of that amount, with this account picked under Other Account.";
-      if (summary) {
-        const balance = noTranslate(BudgetUI.element("p", "panelText accountBalance", formatMoney(summary.today)));
-        if (summary.today < 0) balance.classList.add("negative");
-        if (summary.today > 0) balance.classList.add("positive");
-        fields.push(BudgetUI.field("Balance today", balance, { hint: `It comes from this account's entries. ${howToSet}` }));
-      } else {
-        fields.push(BudgetUI.element("p", "panelHint", `It starts at $0.00, and its entries add up to its balance. ${howToSet}`));
-      }
+      const balance = BudgetUI.textField({ label: "Balance today", value: (summary ? summary.today : 0).toFixed(2), placeholder: "0.00", hint: "What's in the account today. Changing it doesn't add an entry: Hidden and Transfer entries with this account picked add to it from here." });
+      balance.input.inputMode = "decimal";
+      const fields = [name.el, balance.el];
       if (isDefault) fields.push(BudgetUI.element("p", "panelHint", `${existing[0]} is your default account, so it can't be deleted.`));
       if (summary) fields.push(accountEntriesField(summary));
       const buttons = existing
@@ -969,7 +962,11 @@ function openAccountPanel(origin, index) {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         if (!name.value()) return panel.setError("Give the account a name.");
-        BudgetUI.submit(panel, () => saveAccount({ name: name.value() }, index));
+        const typed = balance.value();
+        const amount = typed === "" ? 0 : readMoneyInput(typed);
+        if (!Number.isFinite(amount)) return panel.setError("Enter the balance, like 3000.00.");
+        if (Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), balance: amount }, index));
       });
 
       // Delete: the account goes, and its entries stay where they are
@@ -989,7 +986,7 @@ function accountEntriesField(summary) {
   const upcoming = summary.entries.filter(entry => entry.date > today);
   const latest = summary.entries.filter(entry => entry.date <= today).slice(0, ACCOUNT_ENTRIES_SHOWN);
   if (upcoming.length === 0 && latest.length === 0) {
-    return BudgetUI.field("Entries", BudgetUI.element("p", "panelText", `None yet. Hidden and Transfer entries titled ${summary.name} change it.`));
+    return BudgetUI.field("Entries", BudgetUI.element("p", "panelText", `None yet. Hidden and Transfer entries with ${summary.name} picked under Other Account change it.`));
   }
   const list = BudgetUI.element("ul", "accountEntries");
   for (const entry of [...upcoming, ...latest]) {

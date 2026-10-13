@@ -6,7 +6,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=77aad26b59">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ec781d7373">
+    <link rel="stylesheet" href="/budgetStyle.css?v=8d73074b7e">
     <title>Prismal Budget - See Your Bank Balance Four Weeks Ahead</title>
     <meta name="description" content="Prismal Budget is a calendar budget that shows what will be in your bank account at the end of every day for the next four weeks. It fills in your paychecks and bills, and points out low days before they happen.">
     <link rel="canonical" href="https://prismalbudget.org/">
@@ -99,7 +99,7 @@
           <section id="how" aria-labelledby="howTitle">
             <h2 id="howTitle">How It Works</h2>
             <ol class="frontSteps">
-              <li><strong>Create an account</strong> with a username, your email, your age, and a password (Prismal Budget is for people 18 and older), then open the link we email you to verify your email.</li>
+              <li><strong>Create an account</strong> with a username, your email, your birth date, and a password (Prismal Budget is for people 18 and older), then open the link we email you to verify your email.</li>
               <li><strong>Set your starting balance:</strong> what's in your bank account right now (and in savings, if you like).</li>
               <li><strong>Add your recurring entries</strong> once each: paychecks, rent, bills, and subscriptions.</li>
               <li><strong>Add what you spend as you go,</strong> from the calendar or the Quick Entry icon. In Bank updates for every day ahead, and each week moves into History as it passes.</li>
@@ -273,6 +273,9 @@
           <h4>Viewing The Calendar</h4>
           <ul>
             <li><strong>Tap a day</strong> to zoom in on it. On a phone, it fills almost the whole screen, sharp and easy to read, and shows all of its entries; on a computer, it doubles in size. Tap its <strong>v</strong> (in its top right corner), or anywhere outside it, to zoom back out.</li>
+            <li><strong>On a zoomed day, tap an entry</strong> to change its amount, refraction type, or Other Account, move it to another day, or delete it. Changing its type or account adds it into an entry with that title and type already on the day.</li>
+            <li><strong>On a zoomed day, tap In Bank</strong> and type what your bank says for that day. The difference goes on it as a Regular Catchup entry, and the days after it follow.</li>
+            <li><strong>Search</strong> finds entries by title, and can keep to one refraction type or one Other Account.</li>
             <li><strong>Pinch or stretch with two fingers</strong> on one day to zoom just that day out or in (it turns and moves with your fingers too), or across days to zoom and move the whole calendar. Let go, and it settles back.</li>
             <li><strong>On a computer,</strong> hold the mouse button down on a day to magnify it, and keep holding while you slide across the days to magnify each one you pass.</li>
             <li>To zoom the whole page, pinch anywhere else on a phone, or press Ctrl and + (⌘ and + on a Mac) on a computer.</li>
@@ -285,7 +288,7 @@
             <li><strong>Unique entries</strong> (❗️, ✖️, ⭕️, ❗️✔️, ✖️✔️, ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
             <li><strong>Temporary recurring entries</strong> (❗️✔️, ✖️✔️, ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
             <li>If a recurring entry's End Date moves before a day you changed (or you delete the recurring entry), that day's temporary entry from today on becomes a plain unique entry, like ❗️, since there's nothing left for it to hold back. A $0.00 one just goes away.</li>
-            <li><strong>Spreadsheet entries</strong> (➕❗️, ➕✖️, ➕⭕️) start with a yellow plus. They come from spreadsheets you connect in Settings (once your email is verified), land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. Settings' Help has more.</li>
+            <li><strong>Spreadsheet entries</strong> (➕❗️, ➕✖️, ➕⭕️) start with a yellow plus. They come from spreadsheets you connect on the Spreadsheets page in the menu (once your email is verified), land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. Settings' Help has more.</li>
             <li>Adding an entry with the same title and refraction type as one already on that day adds the two together. So a day has at most three entries with the same title: one Regular, one Hidden, and one Transfer.</li>
           </ul>
 
@@ -325,7 +328,7 @@
           </ul>
 
           <h4>Quick Entry</h4>
-          <p>The Quick Entry button (above the calendar, at the right) puts an icon on your phone's home screen that opens a New Entry form, with no login needed. The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms. Its entries show up here the next time you open Prismal Budget.</p>
+          <p>The Quick Entry button (above the calendar, at the right) puts an icon on your phone's home screen that opens a New Entry form, with no login needed. Add it from Safari (or Chrome on Android) itself, not from a page opened inside another app. The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms. Its entries show up here the next time you open Prismal Budget.</p>
           <p><strong>Prisms</strong> are entries you add often, saved on the Quick Entry page (Add Prism). Tapping one fills in New Entry with what it keeps (like a title, an amount, a type, or an account), and you fill in the rest. They're saved with your budget, so every icon has them. If your password changes, the icon stops working, and you can turn icons off anytime in Settings.</p>
         </section>
 

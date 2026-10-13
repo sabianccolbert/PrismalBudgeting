@@ -5,9 +5,19 @@
 
 wireSearch(); // Works right away (a search before the budget loads says it's still loading)
 
-// Suggestions for a title's Tracker button follow the tracker's rows
-window.workspaceReady.then((loaded) => { if (loaded) fillTrackerRowTitles(); });
-document.addEventListener("budget:updated", () => { if (workspaceLoaded) fillTrackerRowTitles(); });
+// Suggestions for a title's Tracker button follow the tracker's rows, and the Other Account filter the accounts
+window.workspaceReady.then((loaded) => { if (loaded) { fillTrackerRowTitles(); fillAccountFilter(); } });
+document.addEventListener("budget:updated", () => { if (workspaceLoaded) { fillTrackerRowTitles(); fillAccountFilter(); } });
+
+// The Other Account filter: any, none, or one of the accounts (keeping the one picked while it's still there)
+function fillAccountFilter() {
+  const select = document.getElementById("searchAccount");
+  if (!select) return;
+  const picked = select.value;
+  const names = typeof accountsData !== "undefined" && accountsData ? accountRows().map(account => account.name) : [];
+  select.replaceChildren(new Option("Any account", ""), new Option("No Other Account", "none"), ...names.map(name => new Option(name, name)));
+  select.value = picked === "none" || names.includes(picked) ? picked : "";
+}
 
 // The Search button opens the search box, floating over the page (× , Escape, or Search again closes it). It
 // has a list of titles, one per line, each with its own buttons (Enter adds the next line, and Enter on an
@@ -84,13 +94,29 @@ function wireSearch() {
   if (pageAddButton) pageAddButton.replaceWith(terms.addButton);
   else form.querySelector(".searchDates")?.prepend(terms.addButton);
 
+  // Filters: one refraction type, and one Other Account (or entries with none). A list can't show the type's
+  // image (only the device's own emoji), so types are in words.
+  const filters = BudgetUI.element("div", "searchFilters");
+  const typeFilter = BudgetUI.element("select", "selectInput");
+  typeFilter.id = "searchType";
+  typeFilter.setAttribute("aria-label", "Refraction type");
+  typeFilter.append(new Option("Any type", ""), ...[...REFRACTION_NAMES].map(([sprite, name]) => new Option(name, sprite)));
+  const accountFilter = BudgetUI.element("select", "selectInput");
+  accountFilter.id = "searchAccount";
+  accountFilter.setAttribute("aria-label", "Other Account");
+  filters.append(typeFilter, accountFilter);
+  form.querySelector(".searchDates")?.before(filters);
+  fillAccountFilter();
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     submitButton.disabled = true;
     const result = await searchBudget({
       terms: terms.items().map(({ title, mode }) => ({ title, match: mode })),
       from: document.getElementById("searchFrom").value,
-      to: document.getElementById("searchTo").value
+      to: document.getElementById("searchTo").value,
+      type: typeFilter.value,
+      account: accountFilter.value
     });
     submitButton.disabled = false;
     BudgetUI.setPickTarget(null);

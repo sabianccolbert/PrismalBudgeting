@@ -22,21 +22,22 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "558a7e0f16",
     "/Javascript/Analytics.js": "dac605ae19",
-    "/Javascript/Budget Pages.js": "8ba781d36e",
-    "/Javascript/Budget Search.js": "25dc57d117",
-    "/Javascript/Budget UI.js": "fb7adea6b9",
-    "/Javascript/Calendar Page.js": "badb4925f1",
+    "/Javascript/Budget Pages.js": "7727e368cc",
+    "/Javascript/Budget Search.js": "6f91b4418f",
+    "/Javascript/Budget UI.js": "bc9416f9e5",
+    "/Javascript/Calendar Page.js": "d321aad136",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "c627653108",
     "/Javascript/Layout.js": "13544159d9",
-    "/Javascript/Login.js": "c10af43c84",
+    "/Javascript/Login.js": "b8bf5b119d",
     "/Javascript/Passkeys.js": "67a10905c2",
-    "/Javascript/Process Budget.js": "26e08a48ad",
+    "/Javascript/Process Budget.js": "3aedb0b57a",
     "/Javascript/Quick Entry.js": "701cc35a4e",
     "/Javascript/Session.js": "ec241e0ce9",
-    "/Javascript/Settings Page.js": "9b6860342c",
-    "/Javascript/Sheet Import.js": "ce0f11f3be",
-    "/Javascript/Spreadsheets.js": "c651c662c3",
+    "/Javascript/Settings Page.js": "e9b3b9c0d0",
+    "/Javascript/Sheet Import.js": "969eb4976d",
+    "/Javascript/Spreadsheets Page.js": "b4a766db5e",
+    "/Javascript/Spreadsheets.js": "4107bd6583",
     "/Javascript/Sprites.js": "4f0c83ae83",
     "/Javascript/Starfield Setup.js": "d728f1054f",
     "/Resources/Sprites/Hidden.webp": "9c3afd2c80",
@@ -79,6 +80,7 @@
     if (p === "/menu/recurring") return "recurring";
     if (p === "/menu/history") return "history";
     if (p === "/menu/accounts") return "accounts";
+    if (p === "/menu/spreadsheets") return "spreadsheets";
     if (p === "/menu/tracker") return "tracker";
     if (p === "/menu/calculator") return "calculator";
     if (p === "/menu/logs") return "logs";
@@ -193,12 +195,13 @@
   ];
 
   // Quick Entry borrows the budget helpers and New Entry form without loading a budget (see Quick Entry.js)
-  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "tracker", "calculator", "logs", "settings", "quick"];
+  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "spreadsheets", "tracker", "calculator", "logs", "settings", "quick"];
 
   // The script that draws each budget page (the menu data pages share Budget Pages.js)
   const PAGE_SCRIPTS = {
     home: "/Javascript/Calendar Page.js",
     settings: "/Javascript/Settings Page.js",
+    spreadsheets: "/Javascript/Spreadsheets Page.js",
     quick: "/Javascript/Quick Entry.js"
   };
 
