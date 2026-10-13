@@ -335,8 +335,8 @@ function calculatorForm(inputs) {
       // "$25", "7.65%", "1.5×", or "12,50" (a decimal comma) all read as numbers
       const text = fields[field.key].value.replace(/%/g, "").replace(/[x×]\s*$/i, "").trim();
       const number = text === "" ? 0 : readMoneyInput(text);
-      if (!Number.isFinite(number) || number < 0) {
-        error.textContent = `${field.label} needs to be a number (0 or more).`;
+      if (!Number.isFinite(number) || number < 0 || number > MAX_AMOUNT) {
+        error.textContent = number > MAX_AMOUNT ? `${field.label} can be up to 1,000,000,000.` : `${field.label} needs to be a number (0 or more).`;
         error.hidden = false;
         fields[field.key].focus();
         return;
@@ -833,7 +833,7 @@ function openRecurringPanel(origin, index) {
       const existingEnd = existing && String(existing[4]).trim().toLowerCase() !== "none" ? createSafeMidnight(existing[4], true) : null;
       const existingStart = existing ? createSafeMidnight(existing[2], true) : null;
 
-      const title = BudgetUI.textField({ label: "Title", value: existing ? existing[0] : "", placeholder: "Rent, paycheck, phone..." });
+      const title = BudgetUI.textField({ label: "Title", value: existing ? existing[0] : "", placeholder: "Rent, paycheck, phone...", maxLength: MAX_TITLE });
       const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : null });
       const frequency = BudgetUI.frequencyField({ value: existing ? existing[3] : "Every Month" });
       const start = BudgetUI.dateField({ label: "Start Date", date: existing ? (isNaN(existingStart) ? null : existingStart) : today });
@@ -858,6 +858,7 @@ function openRecurringPanel(origin, index) {
         if (!fields.title) return panel.setError("Give the recurring entry a title.");
         if (Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
         if (!existing && fields.amount === null) return panel.setError("Enter an amount, like 12.50.");
+        if (fields.amount !== null && Math.abs(fields.amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
         fields.frequency = frequency.value();
         if (!fields.frequency) return panel.setError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
@@ -887,7 +888,7 @@ function openTrackerPanel(origin, index) {
     title: existing ? "Change Tracker Row" : "New Tracker Row",
     build(form, panel) {
       const existingTitle = existing ? String(existing[0]).replace("⭕️", "") : "";
-      const title = BudgetUI.textField({ label: "Title", value: existingTitle, placeholder: "Groceries, car stuff...", disabled: isAuto });
+      const title = BudgetUI.textField({ label: "Title", value: existingTitle, placeholder: "Groceries, car stuff...", disabled: isAuto, maxLength: MAX_TITLE });
       const aliases = isAuto ? null : BudgetUI.aliasField({ aliases: existing ? aliasList(existing[4]) : [] });
       // Whether the row counts transfers too (its title then starts with ⭕️): an on/off switch
       const transferSwitch = BudgetUI.checkboxField({ label: "Count ⭕️ Transfers in this row", checked: existing ? String(existing[0]).startsWith("⭕️") : false });
@@ -935,7 +936,7 @@ function openAccountPanel(origin, index) {
     size: "large",
     title: existing ? "Change Account" : "New Account",
     build(form, panel) {
-      const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Cash, investments, HSA..." });
+      const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Cash, investments, HSA...", maxLength: MAX_ACCOUNT_NAME });
       const fields = [name.el];
       const howToSet = "To put what's already in the account here, add a Hidden entry for it on the calendar: a gain of that amount, with this account picked under Other Account.";
       if (summary) {
@@ -1001,7 +1002,7 @@ function openCategoryPanel(tableName, origin, index, atIndex) {
     size: "large",
     title: existing ? "Change Section" : "New Section",
     build(form, panel) {
-      const title = BudgetUI.textField({ label: "Section Title", value: existing ? existing[1] : "", placeholder: "Bills, income, fun..." });
+      const title = BudgetUI.textField({ label: "Section Title", value: existing ? existing[1] : "", placeholder: "Bills, income, fun...", maxLength: MAX_TITLE });
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteSection }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Section", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];

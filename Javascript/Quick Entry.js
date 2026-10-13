@@ -242,6 +242,7 @@ function highlightForm() {
 async function savePrismFromForm(panel, fields) {
   const { title, amount, sprite } = fields.values();
   if (Number.isNaN(amount)) return panel.setError("Enter an amount, like 12.50, or leave it blank.");
+  if (amount !== null && Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
   const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null };
   if (!prism.title && prism.amount === null && !prism.type) {
     return panel.setError("Fill in or pick at least one thing for this prism: a title, an amount, a type, or an account.");

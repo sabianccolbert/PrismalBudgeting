@@ -235,6 +235,7 @@ function openSheetPanel(id, origin) {
       const titleInput = BudgetUI.element("input", "textInput");
       titleInput.type = "text";
       titleInput.placeholder = "Rent, paycheck...";
+      titleInput.maxLength = MAX_TITLE;
       // Amount, typed, with Cost / Gain
       const amount = BudgetUI.amountField({ amount: typeof draft.fields.amount?.value === "number" ? draft.fields.amount.value : null });
       const amountControl = amount.el.querySelector(".amountRow");
@@ -425,6 +426,7 @@ function openSheetPanel(id, origin) {
         if (!Spreadsheets.isLinked(fields.amount)) {
           const value = amount.value();
           if (value === null || Number.isNaN(value)) return panel.setError("Type an amount, like 25.00, or tap ➕ next to Amount to pick its cells.");
+          if (Math.abs(value) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         }
         const read = Spreadsheets.readConnection(fields, draft.workbook);
         if (read.entries.length === 0 && read.problems.length > 0) return panel.setError("Fix what's under Needs a look first: nothing can be added from it yet.");
