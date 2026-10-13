@@ -241,6 +241,7 @@ function readStored(KEY) {
   try { return localStorage.getItem(KEY); } catch { return null; }
 }
 
+// Save a value (null removes it)
 function writeStored(KEY, VALUE) {
   try {
     if (VALUE === null) localStorage.removeItem(KEY);

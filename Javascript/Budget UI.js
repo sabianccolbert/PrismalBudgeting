@@ -226,14 +226,16 @@ const BudgetUI = (() => {
     return wrapper;
   }
 
-  // A text box with its label. value(): what's typed, tidied (single spaces, trimmed).
-  function textField({ label, value = "", placeholder = "", optional = false, multiline = false, hint = "", disabled = false }) {
+  // A text box with its label. value(): what's typed, tidied (single spaces, trimmed). maxLength: the most
+  // characters it takes (titles: MAX_TITLE)
+  function textField({ label, value = "", placeholder = "", optional = false, multiline = false, hint = "", disabled = false, maxLength = 0 }) {
     const input = element(multiline ? "textarea" : "input", "textInput");
     if (!multiline) input.type = "text";
     if (multiline) input.rows = 3;
     input.value = value;
     input.placeholder = placeholder;
     input.disabled = disabled;
+    if (maxLength) input.maxLength = maxLength;
     return { el: field(label, input, { optional, hint }), input, value: () => input.value.replace(/\s+/g, " ").trim() };
   }
 
@@ -648,7 +650,7 @@ const BudgetUI = (() => {
   // fill({ title, amount, sprite }): puts these in, leaving the fields they don't have as they are
   //   (the Quick Entry page's prisms). dateEl: the date field, for a form that doesn't need one.
   function newEntryFields({ date = today, accounts = [] } = {}) {
-    const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas..." });
+    const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas...", maxLength: MAX_TITLE });
     const amount = amountField();
     const dateInput = dateField({ label: "Date", date });
     const account = accountField({ accounts, title, amount, type: () => refraction.value() });
@@ -673,6 +675,7 @@ const BudgetUI = (() => {
         const entry = { title: title.value(), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
         if (!entry.title) return { error: "Give the entry a title." };
         if (entry.amount === null || Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
+        if (Math.abs(entry.amount) > MAX_AMOUNT) return { error: AMOUNT_TOO_BIG };
         if (entry.date === undefined) return { error: `That date isn't a real day. Use ${datePattern()}.` };
         entry.date = entry.date || date;
         return { entry };

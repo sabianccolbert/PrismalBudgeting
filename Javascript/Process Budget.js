@@ -32,6 +32,13 @@ const TABLE_SHAPES = {
   logs:       { cols: 8, minRows: 1 }   // [0] column titles, then [time, duration, action, 4 details, status]
 };
 
+// Limits on what's typed in. Amounts go up to a billion dollars (the API's Quick Entry has the same limit):
+// bigger numbers can't be kept to the cent, and past 1e21 JavaScript writes them as "1e+21". Titles go up to 100
+// characters, like Quick Entry's and connected spreadsheets'.
+const MAX_AMOUNT = 1000000000;
+const AMOUNT_TOO_BIG = "Amounts can be up to $1,000,000,000.";
+const MAX_TITLE = 100;
+
 // Load/Save Safety
 let workspaceLoaded = false;      // saveChanges refuses to run until real data has loaded
 let unsavableTables = new Set();  // Tables whose stored content failed to parse (never overwritten)
@@ -957,7 +964,12 @@ function unique(entry) {
   let rawAction = String(entry.action || "Subtract").trim();
   let action = rawAction.toLowerCase();
   let rawAmtString = String(entry.amount ?? "").trim();
-  let amt = parseAmount(rawAmtString || 0);
+  // Amounts arrive as numbers turned into text (String() writes very big or small ones like 1e+22 or 1e-7), so
+  // the text is read as a number first, and parseAmount only reads text like "-$5.00"
+  let amt = rawAmtString === "" ? 0 : Number(rawAmtString);
+  if (!Number.isFinite(amt)) amt = parseAmount(rawAmtString);
+  amt = Math.round(amt * 100) / 100;
+  if (Math.abs(amt) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   if (action === "subtract") amt = amt * -1;
   if (action === "subtract" || action === "add") action = "append";
 
@@ -965,6 +977,11 @@ function unique(entry) {
   formEntryRow[4] = "On: " + showDate(dateObj);
   let dateMove = createSafeMidnight(entry.moveDate || dateObj);
   formEntryRow[5] = entry.moveDate ? "Move To: " + showDate(dateMove) : "Move To: None";
+  // A day before History starts (or one missing from it) has no cell to hold an entry, so nothing can be added
+  // or moved there
+  if (action !== "delete" && dateMove < gridStartDate && !historyHasDay(dateMove)) {
+    throw new BudgetInputError(`${showDate(dateMove)} is before your budget's History starts, so there's no day to put it on. Pick ${showDate(gridStartDate)} or later.`);
+  }
 
   // Refraction type ("" matches or inherits whatever is already there)
   let modifier = String(entry.sprite || "").trim();
@@ -1331,6 +1348,7 @@ function recurring(fields) {
   refuseRecurringTwin(title, sprite);
   let frequency = readFrequency(fields.frequency || "Every Month");
   let hasAmount = typeof fields.amount === "number" && !isNaN(fields.amount);
+  if (hasAmount && Math.abs(fields.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(today);
   let endDate = resolveEndDate(fields.endDate, "None");
 
@@ -1355,6 +1373,7 @@ function editRecurringRow(index, fields) {
   let title = capitalize(String(fields.title || "").replace(/\s+/g, ' ').trim());
   if (!title) throw new BudgetInputError("Give the recurring entry a title.");
   let hasAmount = typeof fields.amount === "number" && !isNaN(fields.amount);
+  if (hasAmount && Math.abs(fields.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   let sprite = String(fields.sprite || "").trim() || String(row[5] || "").trim() || "✔️";
   refuseRecurringTwin(title, sprite, index);
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(row[2]);
@@ -1717,6 +1736,21 @@ function renameAccountEntries(oldClean, newName) {
     if (!aliases.some(alias => alias.clean === oldClean)) continue;
     row[4] = normalizeAliases(aliases.map(alias => ({ title: alias.clean === oldClean ? newName : alias.title, count: alias.count })));
   }
+
+  // Connected spreadsheets: one set up with this account typed in (for every entry) follows it, and so does a
+  // typed Hidden or Transfer title with its name, so the next read still finds the account. The entries each one
+  // read last move with it too. (One whose cells name the account needs those cells changed: its Needs a look says so.)
+  const typed = (field) => !!field && typeof field === "object" && typeof field.range !== "string";
+  for (let connection of sheetsData?.list || []) {
+    let fields = connection.fields || {};
+    if (typed(fields.account) && cleanString(fields.account.value) === oldClean) fields.account.value = newName;
+    if (typed(fields.title) && cleanString(fields.title.value) === oldClean && typed(fields.type) && isAccountEntry(fields.type.value, fields.title.value)) {
+      fields.title.value = newName;
+    }
+    if (connection.entries.some(entry => isAccountEntry(entry[1], entry[3]))) {
+      connection.entries = connection.entries.map(entry => (isAccountEntry(entry[1], entry[3]) ? [entry[0], entry[1], entry[2], newName] : entry));
+    }
+  }
 }
 
 // A day has at most one entry per title and refraction type (so a title shows up at most three times:
@@ -1809,7 +1843,8 @@ function normalizeSheetConnection(item) {
     fields: isObject(item.fields) ? JSON.parse(JSON.stringify(item.fields)) : {},
     entries: (Array.isArray(item.entries) ? item.entries : [])
       .filter(entry => Array.isArray(entry) && entry.length >= 4)
-      .map(entry => [text(entry[0], 10), getSpecialType(text(entry[1], 8)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], 100)]),
+      .map(entry => [text(entry[0], 10), getSpecialType(text(entry[1], 8)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], MAX_TITLE)])
+      .filter(entry => Math.abs(entry[2]) <= MAX_AMOUNT), // Spreadsheets.js never reads a bigger one
     problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
     tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
     access: item.access === "shared" ? "shared" : "public"
@@ -3385,6 +3420,7 @@ function calculator(values) {
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
       throw new BudgetInputError(`${field.label} needs to be a number (0 or more).`);
     }
+    if (value > MAX_AMOUNT) throw new BudgetInputError(`${field.label} can be up to 1,000,000,000.`);
     inputs[field.key] = value;
   }
   let paycheck = computePaycheck(inputs);
@@ -4095,15 +4131,17 @@ function recurringHits(title, date, targetSpecial) {
 }
 
 // Parse a Recurring tab row into what the date checks need (null for separators/empty rows).
-// A frequency that can't be read lands monthly.
+// A frequency that can't be read lands monthly. An End Date that's blank, "None" (in any capitals), or can't be
+// read means it never ends, the same as writeRecurring and releaseEndedTemps read it.
 function parseRecurringRow(item) {
   if (!item || item[0] === "-") return null;
-  const rawEndDate = item[4];
+  const endText = String(item[4] ?? "").trim();
+  const endDate = endText && endText.toLowerCase() !== "none" ? createSafeMidnight(endText, true) : null;
   return {
     cleanTitle: cleanString(item[0]),
     special: getSpecialType(item[5] || ""),
     startDate: createSafeMidnight(item[2]),
-    endDate: (rawEndDate && rawEndDate !== "None") ? createSafeMidnight(rawEndDate) : null,
+    endDate: endDate && !isNaN(endDate.getTime()) ? endDate : null,
     frequency: parseFrequency(item[3]) || { count: 1, unit: "months" }
   };
 }

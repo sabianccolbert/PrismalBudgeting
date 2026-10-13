@@ -11,6 +11,9 @@ window.workspaceReady.then((loaded) => {
   if (!loaded) {
     const dave = document.getElementById("daveMessage");
     if (dave) dave.textContent = "Couldn't load your budget data. Please refresh to try again.";
+    // The calendar's first day says "Loading..." until the budget is there
+    const firstDay = document.querySelector(".elastic-table .cell-content");
+    if (firstDay) firstDay.textContent = "Couldn't load your budget";
     return;
   }
   startDaveVisit(); // Dave's tip for this visit, if there is one (Process Budget.js DAVE'S TIPS)
@@ -148,6 +151,7 @@ async function setStartingBalance(event) {
   const savings = savingsText ? readStartAmount(savingsText) : 0;
   if (balance === null) return BudgetUI.showToast("Enter what's in your bank account, like 1500.00 (or -25.00 if it's overdrawn).", true);
   if (savings === null || savings < 0) return BudgetUI.showToast("Enter what's in savings, like 3000.00, or leave it blank.", true);
+  if (Math.abs(balance) > MAX_AMOUNT || savings > MAX_AMOUNT) return BudgetUI.showToast(AMOUNT_TOO_BIG, true);
 
   form.querySelectorAll("input, button").forEach(control => { control.disabled = true; });
   const savingsAccount = accountRows().find(account => isDefaultAccount(account.row))?.name || otherAccounts()[0]?.name;
@@ -390,6 +394,7 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
         const newAmount = amount.value();
         const move = moveTo.value();
         if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
+        if (newAmount !== null && Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
 
         const change = { title, sprite: refraction, date, action: "set", amount: "" };

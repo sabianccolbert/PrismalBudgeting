@@ -48,6 +48,7 @@ window.workspaceReady.then((loaded) => {
   reportSheetImport();
 });
 
+// The card's status line (red for a problem); an empty message hides it
 function sheetImportSay(message, isWarning = false) {
   const status = document.getElementById("sheetImportStatus");
   if (!status) return;
@@ -56,6 +57,7 @@ function sheetImportSay(message, isWarning = false) {
   status.classList.toggle("negative", isWarning);
 }
 
+// Import: read the sheet through the API, check it, show what's about to come over, then save it
 async function importSheet(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -248,6 +250,7 @@ function sheetTable(rows, cols, headerRows) {
   return table.filter((row, i) => i < headerRows || row.some(cell => cell.trim() !== ""));
 }
 
+// One row as exactly cols cells of text
 function padSheetRow(row, cols) {
   return Array.from({ length: cols }, (_, c) => String((row || [])[c] ?? ""));
 }

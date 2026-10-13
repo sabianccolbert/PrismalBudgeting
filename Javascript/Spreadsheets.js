@@ -17,6 +17,8 @@ const Spreadsheets = (() => {
   const MAX_ROWS = 100000;
   const MAX_COLUMNS = 16384; // Column XFD, the last one Excel has
   const MAX_UNZIPPED = 80000000; // A file inside the spreadsheet that would unzip bigger than this isn't read
+  const MAX_TOTAL_UNZIPPED = 160000000; // ...and the files read from one spreadsheet, all together
+  const TOO_BIG_TO_READ = "That spreadsheet is too big to read. Connect a smaller one, like a new spreadsheet with just the cells for Prismal Budget.";
 
   // A problem reading a spreadsheet. lasting: the server answered (like "not shared", or the account's email
   // isn't verified yet), so it's worth showing in Settings; a dropped connection isn't (the next read tries again).
@@ -78,7 +80,9 @@ const Spreadsheets = (() => {
     return readXlsx(zip);
   }
 
-  // The files inside a zip (a .xlsx or .ods is one): { has(path), text(path) }
+  // The files inside a zip (a .xlsx or .ods is one): { has(path), text(path) }. A file is unzipped a piece at a
+  // time and stopped past MAX_UNZIPPED (and all of them past MAX_TOTAL_UNZIPPED), since a zip can say a file is
+  // small and still unzip into gigabytes (a "zip bomb"), which would freeze the page each time it's read.
   function readZip(bytes) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let end = -1;
@@ -101,24 +105,52 @@ const Spreadsheets = (() => {
       });
       at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
     }
+    let unzipped = 0; // Bytes unzipped from this spreadsheet so far
+    const tooBig = () => new SheetReadError(TOO_BIG_TO_READ, true);
     return {
       has: (path) => files.has(path),
       async text(path) {
         const file = files.get(path);
         if (!file) throw new Error(`No ${path} in the zip`);
-        if (file.size > MAX_UNZIPPED || file.compressedSize === 0xFFFFFFFF) throw new SheetReadError("That spreadsheet is too big to read. Connect a smaller one, like a new spreadsheet with just the cells for Prismal Budget.", true);
+        if (file.size > MAX_UNZIPPED || file.compressedSize === 0xFFFFFFFF) throw tooBig();
         if (view.getUint32(file.offset, true) !== 0x04034b50) throw new Error("Broken zip file");
         const start = file.offset + 30 + view.getUint16(file.offset + 26, true) + view.getUint16(file.offset + 28, true);
         const data = bytes.subarray(start, start + file.compressedSize);
-        if (file.method === 0) return new TextDecoder().decode(data);
-        if (file.method !== 8) throw new Error("Unknown zip compression");
-        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-        return new TextDecoder().decode(await new Response(stream).arrayBuffer());
+        if (file.method !== 0 && file.method !== 8) throw new Error("Unknown zip compression");
+        if (file.method === 0) {
+          unzipped += data.byteLength;
+          if (unzipped > MAX_TOTAL_UNZIPPED) throw tooBig();
+          return new TextDecoder().decode(data);
+        }
+        const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+        const pieces = [];
+        let size = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          unzipped += value.byteLength;
+          if (size > MAX_UNZIPPED || unzipped > MAX_TOTAL_UNZIPPED) {
+            reader.cancel().catch(() => {});
+            throw tooBig();
+          }
+          pieces.push(value);
+        }
+        const unpacked = new Uint8Array(size);
+        let at = 0;
+        for (const piece of pieces) {
+          unpacked.set(piece, at);
+          at += piece.byteLength;
+        }
+        return new TextDecoder().decode(unpacked);
       }
     };
   }
 
+  // A spreadsheet's XML never declares a DOCTYPE or entities, and one that does could expand into far more than
+  // it is ("billion laughs"), so it isn't read
   const parseXml = (text) => {
+    if (/<!(DOCTYPE|ENTITY)/i.test(text)) throw new SheetReadError("That spreadsheet's file couldn't be read. Save it again as .xlsx, and try again.", true);
     const doc = new DOMParser().parseFromString(text, "application/xml");
     if (doc.getElementsByTagName("parsererror").length > 0) throw new Error("Broken XML in the spreadsheet");
     return doc;
@@ -552,6 +584,7 @@ const Spreadsheets = (() => {
     const typedAmount = !isLinked(fields.amount) ? Number(fields.amount?.value) : NaN;
     const sign = isLinked(fields.amount) ? fields.amount.sign : "written";
     if (!isLinked(fields.amount) && !Number.isFinite(typedAmount)) return stop("Type the amount, or tap ➕ next to Amount to pick its cells.");
+    if (!isLinked(fields.amount) && Math.abs(typedAmount) > MAX_AMOUNT) return stop(AMOUNT_TOO_BIG);
     if (typedAccount && !accounts.has(cleanString(typedAccount))) return stop(`The Other Account "${typedAccount}" isn't one of yours anymore. Pick another, or add it on the Other Accounts page.`);
     if (!isLinked(fields.title) && !typedTitle && !typedAccount) return stop("Type a title, or tap ➕ next to Title to pick its cells.");
 
@@ -580,6 +613,10 @@ const Spreadsheets = (() => {
         amount = cellAmount(amountCell.cell);
         if (!Number.isFinite(amount)) {
           problem(amountCell.cell ? `${amountCell.ref} ("${cellText(amountCell.cell)}") isn't an amount. Make it a number, like 25.00.` : `${amountCell.ref} has no amount. Fill it in, or clear its date.`);
+          continue;
+        }
+        if (Math.abs(amount) > MAX_AMOUNT) {
+          problem(`${amountCell.ref} ("${cellText(amountCell.cell)}") is more than $1,000,000,000, the most an entry can be.`);
           continue;
         }
         if (sign === "costs") amount = -Math.abs(amount);
@@ -623,7 +660,7 @@ const Spreadsheets = (() => {
       }
 
       if (date < keepFrom || date > keepTo) continue;
-      entries.push([formatToMMDDYYYY(date), type, Math.round(amount * 100) / 100, capitalize(title.replace(/\s+/g, " ").trim()).slice(0, 100)]);
+      entries.push([formatToMMDDYYYY(date), type, Math.round(amount * 100) / 100, capitalize(title.replace(/\s+/g, " ").trim()).slice(0, MAX_TITLE)]);
     }
 
     entries.sort((a, b) => createSafeMidnight(a[0], true) - createSafeMidnight(b[0], true));
@@ -643,6 +680,7 @@ const Spreadsheets = (() => {
   const READ_GAP_MS = 90 * 1000;
   const READS_KEY = "prismal_sheet_reads"; // When this device last read each spreadsheet: { id: time }
 
+  // { connection id: when this device last read it (ms) }
   function lastReads() {
     try { return JSON.parse(localStorage.getItem(READS_KEY) || "{}") || {}; } catch (e) { return {}; }
   }
