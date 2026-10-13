@@ -710,8 +710,8 @@ function injectGlobalFooter() {
     <hr>
         <p><span translate="no">Prismal Budget™</span> and its logo are trademarked</p>
         <p>Contact:
-        <a href="mailto:sabian.c.colbert@gmail.com">
-          Sabian.C.Colbert&#8203;@Gmail.com
+        <a href="mailto:admin@prismalbudget.org">
+          admin&#8203;@prismalbudget.org
         </a>
         </p>
         <a href="/privacy and terms.html">
