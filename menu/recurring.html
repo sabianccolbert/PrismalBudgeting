@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=1b26847424">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=8b14b14840">
+    <link rel="stylesheet" href="/budgetStyle.css?v=8212e35d23">
     <title>Prismal Budget - Recurring Entries</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -70,7 +70,8 @@
           <h4>Adding And Changing</h4>
           <ul>
             <li>Tap New Entry to add one, or tap a row to change it or delete it.</li>
-            <li>A title can have one recurring entry of each refraction type: one Regular, one Hidden, and one Transfer. If you add one that matches a title and type you already have, it says so, and you change the one that's there instead.</li>
+            <li>Two recurring entries can have the same title only when their refraction type or Other Account is different: Payday can be a Regular, a Hidden, and a Transfer recurring entry, and "Payday → Savings" and "Payday → HSA" are two different ones. If you add (or change) one so it matches another in title, type, and account, it says so, and you change the one that's there instead.</li>
+            <li>If two ever do match (like ones brought over from the spreadsheet version), they're listed at the top under "Needs a look": change one's title, type, or account, or delete one. Until then, on a day both land on, only the first one in the list does.</li>
             <li>For Hidden or Transfer, you can pick one of your Other Accounts, like Savings for a transfer into savings every payday. Each time it lands, a Transfer gives the account the opposite amount (a Transfer cost adds to it), and a Hidden entry its own amount (a Hidden cost takes from it). Help on the Other Accounts page has more.</li>
             <li>The little ? next to Refraction Type shows what each type does.</li>
             <li>To change just one day, tap that day on the calendar, then tap the entry. That makes a temporary recurring entry (like ❗️✔️) for that day only.</li>
