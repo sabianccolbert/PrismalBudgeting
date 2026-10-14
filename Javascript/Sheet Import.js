@@ -395,14 +395,27 @@ function sheetHistory(rows, problems, warnings, flips) {
   return history;
 }
 
-// Recurring: the summary row (worked out again here), the column titles, then the entries and "-" section rows
+// Recurring: the summary row (worked out again here), the column titles, then the entries and "-" section rows.
+// Two that can still land can't share a title and type (the website's rule, see refuseRecurringTwin in Process
+// Budget.js), so a pair like that is listed. One that ended doesn't count: it's removed once the budget opens.
 function sheetRecurring(rows, problems, flips) {
   const titlesAt = headerRow(rows, "title", 1);
-  return [
+  const table = [
     padSheetRow(titlesAt > 0 ? rows[titlesAt - 1] : [], 6),
     padSheetRow(rows[titlesAt], 6),
     ...sheetTable(rows.slice(titlesAt + 1), 6, 0).map(row => (row[0].trim() === "-" ? ["-", row[1].trim(), "", "", "", "-"] : sheetRecurringRow(row, problems, flips)))
   ];
+  const seen = new Set();
+  for (const row of table.slice(2)) {
+    if (row[0] === "-" || !cleanString(row[0])) continue;
+    const end = row[4] === "None" ? null : createSafeMidnight(row[4], true);
+    if (end && !isNaN(end.getTime()) && end < today) continue;
+    const special = getSpecialType(row[5]);
+    const key = cleanString(row[0]) + "|" + special;
+    if (seen.has(key)) problems.push(`Recurring "${row[0]}" (${REFRACTION_NAMES.get(special)}) is there more than once: give one of them another title, or delete one`);
+    seen.add(key);
+  }
+  return table;
 }
 
 // One recurring entry the website's way. Anything that can't be read goes in problems instead of being

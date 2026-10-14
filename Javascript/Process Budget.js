@@ -1375,25 +1375,50 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
 }
 
 /* ---------- Recurring entries (the old "Create/Change A Recurring Entry" form) ---------- */
-// A title can have one recurring entry per refraction type (one Regular, one Hidden, and one Transfer),
-// the same way a day can have one entry per title and type: so it's always clear which recurring entry
-// a day's entry came from. Making a second one is refused; the existing one gets changed instead.
+// Two recurring entries can share a title only when their refraction type or Other Account is different: one Regular,
+// one Hidden, and one Transfer can all be called Payday, and so can "Payday → Savings" and "Payday → HSA" (the account
+// picked is part of the title, see cleanString), the same way a day has one entry per title and type. So it's always
+// clear which recurring entry a day's entry came from. Making or changing one into a match for another is refused (the
+// existing one gets changed instead), and so is renaming an Other Account when that would make two match (accountEntry).
 
 const REFRACTION_NAMES = new Map([["❗️", "Regular"], ["✖️", "Hidden"], ["⭕️", "Transfer"]]);
+const RECURRING_RULE = "Two recurring entries can't have the same title, refraction type, and Other Account";
 
-// The row (other than exceptIndex) with this title and refraction type, or -1
+// The row (other than exceptIndex) with this title (and Other Account) and refraction type, or -1
 function recurringTwin(title, special, exceptIndex = -1) {
   let clean = cleanString(title);
   return recurringData.findIndex((row, i) => i >= 2 && i !== exceptIndex && String(row[0]).trim() !== "-" &&
     cleanString(row[0]) === clean && getSpecialType(String(row[5] || "")) === special);
 }
 
-// Refuse a recurring entry whose title and type another one already has
-function refuseRecurringTwin(title, sprite, exceptIndex = -1) {
+// Refuse a recurring entry whose title, Other Account, and refraction type another one already has. kept: the entry
+// being changed already matched it (two that match can only come with a budget brought over from the spreadsheet,
+// see recurringDuplicates), so it has to change one of the three, or one of them goes.
+function refuseRecurringTwin(title, sprite, exceptIndex = -1, kept = false) {
   let twin = recurringTwin(title, getSpecialType(sprite), exceptIndex);
   if (twin === -1) return;
   let type = REFRACTION_NAMES.get(getSpecialType(sprite));
-  throw new BudgetInputError(`There's already a ${type} recurring entry called ${recurringData[twin][0]}. Each title can have one of each refraction type, so tap that one in the list to change it.`);
+  if (kept) {
+    throw new BudgetInputError(`${recurringData[twin][0]} is a ${type} recurring entry twice. ${RECURRING_RULE}, so give this one another title, type, or account, or delete one of them.`);
+  }
+  throw new BudgetInputError(`There's already a ${type} recurring entry called ${recurringData[twin][0]}. ${RECURRING_RULE}, so tap that one in the list to change it, or pick another title, type, or account.`);
+}
+
+// Recurring entries that match an earlier one's title, Other Account, and refraction type, which can't be made here but
+// can come with a budget brought over from the spreadsheet: ["Rent (Regular)", ...]. The Recurring Entries page lists
+// them to be fixed; until then, on a day both land on, the first one does (see writeRecurring).
+function recurringDuplicates() {
+  let seen = new Set();
+  let found = new Set();
+  for (let i = 2; i < recurringData.length; i++) {
+    let row = recurringData[i];
+    if (!row || String(row[0]).trim() === "-" || !cleanString(row[0])) continue;
+    let special = getSpecialType(String(row[5] || ""));
+    let key = cleanString(row[0]) + "|" + special;
+    if (seen.has(key)) found.add(`${String(row[0]).trim()} (${REFRACTION_NAMES.get(special)})`);
+    seen.add(key);
+  }
+  return [...found];
 }
 
 // "Every 2 Weeks" as typed in the panel, checked and stored the standard way
@@ -1403,7 +1428,7 @@ function readFrequency(text) {
   return formatFrequency(frequency);
 }
 
-// Create a recurring entry (refused when one with its title and refraction type already exists).
+// Create a recurring entry (refused when one with its title, Other Account, and refraction type already exists).
 // fields: { title, sprite: "✔️" | "✔️✖️" | "✔️⭕️", amount: number, frequency: "Every 2 Weeks" (blank = every
 //           month), startDate: Date | null (today), endDate: Date | "None" | null }
 function recurring(fields) {
@@ -1428,8 +1453,8 @@ function recurring(fields) {
   return {};
 }
 
-// Change the recurring entry that was clicked (every field comes from the edit panel). A new title or
-// type can't match another recurring entry's.
+// Change the recurring entry that was clicked (every field comes from the edit panel). Its title, Other Account, and
+// type together can't match another recurring entry's.
 function editRecurringRow(index, fields) {
   let row = recurringData[index];
   if (!row || row[0] === "-" || !String(row[0]).trim()) {
@@ -1440,16 +1465,17 @@ function editRecurringRow(index, fields) {
   let hasAmount = typeof fields.amount === "number" && !isNaN(fields.amount);
   if (hasAmount && Math.abs(fields.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   let sprite = String(fields.sprite || "").trim() || String(row[5] || "").trim() || "✔️";
-  refuseRecurringTwin(title, sprite, index);
+  let oldTitle = String(row[0]).trim();
+  let oldSpecial = getSpecialType(String(row[5] || ""));
+  let newSpecial = getSpecialType(sprite);
+  let renamed = cleanString(oldTitle) !== cleanString(title) || oldSpecial !== newSpecial;
+  refuseRecurringTwin(title, sprite, index, !renamed);
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(row[2]);
   let endDate = resolveEndDate(fields.endDate ?? "None", row[4]);
   let frequency = readFrequency(String(fields.frequency || "").trim() || row[3]);
 
-  // A new title or type takes the days that were changed for this entry along (moveRecurringTemps)
-  let oldTitle = String(row[0]).trim();
-  let oldSpecial = getSpecialType(String(row[5] || ""));
-  let newSpecial = getSpecialType(sprite);
-  if ((cleanString(oldTitle) !== cleanString(title) || oldSpecial !== newSpecial) && recurringTwin(oldTitle, oldSpecial, index) === -1) {
+  // A new title, Other Account, or type takes the days that were changed for this entry along (moveRecurringTemps)
+  if (renamed && recurringTwin(oldTitle, oldSpecial, index) === -1) {
     moveRecurringTemps(cleanString(oldTitle), oldSpecial, title, newSpecial);
   }
 
@@ -1614,8 +1640,9 @@ function describeAliases(text) {
 // An account's balance is its starting amount plus all of those changes, so changing, moving, or deleting one of
 // its entries changes it too. Typing a balance on the Other Accounts page changes the starting amount (no entry
 // is made). accountsData.list: [0] column titles, then [name, balance today (filled in by updateAccountBalances,
-// so the Quick Entry page can show it), "default" | "", starting amount ("" is $0.00)]. The default account, Savings, is always there and
-// can't be deleted.
+// so the Quick Entry page can show it), "default" | "", starting amount ("" is $0.00)]. accountsData.coming: each
+// account's changes after today, which the Quick Entry page counts once their day comes (see accountChangesAhead).
+// The default account, Savings, is always there and can't be deleted.
 
 const ACCOUNTS_VERSION = 3;
 const DEFAULT_ACCOUNT = "Savings";
@@ -1643,9 +1670,53 @@ function otherAccounts() {
   return accountRows().map(account => ({ name: account.name, balance: parseAmount(account.row[1]) }));
 }
 
-// Each account's balance today goes in its row (the Quick Entry page can't add up the budget itself)
+// Each account's balance today goes in its row, and its changes still to come go with them (the Quick Entry page
+// can't add up the budget itself)
 function updateAccountBalances() {
   for (let summary of accountSummaries()) accountsData.list[summary.index][1] = formatMoney(summary.today);
+  accountsData.coming = accountChangesAhead();
+}
+
+// Each account's changes after today, for the Quick Entry page, which adds the ones whose day has come to the
+// balances stored with them (the API's readAccounts), so a page opened days after the budget was last open is still
+// right: the calendar's days after today as they are, then the 28 days after the calendar the way the daily update
+// will fill them in (Upcoming entries, then recurring and connected spreadsheets' entries, which a day more than a
+// month after today doesn't get: see FULL_CATCH_UP_MONTHS). [[account name, "YYYY-MM-DD", change], ...], by day.
+function accountChangesAhead() {
+  const accounts = accountTitleMap();
+  const coming = [];
+  const add = (cellText, day) => {
+    for (const { account, change } of accountLineChanges(cellText, accounts)) {
+      coming.push([account.name, formatToYMD(day), Math.round(change * 100) / 100]);
+    }
+  };
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) if (gridDates[r][c] > today) add(calendarData[r][c], gridDates[r][c]);
+  }
+  const recurringRows = getParsedRecurringRows();
+  const futureByDate = groupFutureRowsByDate();
+  const lastDay = addDays(gridEndDate, 28);
+  const sheetDays = sheetEntriesByDay(nextFourStart, lastDay);
+  const fullUntil = fullCatchUpEnd(today);
+  for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
+    add(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays, day < fullUntil), day);
+  }
+  return coming;
+}
+
+// A day's lines that change an Other Account: [{ account, change, sprite, title }] (see linkedAccount and
+// accountChange). accounts: accountTitleMap(), passed in by loops so it's built once.
+function accountLineChanges(cellText, accounts = accountTitleMap()) {
+  const changes = [];
+  const lines = String(cellText ?? "").split("\n");
+  for (let l = 1; l < lines.length; l++) {
+    const line = readLine(lines[l]);
+    if (!line.title || line.system) continue;
+    const account = linkedAccount(line.sprite, line.title, accounts);
+    const change = account ? accountChange(line.sprite, line.amount) : 0;
+    if (account && change !== 0) changes.push({ account, change, sprite: line.sprite, title: line.title });
+  }
+  return changes;
 }
 
 // Clean account name -> its account (a Map, so names like "constructor" are just names)
@@ -1699,16 +1770,12 @@ function accountSummaries() {
 
   // dayOf(lines): the cell's day (only worked out for a cell with an account entry)
   const addCell = (cellText, dayOf) => {
-    let lines = String(cellText ?? "").split("\n");
-    let date = null;
-    for (let l = 1; l < lines.length; l++) {
-      const line = readLine(lines[l]);
-      if (!line.title || line.system) continue;
-      const account = linkedAccount(line.sprite, line.title, accounts);
-      const change = account ? accountChange(line.sprite, line.amount) : 0;
-      if (!account || change === 0) continue;
-      date = date || dayOf(lines);
-      if (!isNaN(date.getTime())) summaries.get(account.index).entries.push({ date, change, sprite: line.sprite, title: splitAccount(line.title).title });
+    const changes = accountLineChanges(cellText, accounts);
+    if (changes.length === 0) return;
+    const date = dayOf(String(cellText ?? "").split("\n"));
+    if (isNaN(date.getTime())) return;
+    for (const { account, change, sprite, title } of changes) {
+      summaries.get(account.index).entries.push({ date, change, sprite, title: splitAccount(title).title });
     }
   };
   for (let r = 3; r >= 0; r--) {
@@ -1768,6 +1835,7 @@ function accountEntry(fields, index) {
   }
   let oldName = String(row[0]).trim();
   if (cleanString(oldName) !== clean) {
+    refuseRecurringClash(cleanString(oldName), oldName, name);
     renameAccountEntries(cleanString(oldName), name);
     formEntryRow[4] = "Renamed From: " + oldName;
   }
@@ -1785,17 +1853,40 @@ function accountEntry(fields, index) {
   return {};
 }
 
+// An entry's title with its Other Account's new name ("Payday → Savings" -> "Payday → Rainy Day"), or null when the
+// entry isn't for that account (oldClean: the account's old name, as compared)
+function renamedAccountTitle(sprite, text, oldClean, newName) {
+  let special = getSpecialType(String(sprite || ""));
+  if (special !== "✖️" && special !== "⭕️") return null;
+  const { title, account } = splitAccount(text);
+  return account && cleanString(account) === oldClean ? withAccount(title, newName) : null;
+}
+
+// Renaming an account renames its recurring entries too, so it's refused when that would make one match another
+// recurring entry (like one still named for a deleted account with the new name). Two that already matched before
+// (see recurringDuplicates) don't stop it.
+function refuseRecurringClash(oldClean, oldName, newName) {
+  let byKey = new Map(); // Title, account, and type after the rename -> the ones they were before it
+  for (let i = 2; i < recurringData.length; i++) {
+    let row = recurringData[i];
+    if (!row || String(row[0]).trim() === "-" || !cleanString(row[0])) continue;
+    let special = getSpecialType(String(row[5] || ""));
+    let renamed = renamedAccountTitle(row[5], row[0], oldClean, newName);
+    let before = cleanString(row[0]) + "|" + special;
+    let after = cleanString(renamed ?? row[0]) + "|" + special;
+    let known = byKey.get(after);
+    if (known && !known.has(before)) {
+      throw new BudgetInputError(`Renaming ${oldName} to ${newName} would make two ${REFRACTION_NAMES.get(special)} recurring entries called ${renamed ?? String(row[0]).trim()}. ${RECURRING_RULE}, so change or delete one of them on the Recurring Entries page first.`);
+    }
+    if (known) known.add(before);
+    else byKey.set(after, new Set([before]));
+  }
+}
+
 // A renamed account keeps its entries: Hidden and Transfer entries for it (on the calendar, in History, Upcoming,
 // and Recurring) and tracker aliases for it get the new name
 function renameAccountEntries(oldClean, newName) {
-  // An entry's title with the account's new name ("Payday → Savings" -> "Payday → Rainy Day"), or null when the
-  // entry isn't for this account
-  const renamedTitle = (sprite, text) => {
-    let special = getSpecialType(String(sprite || ""));
-    if (special !== "✖️" && special !== "⭕️") return null;
-    const { title, account } = splitAccount(text);
-    return account && cleanString(account) === oldClean ? withAccount(title, newName) : null;
-  };
+  const renamedTitle = (sprite, text) => renamedAccountTitle(sprite, text, oldClean, newName);
   const renameCell = (cellText) => {
     let lines = String(cellText ?? "").split("\n");
     let renamed = false;
@@ -2638,7 +2729,7 @@ function releaseEndedTemps() {
     let endText = String(row[4] ?? "").trim();
     let endDate = endText && endText.toLowerCase() !== "none" ? createSafeMidnight(endText, true) : null;
     if (endDate && isNaN(endDate.getTime())) endDate = null;
-    // (A budget brought over from the spreadsheet can have two rows for one title and type: the later End Date wins)
+    // (Two rows that match, see recurringDuplicates: the later End Date wins)
     if (!lastDays.has(key)) lastDays.set(key, endDate);
     else if (lastDays.get(key) === null || endDate === null) lastDays.set(key, null);
     else if (endDate > lastDays.get(key)) lastDays.set(key, endDate);
@@ -2853,8 +2944,8 @@ function getPredictionData(lastInBank) {
     // spreadsheet entry
     const overridden = (clean, special) => parsedFuture.some(future => future.time === currentTestTime && future.title === clean &&
       entryMark(future.sprite) && future.special === special);
-    // One recurring entry per title and type lands on a day, like writeRecurring (a budget brought over from the
-    // spreadsheet can have two rows for one title and type)
+    // One recurring entry per title and type lands on a day, like writeRecurring (when two rows match, see
+    // recurringDuplicates, the first one does)
     const visibleLanded = new Set();
     const testLanded = new Set();
     for (let row of recurringRows) {
@@ -3619,13 +3710,8 @@ function buildReminderPlan() {
       cellText = calendarData[Math.floor(index / 7)][index % 7];
       dayInBank = readInBank(cellText) ?? 0;
     } else {
-      // Future Dates entries, then recurring entries and spreadsheets' entries, then the In Bank math (like
-      // the catch-up)
-      let text = formatToMMDD(day);
-      for (let f of futureByDate.get(day.getTime()) || []) {
-        text += `\n${String(futureData[f][3])} ${formatMoney(parseAmount(futureData[f][1]))} ${String(futureData[f][0]).trim()}`;
-      }
-      let math = applyCellBudgetMath(writeSheetsToCell(writeRecurringToCell(text, day, recurringRows), sheetDays.get(day.getTime())), inBank);
+      // The day as the daily update will fill it in, then the In Bank math (like the catch-up)
+      let math = applyCellBudgetMath(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), inBank);
       cellText = math.text;
       dayInBank = inBank = math.inBank;
     }
@@ -3641,6 +3727,17 @@ function buildReminderPlan() {
     if (reminder.negative || reminder.uncommon > 0 || reminder.cost) days[formatToYMD(day)] = reminder;
   }
   return { from: formatToYMD(today), to: formatToYMD(lastDay), days: days };
+}
+
+// A day after the calendar the way the daily update will fill it in (before its In Bank, see performDailyUpdate): its
+// Upcoming entries, then, when scheduled, its recurring entries and connected spreadsheets' entries. recurringRows,
+// futureByDate, and sheetDays: from getParsedRecurringRows, groupFutureRowsByDate, and sheetEntriesByDay, made once.
+function dayAfterCalendar(day, recurringRows, futureByDate, sheetDays, scheduled = true) {
+  let text = formatToMMDD(day);
+  for (let f of futureByDate.get(day.getTime()) || []) {
+    text += `\n${String(futureData[f][3])} ${formatMoney(parseAmount(futureData[f][1]))} ${String(futureData[f][0]).trim()}`;
+  }
+  return scheduled ? writeSheetsToCell(writeRecurringToCell(text, day, recurringRows), sheetDays.get(day.getTime())) : text;
 }
 
 // Send the plan (and this device's time zone) to the API when it changed. Never blocks the page.
@@ -3822,12 +3919,14 @@ function normalizeApiTable(rawData, shape) {
   return rows;
 }
 
-// Rebuild the Other Accounts store: { version: 3, list, equity }
+// Rebuild the Other Accounts store: { version: 3, list, equity, coming }
 //   list: [0] column titles, then [name, balance today, "default" | ""] (see Other Accounts in BUDGET
 //         LOGIC). The default account, Savings, is added if it's missing. Balances come only from entries,
 //         so a version 2 store's typed-in balance in [1] isn't kept.
 //   equity: the spreadsheet's business-version (LLC) equity tables, { tabName: table }, kept as stored
 //           (the website doesn't change them). A store without a version is only these tables.
+//   coming: each account's changes after today, for the Quick Entry page (accountChangesAhead fills it in again;
+//           it's kept as stored until then, so loading the budget alone doesn't count as a change)
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
   if (typeof parsed === 'string') {
@@ -3853,7 +3952,11 @@ function normalizeApiAccounts(rawData) {
     if (savings !== -1) list[savings][2] = "default";
     else list.splice(1, 0, [DEFAULT_ACCOUNT, formatMoney(0), "default", ""]);
   }
-  return { version: ACCOUNTS_VERSION, list, equity };
+  const accounts = { version: ACCOUNTS_VERSION, list, equity };
+  const isChange = (item) => Array.isArray(item) && item.length === 3 && typeof item[0] === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(item[1]) && Number.isFinite(item[2]);
+  if (isCurrent && Array.isArray(parsed.coming)) accounts.coming = parsed.coming.filter(isChange);
+  return accounts;
 }
 
 // The calendar as exactly rows x cols cells of text, whatever shape it was stored in (flat or rows)

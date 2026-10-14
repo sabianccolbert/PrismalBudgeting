@@ -74,6 +74,8 @@ function renderRecurringPage(view) {
     view.appendChild(emptyMessage("No recurring entries yet. Tap New Entry to add one."));
     return;
   }
+  const duplicates = recurringDuplicates();
+  if (duplicates.length > 0) view.appendChild(recurringProblems(duplicates));
 
   const tableEl = buildRowTable({
     tableName: "recurring",
@@ -90,6 +92,21 @@ function renderRecurringPage(view) {
     onEntryClick: (index, origin) => openRecurringPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
+}
+
+// "Needs a look" over the table: recurring entries that match another one in title, Other Account, and refraction type,
+// which can only come with a budget brought over from the spreadsheet (see recurringDuplicates in Process Budget.js)
+function recurringProblems(duplicates) {
+  const box = BudgetUI.element("div", "recurringProblems");
+  box.setAttribute("role", "status");
+  const list = BudgetUI.element("ul");
+  for (const name of duplicates) list.append(noTranslate(BudgetUI.element("li", "", name)));
+  box.append(
+    BudgetUI.element("strong", "", "Needs a look"),
+    BudgetUI.element("p", "panelText", `${RECURRING_RULE}, but ${duplicates.length === 1 ? "this one is" : "these are"} here more than once. Give one of each another title, refraction type, or Other Account, or delete one. Until then, on a day they both land on, only the first one in the list does.`),
+    list
+  );
+  return box;
 }
 
 // History tab: [0] column titles, then one row per week (Sunday-Saturday), newest first.
@@ -830,8 +847,8 @@ function rowOrder(body) {
 // #region PANELS
 // =====================================================================
 
-// New recurring entry (index null) or change the tapped one. A title can have one recurring entry per
-// refraction type, so one that matches an existing title and type is refused with a message saying so.
+// New recurring entry (index null) or change the tapped one. Two can share a title only when their refraction type
+// or Other Account is different, so one that matches another in all three is refused with a message saying so.
 function openRecurringPanel(origin, index) {
   const existing = index === null ? null : recurringData[index];
   BudgetUI.openPanel({

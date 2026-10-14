@@ -1923,7 +1923,10 @@ a.budgetButton:hover {
   margin: 0;
 }
 
-.sheetProblems {
+/* "Needs a look": a connected spreadsheet's problems (Spreadsheets), and recurring entries that match another one
+   (Recurring Entries) */
+.sheetProblems,
+.recurringProblems {
   margin-top: 0.55em;
   padding: 0.5em 0.8em;
   font-size: 0.9em;
@@ -1934,13 +1937,21 @@ a.budgetButton:hover {
   border-radius: 10px;
 }
 
-.sheetProblems ul {
+.sheetProblems ul,
+.recurringProblems ul {
   margin: 0.3em 0 0;
   padding-left: 1.1em;
 }
 
-.sheetProblems li + li {
+.sheetProblems li + li,
+.recurringProblems li + li {
   margin-top: 0.3em;
+}
+
+/* Over the Recurring Entries table (Budget Pages.js) */
+.recurringProblems {
+  margin: 0 auto 3vmin;
+  font-size: var(--UI_TEXT);
 }
 
 /* Connecting a spreadsheet needs a verified email: until it is, this note says so (with Send Verification Email) */
