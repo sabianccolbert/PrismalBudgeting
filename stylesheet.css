@@ -663,18 +663,18 @@ label {
 input {
   -webkit-appearance: none;
   appearance: none;
-  
+
   display: block;
   margin: 1vmin auto 3vmin;
   padding: 0.5em 1em;
   width: 60vw;
   max-width: 400px;
-  
+
   /* Match the button pill aesthetic */
   background: transparent;
   border: 3px solid var(--BASE_COLOR);
   border-radius: 9999px;
-  
+
   /* Match typography. A steady size (one that grows with the screen gets huge on wide ones); 16px at
      least, so phones don't zoom in when a box is tapped. */
   color: var(--BASE_COLOR);
@@ -684,8 +684,8 @@ input {
 
   transition:
     transform 0.3s ease-out,
-    box-shadow var(--SLOW_SHADOW), 
-    border-color var(--SLOW_BORDER), 
+    box-shadow var(--SLOW_SHADOW),
+    border-color var(--SLOW_BORDER),
     color var(--SLOW_COLOR),
     text-shadow var(--SLOW_SHADOW);
 }

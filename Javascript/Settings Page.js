@@ -2,7 +2,7 @@
 // reminder time, then turn on push notifications (per device) and/or a calendar link for Google or Apple Calendar.
 // Both are optional. Which days get a reminder comes from the budget (buildReminderPlan in Process Budget.js); the API
 // sends and serves them.
-// Then the account: the email (change it, which needs the password, and verify it), the age (18 or older:
+// Then the account: the email (change it, which needs the password, and verify it), the birth date (18 or older:
 // fix one typed wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID,
 // Windows Hello: add or remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices
 // (turn off Quick Entry icons, Sign Out Everywhere); your data and privacy (Download My Data, analytics on or

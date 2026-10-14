@@ -52,10 +52,12 @@ function siteFiles() {
   return files;
 }
 
+// A git command in the site's folder, and what it printed (as bytes)
 function git(args) {
   return execFileSync("git", args, { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 });
 }
 
+// A file's bytes, read once: as staged for the next commit when checking, from disk otherwise
 const contents = new Map();
 function read(path) {
   if (!contents.has(path)) contents.set(path, CHECK ? git(["show", `:${path}`]) : readFileSync(join(ROOT, path)));
@@ -97,6 +99,7 @@ function stampInlined(text) {
   });
 }
 
+// Every address ending in ?v= in a page or stylesheet, with its file's fingerprint as it is now
 function stampLinks(text) {
   return text.replace(STAMPED_LINK, (match, quote, address) => {
     let path;

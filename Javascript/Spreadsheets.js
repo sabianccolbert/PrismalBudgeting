@@ -350,7 +350,8 @@ const Spreadsheets = (() => {
   }
 
   // A .csv (or tab-separated) file: one tab, every cell text. The separator is whichever of comma, tab, or
-  // semicolon (Europe's spreadsheets use it) the first line has most of.
+  // semicolon (Europe's spreadsheets use it) the first line has most of. Like the other formats, only the first
+  // MAX_ROWS rows and MAX_COLUMNS columns are read.
   function readCsv(bytes, name) {
     const text = new TextDecoder().decode(bytes).replace(/^\uFEFF/, "");
     const firstLine = text.slice(0, text.search(/\r?\n|$/));
@@ -361,8 +362,9 @@ const Spreadsheets = (() => {
     let col = 1;
     let cell = "";
     let quoted = false;
+    // The cell that just ended goes in its tab (empty ones and ones past the last column don't)
     const finishCell = () => {
-      if (cell !== "") setCell(tab, row, col, { t: "s", v: cell });
+      if (cell !== "" && col <= MAX_COLUMNS) setCell(tab, row, col, { t: "s", v: cell });
       cell = "";
       col++;
     };

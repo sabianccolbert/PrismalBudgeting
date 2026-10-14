@@ -64,10 +64,10 @@ S.pointerClientX = 0;
 // Track the current pointer Y position in client coordinates.
 S.pointerClientY = 0;
 
-// Track the last pointer timestamp baseline in “perf-style ms”.
+// Track the last pointer timestamp baseline in "perf-style ms".
 S.lastPointerTimeMs = 0;
 
-// Track the current pointer speed in normalized “energy” units.
+// Track the current pointer speed in normalized "energy" units.
 S.pointerSpeedUnits = 0;
 
 // Track the poke impulse timer used by the poke burst effect.
@@ -83,7 +83,7 @@ S.canvasWidth = 0;
 // Track current canvas pixel height used for physics + drawing.
 S.canvasHeight = 0;
 
-// Track a “screen size” proxy used for scaling (width + height).
+// Track a "screen size" proxy used for scaling (width + height).
 S.screenPerimeter = 0;
 
 // Track the scale-up factor used to grow values on large screens.
@@ -178,13 +178,13 @@ const KEYBOARD = {
   // Add a global drift impulse on Y (ex: WASD movement).
   addY: 0,
 
-  // Paddles: X position (0..100 style “percent” space the pong paddles use).
+  // Paddles: X position (0..100 style "percent" space the pong paddles use).
   paddlesX: 50,
 
-  // Paddles: Y position (0..100 style “percent” space the pong paddles use).
+  // Paddles: Y position (0..100 style "percent" space the pong paddles use).
   paddlesY: 50,
 
-  // Paddles: timer that keeps paddles “active” briefly after input.
+  // Paddles: timer that keeps paddles "active" briefly after input.
   paddlesTimer: 0,
 
   // When true, magnet targets pointer instead of quadrant coordinates.
@@ -210,13 +210,13 @@ S.getNowMs = function getNowMs() {
 
 /* GROUP: Pointer timestamp normalization */
 /**
- * Convert pointer event timestamps into the same “perf-style ms” space as performance.now().
+ * Convert pointer event timestamps into the same "perf-style ms" space as performance.now().
  * Setup sends epoch-style ms (the worker's clock starts at a different time than the page's),
  * and some browsers provide epoch-style timestamps anyway; this normalizes both.
  */
 S.normalizePointerTimestampMs = function normalizePointerTimestampMs(RAW_TIMESTAMP) {
 
-  // If missing/invalid, use “now” so time deltas stay safe.
+  // If missing/invalid, use "now" so time deltas stay safe.
   if (!Number.isFinite(RAW_TIMESTAMP) || RAW_TIMESTAMP <= 0) return S.getNowMs();
 
   // Epoch ms is usually huge (ex: 1700000000000).
@@ -228,7 +228,7 @@ S.normalizePointerTimestampMs = function normalizePointerTimestampMs(RAW_TIMESTA
       return RAW_TIMESTAMP - performance.timeOrigin;
     }
 
-    // If timeOrigin is unavailable, fall back to “now”.
+    // If timeOrigin is unavailable, fall back to "now".
     return S.getNowMs();
   }
 
@@ -316,7 +316,7 @@ function getEdgeFadeFactorFast(STAR) {
     MIN_EDGE_DISTANCE >= FADE_BAND ? 1 :                                  // Safely inside => full strength
     (MIN_EDGE_DISTANCE / FADE_BAND);                                      // Otherwise scale proportionally
 
-  // Square for quick easing (cheap “smooth-ish” curve).
+  // Square for quick easing (cheap "smooth-ish" curve).
   return T * T;
 }
 
@@ -373,7 +373,7 @@ S.updateStarPhysics = function updateStarPhysics() {
   // Store this frame's timestamp for next update.
   S.lastPhysicsMs = NOW_MS;
 
-  // Normalize elapsed time into “60fps frames”.
+  // Normalize elapsed time into "60fps frames".
   const DT_FRAMES = DT_MS / SIXTY_FPS_FRAME_MS;                           // dt in "frames"
 
   // Bail if dt is zero so we don't waste work.
@@ -536,7 +536,7 @@ S.updateStarPhysics = function updateStarPhysics() {
           DELTA_TO_MAGNET_X * DELTA_TO_MAGNET_X + DELTA_TO_MAGNET_Y * DELTA_TO_MAGNET_Y
         ) + 0.0001;                                                       // Add epsilon
 
-        // Unit vector toward magnet (scaled up for “snappy” feel).
+        // Unit vector toward magnet (scaled up for "snappy" feel).
         const UNIT_TOWARD_MAGNET_X = (DELTA_TO_MAGNET_X / DIST_TO_MAGNET) * 5;
         const UNIT_TOWARD_MAGNET_Y = (DELTA_TO_MAGNET_Y / DIST_TO_MAGNET) * 5; // uy * gain
 
@@ -805,7 +805,7 @@ S.updateStarPhysics = function updateStarPhysics() {
     });
   }
 
-  /* GROUP: Adaptive link-distance “lag buster” */
+  /* GROUP: Adaptive link-distance "lag buster" */
   const FRAME_TIME_MS = S.getNowMs() - FRAME_START_MS;                     // Measure how long this physics frame took
 
   const TARGET_MS = 3;                                                     // Desired max budget for physics (ms)
@@ -1236,7 +1236,7 @@ S.restoreOrCreateStars = function restoreOrCreateStars(SAVED) {
   if (!SAVED_META) return;
 
   /* GROUP: Rescale stars */
-  // Rescale stars to current canvas so they don’t “corner spawn” after resize.
+  // Rescale stars to current canvas so they don't "corner spawn" after resize.
   if (SAVED_META.width > 0 && SAVED_META.height > 0) {
 
     // Compute X scale ratio from old canvas to new canvas.
@@ -1262,7 +1262,7 @@ S.restoreOrCreateStars = function restoreOrCreateStars(SAVED) {
   // Restore poke timer (fallback to 0).
   S.pokeImpulseTimer = SAVED_META.pokeTimer ?? 0;
 
-  // Restore pointer speed “energy” (fallback to 0).
+  // Restore pointer speed "energy" (fallback to 0).
   S.pointerSpeedUnits = SAVED_META.userSpeed ?? 0;
 
   // Restore ring timer (fallback to 0).
@@ -1276,7 +1276,7 @@ S.restoreOrCreateStars = function restoreOrCreateStars(SAVED) {
   if (typeof SAVED_META.userY === "number") S.pointerClientY = SAVED_META.userY;
 
   /* GROUP: Reset pointer time baseline */
-  // Reset timing baseline to “now” so next delta is sane.
+  // Reset timing baseline to "now" so next delta is sane.
   S.lastPointerTimeMs = S.getNowMs();
 };
 
@@ -1450,7 +1450,7 @@ function postSnapshot() {
       // Save poke timer so poke resumes smoothly after reload.
       pokeTimer: S.pokeImpulseTimer,
 
-      // Save pointer speed so interaction “energy” resumes smoothly.
+      // Save pointer speed so interaction "energy" resumes smoothly.
       userSpeed: S.pointerSpeedUnits,
 
       // Save pointer X so ring resumes at correct position.

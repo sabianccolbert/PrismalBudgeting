@@ -228,7 +228,7 @@ function RUN_M() {
  *====================================================================*/
 
 /* GROUP: Paddle impulses */
-// These control the paddles overlay and the special “ball star”.
+// These control the paddles overlay and the special "ball star".
 // paddlesTimer controls visibility fade-out.
 
 // Paddle position is tracked here so relative nudges can be sent as absolute values.
