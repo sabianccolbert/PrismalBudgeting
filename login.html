@@ -3,10 +3,11 @@
   <head>
     <meta charset="UTF-8">
     <!-- First, before anything loads: no request from this page says its address (a reset link's carries
-         its code until Login.js takes it out) -->
+         its code until Login.js takes it out). Create Account's check (Cloudflare Turnstile) switches it to the
+         site's own address only, once any code is gone. -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=ec983dd899">
+    <link rel="stylesheet" href="/stylesheet.css?v=1b26847424">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
     <title>Prismal Budget - Login</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
@@ -87,6 +88,10 @@
               <input type="checkbox" id="agree-terms" class="pillSwitch" role="switch" required disabled>
               <span>I agree to the <a href="/privacy and terms.html" target="_blank">Privacy Policy & Terms of Use</a></span>
             </label>
+
+            <!-- New accounts: Cloudflare Turnstile's check that this is a person (Login.js). It runs by itself, and only
+                 shows here when it needs a tap. -->
+            <div id="turnstile-group" class="turnstileField hidden"></div>
 
             <!-- Login: make a passkey for this device right after signing in (Login.js names its check, like Face ID) -->
             <label id="passkey-group" class="termsField hidden">

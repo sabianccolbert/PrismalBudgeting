@@ -823,6 +823,19 @@ input[type="checkbox"].pillSwitch:disabled {
   padding-bottom: 0;
 }
 
+/* Create Account's check that this is a person (Cloudflare Turnstile): empty unless it needs a tap, then its box,
+   centered and no wider than the form */
+.turnstileField {
+  display: flex;
+  justify-content: center;
+  max-width: min(92vw, 400px); /* Its box is at least 300px wide */
+  margin: 0 auto;
+}
+
+.turnstileField:not(:empty) {
+  margin: 1vmin auto 2vmin;
+}
+
 /* Login page instructions (forgot password, new password) */
 .formHint {
   max-width: 80vw;

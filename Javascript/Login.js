@@ -121,7 +121,7 @@ function forgetResetToken() {
 
 // What each mode shows. Groups it doesn't list are hidden, and their inputs disabled so the
 // browser's required checks skip them. passkeys: the passkey button and passkey autofill.
-const ALL_GROUPS = ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'passkey-group'];
+const ALL_GROUPS = ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'turnstile-group', 'passkey-group'];
 const MODES = {
   login: {
     title: 'Sign In To Prismal Budget',
@@ -134,7 +134,7 @@ const MODES = {
   create: {
     title: 'Create Your Account',
     hint: `Prismal Budget is for people ${MIN_AGE} and older.`,
-    groups: ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group'],
+    groups: ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'turnstile-group'],
     primary: 'Create Account',
     toggle: 'Back to Login',
     newPassword: true
@@ -211,6 +211,7 @@ function setMode(newMode) {
   passkeyBtn.classList.toggle('hidden', !(config.passkeys && Passkeys.supported));
   if (config.passkeys) startPasskeyAutofill();
   else stopPasskeyAutofill();
+  if (mode === 'create') startTurnstile(); // Its check runs while the form is filled in
 }
 
 // The message under the form (light for good news, red otherwise)
@@ -290,9 +291,23 @@ authForm.addEventListener('submit', async (e) => {
     return;
   }
 
+  // A new account goes with the answer from the check that this is a person (waiting for it a moment if it's still running)
+  let turnstileToken = '';
+  if (mode === 'create') {
+    primaryBtn.disabled = true;
+    setStatus("Checking that you're a person...", true);
+    turnstileToken = await turnstilePassed();
+    primaryBtn.disabled = false;
+    if (!turnstileToken) {
+      setStatus(TURNSTILE_WAITING);
+      return;
+    }
+    setStatus('');
+  }
+
   const requests = {
     login: ['/api/login', { username, password }],
-    create: ['/api/register', { username, email, birthdate: birthdateInput.value, password, agreedToTerms: true }],
+    create: ['/api/register', { username, email, birthdate: birthdateInput.value, password, agreedToTerms: true, turnstileToken }],
     forgot: ['/api/password/forgot', { email }],
     reset: ['/api/password/reset', { token: resetToken, password }]
   };
@@ -300,6 +315,7 @@ authForm.addEventListener('submit', async (e) => {
   primaryBtn.disabled = true;
   const { ok, status, data } = await api(endpoint, body);
   primaryBtn.disabled = false;
+  if (turnstileToken) resetTurnstile(); // Used up either way
 
   if (ok && data.success) {
     if (mode === 'login') {
@@ -403,6 +419,68 @@ async function confirmSheetEmailLink(token) {
     setStatus(status === 0 ? "Failed to connect to the server. Open the link again to try once more." : (data.error || "An error occurred."));
   }
 }
+
+// =====================================================================
+// #region CREATE ACCOUNT'S CHECK THAT THIS IS A PERSON (Cloudflare Turnstile)
+// =====================================================================
+// Cloudflare's Turnstile script loads the first time Create Account opens, and its check runs by itself while the
+// form is filled in (a box shows only when it needs a tap). Its answer goes with the new account, and the API asks
+// Cloudflare whether it passed. Each answer works once, so a new check starts after every try. The real site uses its
+// own key; anywhere else (like a copy on this computer) uses Cloudflare's test key, which always passes.
+
+const TURNSTILE_SITE_KEY = location.hostname === 'prismalbudget.org' ? '0x4AAAAAAFWoa5trvO9p87Ky' : '1x00000000000000000000AA';
+const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+const TURNSTILE_WAIT_MS = 15000;
+const TURNSTILE_WAITING = "The check that you're a person hasn't finished. If a box shows above Create Account, tap it, then press Create Account again. (If nothing shows, a content blocker may be stopping it.)";
+let turnstileWidget = null;  // The check's ID once it's on the page
+let turnstileLoading = null; // Cloudflare's script while it loads
+let turnstileAnswer = '';    // The latest passed check's answer ('' when there isn't one)
+
+// Load Cloudflare's script (once) and put the check on the page
+function startTurnstile() {
+  if (turnstileWidget !== null || turnstileLoading) return;
+  // The check's frame asks which site it's on, and this page otherwise sends no address at all (see login.html). A
+  // code from an emailed link has left the address bar by now, so only the site's own address goes.
+  document.querySelector('meta[name="referrer"]')?.setAttribute('content', 'strict-origin');
+  turnstileLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = TURNSTILE_SCRIPT;
+    script.async = true;
+    script.addEventListener('load', resolve);
+    script.addEventListener('error', reject);
+    document.head.appendChild(script);
+  }).then(() => {
+    turnstileWidget = window.turnstile.render('#turnstile-group', {
+      sitekey: TURNSTILE_SITE_KEY,
+      action: 'signup',
+      theme: 'dark',
+      appearance: 'interaction-only',
+      size: 'flexible',
+      callback: (answer) => { turnstileAnswer = answer; },
+      'expired-callback': () => { turnstileAnswer = ''; },
+      'error-callback': () => { turnstileAnswer = ''; }
+    });
+  }).catch((error) => {
+    console.warn("Couldn't load the check that you're a person:", error);
+    turnstileLoading = null; // The next try loads it again
+  });
+}
+
+// The check's answer once it has passed (waiting up to TURNSTILE_WAIT_MS for it), or '' when it hasn't
+async function turnstilePassed() {
+  startTurnstile();
+  const giveUp = Date.now() + TURNSTILE_WAIT_MS;
+  while (!turnstileAnswer && Date.now() < giveUp) await new Promise(resolve => setTimeout(resolve, 200));
+  return turnstileAnswer;
+}
+
+// An answer works once: forget it, and start a new check for the next try
+function resetTurnstile() {
+  turnstileAnswer = '';
+  if (turnstileWidget !== null && window.turnstile) window.turnstile.reset(turnstileWidget);
+}
+
+//#endregion
 
 // =====================================================================
 // #region PASSKEY SIGN-IN (the button, and passkey autofill on the username box)
