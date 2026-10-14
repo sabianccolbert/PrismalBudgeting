@@ -696,6 +696,8 @@ onDOMReady(() => {
  * FOOTER INJECTION (SHARED ACROSS ALL PAGES)
  *====================================================================*/
 
+// The footer every page shares: the trademark note, the contact address (it can break onto a new line before the @,
+// <wbr>, without a hidden character ending up in a copied address), and the Privacy Policy and How It Works links
 function injectGlobalFooter() {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
@@ -711,7 +713,7 @@ function injectGlobalFooter() {
         <p><span translate="no">Prismal Budget™</span> and its logo are trademarked</p>
         <p>Contact:
         <a href="mailto:admin@prismalbudget.org">
-          admin&#8203;@prismalbudget.org
+          admin<wbr>@prismalbudget.org
         </a>
         </p>
         <a href="/privacy and terms.html">

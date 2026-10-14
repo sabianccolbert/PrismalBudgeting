@@ -1,3 +1,8 @@
+// Login: the sign-in page. Signing in (with the username or email and the password, or a passkey), creating an
+// account, Forgot Password and the reset link, turning passkey sign-in on right after a password sign-in, and the
+// links emails carry: verifying the account's email, and confirming another email for spreadsheets. The API checks
+// everything again; the checks here only say what's wrong sooner.
+
 const authForm = document.getElementById('auth-form');
 const pageTitle = document.querySelector('header .logo');
 const formHint = document.getElementById('form-hint');
@@ -6,7 +11,8 @@ const usernameLabel = document.getElementById('username-label');
 const emailInput = document.getElementById('email');
 const birthdateInput = document.getElementById('birthdate');
 // The date box can't pick a day after today (local time)
-birthdateInput.max = [new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()].map(n => String(n).padStart(2, '0')).join('-');
+const pageOpened = new Date();
+birthdateInput.max = [pageOpened.getFullYear(), pageOpened.getMonth() + 1, pageOpened.getDate()].map(n => String(n).padStart(2, '0')).join('-');
 const passwordInput = document.getElementById('password');
 const passwordLabel = document.getElementById('password-label');
 const verifyInput = document.getElementById('verify-password');
@@ -88,16 +94,19 @@ document.getElementById('passkey-label').textContent = `Turn on passkey sign-in$
 // The link in a password reset email is /login.html?reset=<token>. The code moves out of the address
 // right away (into this tab's session storage, so a reload still works), so it isn't left showing in the
 // address bar or saved in the browser's history. The link in an email verification email,
-// /login.html?verify=<token>, is checked with the API as soon as the page opens, and leaves the address too.
+// /login.html?verify=<token>, and the one that confirms another email for spreadsheets (Other Emails on the
+// Spreadsheets page), /login.html?sheet-email=<token>, are checked with the API as soon as the page opens, and
+// leave the address too.
 const pageParams = new URLSearchParams(location.search);
 const RESET_TOKEN_KEY = 'prismal_reset_token';
 let resetToken = pageParams.get('reset');
 const verifyToken = pageParams.get('verify');
+const sheetEmailToken = pageParams.get('sheet-email');
 try {
   if (resetToken) sessionStorage.setItem(RESET_TOKEN_KEY, resetToken);
-  else if (!verifyToken) resetToken = sessionStorage.getItem(RESET_TOKEN_KEY);
+  else if (!verifyToken && !sheetEmailToken) resetToken = sessionStorage.getItem(RESET_TOKEN_KEY);
 } catch (e) {}
-if (pageParams.has('reset') || pageParams.has('verify')) history.replaceState(null, '', location.pathname);
+if (pageParams.has('reset') || pageParams.has('verify') || pageParams.has('sheet-email')) history.replaceState(null, '', location.pathname);
 
 // Signed in on this device (a verification link can be opened either way)
 const signedInHere = (() => {
@@ -160,6 +169,13 @@ const MODES = {
     groups: [],
     primary: signedInHere ? 'Open Spreadsheets' : 'Sign In',
     toggle: signedInHere ? 'Go Home' : ''
+  },
+  // The link that confirms another email for spreadsheets (the same next steps as verify)
+  sheetEmail: {
+    title: 'Confirm Your Email',
+    groups: [],
+    primary: signedInHere ? 'Open Spreadsheets' : 'Sign In',
+    toggle: signedInHere ? 'Go Home' : ''
   }
 };
 
@@ -213,7 +229,7 @@ toggleBtn.addEventListener('click', () => {
     declinePasskeys();
     return;
   }
-  if (mode === 'verify') {
+  if (mode === 'verify' || mode === 'sheetEmail') {
     leaveTo('/index.html');
     return;
   }
@@ -229,7 +245,7 @@ authForm.addEventListener('submit', async (e) => {
     addPasskey();
     return;
   }
-  if (mode === 'verify') {
+  if (mode === 'verify' || mode === 'sheetEmail') {
     if (signedInHere) leaveTo('/menu/spreadsheets.html');
     else setMode('login');
     return;
@@ -366,6 +382,23 @@ async function verifyEmailLink(token) {
     setStatus(signedInHere
       ? "That verification link has expired, or your email changed since it was sent. Open Settings and tap Send Verification Email for a new one."
       : "That verification link has expired, or your email changed since it was sent. Sign in, then tap Send Verification Email in Settings for a new one.");
+  } else {
+    setStatus(status === 0 ? "Failed to connect to the server. Open the link again to try once more." : (data.error || "An error occurred."));
+  }
+}
+
+// The link that confirms another email for spreadsheets: the API confirms it for the account that added it (signed
+// in or not)
+async function confirmSheetEmailLink(token) {
+  setMode('sheetEmail');
+  setStatus('Confirming the email...', true);
+  primaryBtn.disabled = true;
+  const { ok, status, data } = await api('/api/sheets/emails/verify', { token });
+  primaryBtn.disabled = false;
+  if (ok && data.success) {
+    setStatus(`${data.email} is confirmed! Spreadsheets it shares with admin@prismalbudget.org can be connected to ${data.username} now (Menu, then Spreadsheets).`, true);
+  } else if (data.expired) {
+    setStatus("That link has expired, a newer one was sent, or the email was removed. Add it again under Other Emails on the Spreadsheets page for a new link.");
   } else {
     setStatus(status === 0 ? "Failed to connect to the server. Open the link again to try once more." : (data.error || "An error occurred."));
   }
@@ -614,6 +647,8 @@ function declinePasskeys() {
 // Start in the mode the link asked for (?new: the front page's Create Account)
 if (verifyToken) {
   verifyEmailLink(verifyToken);
+} else if (sheetEmailToken) {
+  confirmSheetEmailLink(sheetEmailToken);
 } else if (resetToken) {
   setMode('reset');
 } else {

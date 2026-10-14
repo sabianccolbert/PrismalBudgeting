@@ -1,3 +1,7 @@
+// Boot: the first script on every page (in its <head>). It names the release and the files' fingerprints, works out
+// which page this is and whether the browser is signed in (sending it to the login page, or on to Home, when it
+// needs to), gives the starfield a head start, and then adds the scripts the page needs, in order.
+
 (function boot(){
   "use strict";
 
@@ -8,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.13.2026.F";
+  const SITE_VERSION = "10.14.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -20,26 +24,26 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "558a7e0f16",
+    "/Javascript/Active Starfield.js": "ab04438428",
     "/Javascript/Analytics.js": "dac605ae19",
     "/Javascript/Budget Pages.js": "de1887028d",
     "/Javascript/Budget Search.js": "6f91b4418f",
-    "/Javascript/Budget UI.js": "e6fac9bd8b",
+    "/Javascript/Budget UI.js": "775d1d60be",
     "/Javascript/Calendar Page.js": "49aa60945d",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Keyboard Starfield.js": "c627653108",
-    "/Javascript/Layout.js": "75736bde30",
-    "/Javascript/Login.js": "b8bf5b119d",
+    "/Javascript/Keyboard Starfield.js": "7dea1b413a",
+    "/Javascript/Layout.js": "2150e7ed28",
+    "/Javascript/Login.js": "6bfc15f6e1",
     "/Javascript/Passkeys.js": "67a10905c2",
-    "/Javascript/Process Budget.js": "91ebf02d11",
+    "/Javascript/Process Budget.js": "093ea02eba",
     "/Javascript/Quick Entry.js": "67af52ee20",
     "/Javascript/Session.js": "ec241e0ce9",
-    "/Javascript/Settings Page.js": "203122f77c",
+    "/Javascript/Settings Page.js": "1f09bd4f41",
     "/Javascript/Sheet Import.js": "969eb4976d",
-    "/Javascript/Spreadsheets Page.js": "b49f5dcffb",
-    "/Javascript/Spreadsheets.js": "4107bd6583",
+    "/Javascript/Spreadsheets Page.js": "ea5d2e6561",
+    "/Javascript/Spreadsheets.js": "835846fb44",
     "/Javascript/Sprites.js": "4f0c83ae83",
-    "/Javascript/Starfield Setup.js": "d728f1054f",
+    "/Javascript/Starfield Setup.js": "70e7fd08cb",
     "/Resources/Sprites/Hidden.webp": "9c3afd2c80",
     "/Resources/Sprites/Recurring.webp": "f35a230cbd",
     "/Resources/Sprites/Regular.webp": "11a1321f81",
@@ -132,13 +136,14 @@
     ? 'http://127.0.0.1:8787'
     : "https://prismal-budget-api.prismalbudget.workers.dev";
 
-  // The links in a password reset email (/login.html?reset=...) and an email verification email
-  // (/login.html?verify=...) open the login page even when signed in. Login.js moves a reset code into this
+  // The links in a password reset email (/login.html?reset=...), an email verification email
+  // (/login.html?verify=...), and the email that confirms another email for spreadsheets
+  // (/login.html?sheet-email=...) open the login page even when signed in. Login.js moves a reset code into this
   // tab's session storage, so a reload of that page still counts.
   let hasResetCode = false;
   try { hasResetCode = !!sessionStorage.getItem("prismal_reset_token"); } catch (e) {}
   const pageParams = new URLSearchParams(location.search);
-  const isEmailLink = PAGE === "login" && (pageParams.has("reset") || pageParams.has("verify") || hasResetCode);
+  const isEmailLink = PAGE === "login" && (pageParams.has("reset") || pageParams.has("verify") || pageParams.has("sheet-email") || hasResetCode);
 
   // If they are not logged in, and not already on a page that works without it, redirect them.
   if (!isLoggedIn && !IS_PUBLIC) {

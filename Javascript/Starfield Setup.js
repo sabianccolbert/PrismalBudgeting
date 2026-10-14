@@ -117,7 +117,7 @@ S.handleEngineMessage = function handleEngineMessage(MESSAGE) {
 /* GROUP: Save stars + meta */
 // Persist the latest engine snapshot so the starfield survives reloads.
 // This is synchronous on purpose: pagehide can't wait for a reply from the worker.
-// This is “best effort”: storage can fail in private mode or with quota limits.
+// This is "best effort": storage can fail in private mode or with quota limits.
 S.saveStarfieldToStorage = function saveStarfieldToStorage() {
 
   // Bail if there's nothing usable to save yet.
@@ -265,7 +265,7 @@ S.setInteractionSetting = function setInteractionSetting(KEY, VALUE) {
 };
 
 /* GROUP: Hold-to-repeat steppers */
-// Enable “press and hold” repeating behavior for stepper buttons.
+// Enable "press and hold" repeating behavior for stepper buttons.
 S.enableHoldToRepeat = function enableHoldToRepeat(BUTTON, ON_STEP) {
 
   // Track initial delay timeout handle.
@@ -653,7 +653,7 @@ S.startEngine = function startEngine() {
 // different moment. Send epoch ms; the engine converts it into its own performance.now() space.
 S.toEngineTimeMs = function toEngineTimeMs(EVENT_TIMESTAMP) {
   if (EVENT_TIMESTAMP > 1e12) return EVENT_TIMESTAMP; // Already epoch-style (some Safari versions)
-  if (!Number.isFinite(performance.timeOrigin)) return undefined; // Engine falls back to “now”
+  if (!Number.isFinite(performance.timeOrigin)) return undefined; // Engine falls back to "now"
   return performance.timeOrigin + EVENT_TIMESTAMP;
 };
 

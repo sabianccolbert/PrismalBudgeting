@@ -82,7 +82,7 @@
   z-index: 50; /* Bring above other cells */
   position: relative;
   transition: transform 0.2s ease-in-out;
-  
+
   /* Optional: Add a shadow or border so it pops out */
   box-shadow: 0 10px 20px rgba(0,0,0,0.5);
   background-color: rgba(0,0,0,0.5);
@@ -1824,14 +1824,16 @@ a.budgetButton:hover {
   border-top: 1px solid var(--PANEL_LINE);
 }
 
-/* Passkeys: each one's name and dates, with Remove beside it */
-.passkeyList {
+/* Passkeys (Settings) and Other Emails (the Spreadsheets page): each one's name and details, with its buttons beside it */
+.passkeyList,
+.sheetEmailList {
   margin: 0.8em 0 1em;
   padding: 0;
   list-style: none;
 }
 
-.passkeyItem {
+.passkeyItem,
+.sheetEmailItem {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1841,16 +1843,24 @@ a.budgetButton:hover {
   border-top: 1px solid var(--PANEL_BORDER);
 }
 
-.passkeyItem:last-child {
+.passkeyItem:last-child,
+.sheetEmailItem:last-child {
   border-bottom: 1px solid var(--PANEL_BORDER);
 }
 
-.passkeyAbout {
+.passkeyAbout,
+.sheetEmailAbout {
   display: flex;
   flex-direction: column;
   gap: 0.15em;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.sheetEmailButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
 }
 
 /* Connected spreadsheets (the Spreadsheets page): each one's button, On/Off switch, and Delete, with a box under it when

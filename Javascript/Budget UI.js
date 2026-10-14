@@ -852,7 +852,7 @@ const BudgetUI = (() => {
   }
 
   // Notes at the bottom of the screen. Two at once stack (newest at the bottom) instead of one covering
-  // the other.
+  // the other. A longer note stays longer, so there's time to read it (4.5 to 12 seconds).
   let toastStack = null;
   function showToast(message, isWarning = false) {
     if (!toastStack || !toastStack.isConnected) {
@@ -862,8 +862,9 @@ const BudgetUI = (() => {
     const toast = element("div", `budgetToast${isWarning ? " warning" : ""}`, message);
     toast.setAttribute("role", "status");
     toastStack.appendChild(toast);
-    setTimeout(() => toast.classList.add("leaving"), 4500);
-    setTimeout(() => toast.remove(), 5000);
+    const shownMs = Math.min(12000, Math.max(4500, String(message).length * 60));
+    setTimeout(() => toast.classList.add("leaving"), shownMs);
+    setTimeout(() => toast.remove(), shownMs + 500);
   }
 
   //#endregion

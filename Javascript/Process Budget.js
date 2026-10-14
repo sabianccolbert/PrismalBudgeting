@@ -1,3 +1,7 @@
+// Process Budget: the budget itself, for every page that shows one. Loading it from the API and saving what
+// changed, the daily update that brings it up to today, every change (calendar entries, recurring entries, the
+// tracker, Other Accounts, connected spreadsheets, Quick Entry), the budget math, Dave, Search, Undo and Redo, and
+// the helpers the pages share (dates, amounts, titles). Pages draw from it and redraw on its "budget:updated" event.
 
 // =====================================================================
 // GLOBAL VARIABLES
@@ -287,7 +291,6 @@ Then every week before today's week goes to History in one insert, and today's 4
 become the new calendar.
 */
 async function performDailyUpdate() {
-  console.log("Performing daily update...");
   formEntryRow[2] = "🕛 Daily Update";
 
   // 1. Find which week the saved calendar holds, and how far today's grid is past it
@@ -385,7 +388,6 @@ async function performDailyUpdate() {
 
   // 5. Archive every week before today's week to History in one insert (newest week on top)
   if (weeksToScroll > 0) {
-    console.log("Scrolling " + weeksToScroll + " week(s) forward...");
     let archivedWeeks = timeline
       .slice(0, weeksToScroll)
       .map(row => row.map(cell => formatHistoryCell(cell.text, cell.date)));
@@ -565,7 +567,6 @@ async function saveProcessedDate(dateString) {
       })
     });
     if (!res.ok) throw new Error(`Server responded with status: ${res.status}`);
-    console.log("Successfully saved new processing date:", dateString);
     return true;
   } catch (err) {
     console.error("Failed to save daily update timestamp:", err);
@@ -989,12 +990,12 @@ function refreshBudgetData() {
   recurringToDeleteIndexes = [];
 
   normalizeFrequencies();
-  upcomingEntriesMaintanence();
+  upcomingEntriesMaintenance();
   writeRecurring();
   writeSheetEntries();
   releaseEndedTemps();
   releaseSheetTemps();
-  if (deleteExpiredReccurrings()) recurringEdited = true;
+  if (deleteExpiredRecurrings()) recurringEdited = true;
   organizeCellEntries();
   writeBudgetMath();
   commenceDave();
@@ -2499,7 +2500,7 @@ function searchTargets(terms) {
 
 // Move Future Dates entries onto the calendar once their day is on it, and build the
 // "Upcoming" list (everything still past the calendar, by date)
-function upcomingEntriesMaintanence() {
+function upcomingEntriesMaintenance() {
   let latestDay = new Date(0);
   let futureRowsToDeleteIndexes = [];
   for (let i = 1; i < futureData.length; i++) {
@@ -2545,7 +2546,7 @@ function upcomingEntriesMaintanence() {
 
 // Write recurring entries onto every calendar day from today on, respecting temps (a temp with
 // the same title blocks the entry that day) and combining into same-type unique entries.
-// Expired recurring entries are queued for deleteExpiredReccurrings.
+// Expired recurring entries are queued for deleteExpiredRecurrings.
 function writeRecurring() {
   const todayTime = today.getTime();
   for (let i = 2; i < recurringData.length; i++) {
@@ -2604,7 +2605,7 @@ function writeRecurring() {
 
 // Remove expired recurring entries. releaseEndedTemps (just before this) already turned their temps from
 // today on into plain unique entries, so ending a recurring entry never changes days that already passed.
-function deleteExpiredReccurrings() {
+function deleteExpiredRecurrings() {
   let deletedAny = false;
   recurringToDeleteIndexes = [...new Set(recurringToDeleteIndexes)].sort((a, b) => a - b);
   for (let i = recurringToDeleteIndexes.length - 1; i >= 0; i--) {
@@ -2961,13 +2962,22 @@ function commenceDave() {
       }
     }
     tempDaveMessage += farewellPresets[todaysDay % 7];
-    tempDaveMessage += affirmationPresets[todaysDay];
+    tempDaveMessage += affirmationPresets[affirmationIndex(today)];
     message = tempDaveMessage;
   } catch (error) {
-    console.log("Dave error: " + error);
+    console.error("Dave's message couldn't be worked out:", error);
     hadError = true;
   }
   daveMessage = message;
+}
+
+// Which affirmation a day gets: the same one on the same date every year, the leap year one on February 29, and
+// "Next year will be even better." on December 31 (the list has one for each day of a common year, then the leap one)
+function affirmationIndex(date) {
+  const day = getDayDifference(date, new Date(date.getFullYear(), 0, 1));
+  const isLeapYear = new Date(date.getFullYear(), 1, 29).getMonth() === 1;
+  if (!isLeapYear || day < 59) return day;
+  return day === 59 ? 365 : day - 1;
 }
 
 /* ---------- Dave's tips (his "smart" messages) ---------- */
@@ -3670,7 +3680,6 @@ async function saveChanges() {
 
 // Send every table that changed (see saveChanges); resolves to true when they all saved
 async function saveChangedTables() {
-  console.log("Saving data changes...");
   const token = localStorage.getItem('prismal_jwt');
   if (!token) {
     console.error("No active session found. Changes not saved.");
@@ -4049,7 +4058,7 @@ function getGridDates() {
   let dayOfWeek = now.getDay(); // 0 is Sunday
   let startDate = new Date(now);
   startDate.setDate(now.getDate() - dayOfWeek);
-  
+
   let datesArray = [];
   for (let r = 0; r < 4; r++) {
     let row = [];
@@ -4065,7 +4074,7 @@ function getGridDates() {
 
 // Days from date2 to date1 (rounded, so a daylight saving change's 23- or 25-hour day still counts as one)
 function getDayDifference(date1, date2) {
-	return Math.round((date1.getTime() - date2.getTime()) / 86400000);
+  return Math.round((date1.getTime() - date2.getTime()) / 86400000);
 }
 
 // A line's words: [sprite, amount, ...title]
@@ -4110,11 +4119,11 @@ function formatToMMDD(dateObj) {
 
 // An amount as stored and shown: -$1234.56 or $1234.56
 function formatMoney(amount) {
-	let rounded = Math.round(amount * 100) / 100;
-	let isNegative = rounded < 0;
-	let absAmt = Math.abs(rounded)
-		.toFixed(2);
-	return isNegative ? `-$${absAmt}` : `$${absAmt}`;
+  let rounded = Math.round(amount * 100) / 100;
+  let isNegative = rounded < 0;
+  let absAmt = Math.abs(rounded)
+    .toFixed(2);
+  return isNegative ? `-$${absAmt}` : `$${absAmt}`;
 }
 
 // An amount someone typed -> a number, or NaN when it isn't one. Dollar signs, spaces, and thousands
@@ -4130,24 +4139,24 @@ function readMoneyInput(text) {
 
 // A stored amount ("-$1234.56") -> -1234.56; 0 when there isn't one
 function parseAmount(val) {
-	if (!val) return 0;
-	let str = String(val)
-		.replace(/[^\d.-]/g, '');
-	if (str.startsWith("-")) {
-		return -Math.abs(parseFloat(str)) || 0;
-	}
-	return parseFloat(str) || 0;
+  if (!val) return 0;
+  let str = String(val)
+    .replace(/[^\d.-]/g, '');
+  if (str.startsWith("-")) {
+    return -Math.abs(parseFloat(str)) || 0;
+  }
+  return parseFloat(str) || 0;
 }
 
 // An entry line's title ("❗️ -$5.00 Iced Coffee" -> "iced coffee", or as written with clean false)
 function extractTitle(line, clean = true) {
-	if (!line) return "";
-	let parts = getParts(line)
-	if (parts.length <= 2) return "";
-	let title = parts.slice(2)
-		.join(" ");
-	if (clean) title = cleanString(title);
-	return title;
+  if (!line) return "";
+  let parts = getParts(line)
+  if (parts.length <= 2) return "";
+  let title = parts.slice(2)
+    .join(" ");
+  if (clean) title = cleanString(title);
+  return title;
 }
 
 // One line of a day ("❗️ -$5.00 Coffee") read once: { sprite, amount, title (as written, "" without one),
@@ -4235,16 +4244,16 @@ function withAccount(title, account) {
 
 // An entry's refraction type from its sprite: ✖️ Hidden, ⭕️ Transfer, or ❗️ Regular
 function getSpecialType(emo) {
-	if (!emo) return "❗️";
-	if (emo.includes("✖️")) return "✖️";
-	if (emo.includes("⭕️")) return "⭕️";
-	return "❗️";
+  if (!emo) return "❗️";
+  if (emo.includes("✖️")) return "✖️";
+  if (emo.includes("⭕️")) return "⭕️";
+  return "❗️";
 }
 
 // The existing entry's type, and its mark (✔️ or ➕) or the incoming one's
 function combineSprites(existingSprite, incomingSprite) {
-	let specialType = getSpecialType(existingSprite);
-	return specialType + (entryMark(existingSprite) || entryMark(incomingSprite));
+  let specialType = getSpecialType(existingSprite);
+  return specialType + (entryMark(existingSprite) || entryMark(incomingSprite));
 }
 
 // Where a sprite says an entry comes from: ✔️ a recurring entry, ➕ a connected spreadsheet, or "" (its own).
@@ -4253,10 +4262,10 @@ function combineSprites(existingSprite, incomingSprite) {
 const RECURRING_MARK = "✔️";
 const SHEET_MARK = "➕";
 function entryMark(sprite) {
-	let text = String(sprite || "");
-	if (text.includes(RECURRING_MARK)) return RECURRING_MARK;
-	if (text.includes(SHEET_MARK)) return SHEET_MARK;
-	return "";
+  let text = String(sprite || "");
+  if (text.includes(RECURRING_MARK)) return RECURRING_MARK;
+  if (text.includes(SHEET_MARK)) return SHEET_MARK;
+  return "";
 }
 
 // Local midnight N days after date (handles month/year/DST rollover)
@@ -4482,12 +4491,12 @@ const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.client
 table?.addEventListener('touchstart', (e) => {
   if (e.touches.length === 2) {
     isTransforming = true;
-    
+
     const t1 = e.touches[0];
     const t2 = e.touches[1];
     const cell1 = t1.target.closest('td');
     const cell2 = t2.target.closest('td');
-    
+
     if (cell1 && cell1 === cell2) {
       targetEl = cell1.querySelector('.cell-content');
       cell1.style.zIndex = '20';
@@ -4501,22 +4510,22 @@ table?.addEventListener('touchstart', (e) => {
     const center = getCenter(t1, t2);
     startCenterX = center.x;
     startCenterY = center.y;
-    targetEl.style.transition = 'none'; 
+    targetEl.style.transition = 'none';
   }
 }, { passive: false });
 
 table?.addEventListener('touchmove', (e) => {
   if (isTransforming && e.touches.length === 2) {
-    e.preventDefault(); 
+    e.preventDefault();
     const t1 = e.touches[0];
     const t2 = e.touches[1];
-    
+
     const scale = getDistance(t1, t2) / startDist;
     const rotate = getAngle(t1, t2) - startAngle;
     const center = getCenter(t1, t2);
     const translateX = center.x - startCenterX;
     const translateY = center.y - startCenterY;
-    
+
     targetEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`;
   }
 }, { passive: false });
@@ -4525,10 +4534,10 @@ table?.addEventListener('touchmove', (e) => {
 const endTransform = (e) => {
   if (isTransforming && e.touches.length < 2) {
     isTransforming = false;
-    targetEl.style.transition = ''; 
-    targetEl.style.transform = ''; 
+    targetEl.style.transition = '';
+    targetEl.style.transform = '';
     targetEl.style.overflow = '';
-    
+
     const parentTd = targetEl.closest('td');
     if (parentTd) parentTd.style.zIndex = '';
     targetEl = null;
@@ -4685,7 +4694,7 @@ let magnifyDelay = null;
 
 window.addEventListener('pointerup', (e) => {
   if (e.pointerType !== 'mouse') return;
-  
+
   isMouseDown = false;
   clearTimeout(magnifyDelay); // Clear timer on release
 
@@ -4695,13 +4704,13 @@ window.addEventListener('pointerup', (e) => {
 });
 
 document.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || e.pointerType !== 'mouse') return; 
+  if (e.button !== 0 || e.pointerType !== 'mouse') return;
   if (e.target.closest('.cell-action-btn')) return;
 
   const cell = e.target.closest('.elastic-table td');
   if (!cell) return;
 
-  e.preventDefault(); 
+  e.preventDefault();
   isMouseDown = true;
 
   // Delay of 150ms prevents jittering on a fast click
@@ -4721,7 +4730,7 @@ document.addEventListener('pointerout', (e) => {
   if (e.pointerType !== 'mouse') return;
   const cell = e.target.closest('.elastic-table td');
   if (!cell) return;
-  
+
   if (!cell.contains(e.relatedTarget)) {
     cell.classList.remove('is-magnified');
   }
