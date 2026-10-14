@@ -712,7 +712,7 @@ const BudgetUI = (() => {
   // page, while a date box is the "pick target", tapping a day fills it in: panels (and the search box) keep
   // their date box as the target while they're open; other date boxes stop when you tap somewhere else.
 
-  const DAY_TABLES = ".elastic-table, .historyTable"; // Tables whose days can be tapped to pick them
+  const DAY_TABLES = ".elastic-table"; // Tables whose days can be tapped to pick them (Home's and History's)
   let pickTarget = null;
   const hasCalendar = () => !!document.querySelector(DAY_TABLES);
 

@@ -195,13 +195,8 @@ function renderCalendar() {
       if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(gridDates[r][c]) : line, l));
     });
 
-    // Closes the zoomed day (handled in Process Budget.js)
-    const closeButton = document.createElement("button");
-    closeButton.className = "cell-action-btn";
-    closeButton.type = "button";
-    closeButton.textContent = "v";
-    closeButton.setAttribute("aria-label", "Close day");
-    content.replaceChildren(fragment, closeButton);
+    // Its v closes the zoomed day (handled in Process Budget.js)
+    content.replaceChildren(fragment, zoomCloseButton());
 
     td.dataset.row = r;
     td.dataset.col = c;
@@ -243,8 +238,9 @@ function wireCalendar() {
 // as "catch up" in any spelling)
 const CATCHUP_TITLE = "Catchup";
 
-// In Bank tapped on a zoomed day: type what the bank says, and the difference goes on that day as a Regular
-// Catchup entry (adding into one that's already there), so that day and the ones after it follow
+// In Bank tapped on a zoomed day: type what the bank says, and the difference goes on that day as a Transfer
+// titled Catchup, with no Other Account (adding into one that's already there), so that day and the ones after
+// it follow. A Transfer changes In Bank without being a cost or gain, so the fix isn't counted as spending.
 function openInBankOptions(lineEl, r, c) {
   const date = gridDates[r][c];
   const current = readInBank(calendarData[r][c]);
@@ -258,7 +254,7 @@ function openInBankOptions(lineEl, r, c) {
         label: "In Bank",
         value: current.toFixed(2),
         placeholder: "0.00",
-        hint: `What your bank says for this day. The difference goes on it as a Regular ${CATCHUP_TITLE} entry, and the days after it follow.`
+        hint: `What your bank says for this day. The difference goes on it as a ⭕️ Transfer titled ${CATCHUP_TITLE} (with no Other Account), and the days after it follow.`
       });
       balance.input.inputMode = "decimal";
       form.append(balance.el, BudgetUI.buttonRow([
@@ -272,7 +268,7 @@ function openInBankOptions(lineEl, r, c) {
         if (Math.abs(typed) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         const difference = Math.round((typed - current) * 100) / 100;
         if (difference === 0) return panel.close(); // Already right
-        BudgetUI.submit(panel, () => addCalendarEntry({ title: CATCHUP_TITLE, sprite: "❗️", amount: difference, date }));
+        BudgetUI.submit(panel, () => addCalendarEntry({ title: CATCHUP_TITLE, sprite: "⭕️", amount: difference, date }));
       });
     }
   });

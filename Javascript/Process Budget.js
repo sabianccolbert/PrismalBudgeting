@@ -3090,14 +3090,16 @@ function affirmationIndex(date) {
 // day, he shows one of that day's tips for 10 minutes, highlighted. Each visit after that (once the tip before
 // has had its 10 minutes) shows the next one, until all of the day's tips have been shown; then he's back to
 // his everyday message. A purchase that takes the budget below $0 (or further below) gets its tip right away.
-// Which tips were shown is kept on this device (they're only reminders). Tips are worked out once per visit
-// (startDaveVisit), never on every change, so they can't slow changes down. In this order:
+// Which tips were shown is kept on this device (they're only reminders), and stays after signing out (Layout.js
+// keeps just which tips and when), so signing back in goes on to the next tip instead of starting the day's over.
+// Tips are worked out once per visit (startDaveVisit), never on every change, so they can't slow changes down. In
+// this order:
 //   payday:  today has a paycheck: about how much usually goes out, besides recurring bills, before the next
 //            one (looking back 4 months, and only with 4 months of History)
 //   pace:    the last 7 days' spending, besides recurring bills, is well over a usual week's (4 months of History)
 //   savings: a big uncommon bill (or one-time cost added for a later day) is coming up in the next 60 days, and
 //            how much to set aside from each paycheck until then
-//   inBank:  once a week: compare In Bank with the bank, and add what's missing (or a Catchup entry)
+//   inBank:  on Sundays: compare In Bank with the bank, and add what's missing (or a Catchup entry)
 //   catchup: once a week, when Catchup entries in the last 30 days add up to $100 or more: add purchases as
 //            they happen instead
 //   refund:  a purchase took the lowest In Bank after today below $0, or further below
@@ -3113,6 +3115,7 @@ const DAVE_CATCHUP = 100;       // The catchup tip: Catchup entries in the last 
 const DAVE_CATCHUP_DAYS = 30;
 const DAVE_TIPS = [["payday", paydayTip], ["pace", paceTip], ["savings", savingsTip], ["inBank", inBankTip], ["catchup", catchupTip]];
 const DAVE_WEEKLY_TIPS = ["inBank", "catchup"]; // Shown at most once every 7 days
+const DAVE_SUNDAY_TIPS = ["inBank"];            // ...and only on a Sunday
 
 // Where this device keeps Dave's tips for the signed-in account
 const daveStorageKey = () => `prismal_dave_${localStorage.getItem("prismal_username") || ""}`;
@@ -3189,21 +3192,23 @@ function noticeRiskyPurchase(purchase, lowestBefore) {
   writeDaveState(state);
 }
 
-// A weekly tip is due when it's never been shown on this device, or 7 days have passed since (others always are)
+// A weekly tip is due when it's never been shown on this device, or 7 days have passed since (others always are).
+// The weekly check is only due on a Sunday.
 function weeklyTipDue(state, id) {
   if (!DAVE_WEEKLY_TIPS.includes(id)) return true;
+  if (DAVE_SUNDAY_TIPS.includes(id) && today.getDay() !== 0) return false;
   const last = state.weekly[id] ? createSafeMidnight(state.weekly[id], true) : null;
   return !last || isNaN(last.getTime()) || getDayDifference(today, last) >= 7;
 }
 
-// The weekly check: compare today's In Bank with the bank (once there are entries to check)
+// The weekly check (Sundays): compare today's In Bank with the bank (once there are entries to check)
 function inBankTip() {
   const spot = calendarSpot(today);
   const inBank = spot ? readInBank(calendarData[spot.r][spot.c]) : null;
   const hasEntries = historyData.slice(1).some(row => row.some(cell => String(cell ?? "").trim() !== "")) ||
     calendarData.some(row => row.some(cell => ownEntryLines(cell).length > 0));
   if (inBank === null || !hasEntries) return null;
-  return `Time for your weekly check! Look at today's In Bank here (${formatMoney(inBank)}), and compare it with what your bank account actually has. Try to find which purchases are causing any difference, and add them in (on the day they happened, or just to today). Anything you can't find: tap today's In Bank on the calendar and type what your bank says, and a Catchup entry makes up the difference.`;
+  return `Time for your weekly check! Look at today's In Bank here (${formatMoney(inBank)}), and compare it with what your bank account actually has. Try to find which purchases are causing any difference, and add them in (on the day they happened, or just to today). Anything you can't find: tap today's In Bank on the calendar and type what your bank says, and I'll add a Catchup entry to make up the difference.`;
 }
 
 // A paycheck: a gain from a recurring entry or a connected spreadsheet (its line has a ✔️ or ➕) that's
@@ -3228,7 +3233,8 @@ function paycheckDays(first, last) {
 // Each day from 4 months ago through today, from History and the calendar: { spent, catchup, payday }, where spent
 // is what went out of In Bank besides recurring bills (Regular costs that didn't come from a recurring entry or a
 // connected spreadsheet),
-// and catchup is its Catchup costs. enough: History reaches back the whole 4 months. Worked out once per visit
+// and catchup is its Catchup costs (Regular, or a Transfer with no Other Account like In Bank's own Catchup entries;
+// never Hidden, which doesn't change In Bank). enough: History reaches back the whole 4 months. Worked out once per visit
 // (several tips use it: see startDaveVisit).
 function recentSpending() {
   if (daveTipsShared?.spending) return daveTipsShared.spending;
@@ -3247,7 +3253,7 @@ function recentSpending() {
       if (line.amount >= 0) continue;
       const special = getSpecialType(line.sprite);
       if (special === "❗️" && !entryMark(line.sprite)) day.spent -= line.amount;
-      if (special !== "⭕️" && /^catch ?up$/.test(line.titleClean)) day.catchup -= line.amount;
+      if (special !== "✖️" && /^catch ?up$/.test(line.clean)) day.catchup -= line.amount;
     }
     days.set(date.getTime(), day);
   };
@@ -4590,8 +4596,8 @@ window.updateGridCell = async function(gridName, row, col, textValue) {
 // #region LAYOUT FUNCTIONS
 // =====================================================================
 
-// Only the home page has the calendar table; on other pages these listeners are skipped
-const table = document.querySelector('.elastic-table');
+// Home's calendar and History's days (both .elastic-table) zoom and move the same way. Home's table is wired
+// here; History draws its table later (and again after a change), so Budget Pages.js wires each one it draws.
 
 // 1. TOUCH: TWO-FINGER PINCH & DRAG
 
@@ -4599,40 +4605,51 @@ let isTransforming = false;
 let targetEl = null;
 let startDist = 0, startAngle = 0;
 let startCenterX = 0, startCenterY = 0;
+// Two fingers across days move the whole table this much faster than they go, so a short slide brings its
+// edge into view
+const TABLE_PAN_SPEED = 1.5;
 
 // Two fingers: how far apart they are, at what angle, and the point between them
 const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
 const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
 
-table?.addEventListener('touchstart', (e) => {
-  if (e.touches.length === 2) {
-    isTransforming = true;
+const wiredTables = new WeakSet();
 
+// Two-finger pinching, stretching, and moving, and tapping a day to zoom it, on this table (once)
+function wireElasticTable(table) {
+  if (!table || wiredTables.has(table)) return;
+  wiredTables.add(table);
+
+  table.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 2) return;
     const t1 = e.touches[0];
     const t2 = e.touches[1];
     const cell1 = t1.target.closest('td');
     const cell2 = t2.target.closest('td');
 
-    if (cell1 && cell1 === cell2) {
+    if (cell1 && cell1 === cell2 && cell1.querySelector('.cell-content')) {
       targetEl = cell1.querySelector('.cell-content');
-      cell1.style.zIndex = '20';
-      targetEl.style.overflow = 'visible';
+      // A zoomed day stays over the dimmed page, already shows everything, and keeps its scroll
+      if (!cell1.classList.contains('is-editing')) {
+        cell1.style.zIndex = '20';
+        targetEl.style.overflow = 'visible';
+      }
     } else {
       targetEl = table;
     }
 
+    isTransforming = true;
     startDist = getDistance(t1, t2);
     startAngle = getAngle(t1, t2);
     const center = getCenter(t1, t2);
     startCenterX = center.x;
     startCenterY = center.y;
     targetEl.style.transition = 'none';
-  }
-}, { passive: false });
+  }, { passive: false });
 
-table?.addEventListener('touchmove', (e) => {
-  if (isTransforming && e.touches.length === 2) {
+  table.addEventListener('touchmove', (e) => {
+    if (!isTransforming || e.touches.length !== 2) return;
     e.preventDefault();
     const t1 = e.touches[0];
     const t2 = e.touches[1];
@@ -4640,36 +4657,40 @@ table?.addEventListener('touchmove', (e) => {
     const scale = getDistance(t1, t2) / startDist;
     const rotate = getAngle(t1, t2) - startAngle;
     const center = getCenter(t1, t2);
-    const translateX = center.x - startCenterX;
-    const translateY = center.y - startCenterY;
+    const speed = targetEl === table ? TABLE_PAN_SPEED : 1;
+    const translateX = (center.x - startCenterX) * speed;
+    const translateY = (center.y - startCenterY) * speed;
 
     targetEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`;
-  }
-}, { passive: false });
+  }, { passive: false });
 
-// The fingers let go: the day (or the calendar) settles back
-const endTransform = (e) => {
-  if (isTransforming && e.touches.length < 2) {
-    isTransforming = false;
-    targetEl.style.transition = '';
-    targetEl.style.transform = '';
-    targetEl.style.overflow = '';
+  table.addEventListener('touchend', endTransform);
+  table.addEventListener('touchcancel', endTransform);
+  table.addEventListener('click', zoomTappedDay);
+}
 
-    const parentTd = targetEl.closest('td');
-    if (parentTd) parentTd.style.zIndex = '';
-    targetEl = null;
-  }
-};
+// The fingers let go: the day (or the table) settles back
+function endTransform(e) {
+  if (!isTransforming || e.touches.length >= 2) return;
+  isTransforming = false;
+  targetEl.style.transition = '';
+  targetEl.style.transform = '';
+  targetEl.style.overflow = '';
 
-table?.addEventListener('touchend', endTransform);
-table?.addEventListener('touchcancel', endTransform);
+  const parentTd = targetEl.closest('td');
+  if (parentTd) parentTd.style.zIndex = '';
+  targetEl = null;
+}
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
-// A tapped day zooms in and stays zoomed until its v, or anything outside it, is tapped. On a computer it
-// doubles in size (scaled, see budgetStyle.css). On phones (touch screens and narrow windows) it fills almost
-// the whole screen, centered over a dimmed page. There it's laid out at that size (--zoom times its own: its
-// text, sprites, and spacing), not scaled up from the tiny day, so everything in it stays sharp; a scale only
-// runs while it grows out of the day and shrinks back into it.
+// A tapped day zooms in over a dimmed page and stays zoomed until its v, or anything outside it, is tapped.
+// Entries never wrap: a day that isn't zoomed cuts them off at its edge, and a zoomed one lets them run past
+// its edges, over the dimmed page. On a computer it doubles in size (scaled, see budgetStyle.css), moved left
+// when its widest entry would run off the screen. On phones (touch screens and narrow windows) it fills most
+// of the screen, laid out at that size (--zoom times its own: its text, sprites, and spacing), not scaled up
+// from the tiny day, so everything in it stays sharp; a scale only runs while it grows out of the day and
+// shrinks back into it. There its entries scroll in an area as big as the screen, so ones that run past the
+// screen's edge can be scrolled to.
 
 window.editingCell = false;
 let activeEditCell = null;
@@ -4677,9 +4698,25 @@ const fullZoomQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)")
 // Does the device ask for less motion?
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let zoomBackdrop = null;
+// A phone's zoomed day gets smaller to fit a long entry across the screen, but its text stays at least this
+// many pixels tall (a longer entry is scrolled to)
+const ZOOM_TEXT_MIN = 15;
+// What a zoom sets on its day (and closing it takes off)
+const ZOOM_PROPERTIES = ['transform', 'transform-origin', '--zoom', '--dayX', '--dayY', '--dayW', '--dayH', '--viewW', '--viewH'];
 
-// Zoom a day in (closing any other): doubled on a computer, laid out to fill the screen on a phone
-function zoomDay(cell) {
+// A zoomed day's v (close), for Home's days and History's
+function zoomCloseButton() {
+  const button = document.createElement('button');
+  button.className = 'cell-action-btn';
+  button.type = 'button';
+  button.textContent = 'v';
+  button.setAttribute('aria-label', 'Close day');
+  return button;
+}
+
+// Zoom a day in (closing any other): doubled on a computer, laid out to fill the screen on a phone.
+// animate: false puts it there at once (History zooming a day back in after drawing its days again).
+function zoomDay(cell, animate = true) {
   if (activeEditCell) closeZoomedDay();
   // A day tapped again while it was shrinking back stops shrinking
   if (cell.zoomClose) {
@@ -4689,9 +4726,8 @@ function zoomDay(cell) {
   cell.classList.remove('isZoomClosing');
   window.editingCell = true;
   activeEditCell = cell;
+  const place = cell.getBoundingClientRect(); // Where it is before it's doubled
   cell.classList.add('is-editing');
-  if (!fullZoomQuery.matches) return;
-  cell.classList.add('is-fullZoom');
   if (!zoomBackdrop) {
     // In the page's own layer, just under the zoomed day (a backdrop in <body> would cover the day too)
     zoomBackdrop = document.createElement('div');
@@ -4699,7 +4735,12 @@ function zoomDay(cell) {
     document.getElementById('transitionContainer')?.appendChild(zoomBackdrop);
   }
   zoomBackdrop.classList.add('shown');
-  fitZoomedDay(true);
+  if (!fullZoomQuery.matches) {
+    keepDoubledDayOnScreen(cell, place);
+    return;
+  }
+  cell.classList.add('is-fullZoom');
+  fitZoomedDay(animate);
 }
 
 // immediate: no shrinking back into the day (leaving the page)
@@ -4709,6 +4750,7 @@ function closeZoomedDay(immediate = false) {
   activeEditCell = null;
   if (zoomBackdrop) zoomBackdrop.classList.remove('shown');
   if (!cell) return;
+  const content = cell.querySelector('.cell-content');
   const finish = () => {
     const animation = cell.zoomClose;
     cell.zoomClose = null;
@@ -4717,8 +4759,10 @@ function closeZoomedDay(immediate = false) {
     // from the middle of the screen, where the zoomed layout was, after it had already shrunk into place
     cell.style.transition = 'none';
     cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom', 'isZoomClosing');
-    for (const property of ['transform', 'transform-origin', '--zoom']) cell.style.removeProperty(property);
+    for (const property of ZOOM_PROPERTIES) cell.style.removeProperty(property);
     if (animation) animation.cancel(); // It held its last frame until now (fill: forwards)
+    // Its first lines show again (a day that isn't zoomed would keep a zoomed day's scroll, hidden)
+    if (content) content.scrollTop = content.scrollLeft = 0;
     void cell.offsetWidth; // Apply that with no transition before turning transitions back on
     cell.style.removeProperty('transition');
   };
@@ -4731,38 +4775,90 @@ function closeZoomedDay(immediate = false) {
   // A tap on it meanwhile zooms it right back in (zoomDay), and its entries don't open (Calendar Page.js).
   cell.classList.add('isZoomClosing');
   cell.zoomClose = cell.animate(
-    [{ transform: cell.style.transform }, { transform: `translate(0px, 0px) scale(${1 / scale})` }],
+    [{ transform: cell.style.transform }, { transform: dayInPlace(cell, scale) }],
     { duration: 200, easing: 'ease-in', fill: 'forwards' } // Holds the shrunk day until finish puts it back
   );
   cell.zoomClose.onfinish = finish;
 }
 
-// A zoomed day zooms back out when the page is left (so Back never shows it still zoomed)
+// A zoomed day goes back to normal when the page is left (so Back never shows it still zoomed)
 window.FloatingWindows?.closeOnPageExit(() => closeZoomedDay(true));
 
-// Lay the zoomed day out so it fills almost the whole screen, centered: how big (--zoom) from its size where
-// it sits (measured at its own size, which nothing draws in between), then moved there. animate: it grows out
-// of the day (opening); without, it just moves (when the page scrolls or resizes, or the day's entries change).
+// A phone's zoomed layout shrunk so its day sits right over the day in the table (where a zoom grows from and
+// shrinks back to): scaled by 1 / --zoom, and moved by where the day is in its scrolled area
+function dayInPlace(cell, scale) {
+  const content = cell.querySelector('.cell-content');
+  const x = (cell.zoomBox ? cell.zoomBox.x : 0) - (content ? content.scrollLeft : 0);
+  const y = (cell.zoomBox ? cell.zoomBox.y : 0) - (content ? content.scrollTop : 0);
+  return `translate(${-x / scale}px, ${-y / scale}px) scale(${1 / scale})`;
+}
+
+// How wide a day's widest line is at its own size, with the day's padding on both sides (0 for no lines)
+function widestDayLine(content) {
+  const padding = parseFloat(getComputedStyle(content).paddingRight) || 0;
+  let widest = 0;
+  for (const line of content.children) {
+    if (!line.classList.contains('cell-action-btn')) widest = Math.max(widest, line.offsetWidth);
+  }
+  return widest > 0 ? widest + 2 * padding : 0;
+}
+
+// On a computer the day doubles where it is (budgetStyle.css). When its widest entry would run off the right
+// side of the window, it moves left just enough (but never off the left side). place: where it is, not doubled.
+function keepDoubledDayOnScreen(cell, place) {
+  const content = cell.querySelector('.cell-content');
+  if (!content) return;
+  const zoom = parseFloat(getComputedStyle(cell).getPropertyValue('--zoom')) || 1;
+  const originX = parseFloat(getComputedStyle(cell).transformOrigin) || 0;
+  const left = place.left - originX * (zoom - 1);
+  const right = left + Math.max(place.width, widestDayLine(content)) * zoom;
+  const margin = place.width * 0.1;
+  const viewWidth = document.documentElement.clientWidth || window.innerWidth;
+  const shift = Math.min(right - (viewWidth - margin), left - margin);
+  if (shift > 0) cell.style.transform = `translateX(${-shift}px) scale(${zoom})`;
+}
+
+// Lay a phone's zoomed day out: how big (--zoom) and where. It keeps its shape, as big as fits the screen, or
+// smaller when an entry is wider than it, so the widest one fits across the screen too (its text no smaller than
+// ZOOM_TEXT_MIN; a longer one is scrolled to). The day (with an entry running past it) is centered. Its content
+// is as big as the screen, from the screen's top left corner, and draws the day itself (budgetStyle.css) at
+// --dayX, --dayY, --dayW by --dayH, so entries past its edges show over the dimmed page and scroll with it.
+// Measured at its own size (which nothing draws in between), then moved there. animate: it grows out of the day
+// (opening); without, it just moves (when the page scrolls or resizes, or the day's entries change), keeping
+// its scroll.
 function fitZoomedDay(animate = false) {
   const cell = activeEditCell;
   if (!cell || !cell.classList.contains('is-fullZoom')) return;
+  const content = cell.querySelector('.cell-content');
+  if (!content) return;
+  const scrolled = { left: content.scrollLeft, top: content.scrollTop };
   cell.style.transform = 'none';
   cell.style.setProperty('--zoom', '1');
   const box = cell.getBoundingClientRect();
-  const content = cell.querySelector('.cell-content');
-  const height = Math.max(box.height, content ? content.offsetHeight : 0); // A long day shows all of it
+  const widest = Math.max(box.width, widestDayLine(content));
+  const textSize = parseFloat(getComputedStyle(content).fontSize) || 1;
   const viewWidth = document.documentElement.clientWidth || window.innerWidth;
   const viewHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  const scale = Math.min((viewWidth * 0.92) / box.width, (viewHeight * 0.84) / height);
-  const toLeft = (viewWidth - box.width * scale) / 2;
-  const toTop = (viewHeight - height * scale) / 2;
-  const moved = `translate(${toLeft - box.left}px, ${toTop - box.top}px)`;
-  cell.style.transformOrigin = '0 0';
+  const fitsScreen = Math.min((viewWidth * 0.92) / box.width, (viewHeight * 0.84) / box.height);
+  const fitsEntries = (viewWidth * 0.96) / widest;
+  const scale = Math.min(fitsScreen, Math.max(fitsEntries, ZOOM_TEXT_MIN / textSize));
+  const width = box.width * scale;
+  const height = box.height * scale;
+  const left = Math.max(viewWidth * 0.02, (viewWidth - widest * scale) / 2);
+  const top = (viewHeight - height) / 2;
+  cell.zoomBox = { x: left, y: top, width, height };
   cell.style.setProperty('--zoom', String(scale));
+  for (const [name, pixels] of [['--dayX', left], ['--dayY', top], ['--dayW', width], ['--dayH', height], ['--viewW', viewWidth], ['--viewH', viewHeight]]) {
+    cell.style.setProperty(name, `${pixels}px`);
+  }
+  cell.style.transformOrigin = '0 0';
+  const moved = `translate(${-box.left}px, ${-box.top}px)`;
   cell.style.transform = moved;
+  content.scrollLeft = animate ? 0 : scrolled.left;
+  content.scrollTop = animate ? 0 : scrolled.top;
   if (animate && cell.animate && !reducedMotion()) {
     cell.animate(
-      [{ transform: `translate(0px, 0px) scale(${1 / scale})` }, { transform: moved }],
+      [{ transform: dayInPlace(cell, scale) }, { transform: moved }],
       { duration: 250, easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)' }
     );
   }
@@ -4782,7 +4878,8 @@ document.getElementById('transitionContainer')?.addEventListener('transitionend'
 });
 document.addEventListener('budget:updated', () => { if (activeEditCell) refitZoomedDay(); }); // After the page redraws it
 
-table?.addEventListener('click', (e) => {
+// A tap on a table: its day zooms in, and a zoomed day's v closes it
+function zoomTappedDay(e) {
   if (e.target.closest('.cell-action-btn')) {
     closeZoomedDay();
     e.stopPropagation();
@@ -4790,19 +4887,33 @@ table?.addEventListener('click', (e) => {
   }
 
   const cell = e.target.closest('td');
-  if (!cell || activeEditCell === cell) return;
+  if (!cell || activeEditCell === cell || !cell.querySelector('.cell-content')?.childElementCount) return;
   zoomDay(cell);
   // The tap that zooms a day (or zooms one back while it shrinks) doesn't also open the entry or In Bank under it
   // (Calendar Page.js listens on the same table)
   e.stopImmediatePropagation();
-});
+}
+
+wireElasticTable(document.querySelector('.elastic-table')); // Home's calendar (History wires its own)
 
 document.addEventListener('click', (e) => {
   if (!window.editingCell || !activeEditCell) return;
-  if (activeEditCell.contains(e.target)) return;
+  if (activeEditCell.contains(e.target) && !missesZoomedDay(e)) return;
   if (e.target.closest('.budgetPanel')) return; // Working in an entry's panel keeps its day zoomed
   closeZoomedDay();
 });
+
+// A tap on a phone's zoomed day that lands beside the day itself: its content is as big as the screen, but only
+// the day, its lines, and its v keep it open
+function missesZoomedDay(e) {
+  const cell = activeEditCell;
+  const content = cell.querySelector('.cell-content');
+  if (!cell.classList.contains('is-fullZoom') || e.target !== content || !cell.zoomBox) return false;
+  const area = content.getBoundingClientRect();
+  const x = e.clientX - area.left + content.scrollLeft - cell.zoomBox.x;
+  const y = e.clientY - area.top + content.scrollTop - cell.zoomBox.y;
+  return x < 0 || y < 0 || x > cell.zoomBox.width || y > cell.zoomBox.height;
+}
 
 // 3. PC MOUSE GLIDE & MAGNIFYING GLASS
 
