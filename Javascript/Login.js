@@ -28,8 +28,9 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SESSION_KEYS = ['prismal_jwt', 'prismal_username', 'prismal_last_activity'];
 
 // The API's rules (account.js readUsername, passwords.js passwordRuleProblem). Usernames: 5 to 30
-// characters, any you can see. Passwords: 8 to 256 characters, any at all. Both count characters the way
-// a person does (an emoji is one).
+// characters, any you can see, counted the way a person does (an emoji is one). Passwords: 8 to 256
+// characters, any at all, counted as Unicode characters (an emoji joined from several, like a family, is
+// several).
 const MIN_USERNAME = 5;
 const MAX_USERNAME = 30;
 const MIN_PASSWORD = 8;

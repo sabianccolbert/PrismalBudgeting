@@ -16,9 +16,10 @@ const quickKey = quickParams.get("key") || "";
 // The API stores refraction types by name: "✖️" -> "hidden"
 const QUICK_TYPE_NAMES = Object.fromEntries(Object.entries(QUICK_ENTRY_TYPES).map(([name, sprite]) => [sprite, name]));
 let quickUsername = null;
-let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance }] (from /api/quick/check)
+let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance }] (see showQuickAccounts)
 let quickPrisms = [];   // The account's prisms, in order: [{ title, amount, type }] (see PRISMS)
 let quickForm = null;   // The form on the page: { panel, fields, mode: "entry" (New Entry) | "prism" (New Prism) }
+let quickFormDay = null; // This phone's date when the form opened (see moveFormToNewDay)
 // Undo and Redo for entries added on this page: [{ id, entry }] (id: the API's, while it waits; see the end)
 const quickUndo = [];
 const quickRedo = [];
@@ -51,17 +52,12 @@ async function checkQuickKey() {
     window.location.replace("/login.html");
     return;
   }
-  const result = await quickApi("/api/quick/check", { key: quickKey });
+  const result = await quickApi("/api/quick/check", { key: quickKey, today: quickToday() });
   if (result.status === 401) return keyStopped();
   // Offline, or the server is down: the form still shows, and adding an entry says what went wrong
   if (result.ok && result.data) {
     quickUsername = result.data.username;
-    // The account picker's accounts: each one's name and balance (null when it isn't known)
-    if (Array.isArray(result.data.accounts)) {
-      quickAccounts = result.data.accounts
-        .filter(account => account && typeof account.name === "string" && account.name.trim())
-        .map(account => ({ name: account.name, balance: typeof account.balance === "number" ? account.balance : null }));
-    }
+    showQuickAccounts(result.data.accounts);
     // Prisms need the server, so they show once the key is known to work
     quickPrisms = Array.isArray(result.data.prisms) ? result.data.prisms : [];
     document.getElementById("prismSection").hidden = false;
@@ -75,13 +71,14 @@ async function checkQuickKey() {
 // in or picked (no date). fill: { title, amount, sprite } to start with (what was already in the form).
 function openQuickEntryForm(mode = "entry", fill = null) {
   const makingPrism = mode === "prism";
+  quickFormDay = createSafeMidnight(new Date());
   BudgetUI.openPanel({
     size: "large",
     title: makingPrism ? "New Prism" : "New Entry",
     closable: false,
     inline: true, // The form is the page here, not something on top of it
     build(form, panel) {
-      const fields = BudgetUI.newEntryFields({ date: createSafeMidnight(new Date()), accounts: quickAccounts });
+      const fields = BudgetUI.newEntryFields({ date: quickFormDay, accounts: quickAccounts });
       if (makingPrism) {
         form.append(BudgetUI.element("p", "panelHint prismDraftHint", "Fill in or pick only what this prism should keep: a title, an amount, a type, or an account. Then tap Save Prism."));
         panel.panel.classList.add("prismDraft");
@@ -110,7 +107,7 @@ async function addQuickEntry(panel, fields) {
   panel.setError("");
   panel.setBusy(true);
   const queued = { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount: entry.amount, date: formatToYMD(entry.date) };
-  const result = await quickApi("/api/quick/entry", { key: quickKey, entry: queued });
+  const result = await quickApi("/api/quick/entry", { key: quickKey, entry: queued, today: quickToday() });
   panel.setBusy(false);
   if (result.status === 401) return keyStopped();
   if (!result.ok) {
@@ -119,6 +116,7 @@ async function addQuickEntry(panel, fields) {
   }
   BudgetUI.showToast(`Added ${describeQueued(queued)}.`);
   showQuickStatus(accountLine(result.data.waiting));
+  showQuickAccounts(result.data.accounts);
   if (Number.isInteger(result.data.id)) {
     quickUndo.push({ id: result.data.id, entry: queued });
     quickRedo.length = 0;
@@ -126,6 +124,22 @@ async function addQuickEntry(panel, fields) {
   renderQuickUndo();
   openQuickEntryForm(); // A fresh form for the next one
 }
+
+// A home screen icon's page often stays open in the background for days. Looked at again on a later day, New
+// Entry starts on the new day: the form opens again with what's in it, unless a date was typed in it.
+function moveFormToNewDay() {
+  if (!quickForm || !quickFormDay || createSafeMidnight(new Date()).getTime() === quickFormDay.getTime()) return;
+  if (quickForm.mode !== "entry") return; // New Prism has no date, and New Entry starts on the new day after it
+  const dateInput = quickForm.fields.dateEl.querySelector("input.dateInput");
+  if (dateInput && dateInput.dataset.touched === "1" && dateInput.value.trim()) return;
+  openQuickEntryForm("entry", quickForm.fields.values());
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") moveFormToNewDay();
+});
+window.addEventListener("pageshow", moveFormToNewDay);
+window.addEventListener("focus", moveFormToNewDay);
 
 // The password changed or the icon was replaced, so this icon can't add entries anymore: on to the sign-in
 // page, which says why (Login.js SIGNED_OUT_REASONS). Signed in already, that goes straight on to Home.
@@ -359,7 +373,7 @@ async function undoQuickEntry() {
   const last = quickUndo.at(-1);
   if (!last) return;
   setQuickUndoBusy(true);
-  const result = await quickApi("/api/quick/unqueue", { key: quickKey, id: last.id });
+  const result = await quickApi("/api/quick/unqueue", { key: quickKey, id: last.id, today: quickToday() });
   setQuickUndoBusy(false);
   if (result.status === 401) return keyStopped();
   if (result.ok) {
@@ -367,6 +381,7 @@ async function undoQuickEntry() {
     quickRedo.push(last.entry);
     BudgetUI.showToast(`Took back ${describeQueued(last.entry)}.`);
     showQuickStatus(accountLine(result.data.waiting));
+    showQuickAccounts(result.data.accounts);
   } else if (result.data && result.data.joined) {
     quickUndo.pop(); // It's in the budget now: undo it there
     BudgetUI.showToast(result.data.error, true);
@@ -381,7 +396,7 @@ async function redoQuickEntry() {
   const next = quickRedo.at(-1);
   if (!next) return;
   setQuickUndoBusy(true);
-  const result = await quickApi("/api/quick/entry", { key: quickKey, entry: next });
+  const result = await quickApi("/api/quick/entry", { key: quickKey, entry: next, today: quickToday() });
   setQuickUndoBusy(false);
   if (result.status === 401) return keyStopped();
   if (result.ok) {
@@ -389,6 +404,7 @@ async function redoQuickEntry() {
     if (Number.isInteger(result.data.id)) quickUndo.push({ id: result.data.id, entry: next });
     BudgetUI.showToast(`Added ${describeQueued(next)} again.`);
     showQuickStatus(accountLine(result.data.waiting));
+    showQuickAccounts(result.data.accounts);
   } else {
     BudgetUI.showToast((result.data && result.data.error) || "Couldn't reach Prismal Budget. Check your connection and try again.", true);
   }
@@ -416,6 +432,22 @@ function showQuickStatus(text) {
   const status = document.getElementById("dataStatus");
   status.textContent = text;
   status.hidden = !text;
+}
+
+// The account picker's accounts as the API sent them, each with its balance (null when it isn't known). The API
+// counts a waiting entry for an account from its day on, so they come back after every entry added or taken back,
+// and the open form's list follows.
+function showQuickAccounts(accounts) {
+  if (!Array.isArray(accounts)) return;
+  quickAccounts = accounts
+    .filter(account => account && typeof account.name === "string" && account.name.trim())
+    .map(account => ({ name: account.name, balance: typeof account.balance === "number" ? account.balance : null }));
+  if (quickForm) quickForm.fields.setAccounts(quickAccounts);
+}
+
+// This phone's date, "YYYY-MM-DD" (the API counts waiting entries in the balances up to it)
+function quickToday() {
+  return formatToYMD(createSafeMidnight(new Date()));
 }
 
 // "Adding to sam's budget. 2 entries are waiting to show up there the next time you open it."
