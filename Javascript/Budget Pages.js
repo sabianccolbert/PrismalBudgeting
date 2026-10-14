@@ -111,7 +111,12 @@ function recurringProblems(duplicates) {
 
 // History tab: [0] column titles, then one row per week (Sunday-Saturday), newest first.
 // Each cell is "MM/DD/YYYY\n✅ $X In Bank\nentries..."
+// Each day shows just its date, big, until it's tapped: then it zooms in with its In Bank and entries, the same
+// way (and with the same gestures) as Home's days (Process Budget.js LAYOUT FUNCTIONS).
 function renderHistoryPage(view) {
+  // A zoomed day is zoomed again once the days are drawn again (after a change)
+  const zoomedDate = view.querySelector("td.is-editing:not(.isZoomClosing)")?.dataset.date;
+  if (zoomedDate) closeZoomedDay(true);
   view.replaceChildren();
   const weeks = historyData.slice(1);
   if (weeks.length === 0) {
@@ -119,36 +124,53 @@ function renderHistoryPage(view) {
     return;
   }
 
-  const tableEl = createDataTable(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
-  tableEl.classList.add("historyTable");
-  const fragment = document.createDocumentFragment();
-
-  for (let week of weeks) {
-    const tr = document.createElement("tr");
-    for (let c = 0; c < 7; c++) {
-      const td = document.createElement("td");
-      td.className = "historyCell";
-      String(week[c] ?? "").split("\n").forEach((line, l) => {
-        // The first line is the day (stored MM/DD/YYYY), shown in this device's date format
-        if (l === 0) td.dataset.date = line.trim();
-        if (l === 0 || line.trim()) td.appendChild(BudgetUI.renderEntryLine(l === 0 ? showStoredDate(line) : line, l));
-      });
-      tr.appendChild(td);
-    }
-    fragment.appendChild(tr);
+  const tableEl = document.createElement("table");
+  tableEl.className = "elastic-table historyGrid";
+  const head = tableEl.createTHead().insertRow();
+  for (const day of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) head.appendChild(BudgetUI.element("th", "", day));
+  const body = tableEl.createTBody();
+  for (const week of weeks) {
+    const tr = body.insertRow();
+    for (let c = 0; c < 7; c++) tr.appendChild(historyDay(week[c]));
   }
-  tableEl.tBodies[0].appendChild(fragment);
 
-  // While a Search date box is waiting (it glows), tapping a day fills it in
+  // While a Search date box is waiting (it glows), tapping a day fills it in instead of zooming it
   tableEl.addEventListener("click", (event) => {
     if (!BudgetUI.datePickActive()) return;
-    const td = event.target.closest("td.historyCell");
-    const date = td && createSafeMidnight(td.dataset.date, true);
+    const td = event.target.closest("td");
+    const date = td && td.dataset.date && createSafeMidnight(td.dataset.date, true);
     if (!date || isNaN(date.getTime())) return;
+    event.stopPropagation();
     event.preventDefault();
     BudgetUI.pickDate(date, td);
+  }, true);
+  view.appendChild(tableEl);
+  wireElasticTable(tableEl);
+  const zoomed = zoomedDate && [...tableEl.querySelectorAll("td")].find(td => td.dataset.date === zoomedDate);
+  if (zoomed) zoomDay(zoomed, false);
+}
+
+// One day of History: its date, big (with its year under it), and the day as it was (its full date, In Bank, and
+// entries), which shows once it's zoomed. A day the budget didn't have yet stays empty.
+function historyDay(cellText) {
+  const td = document.createElement("td");
+  const content = BudgetUI.element("div", "cell-content");
+  td.appendChild(content);
+  const lines = String(cellText ?? "").split("\n");
+  const stored = lines[0].trim();
+  const date = createSafeMidnight(stored, true);
+  if (!stored || isNaN(date.getTime())) return td;
+
+  td.dataset.date = stored;
+  const day = noTranslate(BudgetUI.element("div", "historyDate", showDay(date)));
+  day.appendChild(BudgetUI.element("span", "historyYear", String(date.getFullYear())));
+  content.appendChild(day);
+  lines.forEach((line, l) => {
+    if (l === 0 || line.trim()) content.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDate(date) : line, l));
   });
-  view.appendChild(wrapScroll(tableEl));
+  content.appendChild(zoomCloseButton());
+  td.classList.toggle("isNegative", (readInBank(cellText) ?? 0) < 0);
+  return td;
 }
 
 // Tracker tab: [0] column titles, then

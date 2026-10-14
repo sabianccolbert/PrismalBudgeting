@@ -34,7 +34,8 @@
   padding: 4px;
   box-sizing: border-box;
 
-  /* Cuts off excess text (a zoomed day shows all of it) */
+  /* Entries never wrap: a day cuts them off at its edges (a zoomed day lets them run past, over the dimmed page) */
+  white-space: nowrap;
   overflow: hidden;
 
   width: 100%;
@@ -79,7 +80,7 @@
 /* Edit mode: Stays zoomed until clicked outside */
 .elastic-table td.is-editing {
   transform: scale(2); /* Zoom level */
-  z-index: 50; /* Bring above other cells */
+  z-index: 60; /* Above the other days and the dimmed page (.dayZoomBackdrop) */
   position: relative;
   transition: transform 0.2s ease-in-out;
 
@@ -100,10 +101,12 @@
   --zoom: 2;
 }
 
-/* Phones: a tapped day fills almost the whole screen (Process Budget.js works out where and how big), over a
-   dimmed page, with all of its entries showing on a solid background. It's laid out at that size (its text,
-   spacing, and corners times --zoom) instead of scaled up from the tiny day, so its text is sharp. Only
-   Process Budget.js's grow and shrink animations scale it. */
+/* Phones: a tapped day fills most of the screen (Process Budget.js works out where and how big), over a dimmed
+   page. It's laid out at that size (its text, spacing, and corners times --zoom) instead of scaled up from the
+   tiny day, so its text is sharp. Its content is as big as the screen (--viewW by --viewH, moved to the screen's
+   top left corner) and scrolls, and draws the day itself (::before) at --dayX, --dayY, --dayW by --dayH, with its
+   lines starting inside it: entries running past the day's edges show over the dimmed page, and ones past the
+   screen's edges can be scrolled to. Only Process Budget.js's grow and shrink animations scale it. */
 .elastic-table td.is-editing.is-fullZoom {
   transform: none;
   z-index: 60;
@@ -112,13 +115,32 @@
   transition: none;
 }
 
-.elastic-table td.is-fullZoom .cell-content {
-  width: calc(100% * var(--zoom, 1));
-  height: auto;
-  min-height: calc(100% * var(--zoom, 1));
-  padding: calc(4px * var(--zoom, 1));
+.elastic-table td.is-editing.is-fullZoom .cell-content {
+  z-index: 0; /* The day (::before) goes under its lines, not under the page */
+  width: var(--viewW, 100vw);
+  height: var(--viewH, 100vh);
+  /* The lines start inside the day; under the last one, room for the space under the day */
+  padding:
+    calc(var(--dayY, 0px) + 4px * var(--zoom, 1))
+    calc(4px * var(--zoom, 1))
+    calc(var(--viewH, 100vh) - var(--dayY, 0px) - var(--dayH, 0px))
+    calc(var(--dayX, 0px) + 4px * var(--zoom, 1));
   font-size: calc(1em * var(--zoom, 1));
-  pointer-events: auto; /* It's bigger than its day now, so taps on it land on it, not what's under it */
+  overflow: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto; /* It covers the screen now, so taps land on it (Process Budget.js closes it for ones beside the day) */
+  background: none;
+  box-shadow: none;
+}
+
+.elastic-table td.is-editing.is-fullZoom .cell-content::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: var(--dayY, 0px);
+  left: var(--dayX, 0px);
+  width: var(--dayW, 100%);
+  height: var(--dayH, 100%);
   /* Like every day: its color at the top, fading to black at the bottom (mostly opaque here, so the page behind
      doesn't show through its entries) */
   background: linear-gradient(to bottom, rgb(15, 0, 80), rgba(0, 0, 0, 0.85));
@@ -129,21 +151,31 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
-/* Red days stay red when zoomed */
-.elastic-table td.is-fullZoom.isNegative .cell-content {
+/* Today keeps its glow, and red days stay red, when zoomed */
+.elastic-table td.is-editing.is-fullZoom.isToday .cell-content::before {
+  box-shadow: inset 0 0 0 1px rgba(201, 218, 248, 0.9), 0 0 10px rgba(120, 160, 255, 0.6);
+}
+
+.elastic-table td.is-editing.is-fullZoom.isNegative .cell-content::before {
   background: linear-gradient(to bottom, rgb(95, 0, 20), rgba(0, 0, 0, 0.85));
 }
 
-.elastic-table td.is-fullZoom.isToday.isNegative .cell-content {
+.elastic-table td.is-editing.is-fullZoom.isToday.isNegative .cell-content::before {
   background: linear-gradient(to bottom, rgb(170, 0, 0), rgba(0, 0, 0, 0.85));
 }
 
+/* The page dims under a zoomed day (on a computer too), and its lines get a dark edge, so entries running past
+   its edges are easy to read over the page */
 .dayZoomBackdrop {
   position: absolute;
   inset: 0;
   z-index: 55;
   display: none;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.elastic-table td.is-editing .cell-content {
+  text-shadow: 0 0 3px #000, 0 0 6px #000;
 }
 
 .dayZoomBackdrop.shown {
@@ -211,8 +243,11 @@
   visibility: visible;
 }
 
-/* A phone's zoomed day isn't scaled, so its v is just its size */
+/* A phone's zoomed day isn't scaled, so its v is just its size, in the top right corner of the day it draws */
 .elastic-table td.is-fullZoom .cell-action-btn {
+  top: var(--dayY, 0px);
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 22px);
+  right: auto;
   width: 22px;
   height: 22px;
   font-size: 13px;
@@ -360,19 +395,45 @@
   text-shadow: var(--SHADOW);
 }
 
-/* History: 7 day columns of multi-line cells, styled like the calendar */
-.historyTable {
-  table-layout: fixed;
-  min-width: 640px;
+/* History: a week on each row, like the calendar's days (they zoom the same way). Each day shows just its date,
+   big, until it's zoomed or magnified; then it shows the day as it was (its full date, In Bank, and entries). */
+.elastic-table.historyGrid {
+  height: auto;
+  margin: 0 auto 4vmin;
 }
 
-.historyTable .historyCell {
-  white-space: pre-line;
-  font-size: clamp(9px, 1.8vmin, 14px);
-  line-height: 1.35;
-  background: linear-gradient(to bottom, var(--PANEL_DEEP), transparent);
-  border-bottom: none;
-  overflow-wrap: anywhere;
+.historyGrid th {
+  padding: 0 0 0.8vmin;
+  font-size: clamp(10px, 2.2vmin, 16px);
+  font-weight: normal;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.historyGrid td {
+  height: max(11vmin, 46px);
+}
+
+.historyGrid .historyDate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: auto;
+  font-size: clamp(12px, 3.2vmin, 26px);
+  font-weight: bold;
+  line-height: 1.1;
+  text-shadow: var(--SHADOW);
+}
+
+.historyGrid .historyYear {
+  font-size: 0.6em;
+  font-weight: normal;
+  opacity: 0.7;
+}
+
+.historyGrid td:not(.is-editing):not(.is-magnified) .cell-content > :not(.historyDate):not(.cell-action-btn),
+.historyGrid td:is(.is-editing, .is-magnified) .historyDate {
+  display: none;
 }
 
 /* Change Logs */
@@ -430,10 +491,10 @@
   background: linear-gradient(to bottom, rgb(170, 0, 0), transparent);
 }
 
-/* Entries (and the day's In Bank) are tappable once their day is zoomed (sized with the text, so they look the
-   same at any zoom) */
-.elastic-table td.is-editing .lineEntry,
-.elastic-table td.is-editing .lineInBank {
+/* On Home, entries (and the day's In Bank) are tappable once their day is zoomed (sized with the text, so they
+   look the same at any zoom). History's days only show what happened. */
+.elastic-table:not(.historyGrid) td.is-editing .lineEntry,
+.elastic-table:not(.historyGrid) td.is-editing .lineInBank {
   pointer-events: auto;
   cursor: pointer;
   border-radius: 0.3em;
@@ -441,31 +502,23 @@
   margin: 0 -0.2em;
 }
 
-.elastic-table td.is-editing .lineEntry:hover,
-.elastic-table td.is-editing .lineInBank:hover {
+.elastic-table:not(.historyGrid) td.is-editing .lineEntry:hover,
+.elastic-table:not(.historyGrid) td.is-editing .lineInBank:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
 /* Date picking: tap a day to fill the waiting date field (📅 opens the device's own picker instead) */
-body.datePicking .elastic-table,
-body.datePicking .historyTable {
+body.datePicking .elastic-table {
   outline: 2px dashed rgba(238, 0, 0, 0.55);
   outline-offset: 6px;
   border-radius: 6px;
 }
 
-/* (History's table scrolls inside its box, so its outline goes inside it) */
-body.datePicking .historyTable {
-  outline-offset: -2px;
-}
-
-body.datePicking .elastic-table td,
-body.datePicking .historyTable td {
+body.datePicking .elastic-table td {
   cursor: crosshair;
 }
 
-.elastic-table td.pickedFlash .cell-content,
-.historyTable td.pickedFlash {
+.elastic-table td.pickedFlash .cell-content {
   animation: pickedFlash 0.7s ease-out;
 }
 
@@ -731,7 +784,8 @@ body.datePicking .historyTable td {
 .budgetPanel input[type="text"],
 .budgetPanel textarea,
 .budgetPanel select,
-.searchBar input {
+.searchBar input,
+.searchBar select {
   box-sizing: border-box;
   width: 100%;
   max-width: none;
@@ -748,6 +802,18 @@ body.datePicking .historyTable td {
   -webkit-user-select: text;
 }
 
+/* Touch screens: 16px at least, or iPhones zoom in on a box when it's tapped (and the zoom cuts off the floating
+   box it's in, at both sides) */
+@media (pointer: coarse) {
+  .budgetPanel input[type="text"],
+  .budgetPanel textarea,
+  .budgetPanel select,
+  .searchBar input,
+  .searchBar select {
+    font-size: max(16px, var(--UI_TEXT));
+  }
+}
+
 .budgetPanel textarea {
   resize: vertical;
 }
@@ -758,7 +824,8 @@ body.datePicking .historyTable td {
 .budgetPanel textarea:focus,
 .budgetPanel select:focus,
 .searchBar input:hover,
-.searchBar input:focus {
+.searchBar input:focus,
+.searchBar select:focus {
   transform: none;
   text-shadow: none;
   box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
@@ -775,7 +842,8 @@ body.datePicking .historyTable td {
 }
 
 .budgetPanel select option,
-.budgetCard select option {
+.budgetCard select option,
+.searchBar select option {
   background: #0a0032;
 }
 

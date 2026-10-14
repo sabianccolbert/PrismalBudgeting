@@ -568,11 +568,11 @@ async function deleteAccount(event) {
     return;
   }
   // The account is gone: this device stops its push notifications, stops offering the account's
-  // passkeys (where the browser supports it), and forgets the session (keeping its own choices, like
-  // analytics off)
+  // passkeys (where the browser supports it), and forgets the session and Dave's tips (keeping its own
+  // choices, like analytics off)
   if (pushSubscription) await pushSubscription.unsubscribe().catch(() => {});
   if (passkeyInfo) Passkeys.syncList(passkeyInfo.userHandle, []);
-  clearSignedInData();
+  clearSignedInData(true);
   window.location.replace("/login.html?deleted=1");
 }
 

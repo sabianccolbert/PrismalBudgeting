@@ -536,13 +536,39 @@ document.addEventListener("click", (EVENT) => {
 /* GROUP: Signing out */
 // Signing out (or deleting the account) forgets everything this browser kept for the account, including
 // this tab's Undo history, but keeps the device's own choices: whether analytics is off here, and its
-// date format
+// date format. Signing out also keeps which of Dave's tips were shown and when (just their names and days, not
+// what they said), so signing back in goes on to his next tip instead of starting the day's tips over;
+// deleting the account (FORGET_TIPS) forgets those too.
 const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format"];
-function clearSignedInData() {
+const DAVE_TIPS_PREFIX = "prismal_dave_";
+function clearSignedInData(FORGET_TIPS = false) {
   try {
+    const KEPT_TIPS = FORGET_TIPS ? [] : Object.keys(localStorage)
+      .filter(KEY => KEY.startsWith(DAVE_TIPS_PREFIX))
+      .map(KEY => [KEY, tipsShown(readStored(KEY))])
+      .filter(([, VALUE]) => VALUE);
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));
     Object.keys(sessionStorage).filter(KEY => KEY.startsWith("prismal_undo_")).forEach(KEY => sessionStorage.removeItem(KEY));
+    KEPT_TIPS.forEach(([KEY, VALUE]) => localStorage.setItem(KEY, VALUE));
   } catch {}
+}
+
+// Dave's tips as kept after signing out: the day, the tips shown that day, and the day each weekly tip was
+// last shown (the tip showing now, and a purchase's tip waiting for Home, are left out: they say amounts).
+// null when there's nothing to keep.
+function tipsShown(STORED) {
+  try {
+    const STATE = JSON.parse(STORED);
+    if (!STATE || typeof STATE !== "object" || typeof STATE.day !== "string") return null;
+    const SHOWN = Array.isArray(STATE.shown) ? STATE.shown.filter(ID => typeof ID === "string") : [];
+    const WEEKLY = {};
+    for (const [ID, DAY] of Object.entries(STATE.weekly && typeof STATE.weekly === "object" ? STATE.weekly : {})) {
+      if (typeof DAY === "string") WEEKLY[ID] = DAY;
+    }
+    return JSON.stringify({ day: STATE.day, shown: SHOWN, weekly: WEEKLY });
+  } catch {
+    return null;
+  }
 }
 
 // Signing out ends the session on the server too, so its token stops working everywhere, even a copy.
