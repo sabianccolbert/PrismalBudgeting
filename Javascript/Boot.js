@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.14.2026.B";
+  const SITE_VERSION = "10.14.2026.C";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -24,23 +24,23 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "ab04438428",
-    "/Javascript/Analytics.js": "dac605ae19",
+    "/Javascript/Active Starfield.js": "9436a62ce0",
+    "/Javascript/Analytics.js": "2e26ee1f3d",
     "/Javascript/Budget Pages.js": "de1887028d",
     "/Javascript/Budget Search.js": "6f91b4418f",
     "/Javascript/Budget UI.js": "775d1d60be",
-    "/Javascript/Calendar Page.js": "49aa60945d",
+    "/Javascript/Calendar Page.js": "c1ec2a8f28",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
     "/Javascript/Layout.js": "2150e7ed28",
     "/Javascript/Login.js": "dc506cf8c0",
     "/Javascript/Passkeys.js": "67a10905c2",
-    "/Javascript/Process Budget.js": "093ea02eba",
+    "/Javascript/Process Budget.js": "e94b540693",
     "/Javascript/Quick Entry.js": "67af52ee20",
     "/Javascript/Session.js": "ec241e0ce9",
     "/Javascript/Settings Page.js": "1f09bd4f41",
     "/Javascript/Sheet Import.js": "969eb4976d",
-    "/Javascript/Spreadsheets Page.js": "ea5d2e6561",
+    "/Javascript/Spreadsheets Page.js": "9841bde22d",
     "/Javascript/Spreadsheets.js": "835846fb44",
     "/Javascript/Sprites.js": "4f0c83ae83",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",

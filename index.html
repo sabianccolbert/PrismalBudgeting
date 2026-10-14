@@ -120,7 +120,7 @@
           </section>
         </article>
 
-        <!-- A new budget's first steps: Calendar Page.js shows this until they're done or it's hidden -->
+        <!-- A new account's first steps: Calendar Page.js shows this on its first sign-in, until they're done or it's hidden -->
         <section id="gettingStarted" class="budgetCard gettingStarted" aria-labelledby="gettingStartedTitle" hidden>
           <button id="gettingStartedHide" type="button" class="panelClose" aria-label="Hide getting started">×</button>
           <h3 id="gettingStartedTitle">Welcome! Three Steps To Get Started</h3>
@@ -268,7 +268,7 @@
           <h3 id="helpTitle">Home Help</h3>
 
           <h4>Getting Started</h4>
-          <p>A new budget starts at $0, so the Welcome card at the top asks what's in your bank account now (and, if you like, in savings). Your bank balance goes on today as a ⭕️ Starting Balance entry, and savings as a ✖️ Hidden entry for your Savings account, so you can change them like any entry. Then add your paychecks and bills on Recurring Entries. The card goes away once both are done, or tap × to hide it.</p>
+          <p>A new budget starts at $0, so the first time you sign in, the Welcome card at the top asks what's in your bank account now (and, if you like, in savings). Your bank balance goes on today as a ⭕️ Starting Balance entry, which you can change like any entry, and savings becomes your Savings account's balance (Other Accounts, in the menu). Then add your paychecks and bills on Recurring Entries. The card goes away once both are done, or tap × to hide it, and it doesn't come back the next time you sign in.</p>
 
           <h4>Viewing The Calendar</h4>
           <ul>
@@ -288,7 +288,7 @@
             <li><strong>Unique entries</strong> (❗️, ✖️, ⭕️, ❗️✔️, ✖️✔️, ⭕️✔️) are the ones you add or change yourself, like fast food, or an electric bill that's higher than normal. Most don't have a checkmark, but when one does, the checkmark is always second.</li>
             <li><strong>Temporary recurring entries</strong> (❗️✔️, ✖️✔️, ⭕️✔️) are unique entries made from a recurring entry: one on a day that passed, or one you changed for just that day. Changing a recurring entry on the calendar only changes that one day. Moving or deleting it leaves a $0.00 entry on its day, which keeps the recurring entry from coming back there.</li>
             <li>If a recurring entry's End Date moves before a day you changed (or you delete the recurring entry), that day's temporary entry from today on becomes a plain unique entry, like ❗️, since there's nothing left for it to hold back. A $0.00 one just goes away.</li>
-            <li><strong>Spreadsheet entries</strong> (➕❗️, ➕✖️, ➕⭕️) start with a yellow plus. They come from spreadsheets you connect on the Spreadsheets page in the menu (once your email is verified), land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. Settings' Help has more.</li>
+            <li><strong>Spreadsheet entries</strong> (➕❗️, ➕✖️, ➕⭕️) start with a yellow plus. They come from spreadsheets you connect on the Spreadsheets page in the menu (once your email is verified), land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. The Spreadsheets page's Help has more.</li>
             <li>Adding an entry with the same title and refraction type as one already on that day adds the two together. So a day has at most three entries with the same title: one Regular, one Hidden, and one Transfer.</li>
           </ul>
 
@@ -307,7 +307,7 @@
           <ul>
             <li>A <strong>Transfer</strong> moves money between your budget's account and that one, so the account gets the opposite amount. Moving $100 into savings is a $100 Transfer cost: In Bank goes down $100, and Savings goes up $100. Taking $200 out is a $200 Transfer gain: In Bank goes up $200, and Savings goes down $200.</li>
             <li>A <strong>Hidden</strong> entry happens in the account itself, so the account changes by the same amount, and In Bank stays the same. Putting $50 in cash into savings is a $50 Hidden gain (Savings goes up $50); paying $30 straight out of savings is a $30 Hidden cost (Savings goes down $30).</li>
-            <li>An account's balance is only ever its entries added up. To put in what's already in an account (like the $3,000 already in your savings), add a $3,000 Hidden gain with that account picked.</li>
+            <li>An account's balance starts from what you type for it, and its entries add to it from there. To put in what's already in an account (like the $3,000 already in your savings), tap it on Other Accounts (in the menu) and type its balance. That doesn't add an entry, so it isn't counted as a gain.</li>
           </ul>
           <p>A Transfer for an account is still a transfer: it isn't a cost or gain, and only tracker rows set to count transfers count it. A Hidden entry for an account is a cost or gain like any Hidden entry, so the day's Gains and Costs show it, and the tracker counts it. Other Accounts (in the Menu) shows each account's balance.</p>
 

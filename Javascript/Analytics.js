@@ -1,12 +1,7 @@
-/* ===========================================
- * Analytics.js - Google Analytics 4 (GA4)
- * ===========================================
- * Loads only when this device hasn't turned analytics off (Settings) and the browser doesn't ask sites
- * not to track it (Global Privacy Control or Do Not Track). Pages are reported without their ?query
- * and #hash, so private codes in links (like a password reset link's) never leave the site.
- * window.ANALYTICS_STATUS tells Settings which applies: "on", "off" (this device), or "browser".
- * Signing out keeps the device's choice (see clearSignedInData in Layout.js).
- */
+// Analytics: Google Analytics 4 (GA4). It loads only when this device hasn't turned analytics off (Settings) and the
+// browser doesn't ask sites not to track it (Global Privacy Control or Do Not Track). Pages are reported without their
+// ?query and #hash, so private codes in links (like a password reset link's) never leave the site. Signing out keeps
+// the device's choice (see clearSignedInData in Layout.js).
 
 (function analytics() {
   const MEASUREMENT_ID = 'G-KD7WLLVTWC';
@@ -15,8 +10,7 @@
   let deviceOff = false;
   try { deviceOff = localStorage.getItem('prismal_analytics') === 'off'; } catch (e) {}
   const browserSaysNo = navigator.globalPrivacyControl === true || navigator.doNotTrack === '1' || window.doNotTrack === '1';
-  window.ANALYTICS_STATUS = deviceOff ? 'off' : (browserSaysNo ? 'browser' : 'on');
-  if (window.ANALYTICS_STATUS !== 'on') return;
+  if (deviceOff || browserSaysNo) return;
 
   // 1. Initialize dataLayer and assign gtag to window scope
   window.dataLayer = window.dataLayer || [];

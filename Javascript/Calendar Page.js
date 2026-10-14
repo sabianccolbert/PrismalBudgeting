@@ -92,14 +92,22 @@ async function takeHistoryStep(direction) {
 // #region GETTING STARTED (a new budget's first steps)
 // =====================================================================
 // A new budget starts at $0, so its first step says what's in the bank: a ⭕️ Transfer titled Starting
-// Balance on today (it changes In Bank, but isn't a gain), and for savings a ✖️ Hidden gain for the default
-// account, "→ Savings" (it puts the money in that account without changing In Bank). The card
-// shows until the starting balance and a recurring entry are there, or it's hidden with ×.
+// Balance on today (it changes In Bank, but isn't a gain), and for savings, the default account's balance
+// (like typing it on Other Accounts: no entry, so it isn't counted as a gain). The card only shows on the
+// account's first sign-in (GETTING_STARTED_KEY in Process Budget.js), until the starting balance and a
+// recurring entry are there or it's hidden with ×.
 
 const STARTING_BALANCE = "Starting Balance";
 
-// Hidden per account on this device
-const gettingStartedHiddenKey = () => `prismal_setup_hidden_${localStorage.getItem("prismal_username") || ""}`;
+// Is this the account's first sign-in, with the card not done or hidden yet?
+function isGettingStarted() {
+  try { return localStorage.getItem(GETTING_STARTED_KEY) === "1"; } catch (e) { return false; }
+}
+
+// The card is done for good (both steps are done, or it was hidden)
+function finishGettingStarted() {
+  try { localStorage.removeItem(GETTING_STARTED_KEY); } catch (e) {}
+}
 
 // Which of Getting Started's steps are done: { balance, recurring }
 function gettingStartedSteps() {
@@ -110,14 +118,13 @@ function gettingStartedSteps() {
   return { balance: hasHistory || hasStartingBalance, recurring: hasRecurring };
 }
 
-// The card shows (its done steps marked) until both are done or it's hidden
+// On the first sign-in, the card shows (its done steps marked) until both are done or it's hidden
 function renderGettingStarted() {
   const card = document.getElementById("gettingStarted");
   if (!card) return;
   const steps = gettingStartedSteps();
-  let hidden = false;
-  try { hidden = localStorage.getItem(gettingStartedHiddenKey()) === "1"; } catch (e) {}
-  card.hidden = hidden || (steps.balance && steps.recurring);
+  if (isGettingStarted() && steps.balance && steps.recurring) finishGettingStarted();
+  card.hidden = !isGettingStarted();
   if (card.hidden) return;
   document.getElementById("startBalanceStep").classList.toggle("done", steps.balance);
   document.getElementById("startBalanceForm").hidden = steps.balance;
@@ -130,7 +137,7 @@ function renderGettingStarted() {
 // The card's × and its starting balance form
 function wireGettingStarted() {
   document.getElementById("gettingStartedHide")?.addEventListener("click", () => {
-    try { localStorage.setItem(gettingStartedHiddenKey(), "1"); } catch (e) {}
+    finishGettingStarted();
     document.getElementById("gettingStarted").hidden = true;
   });
   document.getElementById("startBalanceForm")?.addEventListener("submit", setStartingBalance);
@@ -142,7 +149,7 @@ function readStartAmount(text) {
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : null;
 }
 
-// Set: today's ⭕️ Starting Balance, and savings as a ✖️ gain for the default account
+// Set: today's ⭕️ Starting Balance, and savings as the default account's balance today
 async function setStartingBalance(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -154,16 +161,16 @@ async function setStartingBalance(event) {
   if (Math.abs(balance) > MAX_AMOUNT || savings > MAX_AMOUNT) return BudgetUI.showToast(AMOUNT_TOO_BIG, true);
 
   form.querySelectorAll("input, button").forEach(control => { control.disabled = true; });
-  const savingsAccount = accountRows().find(account => isDefaultAccount(account.row))?.name || otherAccounts()[0]?.name;
+  const savingsAccount = accountRows().find(account => isDefaultAccount(account.row)) || accountRows()[0];
   let result = await addCalendarEntry({ title: STARTING_BALANCE, sprite: "⭕️", amount: balance, date: today });
   if (result.ok && savings > 0 && savingsAccount) {
-    result = await addCalendarEntry({ title: withAccount("", savingsAccount), sprite: "✖️", amount: savings, date: today });
+    result = await saveAccount({ name: savingsAccount.name, balance: savings }, savingsAccount.index);
   }
   form.querySelectorAll("input, button").forEach(control => { control.disabled = false; });
   if (!result.ok) return BudgetUI.showToast(result.message || "Couldn't set the starting balance. Please try again.", true);
   if (result.saved === false) return BudgetUI.warnIfUnsaved(result);
   BudgetUI.showToast(savings > 0 && savingsAccount
-    ? `Starting balance set: ${formatMoney(balance)} in the bank, and ${formatMoney(savings)} in ${savingsAccount}.`
+    ? `Starting balance set: ${formatMoney(balance)} in the bank, and ${formatMoney(savings)} in ${savingsAccount.name}.`
     : `Starting balance set: ${formatMoney(balance)}.`);
 }
 

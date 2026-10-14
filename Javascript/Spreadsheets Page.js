@@ -42,7 +42,6 @@ window.workspaceReady.then(async (loaded) => {
 
 const SHEET_FIELD_KEYS = ["date", "title", "amount", "type", "account"];
 const SHEET_SIGNS = [{ key: "written", label: "As Written" }, { key: "costs", label: "All Costs" }, { key: "gains", label: "All Gains" }];
-const MAX_SHEET_CONNECTIONS = 10;
 const SHEET_PREVIEW_LINES = 8;
 const SHARING_EMAIL = "admin@prismalbudget.org";
 
@@ -54,7 +53,7 @@ function wireSheets() {
   document.addEventListener("budget:updated", renderSheets);
 }
 
-// The connected spreadsheets, and whether one can be added (a verified email, and fewer than 10)
+// The connected spreadsheets, and whether one can be added (a verified email, and fewer than MAX_SHEETS)
 function renderSheets() {
   const view = document.getElementById("sheetsView");
   if (!view || !sheetsData) return;
@@ -73,7 +72,7 @@ function renderSheets() {
       : `Connecting a spreadsheet needs a verified email. Open the link we emailed to ${account.email} (check your spam folder too), or send a new one.`;
     document.getElementById("sheetsVerifyButton").hidden = !account.email || !account.canEmail;
   }
-  document.getElementById("addSheetButton").disabled = unverified || sheetsData.list.length >= MAX_SHEET_CONNECTIONS;
+  document.getElementById("addSheetButton").disabled = unverified || sheetsData.list.length >= MAX_SHEETS;
 }
 
 // One spreadsheet: its button, On/Off, Delete, and its problems
@@ -109,12 +108,12 @@ function sheetItem(connection) {
     if (on) Spreadsheets.refresh({ force: true });
   });
 
-  const remove = settingsButton("Delete", "danger sheetDelete", async (event) => {
+  const remove = settingsButton("Delete", "danger sheetDelete", async () => {
     if (!window.confirm(`Delete ${connection.name}? Its entries come off your calendar from today on. Days that already passed keep theirs, and days you changed become plain entries. The spreadsheet itself isn't touched.`)) return;
-    event.currentTarget.disabled = true;
+    remove.disabled = true;
     const result = await deleteSheetConnection(connection.id);
     if (!result.ok) {
-      event.currentTarget.disabled = false;
+      remove.disabled = false;
       return BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
     }
     BudgetUI.warnIfUnsaved(result);
@@ -184,8 +183,7 @@ function openSheetPanel(id, origin) {
       // ---- The entry form (shown once the spreadsheet opens) ----
       const section = BudgetUI.element("div", "sheetForm");
       section.hidden = !existing;
-      const name = BudgetUI.textField({ label: "Name", value: existing ? existing.name : "", placeholder: "Bills, Paychecks..." });
-      name.input.maxLength = 60;
+      const name = BudgetUI.textField({ label: "Name", value: existing ? existing.name : "", placeholder: "Bills, Paychecks...", maxLength: MAX_SHEET_NAME });
 
       const rows = {};
       const accountNames = otherAccounts().map(account => account.name);
@@ -362,7 +360,7 @@ function openSheetPanel(id, origin) {
         draft.workbook = file.workbook;
         draft.access = file.access;
         draft.openedLink = typed;
-        if (!name.value()) name.input.value = (file.name || "Spreadsheet").slice(0, 60);
+        if (!name.value()) name.input.value = (file.name || "Spreadsheet").slice(0, MAX_SHEET_NAME);
         const tabCount = file.workbook.tabs.length;
         openedNote.textContent = `Opened${file.name ? ` "${file.name}"` : ""}: ${tabCount} ${tabCount === 1 ? "tab" : "tabs"}, ${file.access === "shared" ? `shared with ${SHARING_EMAIL}` : "shared by its link"}.`;
         showPrimary();
