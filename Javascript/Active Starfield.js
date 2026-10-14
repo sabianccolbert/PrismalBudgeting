@@ -343,7 +343,7 @@ function decayPerFrameToDt(BASE_PER_FRAME, DT_FRAMES) {
   return Math.pow(BASE_PER_FRAME, DT_FRAMES);
 }
 
-/* #endregion 0) PERF HELPERS */
+/* #endregion 0) ENGINE STATE + HELPERS */
 
 
 

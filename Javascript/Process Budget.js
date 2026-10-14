@@ -124,6 +124,10 @@ let dataRevision = null;         // The budget's revision this page holds (see s
 let budgetConflict = false;      // A save was refused: the budget was saved somewhere else since this page loaded
 let savingNow = false;
 
+// Set when a budget opens for the first time, which is its account's first sign-in: Home shows its Getting Started
+// card while it's set (Calendar Page.js), and signing out forgets it, so the card never comes back after that
+const GETTING_STARTED_KEY = "prismal_getting_started";
+
 // =====================================================================
 // #region META FUNCTIONS
 // =====================================================================
@@ -160,7 +164,7 @@ async function loadWorkspace() {
     }
 
     if (!response.ok) {
-       throw new Error(`Server responded with status: ${response.status}`);
+      throw new Error(`Server responded with status: ${response.status}`);
     }
 
     const data = await response.json();
@@ -208,7 +212,10 @@ async function loadWorkspace() {
     // one); the calendar would then be laid out on the week before, and every day's entries would land on
     // the wrong day. So the budget keeps that later day until this device's date catches up.
     if (lastDailyUpdate.getTime() > today.getTime()) setBudgetDay(lastDailyUpdate);
-    if (isNewAccount) pendingProcessedDate = formatToMMDDYYYY(today);
+    if (isNewAccount) {
+      pendingProcessedDate = formatToMMDDYYYY(today);
+      try { localStorage.setItem(GETTING_STARTED_KEY, "1"); } catch (e) {}
+    }
     const isNewDay = lastDailyUpdate.getTime() < today.getTime();
     lastActiveDay = latestActiveDay(lastDailyUpdate, data.quick_entries);
 
@@ -2888,8 +2895,8 @@ function commenceDave() {
     // (A $0.00 temp only keeps a recurring entry off its day, so it isn't a payment; a $0.00 note, like "Add To
     // Savings", still counts)
     let futureDatesAmount = futureData.slice(1).filter(row => String(row[0]).trim() !== "" && !(parseAmount(row[1]) === 0 && entryMark(row[3]))).length;
-    let tempDaveMessage = greetingPresets[todaysDay % 6];
-    tempDaveMessage += nicknamePresets[todaysDay % 5];
+    let tempDaveMessage = greetingPresets[todaysDay % greetingPresets.length];
+    tempDaveMessage += nicknamePresets[todaysDay % nicknamePresets.length];
     // A budget with no recurring entries yet is brand new
     let hasRecurring = recurringData.slice(2).some(row => String(row[0]).trim() !== "" && String(row[0]).trim() !== "-");
     if (!hasRecurring) tempDaveMessage = "Woah! Nice new budget, don't forget to add your recurring entries! ";
@@ -2900,7 +2907,7 @@ function commenceDave() {
     if (futureDatesAmount) discrepancies++;
     if (visibleNegatives) discrepancies++;
     if (discrepancies === 0) {
-      tempDaveMessage += allClearPresets[todaysDay % 3];
+      tempDaveMessage += allClearPresets[todaysDay % allClearPresets.length];
     } else if (discrepancies === 2) {
       tempDaveMessage += "I've found a couple things to keep in mind: ";
     } else if (discrepancies === 3) {
@@ -2961,7 +2968,7 @@ function commenceDave() {
         tempDaveMessage += firstLetter + "ou have " + visibleNegatives + " day" + plurality + " negative on the budget. ";
       }
     }
-    tempDaveMessage += farewellPresets[todaysDay % 7];
+    tempDaveMessage += farewellPresets[todaysDay % farewellPresets.length];
     tempDaveMessage += affirmationPresets[affirmationIndex(today)];
     message = tempDaveMessage;
   } catch (error) {
