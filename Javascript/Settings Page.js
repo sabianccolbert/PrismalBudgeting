@@ -402,7 +402,7 @@ async function changePassword(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const newPassword = document.getElementById("newPassword").value;
-  // The API's rule (passwords.js): 8 to 256 characters, any at all, an emoji counting as one
+  // The API's rule (passwords.js): 8 to 256 characters, any at all, counted as Unicode characters
   const length = [...newPassword.normalize("NFKC")].length;
   if (length < 8 || length > 256) {
     BudgetUI.showToast(length < 8 ? "Your new password must be at least 8 characters." : "Your new password can be at most 256 characters.", true);

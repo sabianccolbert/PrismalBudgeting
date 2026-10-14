@@ -340,18 +340,28 @@ const BudgetUI = (() => {
   // accounts: in order, [{ name, balance }] (each shows its balance today), or just names.
   // amount: the form's amountField. type(): the picked refraction type. account: picked to start.
   function accountField({ accounts = [], amount, type = () => "⭕️", account = "" }) {
-    const list = accounts.map(account => (typeof account === "string" ? { name: account, balance: null } : account));
+    let list = [];
+    let shown = false; // Hidden or Transfer is picked (see setVisible)
     const select = element("select", "selectInput accountSelect");
-    select.appendChild(new Option("None", ""));
-    for (const { name, balance } of list) {
-      select.appendChild(new Option(typeof balance === "number" ? `${name} (${formatMoney(balance)})` : name, name));
-    }
     const wrapper = field("Other Account", select, { optional: true });
     const hint = element("span", "panelHint");
     wrapper.appendChild(hint);
     wrapper.hidden = true;
 
     const accountTitled = (text) => list.find(account => cleanString(account.name) === cleanString(text))?.name || "";
+
+    // The accounts to pick from, each with its balance; the one picked stays picked while it's still there
+    function setAccounts(accounts) {
+      const picked = select.value;
+      list = accounts.map(account => (typeof account === "string" ? { name: account, balance: null } : account));
+      select.replaceChildren(new Option("None", ""), ...list.map(({ name, balance }) =>
+        new Option(typeof balance === "number" ? `${name} (${formatMoney(balance)})` : name, name)));
+      select.value = accountTitled(picked);
+      wrapper.hidden = !shown || list.length === 0;
+      if (shown) describe();
+    }
+    setAccounts(accounts);
+
     // The hint under the picker: what the entry does to the account
     function describe() {
       const name = select.value;
@@ -381,8 +391,10 @@ const BudgetUI = (() => {
       el: wrapper,
       select,
       pick,
+      setAccounts,
       // Shown for Hidden and Transfer (when there are accounts to pick)
       setVisible(visible) {
+        shown = visible;
         wrapper.hidden = !visible || list.length === 0;
         describe();
       },
@@ -642,6 +654,7 @@ const BudgetUI = (() => {
   //   unreadable), sprite ("" for Auto), account ("" for none) }
   // fill({ title, amount, sprite, account }): puts these in, leaving the fields they don't have as they are
   //   (the Quick Entry page's prisms). dateEl: the date field, for a form that doesn't need one.
+  // setAccounts(accounts): new balances for the Other Account list (the Quick Entry page's, after an Undo or Redo)
   function newEntryFields({ date = today, accounts = [] } = {}) {
     const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas...", maxLength: MAX_TITLE });
     const amount = amountField();
@@ -653,6 +666,7 @@ const BudgetUI = (() => {
       dateEl: dateInput.el,
       inputs: { title: title.input, amount: amount.input },
       values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value(), account: account.value() }),
+      setAccounts: account.setAccounts,
       fill({ title: newTitle = "", amount: newAmount = null, sprite = "", account: newAccount = "" } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {

@@ -2853,12 +2853,19 @@ function getPredictionData(lastInBank) {
     // spreadsheet entry
     const overridden = (clean, special) => parsedFuture.some(future => future.time === currentTestTime && future.title === clean &&
       entryMark(future.sprite) && future.special === special);
+    // One recurring entry per title and type lands on a day, like writeRecurring (a budget brought over from the
+    // spreadsheet can have two rows for one title and type)
+    const visibleLanded = new Set();
+    const testLanded = new Set();
     for (let row of recurringRows) {
-      if (isUncommonFrequency(row.parsed.frequency) && currentVisibleTime >= todayTime && recurringRowHits(row.parsed, visibleDay)) {
+      const key = row.parsed.cleanTitle + "|" + row.parsed.special;
+      if (isUncommonFrequency(row.parsed.frequency) && currentVisibleTime >= todayTime && !visibleLanded.has(key) && recurringRowHits(row.parsed, visibleDay)) {
+        visibleLanded.add(key);
         visibleUncommons++;
       }
-      if (String(row.sprite || "").includes("✖️")) continue;
-      if (recurringRowHits(row.parsed, testDay) && !overridden(row.parsed.cleanTitle, row.parsed.special)) dayTotal += row.amt;
+      if (String(row.sprite || "").includes("✖️") || testLanded.has(key) || !recurringRowHits(row.parsed, testDay)) continue;
+      testLanded.add(key);
+      if (!overridden(row.parsed.cleanTitle, row.parsed.special)) dayTotal += row.amt;
     }
     for (let entry of sheetDays.get(currentTestTime)?.values() || []) {
       if (entry.special !== "✖️" && !overridden(entry.clean, entry.special)) dayTotal += entry.amount;
