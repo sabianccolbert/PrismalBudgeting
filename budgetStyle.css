@@ -1,3 +1,13 @@
+/* How a day looks: its fill and edge, and those of today (glowing) and a day below $0 (red) */
+:root {
+  --DAY_FILL: linear-gradient(180deg, rgba(30, 32, 86, 0.9), rgba(12, 12, 38, 0.88));
+  --DAY_EDGE: rgba(120, 132, 255, 0.22);
+  --DAY_RADIUS: clamp(4px, 0.9vmin, 10px);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(112, 12, 44, 0.92), rgba(42, 6, 24, 0.9));
+  --NEGATIVE_DAY_EDGE: rgba(255, 80, 100, 0.6);
+  --NEGATIVE_GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 70, 90, 0.5) 0%, rgba(200, 20, 50, 0.28) 50%, rgba(90, 0, 30, 0.1) 85%, transparent 100%);
+}
+
 /* Static hit area (keeps the original bounds) */
 .elastic-table td {
   position: relative;
@@ -9,15 +19,15 @@
   z-index: 1;
 }
 
-/* Table Layout */
+/* Table Layout: as wide as its card */
 .elastic-table {
-  width: 90vw;
+  width: 100%;
   height: 60vh;
   table-layout: fixed;
 
-  /* Separate cells, with a 1% gap between them */
+  /* Separate days, with a small gap between them */
   border-collapse: separate;
-  border-spacing: 1%;
+  border-spacing: clamp(2px, 0.55vw, 7px);
 
   /* Prevent text highlighting while drag-zooming on PC */
   user-select: none;
@@ -27,10 +37,13 @@
   transition: transform 0.25s ease-in-out;
 }
 
-/* The actual element that scales, zooms, and tilts */
+/* The actual element that scales, zooms, and tilts: a small glass tile with a faint blue edge (drawn inside it, so it
+   takes no room) */
 .cell-content {
   pointer-events: none;
-  background: linear-gradient(to bottom, rgb(15, 0, 80), transparent);
+  background: var(--DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--DAY_EDGE);
+  border-radius: var(--DAY_RADIUS);
   padding: 4px;
   box-sizing: border-box;
 
@@ -77,16 +90,13 @@
   -webkit-user-select: none;
 }
 
-/* Edit mode: Stays zoomed until clicked outside */
+/* Edit mode: Stays zoomed until clicked outside. It gets a shadow that follows its round corners, so it pops out. */
 .elastic-table td.is-editing {
   transform: scale(2); /* Zoom level */
   z-index: 60; /* Above the other days and the dimmed page (.dayZoomBackdrop) */
   position: relative;
   transition: transform 0.2s ease-in-out;
-
-  /* Optional: Add a shadow or border so it pops out */
-  box-shadow: 0 10px 20px rgba(0,0,0,0.5);
-  background-color: rgba(0,0,0,0.5);
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.6));
 }
 
 /* Ensure child contents overflow properly if needed */
@@ -112,6 +122,7 @@
   z-index: 60;
   background-color: transparent;
   box-shadow: none;
+  filter: none; /* The day it draws has its own shadow (a filter here would shade every line too) */
   transition: none;
 }
 
@@ -131,6 +142,7 @@
   pointer-events: auto; /* It covers the screen now, so taps land on it (Process Budget.js closes it for ones beside the day) */
   background: none;
   box-shadow: none;
+  border-radius: 0;
 }
 
 .elastic-table td.is-editing.is-fullZoom .cell-content::before {
@@ -141,27 +153,27 @@
   left: var(--dayX, 0px);
   width: var(--dayW, 100%);
   height: var(--dayH, 100%);
-  /* Like every day: its color at the top, fading to black at the bottom (mostly opaque here, so the page behind
-     doesn't show through its entries) */
-  background: linear-gradient(to bottom, rgb(15, 0, 80), rgba(0, 0, 0, 0.85));
-  /* An outline, not a border, so the v stays in the very corner */
-  outline: 1px solid var(--PANEL_BORDER);
-  outline-offset: -1px;
-  border-radius: calc(3px * var(--zoom, 1));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  /* Like every day, but opaque here, so the page behind doesn't show through its entries. Its edge is an inset
+     shadow, not a border, so the v stays in the very corner. */
+  background: linear-gradient(180deg, rgb(30, 32, 86), rgb(10, 10, 32));
+  border-radius: calc(var(--DAY_RADIUS) * var(--zoom, 1));
+  box-shadow: inset 0 0 0 1px rgba(140, 152, 255, 0.4), 0 2px 12px rgba(0, 0, 0, 0.7);
 }
 
 /* Today keeps its glow, and red days stay red, when zoomed */
 .elastic-table td.is-editing.is-fullZoom.isToday .cell-content::before {
-  box-shadow: inset 0 0 0 1px rgba(201, 218, 248, 0.9), 0 0 10px rgba(120, 160, 255, 0.6);
+  background: var(--GLOW_FILL), linear-gradient(180deg, rgb(30, 32, 86), rgb(10, 10, 32));
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 14px rgba(96, 112, 255, 0.65);
 }
 
 .elastic-table td.is-editing.is-fullZoom.isNegative .cell-content::before {
-  background: linear-gradient(to bottom, rgb(95, 0, 20), rgba(0, 0, 0, 0.85));
+  background: linear-gradient(180deg, rgb(112, 12, 44), rgb(42, 6, 24));
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 2px 12px rgba(0, 0, 0, 0.7);
 }
 
 .elastic-table td.is-editing.is-fullZoom.isToday.isNegative .cell-content::before {
-  background: linear-gradient(to bottom, rgb(170, 0, 0), rgba(0, 0, 0, 0.85));
+  background: var(--NEGATIVE_GLOW_FILL), linear-gradient(180deg, rgb(112, 12, 44), rgb(42, 6, 24));
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 0 14px rgba(255, 50, 70, 0.6);
 }
 
 /* The page dims under a zoomed day (on a computer too), and its lines get a dark edge, so entries running past
@@ -256,49 +268,76 @@
 /*========================================*
  *  MENU DATA PAGES (Recurring, History, Tracker, ...)
  *========================================*
- *  Same look as the calendar: deep indigo panels fading to transparent
- *  over the starfield, light gray text, red glow accents.
+ *  Same look as the calendar: glass cards and tables over the starfield, light text, neon blue accents, and red for
+ *  what's chosen.
  */
 
 :root {
-  --PANEL_DEEP: rgba(15, 0, 80, 0.85);   /* Calendar cell gradient start */
-  --PANEL_SOFT: rgba(15, 0, 80, 0.35);
-  --PANEL_DARK: rgba(0, 0, 0, 0.55);
-  --PANEL_LINE: rgba(189, 189, 189, 0.15);
-  --PANEL_BORDER: rgba(189, 189, 189, 0.35);
-  --PANEL_RADIUS: 14px;
-  /* Floating windows (panels, Search, Help): a purple to blue diagonal */
-  --HOVER_GRADIENT: linear-gradient(135deg, rgb(72, 8, 122) 0%, rgb(40, 6, 112) 48%, rgb(10, 24, 118) 100%);
-  --NEGATIVE_TEXT: #ff6b6b;
+  --PANEL_DEEP: rgba(40, 42, 110, 0.7);   /* Table titles and title cells */
+  --PANEL_SOFT: rgba(24, 26, 72, 0.35);
+  --PANEL_DARK: rgba(8, 9, 30, 0.62);
+  --PANEL_LINE: rgba(128, 140, 255, 0.16);
+  --PANEL_BORDER: rgba(150, 165, 255, 0.35);
+  --PANEL_RADIUS: var(--GLASS_RADIUS);
+  /* Floating windows (panels, Search, Help): deep violet to navy glass */
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 26, 108, 0.98) 0%, rgba(24, 20, 84, 0.98) 48%, rgba(12, 18, 64, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 26px rgba(100, 90, 255, 0.28);
+  --NEGATIVE_TEXT: #ff6b7a;
   --POSITIVE_TEXT: #5ee39a;              /* Positive entries */
   --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
 }
 
-/* Page links on the Menu page */
+/* Page links on the Menu page: a glass card each, with its name and what it's for */
 .menuLinks {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2vmin;
-  margin: 4vmin auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: clamp(10px, 2vmin, 18px);
+  width: min(94vw, 760px);
+  margin: 2vmin auto 4vmin;
 }
 
-.menuLinks a {
-  font-size: 6vmin;
+.menuLinks a.menuLink {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  margin: 0;
+  padding: 1em 1.2em;
+  font-size: clamp(14px, 2.8vmin, 18px);
+  text-align: left;
+  text-decoration: none;
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: var(--GLASS_SHADOW);
+  transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER);
+}
+
+.menuLinks a.menuLink:hover,
+.menuLinks a.menuLink:focus-visible {
+  transform: scale(1.03);
+  text-shadow: none;
+  outline: none;
+  border-color: var(--GLOW_EDGE);
+  background: var(--GLOW_FILL), var(--GLASS);
+  box-shadow: var(--GLOW_SHADOW);
+}
+
+.menuLinkName {
+  font-size: clamp(17px, 3.6vmin, 24px);
+  color: var(--TEXT_BRIGHT);
+}
+
+.menuLinkAbout {
+  font-size: clamp(12px, 2.4vmin, 15px);
+  color: var(--TEXT_DIM);
 }
 
 /* Status + empty states */
 .dataStatus,
 .dataEmpty {
-  font-size: 4vmin;
+  font-size: clamp(14px, 3vmin, 20px);
   opacity: 0.8;
   margin: 4vmin auto;
-}
-
-.dataSummary {
-  font-size: 3.5vmin;
-  margin: 1vmin auto 3vmin;
-  text-shadow: var(--SHADOW);
 }
 
 /* A quiet tip under a table */
@@ -309,13 +348,16 @@
 }
 
 /* Horizontal scroll for wide tables (phones). Only sideways: a box that can scroll up and down too (overflow-x
-   alone makes overflow-y auto) takes an up or down swipe from the page on iPhones, so the page doesn't move. */
+   alone makes overflow-y auto) takes an up or down swipe from the page on iPhones, so the page doesn't move. Its
+   scroll bar is thin and blue. */
 .dataScroll {
   width: 94vw;
   max-width: 100%;
   margin: 0 auto 4vmin;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
 }
 
 /* Base data table */
@@ -331,19 +373,27 @@
 
 .dataTable th {
   padding: 1.2vmin 1.5vmin;
-  font-size: clamp(12px, 3.2vmin, 26px);
+  font-size: clamp(12px, 2.7vmin, 21px);
   font-weight: normal;
   text-align: center;
   white-space: nowrap;
-  color: var(--BASE_COLOR);
-  /* The red-orange bar under the column titles is one gradient across the whole row: Budget UI.js
-     (spanHeaderBar) sets --barWidth (the row's width) and each title's --barX (where it sits in the row), so
-     each title shows its own piece of the same gradient. Before that, each title shows the whole gradient. */
+  color: var(--TEXT_BRIGHT);
+  /* The neon bar under the column titles is one gradient across the whole row: Budget UI.js (spanHeaderBar) sets
+     --barWidth (the row's width) and each title's --barX (where it sits in the row), so each title shows its own
+     piece of the same gradient. Before that, each title shows the whole gradient. */
   background:
-    linear-gradient(90deg, #ee0000, #ff4500, #ff9a1a) var(--barX, 0px) 100% / var(--barWidth, 100%) 2px no-repeat,
+    linear-gradient(90deg, var(--NEON_CYAN), var(--NEON_BLUE), var(--NEON_VIOLET), var(--NEON_PINK)) var(--barX, 0px) 100% / var(--barWidth, 100%) 2px no-repeat,
     linear-gradient(to bottom, var(--PANEL_DEEP), var(--PANEL_SOFT));
   border-bottom: none;
-  box-shadow: 0 6px 12px -8px rgba(200, 0, 0, 0.9);
+  box-shadow: 0 6px 12px -8px rgba(100, 110, 255, 0.9);
+}
+
+.dataTable th:first-child {
+  border-top-left-radius: 10px;
+}
+
+.dataTable th:last-child {
+  border-top-right-radius: 10px;
 }
 
 .dataTable td {
@@ -390,9 +440,10 @@
   text-align: center;
   font-size: 1.2em;
   padding: 1vmin;
+  color: var(--TEXT_BRIGHT);
   background: linear-gradient(to right, transparent, var(--PANEL_DEEP), transparent);
   border-bottom: none;
-  text-shadow: var(--SHADOW);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 /* History: a week on each row, like the calendar's days (they zoom the same way). Each day shows just its date,
@@ -402,12 +453,16 @@
   margin: 0 auto 4vmin;
 }
 
-.historyGrid th {
+/* The weekdays over the days (Home's calendar and History) */
+.elastic-table th {
+  height: 1px; /* As short as its words (the table's height goes to the days) */
   padding: 0 0 0.8vmin;
-  font-size: clamp(10px, 2.2vmin, 16px);
+  font-size: clamp(9px, 2vmin, 14px);
   font-weight: normal;
   text-align: center;
-  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--TEXT_DIM);
 }
 
 .historyGrid td {
@@ -422,7 +477,8 @@
   font-size: clamp(12px, 3.2vmin, 26px);
   font-weight: bold;
   line-height: 1.1;
-  text-shadow: var(--SHADOW);
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 .historyGrid .historyYear {
@@ -466,6 +522,7 @@
 
 .lineDate {
   font-weight: bold;
+  color: var(--TEXT_BRIGHT);
 }
 
 .lineEntry.positive,
@@ -478,17 +535,22 @@
   color: var(--NEGATIVE_TEXT);
 }
 
-/* Calendar days: today glows, negative days turn red (like the spreadsheet's cell colors) */
-.elastic-table td.isToday .cell-content {
-  box-shadow: inset 0 0 0 1px rgba(201, 218, 248, 0.9), 0 0 10px rgba(120, 160, 255, 0.6);
+/* Calendar days: today glows (a blue-violet radial gradient from its center, a bright edge, and a glow around it),
+   and a day below $0 turns red (today glows red then). Not a phone's zoomed day: its content is as big as the screen
+   and draws the day itself (::before, above). */
+.elastic-table td.isToday:not(.is-fullZoom) .cell-content {
+  background: var(--GLOW_FILL), var(--DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 12px rgba(96, 112, 255, 0.65);
 }
 
-.elastic-table td.isNegative .cell-content {
-  background: linear-gradient(to bottom, rgb(95, 0, 20), transparent);
+.elastic-table td.isNegative:not(.is-fullZoom) .cell-content {
+  background: var(--NEGATIVE_DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 0 8px rgba(255, 40, 60, 0.3);
 }
 
-.elastic-table td.isToday.isNegative .cell-content {
-  background: linear-gradient(to bottom, rgb(170, 0, 0), transparent);
+.elastic-table td.isToday.isNegative:not(.is-fullZoom) .cell-content {
+  background: var(--NEGATIVE_GLOW_FILL), var(--NEGATIVE_DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 0 12px rgba(255, 50, 70, 0.6);
 }
 
 /* On Home, entries (and the day's In Bank) are tappable once their day is zoomed (sized with the text, so they
@@ -535,22 +597,27 @@ body.datePicking .elastic-table td {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4em;
+  gap: 0.45em;
   margin: 0;
   padding: 0.45em 1.1em;
   font-size: var(--UI_TEXT);
-  border-width: 2px;
   white-space: nowrap;
 }
 
-/* A primary button's border is the red-orange gradient (stylesheet.css GRADIENT BORDERS) */
+/* A primary button's border is the red-orange gradient, over a red radial gradient (stylesheet.css GRADIENT
+   BORDERS) */
 .budgetButton.primary {
   border-color: transparent;
+  color: #fff;
 }
 
 .budgetButton.danger {
   color: var(--NEGATIVE_TEXT);
   border-color: var(--NEGATIVE_TEXT);
+}
+
+.budgetButton.danger:hover {
+  background: radial-gradient(ellipse at center, rgba(255, 80, 100, 0.3), transparent 80%), var(--GLASS_BUTTON);
 }
 
 .budgetButton:disabled {
@@ -563,15 +630,15 @@ body.datePicking .elastic-table td {
  *========================================*/
 
 .budgetPanel {
-  --EDGE_FILL: rgb(10, 0, 48); /* A focused box's color inside its gradient border */
+  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   box-sizing: border-box;
   color: var(--BASE_COLOR);
   text-align: left;
   font-size: var(--UI_TEXT);
-  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(10, 0, 50, 0.92));
-  border: 2px solid var(--PANEL_BORDER);
-  border-radius: var(--PANEL_RADIUS);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 18px rgba(200, 0, 0, 0.25);
+  background: var(--HOVER_GRADIENT);
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 18px;
+  box-shadow: var(--FLOAT_SHADOW);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -666,12 +733,6 @@ body.datePicking .elastic-table td {
   width: auto;
 }
 
-/* An account's balance in its panel */
-.accountBalance {
-  font-size: 1.4em;
-  font-variant-numeric: tabular-nums;
-}
-
 .budgetPanel.isBusy {
   opacity: 0.75;
   cursor: progress;
@@ -693,7 +754,8 @@ body.datePicking .elastic-table td {
   margin: 0;
   font-size: 1.25em;
   font-weight: normal;
-  text-shadow: var(--SHADOW);
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 .panelClose {
@@ -749,7 +811,7 @@ body.datePicking .elastic-table td {
   font-size: 0.85em;
   line-height: 1;
   color: var(--BASE_COLOR);
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(8, 10, 32, 0.6);
   border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 50%;
 }
@@ -758,7 +820,7 @@ body.datePicking .elastic-table td {
 .fieldHelpButton:focus-visible,
 .fieldHelpButton[aria-expanded="true"] {
   transform: none;
-  color: var(--LINK_LIGHT);
+  color: #fff;
   box-shadow: 0 0 8px rgba(200, 0, 0, 0.55);
 }
 
@@ -794,9 +856,9 @@ body.datePicking .elastic-table td {
   font-family: 'Main Font', sans-serif;
   font-size: var(--UI_TEXT);
   text-align: left;
-  color: var(--BASE_COLOR);
-  background: rgba(0, 0, 0, 0.35);
-  border: 2px solid var(--PANEL_BORDER);
+  color: var(--TEXT_BRIGHT);
+  background: rgba(8, 10, 32, 0.6);
+  border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 10px;
   user-select: text;
   -webkit-user-select: text;
@@ -844,7 +906,7 @@ body.datePicking .elastic-table td {
 .budgetPanel select option,
 .budgetCard select option,
 .searchBar select option {
-  background: #0a0032;
+  background: #141238;
 }
 
 /* The date field a calendar tap will fill (its border is the gradient: stylesheet.css GRADIENT BORDERS) */
@@ -874,9 +936,10 @@ input.dateInput.isPickTarget {
   font-size: 0.9em;
 }
 
+/* The chosen one: the red-orange border and a red glow, over a red radial gradient from its center */
 .segmented .budgetButton[aria-checked="true"] {
   color: #fff;
-  background: rgba(200, 0, 0, 0.28);
+  background: var(--PICK_FILL), rgba(120, 0, 20, 0.35);
   box-shadow: 0 0 10px rgba(200, 0, 0, 0.6);
 }
 
@@ -992,11 +1055,11 @@ input.dateInput.isPickTarget {
   pointer-events: auto;
   padding: 0.7em 1.2em;
   font-size: var(--UI_TEXT);
-  color: var(--BASE_COLOR);
-  background: rgba(10, 0, 50, 0.95);
-  border: 2px solid var(--PANEL_BORDER);
+  color: var(--TEXT_BRIGHT);
+  background: var(--HOVER_GRADIENT);
+  border: 1px solid var(--PANEL_BORDER);
   border-radius: var(--PANEL_RADIUS);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--FLOAT_SHADOW);
   transition: opacity 0.5s ease;
 }
 
@@ -1015,8 +1078,8 @@ input.dateInput.isPickTarget {
 /* A new budget's first steps (shown until they're done, or hidden with ×) */
 .budgetCard.gettingStarted {
   position: relative;
-  width: min(94vw, 1100px);
-  margin: 1vmin auto 2vmin;
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2vmin, 18px);
 }
 
 .gettingStarted .panelClose {
@@ -1039,8 +1102,15 @@ input.dateInput.isPickTarget {
   margin: 0 0 1em;
 }
 
+/* A done step starts with In Bank's green check (Sprites.js's image for ✅) */
 .startSteps li.done > strong::before {
-  content: "✅ ";
+  content: "";
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: 0.35em;
+  vertical-align: -0.22em;
+  background: url("/Resources/Sprites/InBank.webp?v=40a6bd5f60") center / contain no-repeat;
 }
 
 .startSteps .panelButtons {
@@ -1082,7 +1152,7 @@ input.dateInput.isPickTarget {
 /* Search: the Search button above the calendar opens it, floating over the page like a large panel (it
    lives in <body>, see wireSearch in Calendar Page.js). Its results show under its form. */
 .searchBar {
-  --EDGE_FILL: rgb(10, 0, 48); /* A focused box's color inside its gradient border */
+  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   position: fixed;
   z-index: 1300;
   top: max(2vh, env(safe-area-inset-top, 0px));
@@ -1100,9 +1170,9 @@ input.dateInput.isPickTarget {
   text-align: left;
   color: var(--BASE_COLOR);
   background: var(--HOVER_GRADIENT);
-  border: 2px solid var(--PANEL_BORDER);
-  border-radius: var(--PANEL_RADIUS);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 18px rgba(200, 0, 0, 0.25);
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 18px;
+  box-shadow: var(--FLOAT_SHADOW);
 }
 
 .searchBar .panelHeader {
@@ -1278,40 +1348,322 @@ input.dateInput.isPickTarget {
   text-align: center;
 }
 
+/*========================================*
+ *  THE BUDGET'S FOUR PAGES (Home, Recurring Entries, History, Other Accounts): TABS, BUTTONS, AND CARDS
+ *========================================*
+ *  Under the header: the four pages as tabs at the left (the one showing glows), beside a glass card with the
+ *  page's own buttons. Under them, the page in a glass card with its icon and title.
+ */
+
+.pageTop {
+  display: grid;
+  grid-template-columns: clamp(98px, 27vw, 230px) minmax(0, 1fr);
+  gap: clamp(8px, 1.6vw, 18px);
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2.2vmin, 22px);
+}
+
+.pageTabs {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 1vmin, 10px);
+}
+
+/* A tab: its icon and name on glass. Tabs share the column's height, so they line up with the card beside them. */
+.pageTabs a.pageTab {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 0.55em;
+  box-sizing: border-box;
+  min-height: 2.6em;
+  margin: 0;
+  padding: 0.45em 0.7em;
+  font-size: clamp(11px, 3vw, 16px);
+  line-height: 1.1;
+  text-align: left;
+  text-decoration: none;
+  color: var(--BASE_COLOR);
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: 12px;
+  box-shadow: var(--GLASS_SHADOW);
+  transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER), color var(--SLOW_COLOR);
+}
+
+.pageTabs a.pageTab:hover,
+.pageTabs a.pageTab:focus-visible {
+  transform: none;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: none;
+  outline: none;
+  border-color: var(--GLASS_LINE_BRIGHT);
+  box-shadow: var(--GLASS_SHADOW), 0 0 10px rgba(96, 112, 255, 0.35);
+}
+
+/* The page that's showing glows: a blue-violet radial gradient from its center, a bright edge, and a neon bar at
+   its left */
+.pageTabs a.pageTab[aria-current="page"] {
+  color: var(--TEXT_BRIGHT);
+  background: var(--GLOW_FILL), var(--GLASS);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--GLOW_SHADOW);
+  cursor: default;
+}
+
+.pageTabs a.pageTab[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: -1px;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(var(--NEON_CYAN), var(--NEON_VIOLET));
+  box-shadow: 0 0 8px var(--NEON_BLUE);
+}
+
+.tabIcon {
+  flex-shrink: 0;
+  width: 1.3em;
+  height: 1.3em;
+  border-radius: 0;
+  object-fit: contain;
+  opacity: 0.85;
+}
+
+.pageTab[aria-current="page"] .tabIcon {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px rgba(170, 180, 255, 0.8));
+}
+
+/* The narrowest phones: the tabs two by two, over the page's buttons (side by side, the buttons wouldn't fit) */
+@media (max-width: 359px) {
+  .pageTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pageTabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* The page's buttons, on glass beside the tabs */
+.controlsCard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: clamp(6px, 1.8vw, 20px);
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: var(--GLASS_SHADOW);
+}
+
+/* Recurring Entries, History, and Other Accounts: the page's icon and title over its buttons, beside the tabs */
+.controlsCard.pageControls {
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(8px, 1.6vmin, 16px);
+}
+
+.pageControls .cardHeader {
+  margin: 0;
+  padding: 0;
+}
+
+.controlsCard.pageControls .tableToolbar {
+  justify-content: flex-start;
+}
+
+/* A page in a glass card: the calendar, or Recurring Entries', History's, and Other Accounts' tables. It never
+   clips or layers what's in it: a zoomed day reaches past it, over the dimmed page (Process Budget.js). */
+.budgetCard.calendarCard,
+.budgetCard.pageCard {
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2.2vmin, 22px);
+  padding: clamp(10px, 2vw, 22px) clamp(6px, 1.6vw, 20px) clamp(8px, 1.6vw, 18px);
+}
+
+.budgetCard.pageCard .dataScroll {
+  width: 100%;
+  margin-bottom: 1em;
+}
+
+.budgetCard.pageCard .elastic-table.historyGrid {
+  margin-bottom: 0.5em;
+}
+
+/* A page's icon and title (and a line under it) */
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  text-align: left;
+  margin: 0 0 clamp(8px, 1.6vmin, 16px);
+  padding: 0 clamp(2px, 0.6vw, 6px);
+}
+
+.cardHeading {
+  min-width: 0;
+}
+
+.cardHeading .cardTitle {
+  margin: 0;
+  font-size: clamp(17px, 3.6vmin, 26px);
+  font-weight: normal;
+  line-height: 1.2;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
+}
+
+.cardHeading .cardSubtitle {
+  margin: 0.15em 0 0;
+  font-size: clamp(12px, 2.4vmin, 16px);
+  color: var(--TEXT_DIM);
+}
+
+/* An icon on its own little glowing tile */
+.cardIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: clamp(36px, 7vmin, 54px);
+  height: clamp(36px, 7vmin, 54px);
+  background: radial-gradient(circle at 50% 40%, rgba(70, 90, 230, 0.35), rgba(12, 14, 44, 0.92));
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: 12px;
+  box-shadow: 0 0 12px rgba(80, 100, 255, 0.25);
+}
+
+.cardIcon img {
+  width: 62%;
+  height: 62%;
+  border-radius: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 0 4px rgba(150, 170, 255, 0.6));
+}
+
+/* The calendar's dark blue icon, lifted to a bright neon blue */
+.cardIcon img[src*="/Calendar."] {
+  filter: brightness(2.8) drop-shadow(0 0 6px rgba(60, 120, 255, 0.95));
+}
+
+/*========================================*
+ *  HOME: LOWEST IN BANK, DAVE, AND UPCOMING
+ *========================================*/
+
+/* Lowest across the top; Dave and Upcoming side by side under it (one column on phones) */
 .infoRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr) minmax(0, 1.4fr);
-  gap: 1.5vmin;
-  width: min(94vw, 1100px);
-  margin: 2vmin auto;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-areas:
+    "lowest lowest"
+    "dave upcoming";
+  gap: clamp(8px, 1.6vw, 18px);
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2.2vmin, 22px);
   text-align: left;
   font-size: clamp(12px, 2.3vmin, 17px);
 }
 
 .infoCard {
   padding: 0.9em 1em;
-  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.15));
-  border: 1px solid var(--PANEL_LINE);
-  border-radius: var(--PANEL_RADIUS);
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: var(--GLASS_SHADOW);
 }
 
 .infoLabel {
   display: block;
   margin-bottom: 0.3em;
   font-size: 0.85em;
-  opacity: 0.75;
+  color: var(--TEXT_DIM);
+}
+
+/* Lowest: the wallet, Lowest in bank after today, and at the right, the 28 days after the calendar (under it on
+   phones), over a faint wave */
+.lowestCard {
+  grid-area: lowest;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6em 1em;
+  padding: 1em 1.2em 1.3em;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(90, 80, 230, 0.16)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(150, 70, 255, 0.14)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+
+.cardIcon.walletIcon {
+  width: clamp(44px, 9vmin, 64px);
+  height: clamp(44px, 9vmin, 64px);
+  border-radius: 14px;
+}
+
+.lowestMain {
+  min-width: 0;
 }
 
 .lowestAmount {
-  font-size: 2em;
+  display: block;
+  font-size: 2.3em;
+  line-height: 1.1;
+  color: var(--TEXT_BRIGHT);
   text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
 }
 
+.lowestAmount.negative,
+.afterAmount.negative {
+  color: var(--NEGATIVE_TEXT);
+  text-shadow: 0 0 14px rgba(255, 60, 80, 0.45);
+}
+
+.afterCalendar {
+  text-align: right;
+}
+
+.afterLine {
+  margin: 0.2em 0 0;
+  font-size: 1.05em;
+  line-height: 1.35;
+  color: var(--TEXT_BRIGHT);
+}
+
+.afterAmount {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .lowestCard {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .afterCalendar {
+    grid-column: 1 / -1;
+    padding-top: 0.6em;
+    text-align: left;
+    border-top: 1px solid var(--PANEL_LINE);
+  }
+}
+
 .daveCard {
+  grid-area: dave;
   position: relative; /* Its tip's gradient border (below) */
   display: flex;
   align-items: flex-start;
   gap: 0.9em;
+}
+
+.upcomingCard {
+  grid-area: upcoming;
 }
 
 /* Dave's picture, in a circle (it shows his name if it can't load) */
@@ -1322,8 +1674,9 @@ input.dateInput.isPickTarget {
   min-width: 52px;
   min-height: 52px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(8, 10, 32, 0.6);
   border: 2px solid var(--PANEL_BORDER);
+  box-shadow: 0 0 12px rgba(110, 120, 255, 0.35);
   color: var(--BASE_COLOR);
   font-size: 0.8em;
   text-align: center;
@@ -1401,81 +1754,165 @@ input.dateInput.isPickTarget {
 
 .upcomingDate {
   flex-shrink: 0;
-  opacity: 0.75;
+  color: var(--TEXT_DIM);
 }
 
 .upcomingEmpty {
   opacity: 0.7;
 }
 
-/* The calendar's buttons, just above it (Lowest, Dave, and Upcoming are under it). On phones, a grid: Undo over
-   Redo at the left, a big round + (New Entry) in the middle, and Search over Quick Entry at the right. On wider
-   screens, one row: Undo at the very left, Search at the very right, New Entry in the middle. */
-.homeControls {
+/*========================================*
+ *  HOME: THE CALENDAR'S BUTTONS
+ *========================================*/
+
+/* Undo over Redo at the left, New Entry (the prism) in the middle, and Search over Quick Entry at the right. Each
+   side's buttons are as wide as each other. */
+.controlsCard.homeControls {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   grid-template-areas:
     "undo new search"
     "redo new quick";
   align-items: center;
-  gap: 1.4vmin 3vw;
-  width: min(94vw, 1100px);
-  margin: 0 auto 2vmin;
+  gap: clamp(6px, 1.4vmin, 14px) clamp(6px, 2vw, 28px);
+  font-size: clamp(11px, 2.9vw, 16px);
 }
 
-.homeUndo   { grid-area: undo;   justify-self: start; }
-.homeRedo   { grid-area: redo;   justify-self: start; }
-.homeSearch { grid-area: search; justify-self: end; }
-.homeQuick  { grid-area: quick;  justify-self: end; }
+.homeControls .budgetButton {
+  font-size: 1em;
+  padding: 0.5em clamp(0.5em, 1.6vw, 1.2em);
+}
 
-@media (min-width: 760px) {
-  .homeControls {
-    grid-template-columns: auto auto 1fr auto 1fr auto auto;
-    grid-template-areas: "undo redo . new . quick search";
-    gap: 1.2vmin;
+.homeUndo   { grid-area: undo;   justify-self: start; width: min(100%, 10em); }
+.homeRedo   { grid-area: redo;   justify-self: start; width: min(100%, 10em); }
+.homeSearch { grid-area: search; justify-self: end;   width: min(100%, 17em); }
+.homeQuick  { grid-area: quick;  justify-self: end;   width: min(100%, 17em); }
+
+/* Phones: Undo and Redo only as wide as they need, so Search and Quick Entry get the rest */
+@media (max-width: 560px) {
+  .controlsCard.homeControls {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    column-gap: 6px;
+  }
+
+  .homeUndo,
+  .homeRedo,
+  .homeSearch,
+  .homeQuick {
+    justify-self: stretch;
+    width: auto;
   }
 }
 
-/* New Entry: a big round + with its name under it (the circle's border is the red-orange gradient) */
+/* Search reads like a search box: its glass and magnifying glass, and its word at the left */
+.budgetButton.homeSearch {
+  justify-content: flex-start;
+  color: var(--TEXT_DIM);
+}
+
+.budgetButton.homeSearch:hover {
+  color: #fff;
+}
+
+/* Quick Entry glows: a blue-violet radial gradient from its center and a bright edge (on hover, the red one joins) */
+.budgetButton.homeQuick {
+  color: var(--TEXT_BRIGHT);
+  background: var(--GLOW_FILL), linear-gradient(90deg, rgba(40, 70, 210, 0.55), rgba(130, 50, 220, 0.55));
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--GLOW_SHADOW);
+}
+
+.budgetButton.homeQuick:not(:disabled):hover {
+  background: var(--PICK_FILL), var(--GLOW_FILL), linear-gradient(90deg, rgba(40, 70, 210, 0.55), rgba(130, 50, 220, 0.55));
+}
+
+/* New Entry: the prism, with a + on it, and its name under it */
 .newEntryButton {
   grid-area: new;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35em;
+  gap: 0.4em;
   margin: 0;
   padding: 0;
-  font-size: var(--UI_TEXT);
-  color: var(--BASE_COLOR);
+  font-size: 1em;
+  color: var(--TEXT_BRIGHT);
   background: none;
   border: none;
+  box-shadow: none;
 }
 
 .newEntryButton:hover {
   box-shadow: none;
 }
 
-.newEntryPlus {
-  --EDGE_WIDTH: 3px;
+.newEntryPrism {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: clamp(58px, 12vmin, 84px);
-  height: clamp(58px, 12vmin, 84px);
-  font-size: 2.3em;
-  line-height: 1;
-  background: radial-gradient(circle at 35% 30%, rgba(255, 90, 30, 0.32), rgba(15, 0, 80, 0.9) 70%);
-  border: 3px solid transparent;
+  width: clamp(52px, 13vw, 84px);
+  height: clamp(52px, 13vw, 84px);
   border-radius: 50%;
-  box-shadow: 0 0 16px rgba(255, 60, 0, 0.4);
+  background: url("/Resources/Icons/NewEntry.webp?v=390f496c85") center / cover no-repeat;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.14),
+    0 0 18px rgba(140, 90, 255, 0.55),
+    0 0 34px rgba(60, 190, 255, 0.25);
   transition: box-shadow var(--SLOW_SHADOW);
 }
 
-.newEntryButton:hover .newEntryPlus,
-.newEntryButton:focus-visible .newEntryPlus {
-  box-shadow: var(--SHADOW);
+/* Hovered or focused: the red-orange edge and red glow, and a red radial gradient from its center */
+.newEntryPrism::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--PICK_FILL);
+  opacity: 0;
+  transition: opacity var(--SLOW_SHADOW);
+}
+
+.newEntryButton:hover .newEntryPrism,
+.newEntryButton:focus-visible .newEntryPrism {
+  box-shadow:
+    0 0 0 2px #ff4500,
+    0 0 22px rgba(255, 60, 0, 0.75);
+}
+
+.newEntryButton:hover .newEntryPrism::after,
+.newEntryButton:focus-visible .newEntryPrism::after {
+  opacity: 1;
+}
+
+.newEntryPlus {
+  position: relative;
+  z-index: 1;
+  font-size: 2.6em;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.95), 0 0 2px #000;
+}
+
+/* Recurring Entries', History's, and Other Accounts' buttons fill their card's row (and wrap on phones) */
+.controlsCard .tableToolbar {
+  margin: 0;
+  font-size: clamp(11px, 3.1vw, 16px);
+}
+
+.controlsCard .tableToolbar .budgetButton {
+  font-size: 1em;
+}
+
+@media (max-width: 700px) {
+  .infoRow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "lowest"
+      "dave"
+      "upcoming";
+  }
 }
 
 /* Undo and Redo (the Quick Entry page's, above its form) */
@@ -1556,7 +1993,7 @@ input.dateInput.isPickTarget {
   align-items: center;
   gap: 0.6em;
   padding: 0.35em 0.6em;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(8, 10, 32, 0.6);
   border: 1px solid var(--PANEL_BORDER);
   border-radius: 10px;
 }
@@ -1589,7 +2026,7 @@ input.dateInput.isPickTarget {
 /* New Prism: the form glows, so it's clear it's making a prism, not adding an entry */
 .budgetPanel.prismDraft {
   position: relative;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(200, 0, 0, 0.7);
+  box-shadow: var(--FLOAT_SHADOW), 0 0 22px rgba(200, 0, 0, 0.7);
 }
 
 .prismDraftHint {
@@ -1603,7 +2040,7 @@ input.dateInput.isPickTarget {
 
 @keyframes prismFlash {
   0%   { box-shadow: 0 0 0 3px var(--LINK_LIGHT), 0 0 34px rgba(255, 60, 60, 0.9); }
-  100% { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 18px rgba(200, 0, 0, 0.25); }
+  100% { box-shadow: var(--FLOAT_SHADOW); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1623,12 +2060,6 @@ input.dateInput.isPickTarget {
 
 .tableToolbar:empty {
   display: none;
-}
-
-@media (max-width: 700px) {
-  .infoRow {
-    grid-template-columns: 1fr;
-  }
 }
 
 /*========================================*
@@ -1751,7 +2182,7 @@ input.dateInput.isPickTarget {
 
 /* Rounded content cards, same look as the home page's info row */
 .budgetCard {
-  --EDGE_FILL: rgb(10, 0, 48); /* A focused box's color inside its gradient border */
+  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   box-sizing: border-box;
   width: min(94vw, 760px);
   margin: 0 auto 2.5vmin;
@@ -1759,9 +2190,10 @@ input.dateInput.isPickTarget {
   text-align: left;
   font-size: var(--UI_TEXT);
   color: var(--BASE_COLOR);
-  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.15));
-  border: 1px solid var(--PANEL_LINE);
-  border-radius: var(--PANEL_RADIUS);
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: var(--GLASS_SHADOW);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -1770,7 +2202,8 @@ input.dateInput.isPickTarget {
   margin: 0 0 0.6em;
   font-size: 1.3em;
   font-weight: normal;
-  text-shadow: var(--SHADOW);
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 .budgetCard p {
@@ -1794,9 +2227,9 @@ input.dateInput.isPickTarget {
   font-family: 'Main Font', sans-serif;
   font-size: var(--UI_TEXT);
   text-align: left;
-  color: var(--BASE_COLOR);
-  background: rgba(0, 0, 0, 0.35);
-  border: 2px solid var(--PANEL_BORDER);
+  color: var(--TEXT_BRIGHT);
+  background: rgba(8, 10, 32, 0.6);
+  border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 10px;
   user-select: text;
   -webkit-user-select: text;
@@ -1828,8 +2261,9 @@ input.dateInput.isPickTarget {
 a.budgetButton {
   margin: 0;
   padding: 0.45em 1.1em;
-  color: var(--BASE_COLOR);
-  border: 2px solid var(--BASE_COLOR);
+  color: var(--TEXT_BRIGHT);
+  background: var(--GLASS_BUTTON);
+  border: 1.5px solid var(--GLASS_LINE_BRIGHT);
   border-radius: 9999px;
   text-decoration: none;
   line-height: normal;
@@ -1837,8 +2271,9 @@ a.budgetButton {
 
 a.budgetButton:hover {
   transform: scale(1.05);
-  color: var(--LINK_LIGHT);
-  box-shadow: var(--SHADOW);
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 60, 0, 0.85);
+  box-shadow: var(--PICK_SHADOW);
 }
 
 /* Settings */
@@ -2253,7 +2688,6 @@ a.budgetButton:hover {
   padding: calc(var(--UI_TEXT) * 0.35) calc(var(--UI_TEXT) * 1.1);
   font-size: max(12px, 2.4vmin);
   line-height: 1.1;
-  border-width: 2px;
 }
 
 .budgetCard.helpView {
@@ -2270,7 +2704,7 @@ a.budgetButton:hover {
   line-height: 1.45;
   background: var(--HOVER_GRADIENT);
   border-color: var(--PANEL_BORDER);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.7), 0 0 18px rgba(200, 0, 0, 0.25);
+  box-shadow: var(--FLOAT_SHADOW);
 }
 
 /* Stays at the top right while the help scrolls */
@@ -2292,7 +2726,8 @@ a.budgetButton:hover {
   margin: 1.2em 0 0.4em;
   font-size: 1.1em;
   font-weight: normal;
-  text-shadow: var(--SHADOW);
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 .helpView ul,
@@ -2422,23 +2857,26 @@ a.budgetButton:hover {
 .guide > nav {
   margin: 0 0 2.5vmin;
   padding: 1em 1.3em;
-  background: linear-gradient(to bottom, var(--PANEL_DEEP), rgba(15, 0, 80, 0.35));
-  border: 1px solid var(--PANEL_LINE);
-  border-radius: var(--PANEL_RADIUS);
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: var(--GLASS_SHADOW);
 }
 
 .guide h2 {
   margin: 0 0 0.6em;
   font-size: 1.45em;
   font-weight: normal;
-  text-shadow: var(--SHADOW);
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 .guide h3 {
   margin: 1.2em 0 0.4em;
   font-size: 1.15em;
   font-weight: normal;
-  text-shadow: var(--SHADOW);
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 .guide p {
@@ -2574,7 +3012,8 @@ html:not(.frontPage) .frontSignIn,
   font-size: clamp(26px, 5.5vmin, 44px);
   font-weight: normal;
   line-height: 1.25;
-  text-shadow: var(--SHADOW);
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
 .frontHero p {
@@ -2611,8 +3050,8 @@ html:not(.frontPage) .frontSignIn,
   margin: 0;
   padding: 0.8em 1em;
   background: var(--PANEL_DARK);
-  border: 1px solid var(--PANEL_LINE);
-  border-radius: 10px;
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: 12px;
 }
 
 .frontFeatures strong {
@@ -2634,9 +3073,10 @@ html:not(.frontPage) .frontSignIn,
   gap: 0.6em;
   padding: 0.45em;
   font-size: clamp(14px, 2.6vmin, 18px);
-  background: rgba(4, 0, 22, 0.75);
-  border: 1px solid var(--PANEL_LINE);
+  background: rgba(12, 12, 40, 0.8);
+  border: 1px solid var(--GLASS_LINE);
   border-radius: 9999px;
+  box-shadow: var(--GLASS_SHADOW);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   transition: opacity 0.4s ease;

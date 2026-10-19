@@ -180,17 +180,53 @@ async function setStartingBalance(event) {
 // #region CALENDAR
 // =====================================================================
 
-// Draw each day: date, system lines, then entries (one element per line so entries are tappable)
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+// The months the calendar covers, for its card: "October 2026", "October - November 2026", or
+// "December 2026 - January 2027"
+function calendarMonths() {
+  const first = gridDates[0][0];
+  const last = gridDates[3][6];
+  const month = (date, withYear) => MONTHS[date.getMonth()] + (withYear ? ` ${date.getFullYear()}` : "");
+  if (first.getFullYear() !== last.getFullYear()) return `${month(first, true)} - ${month(last, true)}`;
+  if (first.getMonth() !== last.getMonth()) return `${month(first, false)} - ${month(last, true)}`;
+  return month(first, true);
+}
+
+// The last day's two lines about the 28 days after the calendar (writeBudgetMath in Process Budget.js writes them
+// under its In Bank: "✅ $812.40 Lowest: 11/14" and "✅ $905.10 Day 28 In Bank"). Home shows them in the Lowest card
+// instead of on the day. { kind: "lowest" | "day28", amount, date (MM/DD, for "lowest") }, or null for any other line.
+function afterCalendarLine(line) {
+  const parts = getParts(line);
+  if (!BudgetUI.isSystemLine(parts[0])) return null;
+  const words = parts.slice(2).join(" ");
+  const lowest = words.match(/^Lowest: (\d{1,2}\/\d{1,2})$/);
+  if (lowest) return { kind: "lowest", amount: parseAmount(parts[1]), date: lowest[1] };
+  if (words === "Day 28 In Bank") return { kind: "day28", amount: parseAmount(parts[1]) };
+  return null;
+}
+
+// Draw each day: date, system lines, then entries (one element per line so entries are tappable). The weekdays
+// over the days, and the months in the card's heading, come from the days themselves.
 function renderCalendar() {
+  const months = document.getElementById("calendarMonths");
+  if (months && gridDates[0]) months.textContent = calendarMonths();
+  document.querySelectorAll(".elastic-table thead th").forEach((th, c) => {
+    if (gridDates[0] && gridDates[0][c]) th.textContent = WEEKDAYS[gridDates[0][c].getDay()];
+  });
+
   const cells = document.querySelectorAll(".elastic-table td");
   cells.forEach((td, index) => {
     const r = Math.floor(index / 7);
     const c = index % 7;
     const content = td.querySelector(".cell-content");
     if (!content || !calendarData[r]) return;
+    const isLastDay = r === 3 && c === 6;
 
     const fragment = document.createDocumentFragment();
     String(calendarData[r][c] ?? "").split("\n").forEach((line, l) => {
+      if (isLastDay && afterCalendarLine(line)) return; // In the Lowest card instead
       // The first line is the day, shown in this device's date format
       if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(gridDates[r][c]) : line, l));
     });
@@ -201,8 +237,7 @@ function renderCalendar() {
     td.dataset.row = r;
     td.dataset.col = c;
     td.classList.toggle("isToday", gridDates[r][c].getTime() === today.getTime());
-    // The last day also turns red when the 28 days after the calendar go negative (its "Lowest" line)
-    const isLastDay = r === 3 && c === 6;
+    // The last day also turns red when the 28 days after the calendar go negative (the Lowest card's "Lowest is on")
     td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0 || (isLastDay && nextFourNegative));
   });
 }
@@ -286,6 +321,7 @@ function renderInfoRow() {
     lowest.textContent = formatMoney(lowestInBank);
     lowest.classList.toggle("negative", lowestInBank < 0);
   }
+  renderAfterCalendar();
 
   renderDave();
 
@@ -304,6 +340,27 @@ function renderInfoRow() {
     item.appendChild(entry);
     list.appendChild(item);
   }
+}
+
+// The Lowest card's look past the calendar, from the last day's two lines (see afterCalendarLine): the day In Bank is
+// lowest in the 28 days after the calendar and how low, and In Bank on the 28th day. Red below $0.
+function renderAfterCalendar() {
+  const box = document.getElementById("afterCalendar");
+  if (!box || !calendarData[3]) return;
+  const found = {};
+  for (const line of String(calendarData[3][6] ?? "").split("\n")) {
+    const after = afterCalendarLine(line);
+    if (after) found[after.kind] = after;
+  }
+  box.hidden = !found.lowest && !found.day28;
+  const show = (id, after) => {
+    const el = document.getElementById(id);
+    el.textContent = after ? formatMoney(after.amount) : "--";
+    el.classList.toggle("negative", !!after && after.amount < 0);
+  };
+  document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${showStoredDate(found.lowest.date)}` : "Lowest is on --";
+  show("afterLowest", found.lowest);
+  show("afterDay28", found.day28);
 }
 
 // Dave's tip, highlighted, while it has its 10 minutes (see DAVE'S TIPS in Process Budget.js); otherwise his

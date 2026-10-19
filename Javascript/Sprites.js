@@ -1,13 +1,15 @@
-// Sprites: the five special emoji, ❗️ (Regular), ✖️ (Hidden), ⭕️ (Transfer), ✔️ (Recurring), and ➕ (a connected
-// spreadsheet's), show as the site's own small images everywhere, on every page, instead of each device's own
-// emoji (which look different everywhere, and some are black on the dark background). Only what's shown changes:
+// Sprites: the site's special emoji show as its own small images everywhere, on every page, instead of each
+// device's own emoji (which look different everywhere, and some are black on the dark background). The entry types:
+// ❗️ (Regular), ✖️ (Hidden), ⭕️ (Transfer), ✔️ (Recurring), and ➕ (a connected spreadsheet's); and the lines the
+// budget writes itself: ✅ (In Bank), ⛔️ (In Bank below $0), ❇️ (Gains), and ✴️ (Costs). Only what's shown changes:
 // the stored budget, the text in boxes, and anything copied or read aloud still have the emoji (each image's alt
 // text is its emoji).
 //
-// The images are Resources/Sprites/*.webp, one color per type, all drawn as thick rounded lines with the same
-// soft shadow: Regular red (a ! as a line and a dot), Hidden purple (an X), Transfer green (a ring), Recurring
-// orange (a check), and Spreadsheet yellow (a plus: Hidden's X turned). To change one, replace its file (any
-// square image with a transparent background works; around 128x128 is plenty), then stamp the site
+// The images are Resources/Sprites/*.webp. The entry types are round: Regular a red circle with a !, Hidden a
+// purple circle with an X, Transfer a green dot in a white ring in a green circle, Recurring an orange check, and
+// Spreadsheet a yellow plus. The budget's own lines are triangles: In Bank a green one with a check, below $0 a red
+// one with a no sign, Gains a blue one with a plus, and Costs an orange one with a minus. To change one, replace its
+// file (any square image with a transparent background works; around 90x90 is plenty), then stamp the site
 // (node _tools/stamp.mjs) so browsers get the new one.
 // If an image can't load, its emoji shows instead. Text that can't hold an image (dialogs, suggestion lists,
 // text boxes) shows the device's own emoji in its own colors, so the site words those spots instead where it
@@ -18,14 +20,18 @@
 
   // Each emoji's character (without the U+FE0F that asks for emoji style) and its image
   const SPRITES = new Map([
-    ["\u2757", "/Resources/Sprites/Regular.webp"],   // ❗️
-    ["\u2716", "/Resources/Sprites/Hidden.webp"],    // ✖️
-    ["\u2B55", "/Resources/Sprites/Transfer.webp"],  // ⭕️
-    ["\u2714", "/Resources/Sprites/Recurring.webp"], // ✔️
-    ["\u2795", "/Resources/Sprites/Spreadsheet.webp"] // ➕
+    ["\u2757", "/Resources/Sprites/Regular.webp"],     // ❗️
+    ["\u2716", "/Resources/Sprites/Hidden.webp"],      // ✖️
+    ["\u2B55", "/Resources/Sprites/Transfer.webp"],    // ⭕️
+    ["\u2714", "/Resources/Sprites/Recurring.webp"],   // ✔️
+    ["\u2795", "/Resources/Sprites/Spreadsheet.webp"], // ➕
+    ["\u2705", "/Resources/Sprites/InBank.webp"],      // ✅
+    ["\u26D4", "/Resources/Sprites/Negative.webp"],    // ⛔️
+    ["\u2747", "/Resources/Sprites/Gains.webp"],       // ❇️
+    ["\u2734", "/Resources/Sprites/Costs.webp"]        // ✴️
   ]);
-  const FIND = /([\u2757\u2716\u2B55\u2714\u2795])\uFE0F?/g;
-  const HAS = /[\u2757\u2716\u2B55\u2714\u2795]/;
+  const FIND = /([\u2757\u2716\u2B55\u2714\u2795\u2705\u26D4\u2747\u2734])\uFE0F?/g;
+  const HAS = /[\u2757\u2716\u2B55\u2714\u2795\u2705\u26D4\u2747\u2734]/;
 
   // Text that can't hold an image (or shouldn't change): page titles, scripts, form controls, and the
   // words a missing image shows instead (Layout.js)
