@@ -827,7 +827,7 @@ const BudgetUI = (() => {
     return el;
   }
 
-  // A table's red-orange bar under its column titles runs as one gradient across the whole row (see .dataTable
+  // A table's neon bar under its column titles runs as one gradient across the whole row (see .dataTable
   // th in budgetStyle.css): each title gets the row's width and its own spot in it. Measured from the layout
   // (offsetLeft and offsetWidth, which a zoom animation's transform doesn't change), and again whenever the
   // table changes size. A table can be passed in before it's on the page.

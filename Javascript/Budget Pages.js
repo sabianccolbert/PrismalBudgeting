@@ -58,15 +58,14 @@ function renderRecurringPage(view) {
   renderToolbar("recurring", (origin) => openRecurringPanel(origin, null));
   view.replaceChildren();
 
+  // Monthly and Yearly, under the card's title
   const summary = recurringData[0] || [];
   const monthly = String(summary[2] || "").trim();
   const yearly = String(summary[5] || "").trim();
-  if (monthly || yearly) {
-    const summaryLine = BudgetUI.element("p", "dataSummary", [
-      monthly ? "Monthly: " + monthly : "",
-      yearly ? "Yearly: " + yearly : ""
-    ].filter(Boolean).join("   •   "));
-    view.appendChild(summaryLine);
+  const subtitle = document.getElementById("pageSubtitle");
+  if (subtitle) {
+    subtitle.textContent = [monthly ? "Monthly: " + monthly : "", yearly ? "Yearly: " + yearly : ""].filter(Boolean).join(" • ");
+    subtitle.hidden = !monthly && !yearly;
   }
 
   const rows = indexedRows(recurringData, 2);
@@ -405,7 +404,7 @@ function calculatorForm(inputs) {
 // =====================================================================
 // #region PAGE SEARCH (Tracker and Change Logs)
 // =====================================================================
-// 🔎 Search on the Tracker and Change Logs pages looks through that page's own rows. It floats over the page
+// Search on the Tracker and Change Logs pages looks through that page's own rows. It floats over the page
 // like Home's Search (×, Escape, or the button again closes it), and as you type, it lists the rows that have
 // every word you typed, in any column. On the tracker, tapping a found row opens it.
 
@@ -436,9 +435,12 @@ const PAGE_SEARCHES = {
 
 let pageSearch = null; // { box, input, results, isOpen }, made the first time it opens
 
-// The 🔎 Search button on the Tracker and Change Logs toolbars
+// The Search button on the Tracker and Change Logs toolbars (its magnifying glass is a CSS image, .iconSearch)
 function pageSearchButton() {
-  const button = toolbarButton("🔎 Search", "", () => setPageSearchOpen(!(pageSearch && pageSearch.isOpen)));
+  const button = toolbarButton("Search", "", () => setPageSearchOpen(!(pageSearch && pageSearch.isOpen)));
+  const icon = BudgetUI.element("span", "buttonIcon iconSearch");
+  icon.setAttribute("aria-hidden", "true");
+  button.prepend(icon);
   button.id = "pageSearchButton";
   button.setAttribute("aria-haspopup", "dialog");
   button.setAttribute("aria-controls", "pageSearchBox");
@@ -446,7 +448,7 @@ function pageSearchButton() {
   return button;
 }
 
-// A toolbar with only 🔎 Search (Change Logs)
+// A toolbar with only Search (Change Logs)
 function renderSearchToolbar() {
   const bar = document.getElementById("pageToolbar");
   if (bar) bar.replaceChildren(pageSearchButton());
@@ -560,7 +562,7 @@ function renderPageSearch() {
 // =====================================================================
 
 // New Entry + Edit normally; Delete Selected + Done in edit mode. Other Accounts adds accounts in edit
-// mode instead (newLabel: the add button's label, newInEditMode: show it in edit mode). search: a 🔎 Search
+// mode instead (newLabel: the add button's label, newInEditMode: show it in edit mode). search: a Search
 // button too, outside edit mode (see PAGE SEARCH).
 function renderToolbar(tableName, openNew, { newLabel = "New Entry", newInEditMode = false, search = false } = {}) {
   const bar = document.getElementById("pageToolbar");

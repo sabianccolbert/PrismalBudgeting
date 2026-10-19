@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=1b26847424">
+    <link rel="stylesheet" href="/stylesheet.css?v=d7417ad1bb">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=b347972775">
+    <link rel="stylesheet" href="/budgetStyle.css?v=cf7cf06c2a">
     <title>Prismal Budget - Recurring Entries</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -38,28 +38,53 @@
     <canvas id="constellations"></canvas>
     <div id="transitionContainer">
       <header>
-        <div class="stacked">
-          <h1>Recurring Entries</h1>
-          <h2 translate="no">Prismal Budget</h2>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <div class="brandText">
+            <p class="logo" translate="no"><span class="logoStrong">Prismal</span> Budget</p>
+            <p class="tagline">Track • Plan • Learn</p>
+          </div>
         </div>
-        <nav class="navButtons">
-          <a href="/menu/">
-            <img src="/Resources/Menu.webp?v=342f2c8a5e" alt="Menu">
+        <nav class="navButtons" aria-label="Settings, menu, and logout">
+          <a class="navButton" href="/settings.html">
+            <img class="navIcon" src="/Resources/Icons/Settings.webp?v=edc4359acb" alt="">
+            <span>Settings</span>
           </a>
-          <a href="/">
-            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
+          <a class="navButton" href="/menu/">
+            <img class="navIcon" src="/Resources/Icons/Menu.webp?v=d60f1cd0ff" alt="">
+            <span>Menu</span>
           </a>
-          <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
+          <a id="logoutButton" class="navButton logoutButton" href="logout">
+            <img class="navIcon" src="/Resources/Icons/Logout.webp?v=38a63f5bfb" alt="">
+            <span>Logout</span>
           </a>
         </nav>
       </header>
-      <hr>
       <main>
-        <div id="pageToolbar" class="tableToolbar"></div>
+        <!-- The budget's four pages, as tabs (the one showing glows), beside this page's title and buttons (Budget Pages.js) -->
+        <div class="pageTop">
+          <nav class="pageTabs" aria-label="Budget pages">
+            <a class="pageTab" href="/"><img class="tabIcon" src="/Resources/Icons/Home.webp?v=995586f434" alt=""><span>Home</span></a>
+            <a class="pageTab" href="/menu/recurring.html" aria-current="page"><img class="tabIcon" src="/Resources/Icons/Recurring.webp?v=6724e4afad" alt=""><span>Recurring</span></a>
+            <a class="pageTab" href="/menu/history.html"><img class="tabIcon" src="/Resources/Icons/History.webp?v=74ff13cd2e" alt=""><span>History</span></a>
+            <a class="pageTab" href="/menu/accounts.html"><img class="tabIcon" src="/Resources/Icons/Accounts.webp?v=ced77c103a" alt=""><span>Other Accounts</span></a>
+          </nav>
+          <div class="controlsCard pageControls">
+            <div class="cardHeader">
+              <span class="cardIcon"><img src="/Resources/Icons/Recurring.webp?v=6724e4afad" alt=""></span>
+              <div class="cardHeading">
+                <h1 id="pageTitle" class="cardTitle">Recurring Entries</h1>
+                <p id="pageSubtitle" class="cardSubtitle" hidden></p>
+              </div>
+            </div>
+            <div id="pageToolbar" class="tableToolbar"></div>
+          </div>
+        </div>
         <div id="panelSlot"></div>
-        <p id="dataStatus" class="dataStatus">Loading...</p>
-        <div id="dataView"></div>
+        <section class="budgetCard pageCard" aria-label="Recurring entries">
+          <p id="dataStatus" class="dataStatus">Loading...</p>
+          <div id="dataView"></div>
+        </section>
 
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>

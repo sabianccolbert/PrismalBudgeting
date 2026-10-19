@@ -327,19 +327,19 @@ function setUpBackButton() {
 
   // If we came from Menu or directly from Homepage, hide "back" (avoid weird loops).
   if (CAME_FROM_MENU_PAGE && HOME_BACK || CAME_FROM_HOME_PAGE && NORMAL_BACK || CAME_FROM_LOGIN_PAGE && BACK_LINK) {
-    BACK_LINK.style.display = "none";
+    BACK_LINK.hidden = true;
     return;
   }
 
   // If internal referrer exists, show back and store it for "back" keyword navigation.
   if (IS_INTERNAL_REFERRER && REFERRER) {
-    BACK_LINK.style.display = "block";
+    BACK_LINK.hidden = false;
     writeStored("homepageBackUrl", REFERRER);
     return;
   }
 
   // External/unknown referrer: hide and clear stored back URL.
-  BACK_LINK.style.display = "none";
+  BACK_LINK.hidden = true;
   writeStored("homepageBackUrl", null);
 }
 
@@ -504,6 +504,12 @@ document.addEventListener("click", (EVENT) => {
 
   // Touch swipe that ended on the link: don't navigate
   if (TOUCH && TOUCH.moved) {
+    EVENT.preventDefault();
+    return;
+  }
+
+  // The tab for the page that's already showing (aria-current="page"): nothing to go to
+  if (LINK.getAttribute("aria-current") === "page") {
     EVENT.preventDefault();
     return;
   }

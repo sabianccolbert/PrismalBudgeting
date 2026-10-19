@@ -28,24 +28,21 @@
  *     - circular avatars
  *
  *  8) BUTTONS
- *     - base button typography + hover behavior
+ *     - glass pills, hover behavior, and button icons
  *
- *  9) NAV ICONS
- *     - nav icon hover/active behavior
+ *  9) HEADER
+ *     - logo, title, tagline, and the labeled nav buttons
  *
- * 10) HEADER
- *     - logo, title, and nav buttons
- *
- * 11) SLIDE-IN PAGE TRANSITION SYSTEM
+ * 10) SLIDE-IN PAGE TRANSITION SYSTEM
  *     - #transitionContainer and JS-driven states
  *     - .homeJs / .otherJs / .noJs
  *
- * 12) REDUCED-MOTION ACCESSIBILITY
+ * 11) REDUCED-MOTION ACCESSIBILITY
  *     - disables animated canvas + transitions when requested
  *
- * 13) FORM ELEMENTS (LOGIN/REGISTER), CHECKBOXES, PILL SWITCHES
+ * 12) FORM ELEMENTS (LOGIN/REGISTER), CHECKBOXES, PILL SWITCHES
  *
- * 14) GRADIENT BORDERS
+ * 13) GRADIENT BORDERS
  *
  *  NOTE: Sections use /* #region ... *\/ for editor folding.
  *==============================================================*/
@@ -64,13 +61,45 @@
   --SLIDE_DISTANCE: 100vh;
   --SLIDE_DURATION: 0.6s;
 
-  /* The red glow on text and boxes */
+  /* The red glow on chosen, hovered, and focused controls */
   --SHADOW: 0 0 20px rgba(200, 0, 0, 1);
+  --PICK_SHADOW: 0 0 16px rgba(230, 30, 0, 0.75);
 
-  /* Brand colors: links, and the neutral color of text and borders */
+  /* Brand colors: links, and text (body text, titles and dates, and labels and hints) */
   --LINK_LIGHT: #ee0000;
   --LINK_DARK:  #550000;
-  --BASE_COLOR: #bdbdbd;
+  --BASE_COLOR: #c9cce4;
+  --TEXT_BRIGHT: #f2f3ff;
+  --TEXT_DIM: #9297bd;
+
+  /* Neon accents */
+  --NEON_BLUE: #4f7bff;
+  --NEON_VIOLET: #8d5cff;
+  --NEON_CYAN: #46c8ff;
+  --NEON_PINK: #e050ff;
+  --TITLE_GLOW: 0 0 14px rgba(110, 120, 255, 0.45);
+
+  /* Glass: the cards, tabs, and buttons the page sits on, over the starfield (see-through enough for the stars, dark
+     enough to read on). Its edge is a faint blue line. */
+  --GLASS: linear-gradient(180deg, rgba(24, 26, 70, 0.84), rgba(11, 11, 36, 0.88));
+  --GLASS_BUTTON: rgba(18, 20, 56, 0.72);
+  --GLASS_LINE: rgba(128, 140, 255, 0.24);
+  --GLASS_LINE_BRIGHT: rgba(150, 165, 255, 0.45);
+  --GLASS_SHADOW: 0 10px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --GLASS_RADIUS: 16px;
+
+  /* Glowing things (the page that's showing, today on the calendar, Quick Entry): a blue-violet radial gradient from
+     their center, a bright edge, and a glow around them */
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(104, 124, 255, 0.55) 0%, rgba(92, 64, 235, 0.3) 45%, rgba(40, 24, 130, 0.12) 75%, rgba(20, 16, 70, 0.05) 100%);
+  --GLOW_EDGE: rgba(150, 165, 255, 0.9);
+  --GLOW_SHADOW: 0 0 16px rgba(96, 112, 255, 0.55), inset 0 0 12px rgba(120, 140, 255, 0.25);
+
+  /* Chosen, hovered, and focused buttons: the red-orange gradient border and red glow, over a red radial gradient from
+     their center (see GRADIENT BORDERS at the end) */
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 96, 40, 0.42) 0%, rgba(214, 24, 24, 0.22) 50%, rgba(120, 0, 30, 0.08) 85%, transparent 100%);
+
+  /* How wide the page's content gets */
+  --PAGE_WIDTH: min(94vw, 1200px);
 
   /* Transition speeds, shared so every control moves the same way */
   --SLOW_TRANSFORM: 0.3s ease-out;
@@ -226,10 +255,6 @@ body {
  *  are an image instead of a line.
  */
 
- .logo{
-  text-shadow: 0 0 10px rgb(0, 0, 0);
- }
-
 h3 {
   font-size: 12vmin;
 }
@@ -245,21 +270,18 @@ p {
 
 
 footer p, footer a{
-  font-size: 3vmin;
+  font-size: clamp(12px, 2.4vmin, 16px);
   padding: 2vmin;
+  color: var(--TEXT_DIM);
 }
 
-/* Divider art */
+/* Dividers: a thin neon line that fades out at both ends */
 hr {
-  width: 75vw;
-  height: 4px;
+  width: min(75vw, 900px);
+  height: 1px;
   border: none;
-
-  /* An image instead of a plain line */
-  background-image: url("/Resources/Hr.webp?v=7c2fbe9896");
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: center;
+  background: linear-gradient(90deg, transparent, rgba(110, 125, 255, 0.65) 25%, rgba(170, 95, 255, 0.65) 75%, transparent);
+  box-shadow: 0 0 8px rgba(120, 110, 255, 0.45);
 }
 
 /* Smaller divider variant */
@@ -328,8 +350,8 @@ a:hover {
 /*========================================*
  *  7) IMAGES
  *========================================*
- *  Images are round by default (the logo, nav icons, and Dave's picture start from this). The ❗️ ✖️ ⭕️ ✔️
- *  sprites have their own rule (img.sprite, near the end).
+ *  Images are round by default (the logo and Dave's picture start from this). Icons (.navIcon, .tabIcon, a
+ *  card's icon) and the sprites (img.sprite, near the end) have their own rules.
  */
 
 img {
@@ -348,7 +370,8 @@ img {
 /*========================================*
  *  8) BUTTONS
  *========================================*
- *  Pill-shaped buttons, and how they look on hover (the gradient border: GRADIENT BORDERS).
+ *  Pill-shaped glass buttons, and how they look on hover: they grow a little, and get the red-orange gradient
+ *  border, a red glow, and a red radial gradient from their center (GRADIENT BORDERS).
  */
 
 button {
@@ -363,11 +386,12 @@ button {
 
   object-fit: contain;
 
-  border: 3px solid var(--BASE_COLOR);
+  border: 1.5px solid var(--GLASS_LINE_BRIGHT);
   border-radius: 9999px;
-  background: transparent;
+  background: var(--GLASS_BUTTON);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  color: var(--BASE_COLOR);
+  color: var(--TEXT_BRIGHT);
   font-family: 'Main Font', sans-serif;
   font-size: 5vmin;
 
@@ -379,36 +403,41 @@ button {
 }
 
 button:hover {
-  /* It grows, glows, and turns red (the border turns into the gradient: GRADIENT BORDERS) */
+  /* It grows and glows (the border and fill turn red: GRADIENT BORDERS) */
   transform: scale(1.05);
 
-  text-shadow: var(--SHADOW);
-  color: var(--LINK_LIGHT);
+  text-shadow: 0 0 10px rgba(255, 60, 0, 0.85);
+  color: #fff;
 
-  box-shadow: var(--SHADOW);
+  box-shadow: var(--PICK_SHADOW);
 }
+
+/* A button's small picture before its words (Undo, Redo, Search, Quick Entry): an image from Resources/Icons, as a
+   background, so a button made by a script can have one too */
+.buttonIcon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 1.15em;
+  height: 1.15em;
+  background: center / contain no-repeat;
+}
+
+.iconUndo   { background-image: url("/Resources/Icons/Undo.webp?v=e50d463c17"); }
+.iconRedo   { background-image: url("/Resources/Icons/Redo.webp?v=7f58fc6f43"); }
+.iconSearch { background-image: url("/Resources/Icons/Search.webp?v=46152f5765"); }
+.iconQuick  { background-image: url("/Resources/Icons/QuickEntry.webp?v=a219571ba6"); }
 
 /* #endregion 8) BUTTONS */
 
 
 
-/* #region 9) NAV ICONS */
+/* #region 9) HEADER */
 /*========================================*
- *  9) NAV ICONS
- *========================================*/
-
-/* Nav icon glow (the link grows a little, and its gradient border is drawn on the link: GRADIENT BORDERS) */
-.navButtons a:hover img,
-.navButtons a:active img {
-  box-shadow: var(--SHADOW);
-}
-
-/* #endregion 9) NAV ICONS */
-
-/* #region 10) HEADER */
-/*========================================*
- *  HEADER & NAVIGATION BAR
- *========================================*/
+ *  9) HEADER
+ *========================================*
+ *  Every page's header: the logo and the page's name (Home and its tabs: Prismal Budget, with its tagline) at the
+ *  left, and its buttons at the right, each an icon over its name on a glass tile.
+ */
 header {
   display: flex;
   flex-direction: row;
@@ -419,89 +448,167 @@ header {
   box-sizing: border-box;
 }
 
-/* Left Side: Logo and Title grouping */
+/* The page's own header, as wide as its content */
+#transitionContainer > header {
+  gap: clamp(8px, 2vw, 24px);
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2.2vmin, 22px);
+  padding: clamp(6px, 1.5vmin, 14px) 0 0;
+}
+
+/* Left side: the logo and the page's name */
 header .brand {
   display: flex;
   align-items: center;
-  gap: 3vw;
+  gap: clamp(8px, 2vw, 18px);
+  min-width: 0;
 }
 
-/* Shrink the main logo image. It never gets narrower than it is tall (the header's row would shrink its
-   width on a skinny screen, but not its height). */
+/* The logo never gets narrower than it is tall (the header's row would shrink its width on a skinny screen, but not
+   its height) */
 header .brand-icon {
   flex-shrink: 0;
-  width: 12vmin;
-  height: 12vmin;
+  width: clamp(40px, 10vmin, 76px);
+  height: clamp(40px, 10vmin, 76px);
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
+  filter: drop-shadow(0 0 10px rgba(130, 100, 255, 0.45));
 }
 
-/* The page's name in the header: smaller than a usual h2, to fit the header */
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+
+/* The name: "Prismal" heavier than "Budget" */
 header .logo {
   margin: 0;
-  font-size: 4.5vmin;
+  font-size: clamp(17px, 4.6vmin, 36px);
+  font-weight: normal;
+  line-height: 1.1;
   text-align: left;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
-/* Modifier for when the brand section is just stacked text (H1 + H2 without logo) */
+.logoStrong {
+  font-weight: bold;
+}
+
+.tagline {
+  margin: 0.3em 0 0;
+  font-size: clamp(10px, 2.3vmin, 16px);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  color: var(--TEXT_BRIGHT);
+  opacity: 0.85;
+}
+
+/* A page's name over "Prismal Budget" (Settings, the menu's pages, and the rest) */
 header .stacked {
-  flex-direction: column;
-  align-items: flex-start;
   justify-content: center;
-  gap: 1vmin; /* Tight spacing between title and subtitle */
+  gap: 0.3em;
 }
 
-/* Header Title (H1) */
 header .stacked h1 {
   margin: 0;
-  font-size: 4vmin;
+  font-size: clamp(17px, 4.2vmin, 32px);
+  font-weight: normal;
   text-align: left;
-  line-height: 1.2;
+  line-height: 1.15;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
 }
 
-/* Header Subtitle (H2 overridden for the stacked variant) */
 header .stacked h2 {
   margin: 0;
-  font-size: 3vmin;
+  font-size: clamp(11px, 2.4vmin, 16px);
   text-align: left;
   font-weight: normal;
-  opacity: 0.7; /* Dims the subtitle slightly for visual hierarchy */
+  color: var(--TEXT_DIM);
 }
 
-/* Right Side: Nav Buttons */
+/* The narrowest phones have no room for the tagline beside the buttons, and a page's one-word name (like
+   Spreadsheets) is a little smaller there, so it fits */
+@media (max-width: 339px) {
+  .tagline {
+    display: none;
+  }
+
+  header .stacked h1 {
+    font-size: 15px;
+  }
+}
+
+/* Right side: the page's buttons (Settings, Menu, Logout, Home, Back), each an icon over its name */
 .navButtons {
   display: flex;
   flex-direction: row;
+  flex-shrink: 0;
   align-items: center;
+  gap: clamp(5px, 1.4vw, 14px);
   margin: 0; /* No auto margins, so it stays right-aligned */
 }
 
-/* Shrink the spacing between nav links so they fit side-by-side. Each link is exactly its icon's size, so
-   its gradient border (GRADIENT BORDERS) lands on the icon's border. */
-.navButtons a {
+.navButtons a.navButton {
   position: relative;
-  display: inline-flex;
-  margin: 0 2vw;
-  padding: 0;
-  border-radius: 30%;
-}
-
-/* Keep nav icons slightly prominent */
-.navButtons img {
-  width: 12vmin;
-  height: 12vmin;
-  padding: 0;
-  border-radius: 30%;
-  border: 3px solid var(--BASE_COLOR);
-  object-fit: cover;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  box-sizing: border-box;
+  width: clamp(48px, 14.5vw, 96px);
+  height: clamp(54px, 14.5vw, 84px);
+  margin: 0;
+  padding: 0.3em 0.2em;
+  font-size: clamp(10px, 2.7vw, 14px);
+  line-height: 1;
+  color: var(--TEXT_BRIGHT);
+  text-decoration: none;
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: 14px;
+  box-shadow: var(--GLASS_SHADOW);
   transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER);
 }
-/* #endregion 10) HEADER */
 
-/* #region 11) SLIDE-IN PAGE TRANSITION SYSTEM */
+.navButtons a.navButton:hover,
+.navButtons a.navButton:focus-visible {
+  transform: scale(1.05);
+  color: #fff;
+  text-shadow: none;
+  outline: none;
+  box-shadow: var(--PICK_SHADOW);
+}
+
+.navIcon {
+  width: clamp(22px, 6vw, 36px);
+  height: clamp(22px, 6vw, 36px);
+  border-radius: 0;
+  object-fit: contain;
+}
+
+/* Each icon glows in its own color (the colored ones are dark on their own, so they're lifted a little) */
+.navIcon[src*="/Settings."] { filter: brightness(1.35) drop-shadow(0 0 6px rgba(40, 100, 255, 0.85)); }
+.navIcon[src*="/Menu."]     { filter: drop-shadow(0 0 6px rgba(40, 220, 40, 0.6)); }
+.navIcon[src*="/Logout."]   { filter: brightness(1.2) drop-shadow(0 0 6px rgba(230, 0, 200, 0.7)); }
+.navIcon[src*="/Home."],
+.navIcon[src*="/Undo."]     { filter: drop-shadow(0 0 5px rgba(170, 180, 255, 0.6)); }
+
+/* Logout's name is pink, like its icon */
+.logoutButton span {
+  color: #ec7dff;
+}
+
+/* #endregion 9) HEADER */
+
+/* #region 10) SLIDE-IN PAGE TRANSITION SYSTEM */
 /*========================================*
- *  11) SLIDE-IN PAGE TRANSITION SYSTEM
+ *  10) SLIDE-IN PAGE TRANSITION SYSTEM
  *========================================*
  *  #transitionContainer holds the whole page. Layout.js gives it .ready once it has slid in (its
  *  resting place) and .slide-out when a link is followed. Boot.js gives html .homeJs on Home and
@@ -564,13 +671,13 @@ header .stacked h2 {
   text-shadow: 0 0 10px rgb(0, 0, 0);
 }
 
-/* #endregion 11) SLIDE-IN PAGE TRANSITION SYSTEM */
+/* #endregion 10) SLIDE-IN PAGE TRANSITION SYSTEM */
 
 
 
-/* #region 12) REDUCED-MOTION ACCESSIBILITY */
+/* #region 11) REDUCED-MOTION ACCESSIBILITY */
 /*========================================*
- *  12) REDUCED-MOTION ACCESSIBILITY
+ *  11) REDUCED-MOTION ACCESSIBILITY
  *========================================*
  *  When users request reduced motion:
  *   1) remove the animated canvas layer
@@ -595,7 +702,7 @@ header .stacked h2 {
   }
 }
 
-/* #endregion 12) REDUCED-MOTION ACCESSIBILITY */
+/* #endregion 11) REDUCED-MOTION ACCESSIBILITY */
 
 /* An image that couldn't load (Layout.js) shows its words instead, in the same spot and size */
 .missingImage {
@@ -610,8 +717,8 @@ header .stacked h2 {
   overflow-wrap: anywhere;
 }
 
-/* The ❗️ ✖️ ⭕️ ✔️ images (Sprites.js): sized like the letters around them, wherever they are. Not the round
-   pictures every other img is (section 7). */
+/* The entry types' and In Bank, Gains, and Costs images (Sprites.js): sized like the letters around them, wherever
+   they are. Not the round pictures every other img is (section 7). */
 img.sprite {
   display: inline-block;
   width: 1.15em;
@@ -645,7 +752,7 @@ img.sprite {
 }
 
 /*========================================*
- *  13) FORM ELEMENTS (LOGIN/REGISTER)
+ *  12) FORM ELEMENTS (LOGIN/REGISTER)
  *========================================*/
 form {
   display: flex;
@@ -670,14 +777,14 @@ input {
   width: 60vw;
   max-width: 400px;
 
-  /* Match the button pill aesthetic */
-  background: transparent;
-  border: 3px solid var(--BASE_COLOR);
+  /* A glass pill, like the buttons */
+  background: rgba(8, 10, 32, 0.6);
+  border: 1.5px solid var(--GLASS_LINE_BRIGHT);
   border-radius: 9999px;
 
   /* Match typography. A steady size (one that grows with the screen gets huge on wide ones); 16px at
      least, so phones don't zoom in when a box is tapped. */
-  color: var(--BASE_COLOR);
+  color: var(--TEXT_BRIGHT);
   font-family: 'Main Font', sans-serif;
   font-size: clamp(16px, 3.4vmin, 21px);
   text-align: center;
@@ -707,14 +814,13 @@ input[type="date"]::-webkit-date-and-time-value {
   text-align: center;
 }
 
-/* Hover and focus states (the border turns into the gradient: GRADIENT BORDERS) */
+/* Hover and focus states: it grows a little and glows red (the border turns into the gradient: GRADIENT BORDERS) */
 input:hover,
 input:focus {
   outline: none;
   transform: scale(1.05);
-  text-shadow: var(--SHADOW);
-  box-shadow: var(--SHADOW);
-  color: var(--LINK_LIGHT);
+  box-shadow: var(--PICK_SHADOW);
+  color: #fff;
 }
 .hidden {
   display: none !important;
@@ -736,7 +842,7 @@ input:focus {
   line-height: 1.4;
   text-align: center;
   color: var(--BASE_COLOR);
-  background: rgba(10, 0, 50, 0.97);
+  background: linear-gradient(160deg, rgba(36, 26, 100, 0.98), rgba(14, 16, 56, 0.98));
   border: 2px solid transparent; /* The gradient border: GRADIENT BORDERS */
   border-radius: 14px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 14px rgba(200, 0, 0, 0.35);
@@ -777,11 +883,11 @@ input[type="checkbox"].pillSwitch {
   height: var(--SWITCH_H);
   -webkit-appearance: none;
   appearance: none;
-  border: 2px solid var(--BASE_COLOR);
+  border: 2px solid var(--GLASS_LINE_BRIGHT);
   border-radius: 9999px;
   background:
     radial-gradient(circle closest-side, var(--BASE_COLOR) 90%, transparent 100%) left 2px center / var(--KNOB) var(--KNOB) no-repeat,
-    rgba(0, 0, 0, 0.35);
+    rgba(8, 10, 32, 0.6);
   transition: background-position 0.2s ease, border-color 0.2s ease, box-shadow var(--SLOW_SHADOW);
 }
 
@@ -848,6 +954,8 @@ input[type="checkbox"].pillSwitch:disabled {
   margin-top: 2vmin;
   padding: 0.3em 0.8em;
   border: none;
+  background: none;
+  box-shadow: none;
   font-size: 4vmin;
 }
 
@@ -855,28 +963,103 @@ input[type="checkbox"].pillSwitch:disabled {
   box-shadow: none;
 }
 
+/* The login page's form, on a glass card: its boxes and buttons as wide as the card, with steady text sizes */
+.authCard {
+  box-sizing: border-box;
+  width: min(92vw, 460px);
+  margin: clamp(8px, 3vmin, 32px) auto 4vmin;
+  padding: clamp(18px, 4vmin, 34px) clamp(16px, 4vmin, 34px);
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: 20px;
+  box-shadow: var(--GLASS_SHADOW), 0 0 30px rgba(90, 90, 255, 0.15);
+}
+
+.authCard form {
+  align-items: stretch;
+}
+
+.authCard form > div {
+  width: 100%;
+}
+
+.authCard label {
+  display: block;
+  margin: 0 0 0.35em;
+  font-size: clamp(14px, 3.2vmin, 17px);
+  text-align: left;
+  color: var(--TEXT_DIM);
+}
+
+.authCard input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0 0 1.1em;
+}
+
+.authCard input:not([type="checkbox"]):hover,
+.authCard input:not([type="checkbox"]):focus {
+  transform: scale(1.02);
+}
+
+.authCard button {
+  width: 100%;
+  margin: 0.7em 0 0;
+  font-size: clamp(15px, 3.4vmin, 19px);
+}
+
+.authCard .textButton {
+  align-self: center;
+  width: auto;
+  margin: 0.9em auto 0;
+  font-size: clamp(13px, 2.9vmin, 16px);
+  color: var(--TEXT_DIM);
+}
+
+.authCard .textButton:hover {
+  color: #fff;
+}
+
+.authCard .termsField,
+.authCard .formHint {
+  max-width: none;
+  font-size: clamp(13px, 2.9vmin, 16px);
+}
+
+/* Its switches sit beside their words (the card's labels are otherwise a line of their own) */
+.authCard .termsField {
+  display: flex;
+  margin: 0.2em 0 0.9em;
+  color: var(--BASE_COLOR);
+}
+
+.authCard #status-message {
+  margin: 0.4em 0 0;
+  font-size: clamp(13px, 2.9vmin, 16px);
+}
+
 /*========================================*
- *  14) GRADIENT BORDERS
+ *  13) GRADIENT BORDERS
  *========================================*
  *  Chosen, hovered, and focused controls get a red-orange diagonal gradient border (--EDGE_GRADIENT).
- *   - Buttons, button-like links, nav icons, panels, and notices draw it as a ring over their own border
+ *   - Buttons, button-like links, nav buttons, panels, and notices draw it as a ring over their own border
  *     (the ::before below), which keeps their round corners and see-through backgrounds. --EDGE_WIDTH is
- *     their border's width; a nav icon's link draws it right on the icon's border (--EDGE_OUTSET: 0).
+ *     how thick it is, and --EDGE_OUTSET how far outside the padding it starts (their border's width, unless set).
+ *   - The buttons also get a red radial gradient from their center (--PICK_FILL) over their glass.
  *   - Text boxes can't have a ::before, so they paint the gradient as a background under a solid fill
  *     (--EDGE_FILL: the box's color while it's focused, set by what it's in).
  */
 :root {
-  --EDGE_FILL: rgb(4, 0, 22);
+  --EDGE_FILL: rgb(10, 11, 34);
 }
 
 button,
 a.budgetButton {
   position: relative; /* The ring's frame */
-  --EDGE_WIDTH: 3px;
+  --EDGE_WIDTH: 2px;
 }
 
-.budgetButton,
-.helpButton,
 .budgetPanel,
 .idleWarning {
   --EDGE_WIDTH: 2px;
@@ -886,9 +1069,10 @@ a.budgetButton {
   --EDGE_WIDTH: 1.5px;
 }
 
+/* The nav buttons' edge is 1px: the ring starts at its outside and runs 2px in */
 .navButtons a {
-  --EDGE_WIDTH: 3px;
-  --EDGE_OUTSET: 0px;
+  --EDGE_WIDTH: 2px;
+  --EDGE_OUTSET: 1px;
 }
 
 button:not([class]):hover,
@@ -899,12 +1083,28 @@ button:not([class]):hover,
 .fieldHelpButton:hover,
 .fieldHelpButton:focus-visible,
 .fieldHelpButton[aria-expanded="true"],
-.newEntryButton .newEntryPlus,
 .budgetPanel.prismDraft,
 .idleWarning,
 .navButtons a:hover,
 .navButtons a:focus-visible {
   border-color: transparent;
+}
+
+/* The buttons among them also get the red radial gradient from their center */
+button:not([class]):hover,
+.helpButton:hover,
+.budgetButton.primary,
+.budgetButton:not(.danger):not(:disabled):hover,
+.segmented .budgetButton[aria-checked="true"],
+.fieldHelpButton:hover,
+.fieldHelpButton:focus-visible,
+.fieldHelpButton[aria-expanded="true"] {
+  background: var(--PICK_FILL), var(--GLASS_BUTTON);
+}
+
+.navButtons a:hover,
+.navButtons a:focus-visible {
+  background: var(--PICK_FILL), var(--GLASS);
 }
 
 button:not([class]):hover::before,
@@ -915,7 +1115,6 @@ button:not([class]):hover::before,
 .fieldHelpButton:hover::before,
 .fieldHelpButton:focus-visible::before,
 .fieldHelpButton[aria-expanded="true"]::before,
-.newEntryButton .newEntryPlus::before,
 .budgetPanel.prismDraft::before,
 .idleWarning::before,
 .navButtons a:hover::before,
@@ -930,11 +1129,6 @@ button:not([class]):hover::before,
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   pointer-events: none;
-}
-
-.navButtons a:hover img,
-.navButtons a:focus-visible img {
-  border-color: transparent;
 }
 
 input:not([type="checkbox"]):not([type="range"]):not([type="number"]):not([type="date"]):hover,

@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.14.2026.F";
+  const SITE_VERSION = "10.19.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,13 +26,13 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "8a0658893b",
-    "/Javascript/Budget Search.js": "6f91b4418f",
-    "/Javascript/Budget UI.js": "9a956cf32a",
-    "/Javascript/Calendar Page.js": "e4c3a1d599",
+    "/Javascript/Budget Pages.js": "3361e09d25",
+    "/Javascript/Budget Search.js": "004d447dae",
+    "/Javascript/Budget UI.js": "637d78baa9",
+    "/Javascript/Calendar Page.js": "39cf9c4001",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "db0a65a1df",
+    "/Javascript/Layout.js": "e35bff5b32",
     "/Javascript/Login.js": "44f2e77ba4",
     "/Javascript/Passkeys.js": "67a10905c2",
     "/Javascript/Process Budget.js": "2ff05a8e16",
@@ -41,14 +41,18 @@
     "/Javascript/Settings Page.js": "f9d240e969",
     "/Javascript/Sheet Import.js": "3bf75b5912",
     "/Javascript/Spreadsheets Page.js": "9841bde22d",
-    "/Javascript/Spreadsheets.js": "835846fb44",
-    "/Javascript/Sprites.js": "4f0c83ae83",
+    "/Javascript/Spreadsheets.js": "a1b13cbfeb",
+    "/Javascript/Sprites.js": "5b494b26db",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
-    "/Resources/Sprites/Hidden.webp": "9c3afd2c80",
+    "/Resources/Sprites/Costs.webp": "6c239b521e",
+    "/Resources/Sprites/Gains.webp": "a5e3b75e17",
+    "/Resources/Sprites/Hidden.webp": "cb92741fc5",
+    "/Resources/Sprites/InBank.webp": "40a6bd5f60",
+    "/Resources/Sprites/Negative.webp": "9bfda25302",
     "/Resources/Sprites/Recurring.webp": "f35a230cbd",
-    "/Resources/Sprites/Regular.webp": "11a1321f81",
+    "/Resources/Sprites/Regular.webp": "660dede305",
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
-    "/Resources/Sprites/Transfer.webp": "0b848dff24",
+    "/Resources/Sprites/Transfer.webp": "4387708852",
     "/Resources/Star.webp": "f2d3021d0b"
   };
   // </stamp:files>
@@ -190,7 +194,7 @@
    * =============================== */
   // Starfield Setup goes first, so the stars start right away (Boot.js has already started its worker, see
   // above), and it has to come before Keyboard and Layout, which use window.STARFIELD. Then Sprites, so the
-  // ❗️ ✖️ ⭕️ ✔️ ➕ images are in before the page slides in.
+  // emoji's images (the entry types, and In Bank, Gains, and Costs) are in before the page slides in.
   const GLOBAL_SCRIPTS = [
     "/Javascript/Starfield Setup.js",
     "/Javascript/Sprites.js",

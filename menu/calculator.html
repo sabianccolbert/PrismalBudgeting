@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=1b26847424">
+    <link rel="stylesheet" href="/stylesheet.css?v=d7417ad1bb">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=b347972775">
+    <link rel="stylesheet" href="/budgetStyle.css?v=cf7cf06c2a">
     <title>Prismal Budget - Paycheck Calculator</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -38,23 +38,28 @@
     <canvas id="constellations"></canvas>
     <div id="transitionContainer">
       <header>
-        <div class="stacked">
-          <h1>Paycheck Calculator</h1>
-          <h2 translate="no">Prismal Budget</h2>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <div class="brandText stacked">
+            <h1>Paycheck Calculator</h1>
+            <h2 translate="no">Prismal Budget</h2>
+          </div>
         </div>
-        <nav class="navButtons">
-          <a href="/menu/">
-            <img src="/Resources/Menu.webp?v=342f2c8a5e" alt="Menu">
+        <nav class="navButtons" aria-label="Pages">
+          <a class="navButton" href="/menu/">
+            <img class="navIcon" src="/Resources/Icons/Menu.webp?v=d60f1cd0ff" alt="">
+            <span>Menu</span>
           </a>
-          <a href="/">
-            <img src="/Resources/Home.webp?v=48230dfc70" alt="Home">
+          <a class="navButton" href="/">
+            <img class="navIcon" src="/Resources/Icons/Home.webp?v=995586f434" alt="">
+            <span>Home</span>
           </a>
-          <a id="logoutButton" href="logout">
-            <img src="/Resources/Logout.webp?v=0ffd8c236c" alt="Logout">
+          <a id="logoutButton" class="navButton logoutButton" href="logout">
+            <img class="navIcon" src="/Resources/Icons/Logout.webp?v=38a63f5bfb" alt="">
+            <span>Logout</span>
           </a>
         </nav>
       </header>
-      <hr>
       <main>
         <div id="pageToolbar" class="tableToolbar"></div>
         <div id="panelSlot"></div>
