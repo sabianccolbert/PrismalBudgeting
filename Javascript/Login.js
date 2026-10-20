@@ -1,7 +1,8 @@
-// Login: the sign-in page. Signing in (with the username or email and the password, or a passkey), creating an
-// account, Forgot Password and the reset link, turning passkey sign-in on right after a password sign-in, and the
-// links emails carry: verifying the account's email, and confirming another email for spreadsheets. The API checks
-// everything again; the checks here only say what's wrong sooner.
+// Login: the sign-in page. Signing in (with the username or an email of the account and the password, or a passkey:
+// the one this device last used is tried by itself), creating an account, Forgot Password and the reset link, turning
+// passkey sign-in on right after a password sign-in, and the links emails carry: verifying the account's email, and
+// confirming another email of the account's. The API checks everything again; the checks here only say what's wrong
+// sooner.
 
 const authForm = document.getElementById('auth-form');
 const pageTitle = document.querySelector('header .logo');
@@ -10,9 +11,6 @@ const usernameInput = document.getElementById('username');
 const usernameLabel = document.getElementById('username-label');
 const emailInput = document.getElementById('email');
 const birthdateInput = document.getElementById('birthdate');
-// The date box can't pick a day after today (local time)
-const pageOpened = new Date();
-birthdateInput.max = [pageOpened.getFullYear(), pageOpened.getMonth() + 1, pageOpened.getDate()].map(n => String(n).padStart(2, '0')).join('-');
 const passwordInput = document.getElementById('password');
 const passwordLabel = document.getElementById('password-label');
 const verifyInput = document.getElementById('verify-password');
@@ -65,16 +63,32 @@ function passwordProblem(value) {
 }
 
 // Prismal Budget is for people 18 and older (the API's readBirthdate): an account can't be made for anyone younger.
-// value: the date box's "YYYY-MM-DD".
+// The birth date is typed in this device's date format (a 2-digit year is a past one: 90 is 1990), or picked on a
+// calendar (its button, from Dates.js, up to today), and goes to the API as YYYY-MM-DD.
 const MIN_AGE = 18;
 const MAX_AGE = 120;
-function birthdateProblem(value) {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return 'Enter your birth date.';
-  const [year, month, day] = match.slice(1).map(Number);
+const pageOpened = createSafeMidnight(new Date());
+birthdateInput.placeholder = datePattern();
+birthdateInput.translate = false;
+birthdateInput.after(DatePicker.button(birthdateInput, {
+  label: 'Birth date',
+  min: new Date(pageOpened.getFullYear() - MAX_AGE, pageOpened.getMonth(), pageOpened.getDate()),
+  max: pageOpened,
+  today: false,
+  pastYears: true
+}));
+
+// The birth date typed (or picked), as a Date (an invalid one when it isn't a real day)
+function typedBirthdate() {
+  return birthdateInput.value.trim() ? parseTypedDate(birthdateInput.value, { pastYears: true }) : new Date(NaN);
+}
+
+// What's wrong with the birth date, or '' when it's fine
+function birthdateProblem(date) {
+  if (isNaN(date.getTime())) return birthdateInput.value.trim() ? `That birth date isn't a real day. Use ${datePattern()}.` : 'Enter your birth date.';
   const now = new Date();
-  let age = now.getFullYear() - year;
-  if (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day)) age--;
+  let age = now.getFullYear() - date.getFullYear();
+  if (now.getMonth() < date.getMonth() || (now.getMonth() === date.getMonth() && now.getDate() < date.getDate())) age--;
   if (age < 0 || age > MAX_AGE) return 'Enter your birth date.';
   if (age < MIN_AGE) return `Prismal Budget is for people ${MIN_AGE} and older, so an account can't be made for someone younger.`;
   return '';
@@ -95,9 +109,9 @@ document.getElementById('passkey-label').textContent = `Turn on passkey sign-in$
 // The link in a password reset email is /login.html?reset=<token>. The code moves out of the address
 // right away (into this tab's session storage, so a reload still works), so it isn't left showing in the
 // address bar or saved in the browser's history. The link in an email verification email,
-// /login.html?verify=<token>, and the one that confirms another email for spreadsheets (Other Emails on the
-// Spreadsheets page), /login.html?sheet-email=<token>, are checked with the API as soon as the page opens, and
-// leave the address too.
+// /login.html?verify=<token>, and the one that confirms another email of the account's (Other Emails, in Settings
+// under Email), /login.html?sheet-email=<token>, are checked with the API as soon as the page opens, and leave the
+// address too.
 const pageParams = new URLSearchParams(location.search);
 const RESET_TOKEN_KEY = 'prismal_reset_token';
 let resetToken = pageParams.get('reset');
@@ -142,7 +156,7 @@ const MODES = {
   },
   forgot: {
     title: 'Reset Your Password',
-    hint: "Enter your account's email, and we'll send you a link to choose a new password.",
+    hint: "Enter your account's email (or another email you added to it), and we'll send you a link to choose a new password.",
     groups: ['email-group'],
     primary: 'Send Reset Link',
     toggle: 'Back to Login'
@@ -171,7 +185,7 @@ const MODES = {
     primary: signedInHere ? 'Open Spreadsheets' : 'Sign In',
     toggle: signedInHere ? 'Go Home' : ''
   },
-  // The link that confirms another email for spreadsheets (the same next steps as verify)
+  // The link that confirms another email of the account's (the same next steps as verify)
   sheetEmail: {
     title: 'Confirm Your Email',
     groups: [],
@@ -281,7 +295,7 @@ authForm.addEventListener('submit', async (e) => {
     return;
   }
   if (mode === 'create') {
-    const problem = birthdateProblem(birthdateInput.value);
+    const problem = birthdateProblem(typedBirthdate());
     if (problem) {
       setStatus(problem);
       return;
@@ -308,7 +322,7 @@ authForm.addEventListener('submit', async (e) => {
 
   const requests = {
     login: ['/api/login', { username, password }],
-    create: ['/api/register', { username, email, birthdate: birthdateInput.value, password, agreedToTerms: true, turnstileToken }],
+    create: ['/api/register', { username, email, birthdate: mode === 'create' ? formatToYMD(typedBirthdate()) : '', password, agreedToTerms: true, turnstileToken }],
     forgot: ['/api/password/forgot', { email }],
     reset: ['/api/password/reset', { token: resetToken, password }]
   };
@@ -404,8 +418,8 @@ async function verifyEmailLink(token) {
   }
 }
 
-// The link that confirms another email for spreadsheets: the API confirms it for the account that added it (signed
-// in or not)
+// The link that confirms one of the account's other emails (Settings, under Email): the API confirms it for the account
+// that added it (signed in or not). Then it signs in to that account too, and its spreadsheets can be connected.
 async function confirmSheetEmailLink(token) {
   setMode('sheetEmail');
   setStatus('Confirming the email...', true);
@@ -413,9 +427,9 @@ async function confirmSheetEmailLink(token) {
   const { ok, status, data } = await api('/api/sheets/emails/verify', { token });
   primaryBtn.disabled = false;
   if (ok && data.success) {
-    setStatus(`${data.email} is confirmed! Spreadsheets it shares with admin@prismalbudget.org can be connected to ${data.username} now (Menu, then Spreadsheets).`, true);
+    setStatus(`${data.email} is confirmed! It signs in to ${data.username} now (with that account's password), and spreadsheets it shares with admin@prismalbudget.org can be connected (Menu, then Spreadsheets).`, true);
   } else if (data.expired) {
-    setStatus("That link has expired, a newer one was sent, or the email was removed. Add it again under Other Emails on the Spreadsheets page for a new link.");
+    setStatus("That link has expired, a newer one was sent, or the email was removed. Add it again in Settings, under Email (Other Emails), for a new link.");
   } else {
     setStatus(status === 0 ? "Failed to connect to the server. Open the link again to try once more." : (data.error || "An error occurred."));
   }
@@ -508,9 +522,12 @@ const signInIsFresh = () => !!signInReady && Date.now() - signInReady.at < Passk
 // waits there until one is picked. Safari only lets a tap start the device's check if the tap doesn't have
 // to wait on the server first, which is why the challenge is fetched ahead even without autofill.
 async function startPasskeyAutofill() {
-  await stopPasskeyAutofill();
+  // (Its run is taken as it stops the last one, so a stop while that closes, like the last passkey being tried by
+  // itself, makes this one give up: the browser takes one passkey request at a time)
+  const stopped = stopPasskeyAutofill();
   const run = autofillRun;
-  if (!Passkeys.usable || mode !== 'login') return;
+  await stopped;
+  if (run !== autofillRun || !Passkeys.usable || mode !== 'login') return;
   if (!signInIsFresh() && await prepareSignIn()) return;
   if (run !== autofillRun || mode !== 'login') return;
   autofillTimer = setTimeout(startPasskeyAutofill, Passkeys.FRESH_MS);
@@ -603,16 +620,48 @@ passkeyBtn.addEventListener('click', async () => {
   passkeyBtn.disabled = false;
 });
 
-// The device answered: the API checks it and, when it's good, signs in the passkey's account
+// As soon as the login page shows, the passkey this device last signed in with (Passkeys.lastUsed) is tried by itself:
+// the device asks for the face, fingerprint, or PIN for that one passkey, so signing back in (whichever account it is,
+// with several on the device) takes one step. Not after Logout or Sign Out Everywhere, so another account can sign in.
+// Some browsers (like Safari) only open a passkey request right in a tap, and say no at once otherwise; then, or when
+// it's cancelled, the page carries on as usual (the button, and the passkeys under the username box). Cancelled twice
+// in a row (or the device doesn't have that passkey anymore), it isn't tried by itself again until a passkey signs in.
+async function tryLastPasskey() {
+  const only = Passkeys.lastUsed();
+  if (!only || !Passkeys.usable || mode !== 'login') return;
+  await stopPasskeyAutofill();
+  if (mode !== 'login' || (!signInIsFresh() && await prepareSignIn())) {
+    startPasskeyAutofill();
+    return;
+  }
+  let credential;
+  const started = Date.now();
+  try {
+    credential = await navigator.credentials.get({ publicKey: Passkeys.signInRequest(signInReady.options, only) });
+  } catch (error) {
+    // (A no that came at once is the browser's own, not the person's)
+    if (error.name === 'NotAllowedError' && Date.now() - started >= Passkeys.INSTANT_MS) Passkeys.declinedLast(only);
+    else if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') console.warn("The passkey wasn't tried by itself:", error);
+    if (mode === 'login') startPasskeyAutofill();
+    return;
+  }
+  await finishPasskeySignIn(credential);
+}
+
+// The device answered: the API checks it and, when it's good, signs in the passkey's account (and the device remembers
+// it as the one to try first next time)
 async function finishPasskeySignIn(credential) {
   signInReady = null; // Its challenge is used up
   setStatus('');
   const { ok, status, data } = await api('/api/passkey/login', Passkeys.signInAnswer(credential));
   if (ok && data.success) {
+    Passkeys.rememberLast(credential);
     saveSession(data);
     goToBudget();
     return;
   }
+  // A passkey that can't sign in isn't tried by itself again
+  if (data.unknownPasskey || data.passkeysOff) Passkeys.forgetLast(credential.id);
   if (data.unknownPasskey) Passkeys.forget(credential.id); // So the device stops offering it
   if (data.passkeysOff && passkeyInput && !passkeyInput.disabled) {
     // Turned off in Settings: signing in with the password with the switch on turns it back on
@@ -699,6 +748,7 @@ async function addPasskey(firstTry = false) {
     setStatus(status === 0 ? "Failed to connect to the server." : (data.error || "Couldn't turn on passkey sign-in. Please try again."));
     return;
   }
+  Passkeys.rememberLast(credential); // Tried by itself the next time this page shows
   offerPassword = '';
   setStatus("Passkey sign-in is on! Next time, press Sign In With A Passkey, or pick your passkey under the username box.", true);
   setTimeout(goToBudget, 2500);
@@ -744,4 +794,7 @@ if (verifyToken) {
   } else if (SIGNED_OUT_REASONS[signedOut]) {
     setStatus(SIGNED_OUT_REASONS[signedOut], true);
   }
+  // Signing in starts with this device's last passkey (not right after signing out on purpose, with Logout or Sign Out
+  // Everywhere, so another account can sign in)
+  if (mode === 'login' && signedOut !== 'logout' && signedOut !== 'everywhere' && !pageParams.has('deleted')) tryLastPasskey();
 }

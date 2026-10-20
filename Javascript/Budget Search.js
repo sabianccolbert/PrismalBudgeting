@@ -28,8 +28,9 @@ function wireSearch() {
   const box = document.getElementById("searchBox");
   const openButton = document.getElementById("searchButton");
   if (!form || !slot || !box || !openButton) return;
-  // In <body>: the page's #transitionContainer is transformed, which would make a fixed box scroll with it
-  document.body.appendChild(box);
+  // In the screen layer (Layout.js): it stays on the visible screen, out of the page's #transitionContainer, which is
+  // transformed and would make a fixed box scroll with it
+  (window.ScreenLayer ? window.ScreenLayer.element : document.body).appendChild(box);
   // It zooms out of the Search button, and back into it (immediately: right away, when the page is left)
   let isOpen = false;
   const setOpen = (open, immediately = false) => {
@@ -70,7 +71,7 @@ function wireSearch() {
     input.placeholder = `${word} ${datePattern()}`; // This device's date format, like From DD/MM/YYYY
     input.translate = false;
     input.addEventListener("focus", (event) => BudgetUI.setPickTarget(event.target));
-    input.after(BudgetUI.datePickerButton(input, `${word} date`)); // 📅: the device's own date picker
+    input.after(BudgetUI.datePickerButton(input, `${word} date`)); // The calendar button: a calendar to pick a day (Dates.js)
   }
 
   const submitButton = form.querySelector("button[type=submit]");

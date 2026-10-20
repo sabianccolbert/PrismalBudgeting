@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=086d447e9b">
+    <link rel="stylesheet" href="/stylesheet.css?v=a8df1a14c7">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=0450ef5bc9">
+    <link rel="stylesheet" href="/budgetStyle.css?v=fc4f8a933a">
     <title>Prismal Budget - Spreadsheets</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -47,11 +47,11 @@
         </div>
         <nav class="navButtons" aria-label="Pages">
           <a id="menuBack" class="navButton" href="/menu/">
-            <img class="navIcon" src="/Resources/Icons/Undo.webp?v=e50d463c17" alt="">
+            <img class="navIcon" src="/Resources/Icons/BackNav.webp?v=5fc649006a" alt="">
             <span>Back</span>
           </a>
           <a class="navButton" href="/">
-            <img class="navIcon" src="/Resources/Icons/Home.webp?v=995586f434" alt="">
+            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
             <span>Home</span>
           </a>
           <a id="logoutButton" class="navButton logoutButton" href="logout">
@@ -79,17 +79,8 @@
           <div class="panelButtons">
             <button id="addSheetButton" type="button" class="budgetButton primary">Add Spreadsheet</button>
           </div>
-        </section>
-
-        <!-- Other emails: spreadsheets shared with admin@prismalbudget.org from a Google account with another email, once
-             the link we email it is opened (Spreadsheets Page.js) -->
-        <section id="sheetEmailsView" class="budgetCard settingsCard" aria-labelledby="sheetEmailsHeading" hidden>
-          <h3 id="sheetEmailsHeading">Other Emails</h3>
-          <p>Share spreadsheets with admin@prismalbudget.org from a Google account with another email? Add that email here, and open the link we send it. Then the spreadsheets it shares can be connected too.</p>
-          <ul id="sheetEmailList" class="sheetEmailList" hidden></ul>
-          <div class="panelButtons">
-            <button id="addSheetEmailButton" type="button" class="budgetButton primary">Add Email</button>
-          </div>
+          <!-- Other emails are added in Settings, under Email (they sign in too) -->
+          <p class="panelHint sheetsOtherEmails">Share spreadsheets with admin@prismalbudget.org from a Google account with another email? Add that email in <a href="/settings.html#email">Settings, under Email</a> (Other Emails), and open the link we send it. Then the spreadsheets it shares can be connected too.</p>
         </section>
 
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
@@ -99,7 +90,7 @@
           <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
           <ol>
             <li>Verify your email first. We email a link when you make your account (it works for 24 hours), and Send Verification Email (on this page, or in Settings under Email) sends a new one. If it isn't in your inbox, check your spam folder.</li>
-            <li>Share the spreadsheet one of two ways: "Anyone with the link" can view it, or add admin@prismalbudget.org as a viewer (Google Sheets and Google Drive). For the second, share it from the Google account that uses your Prismal Budget email, or one whose email you added under Other Emails, so only you can connect it.</li>
+            <li>Share the spreadsheet one of two ways: "Anyone with the link" can view it, or add admin@prismalbudget.org as a viewer (Google Sheets and Google Drive). For the second, share it from the Google account that uses your Prismal Budget email, or one whose email you added under Other Emails (in Settings, under Email), so only you can connect it.</li>
             <li>Tap Add Spreadsheet, paste its link, and tap Open Spreadsheet.</li>
             <li>For each part of an entry, tap the yellow ➕ to pick its cells: a tab (from the list, or type its name), then column and row, like column B row 2 to column B row 50 (that's B2:B50). Leave "to" empty for just one cell.</li>
             <li>Only the dates have to come from the spreadsheet. The title, amount, refraction type, and Other Account can come from cells too, or be typed in once for all of them. One cell works for all of them as well.</li>
@@ -124,7 +115,7 @@
           </ul>
 
           <h4>Other Emails</h4>
-          <p>Keep your spreadsheets in a Google account with another email than your Prismal Budget account's? Add that email under Other Emails, and we email it a link (it works for 24 hours). Once you open it, spreadsheets that Google account shares with admin@prismalbudget.org can be connected to your account. You can add up to 5, and removing one stops its spreadsheets from being read for you.</p>
+          <p>Keep your spreadsheets in a Google account with another email than your Prismal Budget account's? Add that email in Settings, under Email (Other Emails), and we email it a link (it works for 24 hours). Once you open it, spreadsheets that Google account shares with admin@prismalbudget.org can be connected to your account, and the email signs in to it too. You can add up to 5, and removing one stops both.</p>
 
           <h4>On, Off, And Delete</h4>
           <p>Tap a spreadsheet's name to change it. Turning one off takes its entries off your calendar until you turn it back on (days you changed keep their changes). Deleting one takes its entries off from today on; days you changed become plain entries, and days that passed stay as they were.</p>

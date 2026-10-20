@@ -7,7 +7,7 @@
          site's own address only, once any code is gone. -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=086d447e9b">
+    <link rel="stylesheet" href="/stylesheet.css?v=a8df1a14c7">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
     <title>Prismal Budget - Login</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
@@ -49,7 +49,7 @@
         </div>
         <nav class="navButtons" aria-label="Pages">
           <a class="navButton" href="/">
-            <img class="navIcon" src="/Resources/Icons/Home.webp?v=995586f434" alt="">
+            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
             <span>Home</span>
           </a>
         </nav>
@@ -71,10 +71,13 @@
               <input type="email" id="email" required autocomplete="email" disabled>
             </div>
 
-            <!-- New accounts: Prismal Budget is for people 18 and older -->
+            <!-- New accounts: Prismal Budget is for people 18 and older. Typed in this device's date format, or picked on
+                 a calendar (Login.js adds its button) -->
             <div id="age-group" class="hidden">
               <label for="birthdate">Birth date</label>
-              <input type="date" id="birthdate" required autocomplete="bday" disabled>
+              <div class="dateRow">
+                <input type="text" id="birthdate" class="dateInput" inputmode="numeric" required autocomplete="bday" disabled>
+              </div>
             </div>
 
             <div id="password-group">
