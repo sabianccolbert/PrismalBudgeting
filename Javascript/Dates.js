@@ -256,10 +256,11 @@ function namedDate(text) {
 // =====================================================================
 // The calendar button opens a small calendar under its date box, drawn like Home's: a month of square days, each with
 // its number (today glowing, the picked day in red), under the month and the year. Each of those is a box to type in,
-// with a list that drops down under it while it's being typed in (or tapped), and ‹ and › step a month. Tapping a day
-// writes it into the date box in this device's date format and closes the calendar; so do a tap outside it, Close,
-// and Escape. It starts on the date typed in the box (or this month), and lives in the screen layer (Layout.js), so it
-// stays in view however the page is zoomed or scrolled.
+// with a list that drops down under it while it's being typed in (or tapped), which scrolls on its own, and ‹ and ›
+// step a month. Picking a month or a year shows it, and the calendar stays open. Tapping a day writes it into the date
+// box in this device's date format and closes the calendar; so do Today, a tap outside it, Close, and Escape. It
+// starts on the date typed in the box (or this month), and lives in the screen layer (Layout.js), so it stays in view
+// however the page is zoomed or scrolled.
 
 const DatePicker = (() => {
   const MONTH_LABELS = MONTH_NAMES.map(name => name[0].toUpperCase() + name.slice(1));
@@ -494,6 +495,11 @@ const DatePicker = (() => {
     input.setAttribute("aria-controls", list.id);
     let options = [];
     let active = -1;
+    let pressedWith = ""; // What pressed the list last: "mouse", "touch", or "pen"
+    list.addEventListener("pointerdown", (event) => {
+      pressedWith = event.pointerType;
+      event.preventDefault(); // (The box keeps its focus, so its list stays open)
+    });
 
     const mark = () => {
       [...list.children].forEach((item, i) => item.classList.toggle("isActive", i === active));
@@ -506,10 +512,11 @@ const DatePicker = (() => {
       list.replaceChildren(...options.map(option => {
         const item = make("li", "pickerOption", option.label);
         item.setAttribute("role", "option");
-        // (Picked on the press, so the box keeps its focus until it's done)
-        item.addEventListener("pointerdown", (event) => {
-          event.preventDefault();
+        // A tap picks it (a finger sliding through the list scrolls it instead), and the calendar stays open on that
+        // month or year. Picked with a finger, the box lets go too, so the phone's keyboard goes away.
+        item.addEventListener("click", () => {
           done(option.value);
+          if (pressedWith && pressedWith !== "mouse") input.blur();
         });
         return item;
       }));

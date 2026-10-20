@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=a8df1a14c7">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=fc4f8a933a">
+    <link rel="stylesheet" href="/budgetStyle.css?v=6bf2d92b45">
     <title>Prismal Budget - Settings</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -64,9 +64,10 @@
         <p id="dataStatus" class="dataStatus">Loading...</p>
 
         <div id="settingsView" hidden>
-          <section class="budgetCard settingsCard" aria-labelledby="reminderHeading">
+          <!-- Shown only while push notifications (on any device) or the calendar link are on (Settings Page.js) -->
+          <section id="reminderCard" class="budgetCard settingsCard" aria-labelledby="reminderHeading" hidden>
             <h3 id="reminderHeading">Daily Reminder</h3>
-            <p>On days your budget needs a look, you can get a "🗓️ Check Budget" reminder at this time:</p>
+            <p>On days your budget needs a look, you get a "🗓️ Check Budget" reminder at this time:</p>
             <ul class="settingsList">
               <li>⛔️ Your In Bank is negative that day</li>
               <li>✔️ An uncommon recurring payment (one that lands every 3 months or less often) is in the current four weeks</li>
@@ -77,11 +78,12 @@
               <input id="reminderTime" class="timeInput" type="time" step="300">
             </label>
             <p id="timeZoneNote" class="panelHint"></p>
-            <p class="panelHint">Get it as a push notification, on your calendar, or both. Each one is optional.</p>
+            <p class="panelHint">It comes as a push notification, on your calendar, or both, whichever you turn on below. With both off, this goes away.</p>
           </section>
 
           <section class="budgetCard settingsCard" aria-labelledby="pushHeading">
             <h3 id="pushHeading">Push Notifications</h3>
+            <p class="panelHint">A "🗓️ Check Budget" reminder on days your budget needs a look (like a day your In Bank goes below $0), as a notification on this device.</p>
             <p id="pushStatus"></p>
             <div id="pushButtons" class="panelButtons"></div>
           </section>

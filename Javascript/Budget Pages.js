@@ -104,7 +104,7 @@ function renderRecurringPage(view) {
 }
 
 // "Needs a look" over the table: recurring entries that match another one in title, Other Account, and refraction type,
-// which can only come with a budget brought over from the spreadsheet (see recurringDuplicates in Process Budget.js)
+// which can't be made here (see recurringDuplicates in Process Budget.js)
 function recurringProblems(duplicates) {
   const box = BudgetUI.element("div", "recurringProblems");
   box.setAttribute("role", "status");
@@ -210,7 +210,7 @@ function renderTrackerPage(view) {
 
   const tableEl = buildRowTable({
     tableName: "tracker",
-    columns: ["Type", "Last 4 Weeks", "Last 3 Months", "Last 365 Days", "Aliases"],
+    columns: TRACKER_COLUMNS,
     rows,
     extraClass: "trackerTable",
     canSelect: (row) => !TRACKER_AUTO_ROWS.includes(cleanString(row[0])),
@@ -221,6 +221,9 @@ function renderTrackerPage(view) {
   view.appendChild(wrapScroll(tableEl));
   markClipped(tableEl);
 }
+
+// The tracker's columns (on the narrowest phones, Edit leaves out the aliases: budgetStyle.css .aliasHead)
+const TRACKER_COLUMNS = ["Type", "Last 4 Weeks", "Last 3 Months", "Last 365 Days", { label: "Aliases", className: "aliasHead" }];
 
 // A tracker row's cells (the page's table, and its Search results)
 function trackerCells(tr, row) {
@@ -527,7 +530,8 @@ const PAGE_SEARCHES = {
   tracker: {
     placeholder: "A row or an alias, like food",
     noun: ["row", "rows"],
-    columns: ["Type", "Last 4 Weeks", "Last 3 Months", "Last 365 Days", "Aliases"],
+    tableClass: "trackerTable",
+    columns: TRACKER_COLUMNS,
     rows: () => indexedRows(trackerData, 1).filter(({ row }) => !isSeparatorRow(row)),
     text: (row) => [row[0], row[4], trackerAliasText(row)].join(" "),
     render: (row) => {
@@ -540,6 +544,7 @@ const PAGE_SEARCHES = {
   logs: {
     placeholder: "A title, an action, or a date",
     noun: ["change", "changes"],
+    tableClass: "logsTable",
     columns: LOG_COLUMNS,
     rows: () => logsData.map((row, index) => ({ index, row })).slice(1).filter(({ row }) => !isBlankRow(row)),
     text: (row) => row.join(" "),
@@ -653,7 +658,9 @@ function renderPageSearch() {
   results.appendChild(BudgetUI.element("p", "searchSummary", `${found.length} of ${rows.length} ${rows.length === 1 ? one : many} found${config.open && found.length && !editMode ? ". Tap one to open it." : ""}`));
   if (found.length === 0) return;
 
+  // (Laid out like the page's own table, so it fits the same way)
   const tableEl = createDataTable(config.columns);
+  tableEl.classList.add(config.tableClass, "pageSearchTable");
   for (const { index, row } of found) {
     const tr = config.render(row);
     if (config.open && !editMode) {

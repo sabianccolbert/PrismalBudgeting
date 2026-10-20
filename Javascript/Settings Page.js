@@ -1,7 +1,7 @@
-// Settings Page: the daily "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification). Pick the
-// reminder time, then turn on push notifications (per device) and/or a calendar link for Google or Apple Calendar.
-// Both are optional. Which days get a reminder comes from the budget (buildReminderPlan in Process Budget.js); the API
-// sends and serves them.
+// Settings Page: the daily "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification). Turn on push
+// notifications (per device) and/or a calendar link for Google or Apple Calendar, both optional; while either is on,
+// the Daily Reminder card picks the reminder time. Which days get a reminder comes from the budget (buildReminderPlan
+// in Process Budget.js); the API sends and serves them.
 // Then the account: the email (change it, which needs the password, and verify it) and other emails (each confirmed by
 // a link; they sign in too, and their spreadsheets can be connected), the birth date (18 or older: fix one typed
 // wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID, Windows Hello: add or
@@ -112,6 +112,13 @@ function renderReminderTime() {
   document.getElementById("timeZoneNote").textContent = `Time zone: ${zone}. Reminders go out within 5 minutes of this time.`;
 }
 
+// The Daily Reminder card (the reminder time) only shows while a reminder is on: push notifications on any device, or
+// the calendar link
+function renderReminderCard() {
+  const pushOn = !!pushSubscription || (reminderSettings.push && reminderSettings.push.devices > 0);
+  document.getElementById("reminderCard").hidden = !pushOn && !reminderSettings.calendarUrl;
+}
+
 // "08:00" -> "8:00 AM"
 function formatTime12(hhmm) {
   const [hour, minute] = hhmm.split(":").map(Number);
@@ -210,6 +217,7 @@ function renderPush() {
   const status = document.getElementById("pushStatus");
   const buttons = document.getElementById("pushButtons");
   buttons.replaceChildren();
+  renderReminderCard();
 
   const otherDevices = reminderSettings.push.devices - (pushSubscription ? 1 : 0);
   const others = otherDevices > 0 ? ` They're also on for ${otherDevices} other device${otherDevices > 1 ? "s" : ""}.` : "";
@@ -315,6 +323,7 @@ function renderCalendarLink() {
   const input = document.getElementById("calendarUrl");
   const buttons = document.getElementById("calendarButtons");
   buttons.replaceChildren();
+  renderReminderCard();
   const url = reminderSettings.calendarUrl;
   input.hidden = !url;
 

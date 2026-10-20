@@ -89,11 +89,12 @@ function wireSearch() {
     // Exact: only entries with just this title; off, any title with it in it ("gas" finds Gas Station too). A
     // tracker row is always found by its own title.
     exact: true,
-    noExact: ["category"]
+    noExact: ["category"],
+    help: { label: "What All, Costs, Gains, and Tracker find", content: searchHelp() }
   });
   // The page has a first line already (so nothing moves while the page loads); the working list
-  // looks the same
-  slot.replaceChildren(terms.lines);
+  // looks the same. The ? before its All shows what the buttons do, under the titles.
+  slot.replaceChildren(terms.lines, terms.helpBox);
   const pageAddButton = document.getElementById("searchAdd");
   terms.addButton.id = "searchAdd";
   if (pageAddButton) pageAddButton.replaceWith(terms.addButton);
@@ -129,6 +130,23 @@ function wireSearch() {
     if (!result.ok) return showSearchMessage(result.message);
     renderSearchResults(result.search);
   });
+}
+
+// What a title's buttons find (the ? before the first title's All)
+function searchHelp() {
+  const list = BudgetUI.element("ul");
+  const item = (name, text) => {
+    const li = BudgetUI.element("li");
+    li.append(BudgetUI.element("strong", "", name), `: ${text}`);
+    list.appendChild(li);
+  };
+  item("All", "every entry with this title, its costs and its gains.");
+  item("Costs", "only this title's costs.");
+  item("Gains", "only this title's gains.");
+  item("Tracker", "the title is one of your tracker rows (like Food), and it finds the entries that row counts: the titles in its aliases, each counting All, Costs, or Gains the way the row does, and transfers too when the row counts them. The Costs, Gains, and Transfers rows find every cost, gain, or transfer.");
+  item("Exact", "on, only entries with this exact title. Off, any title with these words in it (gas finds Gas Station too). Tracker always finds the row with this title.");
+  list.appendChild(BudgetUI.element("li", "", "With no title, All, Costs, or Gains finds every entry, cost, or gain between the dates."));
+  return list;
 }
 
 // Say something in place of the results (like why a search couldn't run)
