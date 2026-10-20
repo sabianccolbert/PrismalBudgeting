@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=a8df1a14c7">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=fc4f8a933a">
+    <link rel="stylesheet" href="/budgetStyle.css?v=6bf2d92b45">
     <title>Prismal Budget - History</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -96,6 +96,7 @@
                 <div class="termRow">
                   <input class="termInput" type="text" placeholder="Title, like rent" aria-label="Title">
                   <div class="termControls">
+                    <button type="button" class="fieldHelpButton termHelpButton" aria-label="What All, Costs, Gains, and Tracker find" aria-expanded="false">?</button>
                     <div class="segmented" role="radiogroup" aria-label="Title: find">
                       <button type="button" class="budgetButton" role="radio" aria-checked="true">All</button>
                       <button type="button" class="budgetButton" role="radio" aria-checked="false">Costs</button>
@@ -141,7 +142,7 @@
           <h4>Search</h4>
           <ul>
             <li>Search (beside the tabs) is the same as Home's: it finds entries by title in History, the calendar, and Upcoming, and, through its To date, the recurring entries (up to two years ahead) and connected spreadsheets' entries still to come. It floats over the page; × or Escape closes it.</li>
-            <li>Type a title, then pick <strong>All</strong>, <strong>Costs</strong> (only its costs), <strong>Gains</strong> (only its gains), or <strong>Tracker</strong> (the title is a tracker row, like Food: it finds what that row counts). Press Enter (or tap + Add Title) for another title, and leave the title blank to find everything.</li>
+            <li>Type a title, then pick <strong>All</strong>, <strong>Costs</strong> (only its costs), <strong>Gains</strong> (only its gains), or <strong>Tracker</strong> (the title is a tracker row, like Food: it finds what that row counts). The little ? just left of All says the same. Press Enter (or tap + Add Title) for another title, and leave the title blank to find everything.</li>
             <li><strong>Exact</strong>, beside each title: off, it finds every title with what you typed in it (gas finds Gas Station too); on, only that title.</li>
             <li>From and To are optional. With no To, it looks a month past today (or past From). Tap the calendar button to pick a date, or, while a date box glows, tap a day in History to fill it in.</li>
             <li>Results show newest first, with a total of the checked ones; ones after today come first, under Coming up, apart from today and before. ⭕️ Transfers start unchecked.</li>

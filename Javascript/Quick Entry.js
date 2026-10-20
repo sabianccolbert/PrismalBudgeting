@@ -1,11 +1,12 @@
 // Quick Entry: the page a home screen icon opens (quick.html?key=...). It's the calendar's New Entry
 // form with no login. The key in the link comes from Home's Quick Entry button (made
 // while signed in) and can only queue entries, which join the budget the next time it opens (see
-// applyQuickEntries in Process Budget.js). Besides that, it only gets In Bank today and the lowest it gets (shown
-// at the top), the Other Accounts' names and balances, for the account picker, and the account's prisms (preset
-// entries, see PRISMS), which it can change. Keys stop working when the password changes. Nothing on the site links
-// here. Opened without a key, or with one that stopped working, it goes to the sign-in page. Opened on an Apple Watch
-// (a link tapped in Messages or Mail there), it shows only In Bank today.
+// applyQuickEntries in Process Budget.js), and change or delete the ones it queued until then (see WAITING
+// ENTRIES). Besides those, it only gets In Bank today and the lowest it gets (shown at the top), the Other Accounts'
+// names and balances, for the account picker, and the account's prisms (preset entries, see PRISMS), which it can
+// change. Keys stop working when the password changes. Nothing on the site links here. Opened without a key, or with
+// one that stopped working, it goes to the sign-in page. Opened on an Apple Watch (a link tapped in Messages or Mail
+// there), it shows only In Bank today and the lowest it gets.
 // Process Budget.js is only loaded for its helpers: it skips loading a budget here.
 
 // =====================================================================
@@ -19,13 +20,16 @@ const QUICK_TYPE_NAMES = Object.fromEntries(Object.entries(QUICK_ENTRY_TYPES).ma
 let quickUsername = null;
 let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance }] (see showQuickAccounts)
 let quickPrisms = [];   // The account's prisms, in order: [{ title, amount, type }] (see PRISMS)
-let quickForm = null;   // The form on the page: { panel, fields, mode: "entry" (New Entry) | "prism" (New Prism) }
+let quickQueued = [];   // The entries this icon added that are still waiting: [{ id, title, type, amount, date, joining }]
+let quickForm = null;   // The form on the page: { panel, fields, mode: "entry" (New Entry) | "prism" (New Prism) |
+                        // "change" (Change Entry, a waiting one), changing (that entry) }
 let quickFormDay = null; // This phone's date when the form opened (see moveFormToNewDay)
 // Undo and Redo for entries added on this page: [{ id, entry }] (id: the API's, while it waits; see the end)
 const quickUndo = [];
 const quickRedo = [];
 
 // An Apple Watch (its browser says "Watch" in its name; or any screen too small for the form) shows only In Bank today
+// and the lowest it gets
 const onWatch = /\bWatch(\d|\b)|watchOS|Watch OS/i.test(navigator.userAgent) || Math.min(screen.width, screen.height) < 250;
 document.documentElement.classList.toggle("watchView", onWatch);
 
@@ -72,43 +76,54 @@ async function checkQuickKey() {
   // Offline, or the server is down: the form still shows, and adding an entry says what went wrong
   if (result.ok && result.data) {
     quickUsername = result.data.username;
-    showQuickAccounts(result.data.accounts);
-    showQuickBalances(result.data.inBank);
+    showQuickAnswer(result.data);
     // Prisms need the server, so they show once the key is known to work
     quickPrisms = Array.isArray(result.data.prisms) ? result.data.prisms : [];
     document.getElementById("prismSection").hidden = false;
     renderPrisms();
+  } else {
+    showQuickStatus("");
   }
-  showQuickStatus(result.ok && result.data ? accountLine(result.data.waiting) : "");
   openQuickEntryForm();
 }
 
-// The form: New Entry, or (mode "prism", from Add Prism) New Prism, which glows and keeps only what's filled
-// in or picked (no date). fill: { title, amount, sprite } to start with (what was already in the form).
-function openQuickEntryForm(mode = "entry", fill = null) {
+// The form: New Entry; New Prism (mode "prism", from Add Prism), which glows and keeps only what's filled in or picked
+// (no date); or Change Entry (mode "change", from Waiting), one of this icon's waiting entries. fill: { title, amount,
+// sprite, account } to start with (what was already in the form, or the waiting entry's). changing: that waiting entry.
+function openQuickEntryForm(mode = "entry", fill = null, changing = null) {
   const makingPrism = mode === "prism";
+  const changingEntry = mode === "change" && !!changing;
   quickFormDay = createSafeMidnight(new Date());
   BudgetUI.openPanel({
     size: "large",
-    title: makingPrism ? "New Prism" : "New Entry",
+    title: makingPrism ? "New Prism" : changingEntry ? "Change Entry" : "New Entry",
     closable: false,
     inline: true, // The form is the page here, not something on top of it
     build(form, panel) {
-      const fields = BudgetUI.newEntryFields({ date: quickFormDay, accounts: quickAccounts });
+      const day = changingEntry ? createSafeMidnight(changing.date, true) : quickFormDay;
+      const fields = BudgetUI.newEntryFields({ date: day, accounts: quickAccounts });
       if (makingPrism) {
         form.append(BudgetUI.element("p", "panelHint prismDraftHint", "Fill in or pick only what this prism should keep: a title, an amount, a type, or an account. Then tap Save Prism."));
         panel.panel.classList.add("prismDraft");
       }
-      // A prism never keeps a date, so New Prism has no date box
-      form.append(...fields.els.filter(el => !makingPrism || el !== fields.dateEl), BudgetUI.buttonRow(makingPrism
+      if (changingEntry) {
+        form.append(BudgetUI.element("p", "panelHint prismDraftHint", "Change what you like, then tap Save Changes. It's still waiting to join your budget."));
+        panel.panel.classList.add("changeDraft");
+      }
+      const buttons = makingPrism
         ? [{ label: "Save Prism", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => openQuickEntryForm("entry", fields.values()) }]
-        : [{ label: "Add Entry", kind: "primary", type: "submit" }]));
+        : changingEntry
+          ? [{ label: "Save Changes", kind: "primary", type: "submit" }, { label: "Cancel", onClick: backToNewEntry }]
+          : [{ label: "Add Entry", kind: "primary", type: "submit" }];
+      // A prism never keeps a date, so New Prism has no date box
+      form.append(...fields.els.filter(el => !makingPrism || el !== fields.dateEl), BudgetUI.buttonRow(buttons));
       if (fill) fields.fill(fill);
-      quickForm = { panel, fields, mode };
+      quickForm = { panel, fields, mode: changingEntry ? "change" : makingPrism ? "prism" : "entry", changing: changingEntry ? changing : null };
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         if (makingPrism) savePrismFromForm(panel, fields);
+        else if (changingEntry) saveWaitingChange(panel, fields, changing);
         else addQuickEntry(panel, fields);
       });
     }
@@ -122,24 +137,24 @@ async function addQuickEntry(panel, fields) {
 
   panel.setError("");
   panel.setBusy(true);
-  const queued = { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount: entry.amount, date: formatToYMD(entry.date) };
+  const queued = toQueued(entry);
   const result = await quickApi("/api/quick/entry", { key: quickKey, entry: queued, today: quickToday() });
   panel.setBusy(false);
   if (result.status === 401) return keyStopped();
-  if (!result.ok) {
-    return panel.setError((result.data && result.data.error) ||
-      (result.status === 0 ? "Couldn't reach Prismal Budget. Check your connection and try again." : "That didn't work. Please try again."));
-  }
+  if (!result.ok) return panel.setError(quickProblem(result));
   BudgetUI.showToast(`Added ${describeQueued(queued)}.`);
-  showQuickStatus(accountLine(result.data.waiting));
-  showQuickAccounts(result.data.accounts);
-  showQuickBalances(result.data.inBank);
+  showQuickAnswer(result.data);
   if (Number.isInteger(result.data.id)) {
     quickUndo.push({ id: result.data.id, entry: queued });
     quickRedo.length = 0;
   }
   renderQuickUndo();
   openQuickEntryForm(); // A fresh form for the next one
+}
+
+// The form's entry as the API keeps it: { title (with its Other Account), type, amount, date: "YYYY-MM-DD" }
+function toQueued(entry) {
+  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount: entry.amount, date: formatToYMD(entry.date) };
 }
 
 // A home screen icon's page often stays open in the background for days. Looked at again on a later day, New
@@ -183,8 +198,9 @@ let editingPrisms = false;
 
 document.getElementById("addPrismButton").addEventListener("click", () => {
   if (editingPrisms) setPrismEditing(false);
-  // What's already in New Entry counts toward the prism
-  const current = quickForm && quickForm.mode === "entry" ? quickForm.fields.values() : null;
+  // What's already in New Entry counts toward the prism (or, while a waiting entry is being changed, what New Entry had)
+  const current = !quickForm ? null : quickForm.mode === "entry" ? quickForm.fields.values() : quickForm.mode === "change" ? stashedEntry : null;
+  stashedEntry = null;
   openQuickEntryForm("prism", current);
   highlightForm();
 });
@@ -253,10 +269,10 @@ function prismLabel(prism, inWords = false) {
   return parts.join(" ");
 }
 
-// Tapping a prism: what it keeps goes into New Entry, which comes into view with the first thing still to
-// fill in ready to type
+// Tapping a prism: what it keeps goes into New Entry (or Change Entry, while a waiting entry is being changed), which
+// comes into view with the first thing still to fill in ready to type
 function applyPrism(prism) {
-  if (!quickForm || quickForm.mode !== "entry") openQuickEntryForm("entry");
+  if (!quickForm || quickForm.mode === "prism") openQuickEntryForm("entry");
   const { fields } = quickForm;
   fields.fill({ title: prism.title, amount: prism.amount, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "" });
   // An account renamed or deleted since the prism was saved isn't in the list, so it says to pick one
@@ -370,13 +386,14 @@ function startPrismDrag(event, item) {
 document.getElementById("quickUndoButton").addEventListener("click", undoQuickEntry);
 document.getElementById("quickRedoButton").addEventListener("click", redoQuickEntry);
 
-// Undo and Redo show while there's something to take back or add again, and say what
+// Undo and Redo show while there's something to take back or add again (or entries waiting, for Waiting beside them),
+// and say what
 function renderQuickUndo() {
   const undoButton = document.getElementById("quickUndoButton");
   const redoButton = document.getElementById("quickRedoButton");
   const last = quickUndo.at(-1);
   const next = quickRedo.at(-1);
-  document.getElementById("quickUndo").hidden = !last && !next;
+  document.getElementById("quickUndo").hidden = !last && !next && quickQueued.length === 0;
   undoButton.disabled = !last;
   redoButton.disabled = !next;
   undoButton.title = last ? `Undo: ${describeQueued(last.entry)}` : "Nothing to undo";
@@ -397,14 +414,14 @@ async function undoQuickEntry() {
     quickUndo.pop();
     quickRedo.push(last.entry);
     BudgetUI.showToast(`Took back ${describeQueued(last.entry)}.`);
-    showQuickStatus(accountLine(result.data.waiting));
-    showQuickAccounts(result.data.accounts);
-    showQuickBalances(result.data.inBank);
+    showQuickAnswer(result.data);
+    leaveChangeOf(last.id);
   } else if (result.data && result.data.joined) {
     quickUndo.pop(); // It's in the budget now: undo it there
+    showWaiting(result.data);
     BudgetUI.showToast(result.data.error, true);
   } else {
-    BudgetUI.showToast((result.data && result.data.error) || "Couldn't reach Prismal Budget. Check your connection and try again.", true);
+    BudgetUI.showToast(quickProblem(result), true);
   }
   renderQuickUndo();
 }
@@ -421,11 +438,9 @@ async function redoQuickEntry() {
     quickRedo.pop();
     if (Number.isInteger(result.data.id)) quickUndo.push({ id: result.data.id, entry: next });
     BudgetUI.showToast(`Added ${describeQueued(next)} again.`);
-    showQuickStatus(accountLine(result.data.waiting));
-    showQuickAccounts(result.data.accounts);
-    showQuickBalances(result.data.inBank);
+    showQuickAnswer(result.data);
   } else {
-    BudgetUI.showToast((result.data && result.data.error) || "Couldn't reach Prismal Budget. Check your connection and try again.", true);
+    BudgetUI.showToast(quickProblem(result), true);
   }
   renderQuickUndo();
 }
@@ -444,6 +459,161 @@ function describeQueued(entry) {
 //#endregion
 
 // =====================================================================
+// #region WAITING ENTRIES (the ones this icon added, still waiting)
+// =====================================================================
+// Waiting (beside Undo and Redo) lists the entries added with this icon that haven't joined the budget yet, newest
+// first: Change puts one in the form (Change Entry) to fix it, and × deletes it. Other icons' entries are only
+// counted. Once the budget has picked one up (it's opening somewhere right then, or it opened and couldn't save
+// yet), it's on its way in and can only be changed there, so it just says so.
+
+let showingWaiting = false; // The list is open
+let stashedEntry = null;    // What New Entry had when Change was tapped ({ title, amount, sprite, account }), to put back
+
+document.getElementById("waitingButton").addEventListener("click", () => {
+  showingWaiting = !showingWaiting;
+  renderWaiting();
+});
+
+// The API's answer: { waiting (every icon's), queued (this icon's: [{ id, title, type, amount, date, joining }]) }
+function showWaiting(data) {
+  if (!data || !Array.isArray(data.queued)) return;
+  quickQueued = data.queued.filter(item => item && Number.isInteger(item.id) && typeof item.title === "string" &&
+    typeof item.amount === "number" && typeof item.date === "string");
+  const others = (Number.isInteger(data.waiting) ? data.waiting : 0) - quickQueued.length;
+  const note = document.getElementById("waitingNote");
+  note.hidden = others <= 0;
+  note.textContent = `${others} more ${others === 1 ? "entry is" : "entries are"} waiting from your other Quick Entry icons.`;
+  // One being changed that isn't waiting here anymore (the budget has it now) can't be saved
+  if (quickForm && quickForm.mode === "change" && !quickQueued.some(item => item.id === quickForm.changing.id && !item.joining)) {
+    BudgetUI.showToast("That entry joined your budget, so it can only be changed there now.", true);
+    backToNewEntry();
+  }
+  renderWaiting();
+}
+
+// Waiting (with how many) and its list
+function renderWaiting() {
+  const button = document.getElementById("waitingButton");
+  if (quickQueued.length === 0) showingWaiting = false;
+  button.hidden = quickQueued.length === 0;
+  button.textContent = `Waiting (${quickQueued.length})`;
+  button.setAttribute("aria-expanded", String(showingWaiting));
+  button.classList.toggle("primary", showingWaiting);
+  document.getElementById("waitingSection").hidden = !showingWaiting;
+  document.getElementById("waitingList").replaceChildren(...[...quickQueued].reverse().map(waitingRow));
+  renderQuickUndo();
+}
+
+// One waiting entry: its type and title over its amount and day, with Change and × (or, once the budget has it, a note)
+function waitingRow(item) {
+  const row = BudgetUI.element("li", "waitingItem");
+  const sprite = QUICK_ENTRY_TYPES[item.type] || "";
+  const day = createSafeMidnight(item.date, true);
+  const amount = BudgetUI.element("span", `waitingAmount${item.amount < 0 ? " negative" : item.amount > 0 ? " positive" : ""}`, formatMoney(item.amount));
+  const details = BudgetUI.element("span", "waitingDetails");
+  details.append(amount, ` on ${isNaN(day.getTime()) ? item.date : showDate(day)}`);
+  const text = BudgetUI.noTranslate(BudgetUI.element("span", "waitingText"));
+  text.append(BudgetUI.element("span", "waitingTitle", `${sprite ? sprite + " " : ""}${capitalize(item.title)}`), details);
+  row.append(text);
+  if (item.joining) {
+    row.classList.add("isJoining");
+    row.append(BudgetUI.element("span", "waitingJoining", "Joining your budget"));
+    return row;
+  }
+  const change = BudgetUI.element("button", "budgetButton waitingChange", "Change");
+  change.type = "button";
+  change.setAttribute("aria-label", `Change ${describeQueued(item)}`);
+  change.addEventListener("click", () => changeWaiting(item));
+  const remove = BudgetUI.element("button", "panelClose waitingDelete", "×");
+  remove.type = "button";
+  remove.setAttribute("aria-label", `Delete ${describeQueued(item)}`);
+  remove.addEventListener("click", () => deleteWaiting(item, row));
+  row.append(change, remove);
+  return row;
+}
+
+// Change: the waiting entry goes into the form (Change Entry), which comes into view
+function changeWaiting(item) {
+  if (quickForm && quickForm.mode === "entry") stashedEntry = quickForm.fields.values();
+  const { title, account } = splitAccount(item.title);
+  openQuickEntryForm("change", { title, amount: item.amount, sprite: QUICK_ENTRY_TYPES[item.type] || "", account }, item);
+  // An account renamed or deleted since isn't in the list, so it says to pick one
+  if (account && !quickAccounts.some(known => cleanString(known.name) === cleanString(account))) {
+    BudgetUI.showToast(`${account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
+  }
+  highlightForm();
+}
+
+// Save Changes: the waiting entry as the form has it now, then back to New Entry
+async function saveWaitingChange(panel, fields, changing) {
+  const { entry, error } = fields.read();
+  if (error) return panel.setError(error);
+  panel.setError("");
+  panel.setBusy(true);
+  const queued = toQueued(entry);
+  const result = await quickApi("/api/quick/change", { key: quickKey, id: changing.id, entry: queued, today: quickToday() });
+  panel.setBusy(false);
+  if (result.status === 401) return keyStopped();
+  if (!result.ok && !(result.data && result.data.joined)) return panel.setError(quickProblem(result));
+  if (!result.ok) {
+    // It joined the budget meanwhile, so it's changed there now (showWaiting goes back to New Entry, and says so)
+    forgetUndo(changing.id);
+    showWaiting(result.data);
+    leaveChangeOf(changing.id);
+    renderQuickUndo();
+    return;
+  }
+  const step = quickUndo.find(undo => undo.id === changing.id);
+  if (step) step.entry = queued; // Undo takes back the entry as it is now
+  BudgetUI.showToast(`Changed it to ${describeQueued(queued)}.`);
+  showQuickAnswer(result.data);
+  leaveChangeOf(changing.id);
+  renderQuickUndo();
+}
+
+// ×: delete a waiting entry (after asking), so it never joins the budget
+async function deleteWaiting(item, row) {
+  if (!window.confirm(`Delete ${describeQueued(item)}? It won't be added to your budget.`)) return;
+  row.querySelectorAll("button").forEach(button => { button.disabled = true; });
+  const result = await quickApi("/api/quick/unqueue", { key: quickKey, id: item.id, today: quickToday() });
+  if (result.status === 401) return keyStopped();
+  if (result.ok) {
+    forgetUndo(item.id);
+    BudgetUI.showToast(`Deleted ${describeQueued(item)}.`);
+    showQuickAnswer(result.data);
+    leaveChangeOf(item.id);
+  } else if (result.data && result.data.joined) {
+    forgetUndo(item.id);
+    showWaiting(result.data);
+    BudgetUI.showToast("That entry already joined your budget, so it can only be deleted there now.", true);
+  } else {
+    row.querySelectorAll("button").forEach(button => { button.disabled = false; });
+    BudgetUI.showToast(quickProblem(result), true);
+  }
+  renderQuickUndo();
+}
+
+// Back to New Entry from Change Entry, with what New Entry had before
+function backToNewEntry() {
+  const fill = stashedEntry;
+  stashedEntry = null;
+  openQuickEntryForm("entry", fill);
+}
+
+// The form was changing this entry, which is gone now: back to New Entry
+function leaveChangeOf(id) {
+  if (quickForm && quickForm.mode === "change" && quickForm.changing.id === id) backToNewEntry();
+}
+
+// An entry that isn't waiting anymore can't be undone here
+function forgetUndo(id) {
+  const at = quickUndo.findIndex(step => step.id === id);
+  if (at >= 0) quickUndo.splice(at, 1);
+}
+
+//#endregion
+
+// =====================================================================
 // #region HELPERS
 // =====================================================================
 
@@ -451,6 +621,21 @@ function showQuickStatus(text) {
   const status = document.getElementById("dataStatus");
   status.textContent = text;
   status.hidden = !text;
+}
+
+// What the API answers after the icon is checked, or an entry is added, changed, or taken back: how many entries are
+// waiting (and the ones this icon added), and the balances with them counted
+function showQuickAnswer(data) {
+  showQuickStatus(accountLine(data.waiting));
+  showQuickAccounts(data.accounts);
+  showQuickBalances(data.inBank);
+  showWaiting(data);
+}
+
+// Why a request didn't work: what the API said, or that it couldn't be reached
+function quickProblem(result) {
+  return (result.data && result.data.error) ||
+    (result.status === 0 ? "Couldn't reach Prismal Budget. Check your connection and try again." : "That didn't work. Please try again.");
 }
 
 // The account picker's accounts as the API sent them, each with its balance (null when it isn't known). The API

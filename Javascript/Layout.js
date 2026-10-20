@@ -598,9 +598,10 @@ function transitionTo(URL, useReplace = false, TAB = null) {
 }
 
 /* GROUP: The tab's glow slides to the tab that was tapped */
-// While the page under the tabs slides out, the glow on the tab that's showing (its blue-violet light, bright edge, and
-// dot) slides up or down to the tab that was tapped, where the next page has it already. A copy of it does the moving:
-// the tabs keep their places, and the one that was showing looks like the others meanwhile.
+// While the page under the tabs slides out, the glow on the tab that's showing slides up or down to the tab that was
+// tapped, where the next page has it already: a copy of its bright edge, glow, and dot does the moving (the tabs keep
+// their places), and the light inside fades from the tab it left into the tapped one in the same time (budgetStyle.css
+// .isGliding), so the tapped one looks just like the next page's when it comes.
 function glideTabGlow(TAB, DURATION_MS) {
   const TABS = TAB.closest(".pageTabs");
   const CURRENT = TABS && TABS.querySelector('.pageTab[aria-current="page"]');
@@ -608,18 +609,20 @@ function glideTabGlow(TAB, DURATION_MS) {
   const BOX = (EL) => ({ left: EL.offsetLeft, top: EL.offsetTop, width: EL.offsetWidth, height: EL.offsetHeight });
   const FROM = BOX(CURRENT);
   const TO = BOX(TAB);
+  // It gets there a little before the page leaves, so it rests on its tab for a moment
+  const GLIDE_MS = Math.max(200, DURATION_MS * 0.75);
   const GLOW = document.createElement("span");
   GLOW.className = "tabGlow";
   GLOW.setAttribute("aria-hidden", "true");
   Object.assign(GLOW.style, { left: `${FROM.left}px`, top: `${FROM.top}px`, width: `${FROM.width}px`, height: `${FROM.height}px` });
+  TABS.style.setProperty("--GLIDE_TIME", `${GLIDE_MS}ms`);
   TABS.appendChild(GLOW);
   TABS.classList.add("isGliding");
   TAB.classList.add("isGlideTarget");
-  // It gets there a little before the page leaves, so it rests on its tab for a moment
   GLOW.animate([
     { transform: "translate(0, 0)", width: `${FROM.width}px`, height: `${FROM.height}px` },
     { transform: `translate(${TO.left - FROM.left}px, ${TO.top - FROM.top}px)`, width: `${TO.width}px`, height: `${TO.height}px` }
-  ], { duration: Math.max(200, DURATION_MS * 0.75), easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "forwards" });
+  ], { duration: GLIDE_MS, easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "forwards" });
 }
 
 /* #endregion 5) TRANSITION NAVIGATION (SLIDE-OUT THEN LEAVE) */

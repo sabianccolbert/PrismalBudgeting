@@ -1495,8 +1495,8 @@ function recurringTwin(title, special, exceptIndex = -1) {
 }
 
 // Refuse a recurring entry whose title, Other Account, and refraction type another one already has. kept: the entry
-// being changed already matched it (two that match can only come with a budget brought over from the spreadsheet,
-// see recurringDuplicates), so it has to change one of the three, or one of them goes.
+// being changed already matched it (two that match can't be made here, see recurringDuplicates), so it has to change
+// one of the three, or one of them goes.
 function refuseRecurringTwin(title, sprite, exceptIndex = -1, kept = false) {
   let twin = recurringTwin(title, getSpecialType(sprite), exceptIndex);
   if (twin === -1) return;
@@ -1508,8 +1508,8 @@ function refuseRecurringTwin(title, sprite, exceptIndex = -1, kept = false) {
 }
 
 // Recurring entries that match an earlier one's title, Other Account, and refraction type, which can't be made here but
-// can come with a budget brought over from the spreadsheet: ["Rent (Regular)", ...]. The Recurring Entries page lists
-// them to be fixed; until then, on a day both land on, the first one does (see writeRecurring).
+// a budget from before that rule can have: ["Rent (Regular)", ...]. The Recurring Entries page lists them to be fixed;
+// until then, on a day both land on, the first one does (see writeRecurring).
 function recurringDuplicates() {
   let seen = new Set();
   let found = new Set();
@@ -1686,7 +1686,7 @@ function trackerEntry(fields, index) {
 
 // An alias is an entry title plus which of its amounts it counts: All, only Costs, or only Gains (people only
 // ever see those words: the tracker's buttons, and describeAliases). Inside the tracker table each one is
-// stored the spreadsheet's way, a title with an ending, so imported rows keep working: "rent-" counts costs,
+// stored the spreadsheet's way, a title with an ending: "rent-" counts costs,
 // "paycheck+" gains, and "atm" (or "atm=") everything. A title that ends in one of those itself, like
 // "Disney+", gets an ending of its own ("Disney+=") so it reads back as typed.
 const ALIAS_SUFFIXES = { all: "", costs: "-", gains: "+" };

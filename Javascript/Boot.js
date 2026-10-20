@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.20.2026.A";
+  const SITE_VERSION = "10.20.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,21 +26,20 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "2e289270be",
-    "/Javascript/Budget Search.js": "d2bf7dd6ac",
-    "/Javascript/Budget UI.js": "7dae80a077",
+    "/Javascript/Budget Pages.js": "fe8f3588ef",
+    "/Javascript/Budget Search.js": "52f4685c43",
+    "/Javascript/Budget UI.js": "4139447039",
     "/Javascript/Calendar Page.js": "db8a832ff9",
-    "/Javascript/Dates.js": "f8cf704fe1",
+    "/Javascript/Dates.js": "9f645c4b1f",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "696c7ad676",
+    "/Javascript/Layout.js": "6dfb9a06d0",
     "/Javascript/Login.js": "9e6e1a34a1",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "a97c336117",
-    "/Javascript/Quick Entry.js": "887c663fc1",
+    "/Javascript/Process Budget.js": "158ec3a22b",
+    "/Javascript/Quick Entry.js": "45ef9cd0ae",
     "/Javascript/Session.js": "4967552407",
-    "/Javascript/Settings Page.js": "8b8dff3367",
-    "/Javascript/Sheet Import.js": "3bf75b5912",
+    "/Javascript/Settings Page.js": "38b25426e5",
     "/Javascript/Spreadsheets Page.js": "2d9bb4bb47",
     "/Javascript/Spreadsheets.js": "b4b0b3b517",
     "/Javascript/Sprites.js": "5b494b26db",
@@ -263,9 +262,6 @@
       // Search (Home's and History's): before the page script, which opens it
       if (PAGE === "home" || PAGE === "history") appendScript("/Javascript/Budget Search.js");
       appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");
-      // May need again in the future: bringing a Google Sheets budget over (see Sheet Import.js, and its card at the
-      // bottom of index.html, which is commented out too)
-      // if (PAGE === "home") appendScript("/Javascript/Sheet Import.js");
     }
   }
 

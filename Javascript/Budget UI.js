@@ -548,9 +548,11 @@ const BudgetUI = (() => {
   //   placeholder and suggestions (a datalist id) can be functions of the line's mode. onEnterEmpty: runs
   //   when Enter is pressed on an empty line. exact: each line gets an Exact switch beside its box (Search: off
   //   finds titles with the words in them, on only the title itself), except for the modes in noExact.
-  // Returns { el (the lines and the add button), lines, addButton, items(): [{ title, mode, exact }] for
-  // every line, blank ones too }
-  function termList({ items = [], options, label, lineLabel, addLabel, placeholder = "", suggestions = null, onEnterEmpty = null, exact = false, noExact = [] }) {
+  //   help: { label, content }, a tiny ? before the first line's buttons that shows (or hides) what they do, in a box
+  //   that goes wherever the caller puts it (helpBox)
+  // Returns { el (the lines, the help box, and the add button), lines, helpBox (or null), addButton, items():
+  // [{ title, mode, exact }] for every line, blank ones too }
+  function termList({ items = [], options, label, lineLabel, addLabel, placeholder = "", suggestions = null, onEnterEmpty = null, exact = false, noExact = [], help = null }) {
     const list = element("div", "termList");
     list.setAttribute("role", "group");
     list.setAttribute("aria-label", label);
@@ -558,6 +560,29 @@ const BudgetUI = (() => {
     const defaultMode = options[0].key;
     const forMode = (setting, mode) => (typeof setting === "function" ? setting(mode) : setting);
     const tidy = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
+
+    // The explanation the ? shows (every line has one, but only the first line's shows: see .termHelpButton)
+    const helpBox = help ? element("div", "fieldHelp termHelp") : null;
+    const helpButtons = [];
+    if (helpBox) {
+      helpBox.id = `fieldHelp${++fieldHelpCount}`;
+      helpBox.hidden = true;
+      helpBox.appendChild(help.content);
+    }
+    const helpButton = () => {
+      const button = element("button", "fieldHelpButton termHelpButton", "?");
+      button.type = "button";
+      button.title = help.label;
+      button.setAttribute("aria-label", help.label);
+      button.setAttribute("aria-controls", helpBox.id);
+      button.setAttribute("aria-expanded", String(!helpBox.hidden));
+      button.addEventListener("click", () => {
+        helpBox.hidden = !helpBox.hidden;
+        helpButtons.forEach(each => each.setAttribute("aria-expanded", String(!helpBox.hidden)));
+      });
+      helpButtons.push(button);
+      return button;
+    };
 
     // A line goes after the line `after`, or at the end
     function addLine(item = { title: "", mode: defaultMode, exact: false }, after = null) {
@@ -571,9 +596,9 @@ const BudgetUI = (() => {
       const remove = element("button", "panelClose termRemove", "×");
       remove.type = "button";
       remove.setAttribute("aria-label", `Remove ${lineLabel.toLowerCase()}`);
-      // The buttons and × stay together, × right after the last button, when the line wraps
+      // The buttons and × stay together, × right after the last button, when the line wraps (and the ? before them)
       const controls = element("div", "termControls");
-      controls.append(modes.el, remove);
+      controls.append(...(helpBox ? [helpButton()] : []), modes.el, remove);
       const exactSwitch = exact ? checkboxField({ label: "Exact", checked: !!item.exact }) : null;
       if (exactSwitch) {
         exactSwitch.el.classList.add("termExact");
@@ -634,6 +659,8 @@ const BudgetUI = (() => {
       remove.addEventListener("click", () => {
         lines.splice(lines.indexOf(line), 1);
         row.remove();
+        const helpAt = helpButtons.indexOf(controls.querySelector(".termHelpButton"));
+        if (helpAt >= 0) helpButtons.splice(helpAt, 1);
         if (lines.length === 0) addLine();
         addButton.focus();
       });
@@ -650,10 +677,11 @@ const BudgetUI = (() => {
     if (lines.length === 0) addLine();
 
     const el = element("div", "termField");
-    el.append(list, addButton);
+    el.append(list, ...(helpBox ? [helpBox] : []), addButton);
     return {
       el,
       lines: list,
+      helpBox,
       addButton,
       items: () => lines.map(line => ({ title: tidy(line.input.value), mode: line.modes.value(), exact: !!line.exactSwitch?.value() }))
     };
