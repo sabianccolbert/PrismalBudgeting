@@ -603,7 +603,7 @@ function renderQuickIcons() {
     status.textContent = "Quick Entry icons: none right now. The Quick Entry button on Home makes one for a phone's home screen.";
     return;
   }
-  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see your Other Accounts' balances (for its account picker), and keep your prisms, but nothing else.`;
+  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see In Bank today and the lowest it gets, see your Other Accounts' balances (for its account picker), and keep your prisms, but nothing else.`;
   buttons.append(settingsButton(count === 1 ? "Turn Off The Icon" : "Turn Off Icons", "danger", turnOffQuickIcons));
 }
 

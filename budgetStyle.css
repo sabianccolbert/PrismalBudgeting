@@ -1,9 +1,10 @@
-/* How a day looks: its fill and edge, and those of today (glowing) and a day below $0 (red) */
+/* How a day looks: its fill and edge, and those of today (glowing) and a day below $0 (red). The fills are half
+   see-through (the stars show through them); the words and sprites on them aren't. */
 :root {
-  --DAY_FILL: linear-gradient(180deg, rgba(30, 32, 86, 0.9), rgba(12, 12, 38, 0.88));
+  --DAY_FILL: linear-gradient(180deg, rgba(30, 32, 86, 0.5), rgba(12, 12, 38, 0.5));
   --DAY_EDGE: rgba(120, 132, 255, 0.22);
   --DAY_RADIUS: clamp(4px, 0.9vmin, 10px);
-  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(112, 12, 44, 0.92), rgba(42, 6, 24, 0.9));
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(112, 12, 44, 0.5), rgba(42, 6, 24, 0.5));
   --NEGATIVE_DAY_EDGE: rgba(255, 80, 100, 0.6);
   --NEGATIVE_GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 70, 90, 0.5) 0%, rgba(200, 20, 50, 0.28) 50%, rgba(90, 0, 30, 0.1) 85%, transparent 100%);
 }
@@ -32,9 +33,6 @@
   /* Prevent text highlighting while drag-zooming on PC */
   user-select: none;
   -webkit-user-select: none;
-
-  /* Smoothly animates the table's transform when released */
-  transition: transform 0.25s ease-in-out;
 }
 
 /* The actual element that scales, zooms, and tilts: a small glass tile with a faint blue edge (drawn inside it, so it
@@ -66,6 +64,13 @@
   transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
+/* A day that isn't zoomed (or magnified) cuts a line too long for it short, with "..." at its edge */
+.elastic-table td:not(.is-editing):not(.is-magnified) .cell-content > :not(.cell-action-btn):not(.historyDate) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /*
  * PC Mouse Interaction (Magnifying Glass Effect): holding the mouse down on a day magnifies it
  * (Process Budget.js adds .is-magnified)
@@ -95,7 +100,7 @@
   transform: scale(2); /* Zoom level */
   z-index: 60; /* Above the other days and the dimmed page (.dayZoomBackdrop) */
   position: relative;
-  transition: transform 0.2s ease-in-out;
+  transition: transform 0.4s cubic-bezier(0.33, 0, 0.2, 1);
   filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.6));
 }
 
@@ -433,6 +438,26 @@
   min-width: 30vmin;
   font-size: 0.85em;
   opacity: 0.85;
+}
+
+/* A row's aliases scroll in a box about two lines tall (Budget Pages.js aliasBox): tapped, it opens all the way */
+.dataTable .aliasBox {
+  max-height: 2.7em;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
+}
+
+.dataTable .aliasBox.isClipped {
+  cursor: zoom-in;
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, rgba(0, 0, 0, 0.35));
+  mask-image: linear-gradient(to bottom, #000 60%, rgba(0, 0, 0, 0.35));
+}
+
+.dataTable .aliasBox.isOpen {
+  max-height: none;
+  overflow: visible;
+  cursor: zoom-out;
 }
 
 /* Category separator rows */
@@ -1189,8 +1214,18 @@ input.dateInput.isPickTarget {
 .searchBar input {
   flex: 1 1 9em;
   width: auto;
+  min-width: 0;
   border-radius: 9999px;
   padding: 0.45em 1em;
+}
+
+/* Safari's own text box look (an inner shadow, its own padding and line height) can cut the words off at the edges
+   of a round box, so the box is drawn only by these rules */
+.searchBar input[type="text"] {
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.35;
+  text-overflow: ellipsis;
 }
 
 /* The titles to search for: one line each, with All / Costs / Gains / Tracker and × */
@@ -1219,7 +1254,26 @@ input.dateInput.isPickTarget {
 }
 
 .searchBar .termInput {
-  flex: 3 1 16em;
+  flex: 3 1 10em;
+}
+
+/* A title's Exact switch, right beside its box (Tracker titles don't have one) */
+.termRow .termExact {
+  flex: 0 0 auto;
+  gap: 0.4em;
+  font-size: 0.9em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.termRow .termExact[hidden] {
+  display: none;
+}
+
+.searchBar .termExact input.pillSwitch {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
 }
 
 .searchTerms .segmented {
@@ -1230,10 +1284,12 @@ input.dateInput.isPickTarget {
   margin-left: 0;
 }
 
-/* Search's filters: a refraction type and an Other Account, side by side */
+/* Search's filters: a refraction type and an Other Account, side by side across the box (columns that can shrink below a
+   box's own width, so they never push past the edges) */
 .searchFilters {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  flex: 1 1 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.6em;
   margin-top: 0.6em;
 }
@@ -1254,11 +1310,13 @@ input.dateInput.isPickTarget {
 }
 
 /* In the search box: From and To (each a full row on phones, side by side on wider screens), then
-   + Add Title at the left and Search at the right */
+   + Add Title at the left and Search at the right. The columns can shrink below a date box's own width (a text box
+   is about 20 letters wide unless told otherwise), so the two side by side never push past the box's edges. */
 .searchBar .searchDates {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.6em;
+  min-width: 0;
   margin-top: 0.4em;
 }
 
@@ -1304,6 +1362,70 @@ input.dateInput.isPickTarget {
   width: 100%;
   max-width: none;
   margin: 0.2em 0 0;
+}
+
+/* Other Accounts: the total with In Bank, today and on the calendar's last day, and In Bank, over the accounts */
+.accountsTotal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6em clamp(14px, 4vw, 40px);
+  margin: 0 auto 1.2em;
+  padding: 0.8em 1em;
+  font-size: var(--UI_TEXT);
+  text-align: center;
+  background: var(--PANEL_DARK);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 12px;
+}
+
+.accountsTotal .infoLabel {
+  margin-bottom: 0.15em;
+}
+
+.accountsTotal .totalAmount {
+  font-size: 1.25em;
+  color: var(--TEXT_BRIGHT);
+  font-variant-numeric: tabular-nums;
+}
+
+.accountsTotal .totalFigure.main .totalAmount {
+  font-size: 1.7em;
+}
+
+.accountsTotal .totalAmount.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+/* An account's Interest switch and rate (its rate shows while the switch is on) */
+.interestFields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+}
+
+.startForm .startSign {
+  flex: 0 0 auto;
+}
+
+/* Search's results: what's after today is tinted, and a line under its own heading sets it apart from today and
+   before */
+.searchTable tr.searchComing td {
+  background: rgba(70, 60, 170, 0.32);
+}
+
+.searchTable tr.searchDivider td {
+  padding: 0.5em 0.6em 0.3em;
+  font-size: 0.85em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--TEXT_DIM);
+  background: none;
+  border-bottom: 2px solid var(--NEON_VIOLET);
+}
+
+.searchTable tr.searchComing + tr.searchDivider td {
+  padding-top: 1em;
 }
 
 /* Results show under the search's form, inside the box */
@@ -1602,6 +1724,15 @@ input.dateInput.isPickTarget {
     var(--GLASS);
 }
 
+/* Below $0 (today through the 28 days after the calendar): the card turns red, like a day below $0 */
+.lowestCard.isNegative {
+  border-color: var(--NEGATIVE_DAY_EDGE);
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(255, 70, 100, 0.16)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(200, 30, 80, 0.16)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--NEGATIVE_DAY_FILL);
+  box-shadow: var(--GLASS_SHADOW), 0 0 16px rgba(255, 40, 60, 0.35);
+}
+
 .cardIcon.walletIcon {
   width: clamp(44px, 9vmin, 64px);
   height: clamp(44px, 9vmin, 64px);
@@ -1746,10 +1877,45 @@ input.dateInput.isPickTarget {
 }
 
 .upcomingItem {
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+/* Each upcoming entry is a button that opens its options (Calendar Page.js renderInfoRow) */
+.upcomingItem .upcomingButton {
   display: flex;
   gap: 0.6em;
-  padding: 0.2em 0;
-  border-bottom: 1px solid var(--PANEL_LINE);
+  width: 100%;
+  margin: 0;
+  padding: 0.25em 0.3em;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.upcomingItem .upcomingButton:hover,
+.upcomingItem .upcomingButton:focus-visible {
+  transform: none;
+  text-shadow: none;
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+/* New Entry: an entry with that title and type already on the day, and whether to add to it or set it */
+.matchBox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.matchNote .lineEntry {
+  display: inline;
 }
 
 .upcomingDate {
@@ -1863,6 +2029,16 @@ input.dateInput.isPickTarget {
   transition: box-shadow var(--SLOW_SHADOW);
 }
 
+/* The colors are only its ring: its middle is solid dark blue, under the + */
+.newEntryPrism::before {
+  content: "";
+  position: absolute;
+  inset: 15%;
+  border-radius: 50%;
+  background: #0b1145;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.55), inset 0 0 8px rgba(0, 0, 0, 0.5);
+}
+
 /* Hovered or focused: the red-orange edge and red glow, and a red radial gradient from its center */
 .newEntryPrism::after {
   content: "";
@@ -1913,6 +2089,126 @@ input.dateInput.isPickTarget {
       "dave"
       "upcoming";
   }
+}
+
+/* Steps for each kind of phone (Layout.js wireDeviceGuide): a list picks the kind, and only its part shows. Without
+   JavaScript, every part shows under its own name. */
+.deviceGuide {
+  margin: 0.6em 0 1em;
+  padding: 0.7em 0.9em;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.deviceGuidePick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.5em;
+  font-size: 0.95em;
+  color: var(--TEXT_DIM);
+}
+
+.deviceGuide .deviceSelect {
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.35em 0.7em;
+  font-family: inherit;
+  font-size: max(16px, 1em);
+  color: var(--TEXT_BRIGHT);
+  background: rgba(8, 10, 32, 0.6);
+  border: 1.5px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+}
+
+.deviceGuide .deviceSelect option {
+  background: #141238;
+}
+
+.deviceGuide .deviceName {
+  margin: 0.6em 0 0.2em;
+  font-weight: bold;
+  color: var(--TEXT_BRIGHT);
+}
+
+.deviceGuide.isPicking .deviceName {
+  display: none;
+}
+
+.deviceGuide [data-device] > :first-child,
+.deviceGuide [data-device] > .deviceName + * {
+  margin-top: 0;
+}
+
+/* Quick Entry: In Bank today and the lowest it gets, side by side over the form (Quick Entry.js showQuickBalances) */
+.quickBalances {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(8px, 1.6vw, 18px);
+  width: min(94vw, 760px);
+  margin: 0 auto 1em;
+  font-size: clamp(13px, 2.6vmin, 18px);
+}
+
+.quickBalances[hidden] {
+  display: none;
+}
+
+.quickBalance {
+  padding: 0.7em 0.9em;
+  text-align: center;
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: var(--GLASS_SHADOW);
+}
+
+.quickBalanceAmount {
+  display: block;
+  font-size: 1.7em;
+  line-height: 1.15;
+  color: var(--TEXT_BRIGHT);
+  font-variant-numeric: tabular-nums;
+}
+
+.quickBalanceAmount.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+/* An Apple Watch (html.watchView, Quick Entry.js): In Bank today, big, and nothing else ("Loading..." until it's in) */
+html.watchView #constellations,
+html.watchView #transitionContainer > header,
+html.watchView main > :not(.quickBalances):not(#dataStatus),
+html.watchView .quickBalances:not([hidden]) ~ #dataStatus,
+html.watchView .quickBalance + .quickBalance,
+html.watchView footer[data-global-footer],
+html.watchView #versionBadge {
+  display: none;
+}
+
+html.watchView main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 90vh;
+}
+
+html.watchView .quickBalances {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  margin: 0;
+}
+
+html.watchView .quickBalance {
+  padding: 0.6em 0.3em;
+}
+
+html.watchView .quickBalanceAmount {
+  font-size: 2.1em;
 }
 
 /* Undo and Redo (the Quick Entry page's, above its form) */

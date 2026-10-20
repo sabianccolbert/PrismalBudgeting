@@ -125,8 +125,8 @@ This file lives in _tools/, which the website never publishes. Delete this file 
 
 THE SITE VERSION
 ----------------
-The version is shown at the bottom of every page (like v10.19.2026.A): the release's date, then a letter for
+The version is shown at the bottom of every page (like v10.19.2026.B): the release's date, then a letter for
 which release that day (A, then B, ...). It's written in two places:
-  - Javascript/Boot.js:   const SITE_VERSION = "10.19.2026.A";
-  - how-it-works.html:    the "Last updated: ... (site version 10.19.2026.A)." line near the top
+  - Javascript/Boot.js:   const SITE_VERSION = "10.19.2026.B";
+  - how-it-works.html:    the "Last updated: ... (site version 10.19.2026.B)." line near the top
 Change both to the new version before stamping.

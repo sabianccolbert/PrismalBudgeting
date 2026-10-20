@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.19.2026.A";
+  const SITE_VERSION = "10.19.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,19 +26,19 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "3361e09d25",
-    "/Javascript/Budget Search.js": "004d447dae",
-    "/Javascript/Budget UI.js": "637d78baa9",
-    "/Javascript/Calendar Page.js": "39cf9c4001",
+    "/Javascript/Budget Pages.js": "35336dab8e",
+    "/Javascript/Budget Search.js": "ebfd263fb9",
+    "/Javascript/Budget UI.js": "329c377b8f",
+    "/Javascript/Calendar Page.js": "dcd0defb42",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "e35bff5b32",
+    "/Javascript/Layout.js": "d0d75b2223",
     "/Javascript/Login.js": "44f2e77ba4",
     "/Javascript/Passkeys.js": "67a10905c2",
-    "/Javascript/Process Budget.js": "2ff05a8e16",
-    "/Javascript/Quick Entry.js": "0d5833c0f2",
+    "/Javascript/Process Budget.js": "56d446a2d9",
+    "/Javascript/Quick Entry.js": "887c663fc1",
     "/Javascript/Session.js": "ec241e0ce9",
-    "/Javascript/Settings Page.js": "f9d240e969",
+    "/Javascript/Settings Page.js": "870f6615a8",
     "/Javascript/Sheet Import.js": "3bf75b5912",
     "/Javascript/Spreadsheets Page.js": "9841bde22d",
     "/Javascript/Spreadsheets.js": "a1b13cbfeb",
@@ -188,6 +188,16 @@
    *  5) CSS mode flip
    * =============================== */
   document.documentElement.classList.add(PAGE === "home" ? "homeJs" : "otherJs");
+
+  // Coming from one of the budget's four pages by its tab (Layout.js leaves a note for this tab), the header and the
+  // tabs are already in place, and only the rest of the page slides in (Layout.js takes html.tabSlide off after)
+  const TAB_PAGES = ["home", "recurring", "history", "accounts"];
+  let fromTab = false;
+  try {
+    fromTab = sessionStorage.getItem("prismal_tab_slide") === "1";
+    sessionStorage.removeItem("prismal_tab_slide");
+  } catch (e) {}
+  if (fromTab && TAB_PAGES.includes(PAGE) && !FRONT_PAGE) document.documentElement.classList.add("tabSlide");
 
   /* ===============================
    *  6) Append page scripts at END

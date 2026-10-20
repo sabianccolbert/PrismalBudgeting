@@ -134,17 +134,33 @@ function renderGettingStarted() {
   document.getElementById("startRecurringStep").classList.toggle("done", steps.recurring);
 }
 
-// The card's × and its starting balance form
+// The card's × and its starting balance form. Its boxes are typed like a cash register (Budget UI.js), and the bank's
+// has − and + beside it for an account that's overdrawn.
+let startBalanceSign = 1;
 function wireGettingStarted() {
   document.getElementById("gettingStartedHide")?.addEventListener("click", () => {
     finishGettingStarted();
     document.getElementById("gettingStarted").hidden = true;
   });
   document.getElementById("startBalanceForm")?.addEventListener("submit", setStartingBalance);
+  const bank = document.getElementById("startBalance");
+  if (bank) {
+    const signs = BudgetUI.segmented([{ key: -1, label: "−" }, { key: 1, label: "+" }], 1, (key) => { startBalanceSign = key; });
+    signs.el.classList.add("startSign");
+    signs.el.setAttribute("aria-label", "Overdrawn (−) or not (+)");
+    bank.after(signs.el);
+    BudgetUI.cashRegister(bank, (key) => {
+      startBalanceSign = key;
+      signs.set(key);
+    });
+  }
+  const savings = document.getElementById("startSavings");
+  if (savings) BudgetUI.cashRegister(savings);
 }
 
-// "1,500.00", "$1500", or "1500,50" -> the amount (to the cent); null when it isn't an amount
+// "1,500.00", "$1500", or "1500,50" -> the amount (to the cent); null when it isn't an amount. Blank is 0.
 function readStartAmount(text) {
+  if (!String(text).trim()) return 0;
   const amount = readMoneyInput(text);
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : null;
 }
@@ -153,10 +169,10 @@ function readStartAmount(text) {
 async function setStartingBalance(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const balance = readStartAmount(document.getElementById("startBalance").value);
-  const savingsText = document.getElementById("startSavings").value.trim();
-  const savings = savingsText ? readStartAmount(savingsText) : 0;
-  if (balance === null) return BudgetUI.showToast("Enter what's in your bank account, like 1500.00 (or -25.00 if it's overdrawn).", true);
+  const typedBalance = readStartAmount(document.getElementById("startBalance").value);
+  const balance = typedBalance === null ? null : startBalanceSign * Math.abs(typedBalance);
+  const savings = readStartAmount(document.getElementById("startSavings").value);
+  if (balance === null) return BudgetUI.showToast("Enter what's in your bank account, like 1500.00 (tap − first if it's overdrawn).", true);
   if (savings === null || savings < 0) return BudgetUI.showToast("Enter what's in savings, like 3000.00, or leave it blank.", true);
   if (Math.abs(balance) > MAX_AMOUNT || savings > MAX_AMOUNT) return BudgetUI.showToast(AMOUNT_TOO_BIG, true);
 
@@ -237,8 +253,8 @@ function renderCalendar() {
     td.dataset.row = r;
     td.dataset.col = c;
     td.classList.toggle("isToday", gridDates[r][c].getTime() === today.getTime());
-    // The last day also turns red when the 28 days after the calendar go negative (the Lowest card's "Lowest is on")
-    td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0 || (isLastDay && nextFourNegative));
+    // (The 28 days after the calendar going below $0 turns the Lowest card red instead, see renderAfterCalendar)
+    td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0);
   });
 }
 
@@ -285,21 +301,21 @@ function openInBankOptions(lineEl, r, c) {
     size: "small",
     title: `${showDay(date)} In Bank`,
     build(form, panel) {
-      const balance = BudgetUI.textField({
+      // (Negative is for a bank account that's below zero)
+      const balance = BudgetUI.amountField({
         label: "In Bank",
-        value: current.toFixed(2),
-        placeholder: "0.00",
+        amount: current,
+        signs: BudgetUI.BALANCE_SIGNS,
         hint: `What your bank says for this day. The difference goes on it as a ⭕️ Transfer titled ${CATCHUP_TITLE} (with no Other Account), and the days after it follow.`
       });
-      balance.input.inputMode = "decimal";
       form.append(balance.el, BudgetUI.buttonRow([
         { label: "Save", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }
       ]));
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const typed = readMoneyInput(balance.value());
-        if (!Number.isFinite(typed)) return panel.setError("Enter what's in the bank, like 1250.00 (or -40.00 when it's below zero).");
+        const typed = balance.value() ?? 0;
+        if (!Number.isFinite(typed)) return panel.setError("Enter what's in the bank, like 1250.00 (tap Negative when it's below zero).");
         if (Math.abs(typed) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         const difference = Math.round((typed - current) * 100) / 100;
         if (difference === 0) return panel.close(); // Already right
@@ -332,18 +348,25 @@ function renderInfoRow() {
     list.appendChild(BudgetUI.element("li", "upcomingEmpty", "Nothing scheduled past this calendar."));
     return;
   }
+  // Each one opens its options when tapped, like an entry on a zoomed day (change it, move it, or delete it)
   for (const upcoming of upcomingEntries) {
     const item = BudgetUI.noTranslate(BudgetUI.element("li", "upcomingItem"));
-    item.appendChild(BudgetUI.element("span", "upcomingDate", showDate(upcoming.date)));
-    const entry = BudgetUI.element("span", "upcomingEntry", `${upcoming.sprite} ${formatMoney(upcoming.amount)} ${upcoming.title}`);
+    const button = BudgetUI.element("button", "upcomingButton");
+    button.type = "button";
+    const line = `${upcoming.sprite} ${formatMoney(upcoming.amount)} ${upcoming.title}`;
+    button.appendChild(BudgetUI.element("span", "upcomingDate", showDate(upcoming.date)));
+    const entry = BudgetUI.element("span", "upcomingEntry", line);
     if (upcoming.amount > 0) entry.classList.add("positive");
-    item.appendChild(entry);
+    button.appendChild(entry);
+    button.addEventListener("click", () => openEntryOptionsFor(button, line, upcoming.date));
+    item.appendChild(button);
     list.appendChild(item);
   }
 }
 
 // The Lowest card's look past the calendar, from the last day's two lines (see afterCalendarLine): the day In Bank is
-// lowest in the 28 days after the calendar and how low, and In Bank on the 28th day. Red below $0.
+// lowest in the 28 days after the calendar and how low, and In Bank on the 28th day. Red below $0, and the whole card
+// turns red when any of its amounts is below $0.
 function renderAfterCalendar() {
   const box = document.getElementById("afterCalendar");
   if (!box || !calendarData[3]) return;
@@ -352,6 +375,8 @@ function renderAfterCalendar() {
     const after = afterCalendarLine(line);
     if (after) found[after.kind] = after;
   }
+  const belowZero = lowestInBank < 0 || [found.lowest, found.day28].some(after => after && after.amount < 0);
+  box.closest(".lowestCard")?.classList.toggle("isNegative", belowZero);
   box.hidden = !found.lowest && !found.day28;
   const show = (id, after) => {
     const el = document.getElementById(id);
@@ -385,7 +410,10 @@ function renderDave() {
 // =====================================================================
 
 // New entry: title, amount (cost or gain), date, optional refraction type, and for Hidden or Transfer,
-// an Other Account. Same title + refraction type on that day combines with what's there.
+// an Other Account. A day has one entry per title, type, and Other Account, so when one is already there (its own,
+// or a recurring or connected spreadsheet's entry landing there), the form says so and asks whether to add the new
+// amount to it or set it to the new amount. Either way a recurring or spreadsheet entry becomes a temp for that day
+// (like ❗️✔️), the same as changing it on the calendar.
 function openNewEntryPanel(origin) {
   BudgetUI.openPanel({
     origin,
@@ -393,15 +421,48 @@ function openNewEntryPanel(origin) {
     title: "New Entry",
     build(form, panel) {
       const fields = BudgetUI.newEntryFields({ accounts: otherAccounts() });
-      form.append(...fields.els, BudgetUI.buttonRow([
+      let mode = "add";
+      const modeToggle = BudgetUI.segmented([{ key: "add", label: "Add to it" }, { key: "set", label: "Set to this" }], mode, (key) => { mode = key; });
+      const matchNote = BudgetUI.element("div", "panelText matchNote");
+      const matchBox = BudgetUI.element("div", "matchBox");
+      matchBox.append(matchNote, modeToggle.el);
+      const matchField = BudgetUI.field("Already on that day", matchBox);
+      matchField.hidden = true;
+      form.append(...fields.els, matchField, BudgetUI.buttonRow([
         { label: "Add Entry", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }
       ]));
+
+      // The entry already there, if there's one (looked up again as the form changes)
+      let match = null;
+      const findMatch = () => {
+        const { title, sprite, account, date } = fields.values();
+        match = title && !title.includes(ACCOUNT_ARROW) ? entryOnDay(withAccount(title, account), sprite, date || today) : null;
+        matchField.hidden = !match;
+        if (!match) return;
+        const mark = entryMark(match.sprite);
+        const from = mark === RECURRING_MARK ? " (a recurring entry)" : mark === SHEET_MARK ? " (from a connected spreadsheet)" : "";
+        matchNote.replaceChildren(BudgetUI.renderEntryLine(`${match.sprite} ${formatMoney(match.amount)} ${capitalize(withAccount(title, account))}`, 1), ` is already on ${showDay(date || today)}${from}. Add this amount to it, or set it to this amount?`);
+      };
+      let pending = 0;
+      const queueFind = () => {
+        cancelAnimationFrame(pending);
+        pending = requestAnimationFrame(findMatch);
+      };
+      form.addEventListener("input", queueFind);
+      form.addEventListener("change", queueFind);
+      form.addEventListener("click", queueFind); // The refraction type's buttons
+      findMatch();
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const { entry, error } = fields.read();
         if (error) return panel.setError(error);
+        findMatch();
+        if (match && mode === "set") {
+          const sprite = entry.sprite || getSpecialType(match.sprite);
+          return BudgetUI.submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", amount: String(entry.amount) }));
+        }
         BudgetUI.submit(panel, () => addCalendarEntry(entry));
       });
     }
@@ -421,8 +482,8 @@ function openQuickEntrySetup(origin) {
       const text = (line) => BudgetUI.element("p", "panelText", line);
       form.append(
         text("Put an icon on your phone's home screen that opens a New Entry form, with no login needed."),
-        text("The icon can only add entries. It never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, or you turn icons off in Settings, it stops working."),
-        text("On the next page, add it to your home screen: on iPhone, in Safari, tap Share, then Add to Home Screen. On Android, in Chrome, tap ⋮, then Add to Home screen. Use Safari or Chrome itself, not Prismal Budget opened inside another app (like Gmail or Instagram)."),
+        text("The icon can only add entries. Besides In Bank today and the lowest it gets, it never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, or you turn icons off in Settings, it stops working."),
+        text("The next page shows how to add it to your home screen on your phone (iPhone, Samsung, Pixel, OnePlus, and more), and its Help shows how to open it from an iPhone's Lock Screen or check In Bank on an Apple Watch. Use your browser itself, not Prismal Budget opened inside another app (like Gmail or Instagram)."),
         BudgetUI.buttonRow([
           { label: "Set It Up", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }
@@ -450,15 +511,19 @@ function openQuickEntrySetup(origin) {
 // Options for an entry tapped inside a zoomed day: set or add to the amount, move it, or delete it
 function openEntryOptions(lineEl, r, c, lineIndex) {
   const line = String(calendarData[r][c]).split("\n")[lineIndex];
-  if (!line) return;
+  if (line) openEntryOptionsFor(lineEl, line, gridDates[r][c], lineIndex);
+}
+
+// The same options for any entry: line is the entry as a day shows it ("❗️ -$4.50 Coffee") on date (Upcoming's
+// entries, after the calendar, too)
+function openEntryOptionsFor(origin, line, date, lineIndex = 1) {
   const parts = getParts(line);
   const refraction = getSpecialType(parts[0]);
   const currentAmount = parseAmount(parts[1]);
   const title = parts.slice(2).join(" ");
-  const date = gridDates[r][c];
 
   BudgetUI.openPanel({
-    origin: lineEl,
+    origin,
     size: "small",
     title: `${showDay(date)} Entry`,
     build(form, panel) {
@@ -477,7 +542,7 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
         "set",
         (key) => {
           mode = key;
-          amount.input.value = key === "set" ? Math.abs(currentAmount).toFixed(2) : "";
+          amount.input.value = key === "set" && Math.round(currentAmount * 100) !== 0 ? Math.abs(currentAmount).toFixed(2) : "";
           amount.setSign(key === "set" && currentAmount > 0 ? 1 : -1);
         }
       );
@@ -499,16 +564,16 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const newAmount = amount.value();
+        const newAmount = amount.value() ?? 0; // A blank box is 0 (Set to 0, or nothing added)
         const move = moveTo.value();
         if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
-        if (newAmount !== null && Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+        if (Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
 
         const newSprite = type.value();
         const newAccount = accountPicker.value();
         if (newSprite !== refraction || newAccount !== startAccount) {
-          const total = mode === "set" ? (newAmount === null ? currentAmount : newAmount) : currentAmount + (newAmount || 0);
+          const total = mode === "set" ? newAmount : currentAmount + newAmount;
           if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
           const newTitle = withAccount(ownTitle, newAccount);
           // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
@@ -519,7 +584,7 @@ function openEntryOptions(lineEl, r, c, lineIndex) {
         }
 
         const change = { title, sprite: refraction, date, action: "set", amount: "" };
-        const amountChanged = newAmount !== null && (mode === "set" ? newAmount !== currentAmount : newAmount !== 0);
+        const amountChanged = mode === "set" ? newAmount !== currentAmount : newAmount !== 0;
         if (amountChanged) {
           change.action = mode === "set" ? "set" : (newAmount > 0 ? "add" : "subtract");
           change.amount = mode === "set" ? String(newAmount) : String(Math.abs(newAmount));

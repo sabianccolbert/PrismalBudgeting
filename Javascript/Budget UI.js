@@ -239,16 +239,21 @@ const BudgetUI = (() => {
     return { el: field(label, input, { optional, hint }), input, value: () => input.value.replace(/\s+/g, " ").trim() };
   }
 
-  // Amount with a Cost/Gain toggle. value(): signed number, null when blank, NaN when unreadable.
-  function amountField({ label = "Amount", amount = null, optional = false } = {}) {
+  // Amount with a Cost/Gain toggle (or another pair of names for the two signs: BALANCE_SIGNS for a balance, which
+  // starts on + instead). It's typed like a cash register (cashRegister below), and an amount of 0 shows as a blank
+  // box with 0.00 as its hint. value(): signed number, null when blank (callers count that as 0), NaN when unreadable.
+  const ENTRY_SIGNS = ["− Cost", "+ Gain"];
+  const BALANCE_SIGNS = ["− Negative", "+ Positive"];
+
+  function amountField({ label = "Amount", amount = null, optional = false, hint = "", signs = ENTRY_SIGNS, startSign = signs === ENTRY_SIGNS ? -1 : 1 } = {}) {
     const input = element("input", "amountInput");
     input.type = "text";
-    input.inputMode = "decimal";
     input.placeholder = "0.00";
-    if (amount !== null) input.value = Math.abs(amount).toFixed(2);
+    input.autocomplete = "off";
+    if (amount !== null && Math.round(amount * 100) !== 0) input.value = Math.abs(amount).toFixed(2);
 
-    let sign = amount !== null && amount > 0 ? 1 : -1;
-    const toggle = segmented([{ key: -1, label: "− Cost" }, { key: 1, label: "+ Gain" }], sign, (key) => setSign(key));
+    let sign = amount !== null && Math.round(amount * 100) !== 0 ? Math.sign(amount) : startSign;
+    const toggle = segmented([{ key: -1, label: signs[0] }, { key: 1, label: signs[1] }], sign, (key) => setSign(key));
     // Cost (-1) or Gain (1); a gain's box shows green
     function setSign(key) {
       sign = key;
@@ -256,19 +261,12 @@ const BudgetUI = (() => {
       input.classList.toggle("positive", sign > 0); // Positive entries show green
     }
     setSign(sign);
-
-    // Typing a leading - or + flips the toggle instead
-    input.addEventListener("input", () => {
-      const match = input.value.match(/^\s*([-+])/);
-      if (!match) return;
-      setSign(match[1] === "+" ? 1 : -1);
-      input.value = input.value.replace(/^\s*[-+]/, "");
-    });
+    cashRegister(input, setSign); // Typing - or + flips the toggle instead
 
     const row = element("div", "amountRow");
     row.append(input, toggle.el);
     return {
-      el: field(label, row, { optional }),
+      el: field(label, row, { optional, hint }),
       input,
       setSign,
       value() {
@@ -277,6 +275,39 @@ const BudgetUI = (() => {
         return Number.isFinite(number) ? sign * Math.abs(number) : NaN;
       }
     };
+  }
+
+  // A money box typed like a cash register: digits fill in from the cents, so the decimal point never needs typing
+  // ("5" is 0.05, "1234" is 12.34, and each digit after moves it along). A pasted or filled-in amount ("12.50",
+  // "$1,200") is read as it is. Nothing but zero shows as a blank box. A - or + typed anywhere goes to onSign(-1 or
+  // 1) instead (a box with no sign of its own just drops it). Tapping into a box with an amount in it selects it,
+  // so typing replaces it. A keyboard still putting a character together (composing) is left to finish first.
+  const MAX_DIGITS = 12; // $1,000,000,000.00
+  function cashRegister(input, onSign = null) {
+    input.inputMode = "numeric";
+    const digits = (text) => String(text).replace(/\D/g, "").replace(/^0+/, "").slice(0, MAX_DIGITS);
+    const tidy = (inputType = "") => {
+      const typedSigns = input.value.match(/[-+]/g);
+      if (typedSigns && onSign) onSign(typedSigns[typedSigns.length - 1] === "+" ? 1 : -1);
+      const text = input.value.replace(/[-+]/g, "");
+      let cents = Number(digits(text) || 0);
+      if (/^insert(FromPaste|FromDrop|ReplacementText)$/.test(inputType)) {
+        const pasted = readMoneyInput(text);
+        if (Number.isFinite(pasted)) cents = Math.round(Math.abs(pasted) * 100);
+      }
+      input.value = cents ? (cents / 100).toFixed(2) : "";
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+    };
+    input.addEventListener("input", (event) => {
+      if (!event.isComposing) tidy(event.inputType);
+    });
+    input.addEventListener("compositionend", () => tidy());
+    input.addEventListener("focus", () => {
+      if (!input.value) return;
+      requestAnimationFrame(() => {
+        try { if (document.activeElement === input) input.setSelectionRange(0, input.value.length); } catch (e) {}
+      });
+    });
   }
 
   // Refraction type picker. value(): "" (Auto), "❗️", "✖️", or "⭕️". onChange(key) runs when one is tapped.
@@ -492,12 +523,13 @@ const BudgetUI = (() => {
   // The tracker's aliases and the search bar use it. A comma starts the next line (so a pasted list
   // splits up), and Enter adds a line. Only the buttons pick what a line finds: a title is kept as it's
   // typed, so one like "Disney+" stays a title.
-  //   items: [{ title, mode }]. options: [{ key, label }] (the first is the default for new lines).
+  //   items: [{ title, mode, exact }]. options: [{ key, label }] (the first is the default for new lines).
   //   placeholder and suggestions (a datalist id) can be functions of the line's mode. onEnterEmpty: runs
-  //   when Enter is pressed on an empty line.
-  // Returns { el (the lines and the add button), lines, addButton, items(): [{ title, mode }] for
+  //   when Enter is pressed on an empty line. exact: each line gets an Exact switch beside its box (Search: off
+  //   finds titles with the words in them, on only the title itself), except for the modes in noExact.
+  // Returns { el (the lines and the add button), lines, addButton, items(): [{ title, mode, exact }] for
   // every line, blank ones too }
-  function termList({ items = [], options, label, lineLabel, addLabel, placeholder = "", suggestions = null, onEnterEmpty = null }) {
+  function termList({ items = [], options, label, lineLabel, addLabel, placeholder = "", suggestions = null, onEnterEmpty = null, exact = false, noExact = [] }) {
     const list = element("div", "termList");
     list.setAttribute("role", "group");
     list.setAttribute("aria-label", label);
@@ -507,7 +539,7 @@ const BudgetUI = (() => {
     const tidy = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
     // A line goes after the line `after`, or at the end
-    function addLine(item = { title: "", mode: defaultMode }, after = null) {
+    function addLine(item = { title: "", mode: defaultMode, exact: false }, after = null) {
       const row = element("div", "termRow");
       const input = element("input", "termInput");
       input.type = "text";
@@ -521,18 +553,26 @@ const BudgetUI = (() => {
       // The buttons and × stay together, × right after the last button, when the line wraps
       const controls = element("div", "termControls");
       controls.append(modes.el, remove);
-      row.append(input, controls);
+      const exactSwitch = exact ? checkboxField({ label: "Exact", checked: !!item.exact }) : null;
+      if (exactSwitch) {
+        exactSwitch.el.classList.add("termExact");
+        exactSwitch.input.setAttribute("aria-label", `${lineLabel}: exact match`);
+        exactSwitch.el.title = "On: only this exact title. Off: any title with these words in it.";
+      }
+      row.append(input, ...(exactSwitch ? [exactSwitch.el] : []), controls);
 
-      // Placeholder and suggestions for the line's button (the search bar's Tracker suggests rows)
+      // Placeholder and suggestions for the line's button (the search bar's Tracker suggests rows), and its Exact
+      // switch only where it means something
       function showMode(mode) {
         input.placeholder = forMode(placeholder, mode);
         const listId = suggestions ? suggestions(mode) : null;
         if (listId) input.setAttribute("list", listId);
         else input.removeAttribute("list");
+        if (exactSwitch) exactSwitch.el.hidden = noExact.includes(mode);
       }
       showMode(item.mode);
 
-      const line = { input, modes };
+      const line = { input, modes, exactSwitch };
       if (after) {
         lines.splice(lines.indexOf(after) + 1, 0, line);
         after.input.closest(".termRow").after(row);
@@ -594,7 +634,7 @@ const BudgetUI = (() => {
       el,
       lines: list,
       addButton,
-      items: () => lines.map(line => ({ title: tidy(line.input.value), mode: line.modes.value() }))
+      items: () => lines.map(line => ({ title: tidy(line.input.value), mode: line.modes.value(), exact: !!line.exactSwitch?.value() }))
     };
   }
 
@@ -651,7 +691,7 @@ const BudgetUI = (() => {
   // read(): { entry: { title, amount, date, sprite } } when it's filled in right, otherwise { error }. The title
   //   carries the Other Account picked: "Title → Account" (or just the account's name when no title is typed).
   // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
-  //   unreadable), sprite ("" for Auto), account ("" for none) }
+  //   unreadable), sprite ("" for Auto), account ("" for none), date (null when blank, undefined when it isn't a day) }
   // fill({ title, amount, sprite, account }): puts these in, leaving the fields they don't have as they are
   //   (the Quick Entry page's prisms). dateEl: the date field, for a form that doesn't need one.
   // setAccounts(accounts): new balances for the Other Account list (the Quick Entry page's, after an Undo or Redo)
@@ -665,12 +705,12 @@ const BudgetUI = (() => {
       els: [title.el, amount.el, dateInput.el, refraction.el, account.el],
       dateEl: dateInput.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value(), account: account.value() }),
+      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value(), account: account.value(), date: dateInput.value() }),
       setAccounts: account.setAccounts,
       fill({ title: newTitle = "", amount: newAmount = null, sprite = "", account: newAccount = "" } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
-          amount.input.value = Math.abs(newAmount).toFixed(2);
+          amount.input.value = Math.round(newAmount * 100) !== 0 ? Math.abs(newAmount).toFixed(2) : "";
           amount.setSign(newAmount > 0 ? 1 : -1);
         }
         if (sprite) refraction.set(sprite);
@@ -680,9 +720,9 @@ const BudgetUI = (() => {
       },
       read() {
         if (title.value().includes(ACCOUNT_ARROW)) return { error: TITLE_ARROW };
-        const entry = { title: withAccount(title.value(), account.value()), amount: amount.value(), date: dateInput.value(), sprite: refraction.value() };
+        const entry = { title: withAccount(title.value(), account.value()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value() };
         if (!entry.title) return { error: "Give the entry a title." };
-        if (entry.amount === null || Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
+        if (Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
         if (Math.abs(entry.amount) > MAX_AMOUNT) return { error: AMOUNT_TOO_BIG };
         if (entry.date === undefined) return { error: `That date isn't a real day. Use ${datePattern()}.` };
         entry.date = entry.date || date;
@@ -718,7 +758,9 @@ const BudgetUI = (() => {
 
   // 📅 for a typed date box: a see-through date input fills the button, so a tap lands right on it and the
   // device's picker opens (showPicker opens it on a click elsewhere on the button, where browsers allow it).
-  // The picker starts on the typed date, and the picked one is written back in this device's date format.
+  // The picker starts on the typed date, and the picked one is written back in this device's date format. With no
+  // date typed, the picker starts with nothing picked (it shows this month), so picking today counts as a pick too
+  // (a picker that already had today picked wouldn't say anything when today was picked again).
   function datePickerButton(textInput, label = "Date") {
     const button = element("span", "budgetButton pickDay", "📅");
     button.title = "Pick a date";
@@ -729,8 +771,8 @@ const BudgetUI = (() => {
     button.appendChild(picker);
 
     const startOnTyped = () => {
-      const typed = parseTypedDate(textInput.value);
-      picker.value = formatToYMD(isNaN(typed.getTime()) ? today : typed);
+      const typed = textInput.value.trim() ? parseTypedDate(textInput.value) : new Date(NaN);
+      picker.value = isNaN(typed.getTime()) ? "" : formatToYMD(typed);
     };
     button.addEventListener("pointerdown", startOnTyped);
     button.addEventListener("click", (event) => {
@@ -741,12 +783,16 @@ const BudgetUI = (() => {
         event.preventDefault();
       } catch (e) {} // Then the tap on the date input itself opens it
     });
-    picker.addEventListener("change", () => {
+    const usePicked = () => {
       if (!picker.value) return;
-      textInput.value = showDate(createSafeMidnight(picker.value, true));
+      const shown = showDate(createSafeMidnight(picker.value, true));
+      if (textInput.value === shown) return;
+      textInput.value = shown;
       textInput.dispatchEvent(new Event("input", { bubbles: true }));
       textInput.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    };
+    picker.addEventListener("input", usePicked);
+    picker.addEventListener("change", usePicked);
     return button;
   }
 
@@ -896,6 +942,8 @@ const BudgetUI = (() => {
     field,
     textField,
     amountField,
+    BALANCE_SIGNS,
+    cashRegister,
     refractionField,
     addFieldHelp,
     dateField,

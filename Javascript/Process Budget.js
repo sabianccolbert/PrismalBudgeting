@@ -31,7 +31,7 @@ const TABLE_SHAPES = {
   history:    { cols: 7, minRows: 1 },  // [0] column titles, then one row per week (newest first)
   search:     { cols: 4, minRows: 3 },  // [0]-[2] search summary
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
-  accounts:   { cols: 4, minRows: 1 },  // Other Accounts: [0] column titles, then [name, balance, "default" | "", starting amount]
+  accounts:   { cols: 6, minRows: 1 },  // Other Accounts: [0] column titles, then [name, balance, "default" | "", starting amount, interest rate, interest since]
   account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
   logs:       { cols: 8, minRows: 1 }   // [0] column titles, then [time, duration, action, 4 details, status]
 };
@@ -1374,6 +1374,38 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
   return notFound;
 }
 
+// The entry a new one would go into on date (a day has one per title and type, see unique): the day's own entry with
+// this title (and Other Account: "Payday → Savings") and refraction type ("" for Auto: any type), or a recurring or
+// connected spreadsheet's entry that lands there. { amount, sprite } or null. New Entry offers to set it or add to it.
+function entryOnDay(title, sprite, date) {
+  const clean = cleanString(title);
+  if (!clean || !(date instanceof Date) || isNaN(date.getTime())) return null;
+  const special = sprite ? getSpecialType(sprite) : null;
+  const matches = (lineSprite, lineTitle) => !systemEmojis.includes(lineSprite) && cleanString(lineTitle) === clean &&
+    (!special || getSpecialType(lineSprite) === special);
+  let cell = null;
+  if (date >= gridStartDate && date <= gridEndDate) {
+    const spot = calendarSpot(date);
+    cell = spot ? calendarData[spot.r][spot.c] : "";
+  } else if (date < gridStartDate) {
+    const spot = historySpot(date);
+    cell = spot ? historyData[spot.r][spot.c] : "";
+  }
+  if (cell !== null) {
+    for (const text of String(cell).split("\n").slice(1)) {
+      const line = readLine(text);
+      if (line.title && matches(line.sprite, line.title)) return { amount: line.amount, sprite: line.sprite };
+    }
+    return null;
+  }
+  // After the calendar: Upcoming, then what lands there by itself (unless a temp in Upcoming already stands in for it)
+  for (const row of futureData.slice(1)) {
+    if (isUpcomingOn(row, date) && matches(String(row[3]).trim(), String(row[0]))) return { amount: parseAmount(row[1]), sprite: String(row[3]).trim() };
+  }
+  const landing = scheduledHit(title, date, special);
+  return landing ? { amount: landing.amount, sprite: landing.sprite } : null;
+}
+
 /* ---------- Recurring entries (the old "Create/Change A Recurring Entry" form) ---------- */
 // Two recurring entries can share a title only when their refraction type or Other Account is different: one Regular,
 // one Hidden, and one Transfer can all be called Payday, and so can "Payday → Savings" and "Payday → HSA" (the account
@@ -1639,10 +1671,13 @@ function describeAliases(text) {
 //     same amount: a $50 Hidden cost takes $50 out of it, and a $3,000 Hidden gain puts $3,000 in.
 // An account's balance is its starting amount plus all of those changes, so changing, moving, or deleting one of
 // its entries changes it too. Typing a balance on the Other Accounts page changes the starting amount (no entry
-// is made). accountsData.list: [0] column titles, then [name, balance today (filled in by updateAccountBalances,
-// so the Quick Entry page can show it), "default" | "", starting amount ("" is $0.00)]. accountsData.coming: each
-// account's changes after today, which the Quick Entry page counts once their day comes (see accountChangesAhead).
-// The default account, Savings, is always there and can't be deleted.
+// is made). An account can also get interest each month (a credit card, or savings that earn it): see
+// interestCredits. accountsData.list: [0] column titles, then [name, balance today (filled in by
+// updateAccountBalances, so the Quick Entry page can show it), "default" | "", starting amount ("" is $0.00),
+// interest rate (a year, in %; "" for none), the day interest started counting (MM/DD/YYYY)]. accountsData.coming:
+// each account's changes after today, which the Quick Entry page counts once their day comes (see
+// accountChangesAhead). accountsData.inBank: In Bank from today through the 28 days after the calendar, for the Quick
+// Entry page (see inBankAhead). The default account, Savings, is always there and can't be deleted.
 
 const ACCOUNTS_VERSION = 3;
 const DEFAULT_ACCOUNT = "Savings";
@@ -1670,11 +1705,34 @@ function otherAccounts() {
   return accountRows().map(account => ({ name: account.name, balance: parseAmount(account.row[1]) }));
 }
 
-// Each account's balance today goes in its row, and its changes still to come go with them (the Quick Entry page
-// can't add up the budget itself)
+// Each account's balance today goes in its row, and its changes still to come go with them (interest too), and so
+// does In Bank from today on (the Quick Entry page can't add up the budget itself)
 function updateAccountBalances() {
-  for (let summary of accountSummaries()) accountsData.list[summary.index][1] = formatMoney(summary.today);
-  accountsData.coming = accountChangesAhead();
+  const lastDay = addDays(gridEndDate, 28);
+  const coming = accountChangesAhead();
+  for (let summary of accountSummaries(lastDay)) {
+    accountsData.list[summary.index][1] = formatMoney(summary.today);
+    for (const credit of summary.interestCredits) {
+      if (credit.date > today) coming.push([summary.name, formatToYMD(credit.date), credit.change]);
+    }
+  }
+  coming.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  accountsData.coming = coming;
+  accountsData.inBank = inBankAhead();
+}
+
+// In Bank on each day from today through the 28 days after the calendar: [["YYYY-MM-DD", amount], ...]. The Quick
+// Entry page shows today's and the lowest from these (the API's readInBank adds the entries waiting for the budget).
+function inBankAhead() {
+  const days = [];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      const inBank = gridDates[r][c] >= today ? readInBank(calendarData[r][c]) : null;
+      if (inBank !== null) days.push([formatToYMD(gridDates[r][c]), inBank]);
+    }
+  }
+  for (const [day, inBank] of predictedInBank) days.push([formatToYMD(day), inBank]);
+  return days;
 }
 
 // Each account's changes after today, for the Quick Entry page, which adds the ones whose day has come to the
@@ -1754,18 +1812,23 @@ function isTransferEntry(sprite) {
 }
 
 // Each account's balance today and on the calendar's last day, with the entries that changed it (and
-// the ones on the calendar that will), newest first:
-// [{ index, name, isDefault, start, today, calendarEnd, entries: [{ date, change, sprite, title (its own, "" without one) }] }]
-function accountSummaries() {
+// the ones on the calendar that will), newest first, and its interest (through interestUntil):
+// [{ index, name, isDefault, start, interest ({ rate, since } or null), entriesToday (its entries through today, added
+// up), today, calendarEnd, entries: [{ date, change, sprite, title (its own, "" without one) }], interestCredits:
+// [{ date, change }] oldest first }]
+function accountSummaries(interestUntil = gridEndDate) {
   let accounts = accountTitleMap();
   let summaries = new Map(accountRows().map(account => [account.index, {
     index: account.index,
     name: account.name,
     isDefault: isDefaultAccount(account.row),
     start: accountStart(account.row),
+    interest: accountInterest(account.row),
+    entriesToday: 0,
     today: 0,
     calendarEnd: 0,
-    entries: []
+    entries: [],
+    interestCredits: []
   }]));
 
   // dayOf(lines): the cell's day (only worked out for a cell with an account entry)
@@ -1787,10 +1850,13 @@ function accountSummaries() {
   }
 
   const round = (amount) => Math.round(amount * 100) / 100;
+  const addUp = (list, through) => list.filter(item => item.date <= through).reduce((total, item) => total + item.change, 0);
   return [...summaries.values()].map(summary => {
     summary.entries.sort((a, b) => b.date - a.date);
-    summary.today = round(summary.entries.filter(entry => entry.date <= today).reduce((total, entry) => total + entry.change, summary.start));
-    summary.calendarEnd = round(summary.entries.reduce((total, entry) => total + entry.change, summary.start));
+    if (summary.interest) summary.interestCredits = interestCredits(summary.start, summary.entries, summary.interest, interestUntil);
+    summary.entriesToday = round(addUp(summary.entries, today));
+    summary.today = round(summary.start + summary.entriesToday + addUp(summary.interestCredits, today));
+    summary.calendarEnd = round(summary.start + addUp(summary.entries, gridEndDate) + addUp(summary.interestCredits, gridEndDate));
     return summary;
   });
 }
@@ -1801,9 +1867,45 @@ function accountStart(row) {
   return text ? Math.round(parseAmount(text) * 100) / 100 : 0;
 }
 
+// An account's interest: { rate (a year, in %), since (the day it started counting) }, or null when it has none (its
+// row's [4] and [5])
+const MAX_INTEREST_RATE = 1000;
+function accountInterest(row) {
+  const rateText = String(row?.[4] ?? "").trim();
+  const sinceText = String(row?.[5] ?? "").trim();
+  const rate = Number(rateText);
+  const since = sinceText ? createSafeMidnight(sinceText, true) : null;
+  if (!rateText || !Number.isFinite(rate) || rate <= 0 || rate > MAX_INTEREST_RATE || !since || isNaN(since.getTime())) return null;
+  return { rate, since };
+}
+
+// The interest an account gets, once a month on the day of the month it started counting (interest.since), from a
+// month after that day through until: [{ date, change }], oldest first. Each one is the balance that morning (its
+// starting amount, its entries before that day, and the interest before it) times a twelfth of the yearly rate, to the
+// cent, so a balance below $0 (like a credit card's) goes further below, and one above $0 grows. Typing the account's
+// balance or changing its interest starts it counting again from that day (accountEntry), so interest never counts
+// twice.
+function interestCredits(start, entries, interest, until) {
+  const ordered = [...entries].sort((a, b) => a.date - b.date);
+  const credits = [];
+  let balance = start;
+  let counted = 0; // Entries added into balance so far
+  for (let month = 1; month <= 1200; month++) {
+    const day = addMonths(interest.since, month);
+    if (day > until) break;
+    while (counted < ordered.length && ordered[counted].date < day) balance += ordered[counted++].change;
+    const change = Math.round(balance * interest.rate / 12) / 100;
+    if (change !== 0) credits.push({ date: day, change });
+    balance += change;
+  }
+  return credits;
+}
+
 // New account (index null) or change the tapped one. fields: { name, balance (today's, a number; leave it out
-// to keep it) }. A new name goes on its entries and tracker aliases too, so they stay with it. A balance
-// sets the starting amount so today's balance comes out to it (the entries stay as they are).
+// to keep it), interest ({ rate } a year in %, or null for none; leave it out to keep it) }. A new name goes on its
+// entries and tracker aliases too, so they stay with it. A balance sets the starting amount so today's balance comes
+// out to it (the entries stay as they are). A new balance or a new rate starts interest counting from today, with
+// the interest so far kept in today's balance.
 function accountEntry(fields, index) {
   let name = capitalize(String(fields.name || "").replace(/\s+/g, " ").trim());
   let clean = cleanString(name);
@@ -1823,14 +1925,20 @@ function accountEntry(fields, index) {
   if (balance !== null && !Number.isFinite(balance)) throw new BudgetInputError("Enter the balance, like 3000.00.");
   if (balance !== null && Math.abs(balance) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   if (balance !== null) balance = Math.round(balance * 100) / 100;
+  let rate = fields.interest === undefined ? undefined : (fields.interest === null ? 0 : Number(fields.interest.rate));
+  if (rate !== undefined && (!Number.isFinite(rate) || rate < 0 || rate > MAX_INTEREST_RATE)) {
+    throw new BudgetInputError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}).`);
+  }
+  if (rate !== undefined) rate = Math.round(rate * 1000) / 1000;
 
   formEntryRow[3] = "Account: " + name;
   formEntryRow[4] = "";
   formEntryRow[5] = "";
   if (isNew) {
-    list.push([name, formatMoney(balance || 0), "", balance ? formatMoney(balance) : ""]);
+    list.push([name, formatMoney(balance || 0), "", balance ? formatMoney(balance) : "", rate ? String(rate) : "", rate ? formatToMMDDYYYY(today) : ""]);
     formEntryRow[2] = "🏦 New Account";
     if (balance) formEntryRow[5] = "Balance: " + formatMoney(balance);
+    if (rate) formEntryRow[6] = `Interest: ${rate}% a year`;
     return {};
   }
   let oldName = String(row[0]).trim();
@@ -1841,14 +1949,20 @@ function accountEntry(fields, index) {
   }
   row[0] = name;
   formEntryRow[2] = "🏦 Change Account";
-  if (balance !== null) {
-    const summary = accountSummaries().find(account => account.index === index);
-    const now = summary ? summary.today : 0;
-    if (Math.abs(now - balance) >= 0.005) {
-      const start = Math.round((accountStart(row) + balance - now) * 100) / 100;
-      row[3] = start ? formatMoney(start) : "";
-      formEntryRow[5] = `Balance: ${formatMoney(balance)} (was ${formatMoney(now)})`;
-    }
+  const summary = accountSummaries().find(account => account.index === index);
+  const now = summary ? summary.today : 0;
+  const oldRate = summary && summary.interest ? summary.interest.rate : 0;
+  const newRate = rate === undefined ? oldRate : rate;
+  const balanceChanged = balance !== null && Math.abs(now - balance) >= 0.005;
+  if (balanceChanged || newRate !== oldRate) {
+    // Today's balance is the one typed (or stays what it is, interest so far and all), and interest counts from today
+    const target = balanceChanged ? balance : now;
+    const start = Math.round((target - (summary ? summary.entriesToday : 0)) * 100) / 100;
+    row[3] = start ? formatMoney(start) : "";
+    row[4] = newRate ? String(newRate) : "";
+    row[5] = newRate ? formatToMMDDYYYY(today) : "";
+    if (balanceChanged) formEntryRow[5] = `Balance: ${formatMoney(balance)} (was ${formatMoney(now)})`;
+    if (newRate !== oldRate) formEntryRow[6] = newRate ? `Interest: ${newRate}% a year` : "Interest: Off";
   }
   return {};
 }
@@ -2392,10 +2506,11 @@ function deleteTableRows(tableName, indexes) {
 // Find entries by title and date in History, the calendar, Future Dates, and recurring entries and connected
 // spreadsheets' entries past the calendar. terms: the search bar's list, one title per line, each with its own buttons (which
 // replace the spreadsheet's rent-, rent+ and car stuff=): match "all", "costs" (only costs), "gains"
-// (only gains), or "category" (the title is a tracker row: find what the row counts). With no titles,
+// (only gains), or "category" (the title is a tracker row: find what the row counts). A title that isn't
+// exact finds every title with it in it ("gas" finds Gas Station); an exact one only itself. With no titles,
 // the first line's buttons pick everything, every cost, or every gain. Blank From = from the start,
-// blank To = to the end.
-// query: { terms: [{ title, match }], from, to } as typed.
+// blank To = a month after today (or after From).
+// query: { terms: [{ title, match, exact }], from, to } as typed.
 // Returns { results: [{ date, amount, sprite, title, isTransfer, checked }], from, to, searchingFor }
 // calendar: the calendar's days as they show, recurring entries included (see searchBudget)
 function search(query, calendar = calendarData) {
@@ -2407,19 +2522,24 @@ function search(query, calendar = calendarData) {
   if ((fromDate && isNaN(fromDate.getTime())) || (toDate && isNaN(toDate.getTime()))) {
     throw new BudgetInputError(`Search dates should look like ${datePattern()}.`);
   }
+  // Without a To date, it looks a month ahead (from today, or from the From date when that's later), so what's
+  // still to come shows too: Upcoming, and recurring and connected spreadsheets' entries past the calendar
+  if (!toDate) toDate = addMonths(fromDate && fromDate > today ? fromDate : today, 1);
   if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) [fromDate, toDate] = [toDate, fromDate];
   let startTime = fromDate ? fromDate.getTime() : -Infinity;
-  let endTime = toDate ? toDate.getTime() : Infinity;
+  let endTime = toDate.getTime();
   let dateA = fromDate ? showDate(fromDate) : "the start";
-  let dateB = toDate ? showDate(toDate) : "the end";
+  let dateB = showDate(toDate);
   const inRange = (time) => time >= startTime && time <= endTime;
 
   // 2. What to find: targets for one title each (or every title), and whose amounts they count
   let { targets, searchingFor } = searchTargets(query.terms);
   let targetsByTitle = new Map();
   let everyTitle = [];
+  let partTitles = []; // Titles that aren't Exact: any title with them in it
   for (let target of targets) {
     if (target.clean === null) everyTitle.push(target);
+    else if (!target.exact) partTitles.push(target);
     else targetsByTitle.set(target.clean, [...(targetsByTitle.get(target.clean) || []), target]);
   }
 
@@ -2447,6 +2567,9 @@ function search(query, calendar = calendarData) {
     let { title: own, account } = splitAccount(title);
     let keys = new Set(account ? [cleanString(title), cleanString(own), cleanString(account)] : [cleanString(title)]);
     let named = [...keys].flatMap(key => targetsByTitle.get(key) || []);
+    for (let target of partTitles) {
+      if ([...keys].some(key => key.includes(target.clean))) named.push(target);
+    }
     let found = [...everyTitle, ...new Set(named)].filter(target => aliasCounts(target.count, amount) && (!target.onlyTransfers || isTransfer));
     if (found.length === 0) return;
     searchResults.push({ date, amount, sprite, title, isTransfer, checked: !isTransfer || found.some(target => target.withTransfers) });
@@ -2463,7 +2586,7 @@ function search(query, calendar = calendarData) {
 
   // 4. Recurring entries and spreadsheets' entries past the calendar (calendar days are searched directly
   //    below), skipping days a Future Dates temp blocks. Projected up to two years ahead.
-  if (toDate && toDate.getTime() > gridEndDate.getTime()) {
+  if (toDate.getTime() > gridEndDate.getTime()) {
     let lastDay = new Date(Math.min(toDate.getTime(), addDays(today, 730).getTime()));
     let firstDay = addDays(gridEndDate, 1);
     if (fromDate && fromDate.getTime() > firstDay.getTime()) firstDay = fromDate;
@@ -2528,7 +2651,7 @@ function search(query, calendar = calendarData) {
 }
 
 // What a search looks for: { targets: [{ clean (null = every title), count: "all" | "costs" | "gains",
-// withTransfers }], searchingFor: "rent (costs only), the Food tracker row" }. See search() for terms.
+// withTransfers, exact }], searchingFor: "rent (costs only), the Food tracker row" }. See search() for terms.
 const SEARCH_MATCHES = ["all", "costs", "gains", "category"];
 // How Search suggests a tracker row that counts transfers ("Food (counts transfers)"): a suggestion list can't
 // show the ⭕️ image (Sprites.js), only the device's own emoji
@@ -2537,7 +2660,8 @@ const COUNTS_TRANSFERS = "(counts transfers)";
 function searchTargets(terms) {
   let lines = (Array.isArray(terms) ? terms : []).map(term => ({
     title: String(term?.title ?? "").replace(/\s+/g, " ").trim(),
-    match: SEARCH_MATCHES.includes(term?.match) ? term.match : "all"
+    match: SEARCH_MATCHES.includes(term?.match) ? term.match : "all",
+    exact: !!term?.exact
   }));
   let filled = lines.filter(line => cleanString(line.title) !== "");
 
@@ -2551,10 +2675,11 @@ function searchTargets(terms) {
   let targets = [];
   let described = [];
   let rowsFound = new Set();
-  for (let { title, match } of filled) {
+  for (let { title, match, exact } of filled) {
     if (match !== "category") {
-      targets.push({ clean: cleanString(title), count: match, withTransfers: false });
-      described.push(title + (match === "all" ? "" : ` (${match} only)`));
+      targets.push({ clean: cleanString(title), count: match, withTransfers: false, exact });
+      const notes = [exact ? "exact" : "", match === "all" ? "" : `${match} only`].filter(Boolean);
+      described.push(title + (notes.length ? ` (${notes.join(", ")})` : ""));
       continue;
     }
 
@@ -2588,7 +2713,7 @@ function searchTargets(terms) {
     let withTransfers = String(row[0]).startsWith("⭕️");
     for (let alias of String(row[4] || "").split(",")) {
       let { clean, count } = parseAlias(alias);
-      if (clean) targets.push({ clean, count, withTransfers });
+      if (clean) targets.push({ clean, count, withTransfers, exact: true }); // Like the tracker counts them
     }
   }
   return { targets, searchingFor: described.join(", ") };
@@ -2907,10 +3032,15 @@ function dayMath(lines) {
   return { gains, costs, bankChange };
 }
 
+// In Bank on each of the 28 days after the calendar, as getPredictionData works it out: [[Date, amount], ...] (for the
+// Quick Entry page, see inBankAhead)
+let predictedInBank = [];
+
 // The 28 days after the calendar: lowest balance (and when) and the balance on day 28, with recurring entries,
 // connected spreadsheets' entries, and Future Dates. Also counts uncommon recurring entries (every 3 months or
 // less often) visible from today on.
 function getPredictionData(lastInBank) {
+  predictedInBank = [];
   let recurringRows = getParsedRecurringRows();
   let sheetDays = sheetEntriesByDay(nextFourStart, addDays(nextFourStart, 27));
   let visibleDay = createSafeMidnight(gridStartDate);
@@ -2968,6 +3098,7 @@ function getPredictionData(lastInBank) {
     }
 
     lastInBank = Math.round((lastInBank + dayTotal) * 100) / 100; // To the cent, like every In Bank
+    predictedInBank.push([new Date(testDay.getTime()), lastInBank]);
     if (lastInBank < lowest) {
       lowest = lastInBank;
       lowestDate = new Date(testDay.getTime());
@@ -3925,14 +4056,15 @@ function normalizeApiTable(rawData, shape) {
   return rows;
 }
 
-// Rebuild the Other Accounts store: { version: 3, list, equity, coming }
-//   list: [0] column titles, then [name, balance today, "default" | ""] (see Other Accounts in BUDGET
-//         LOGIC). The default account, Savings, is added if it's missing. Balances come only from entries,
-//         so a version 2 store's typed-in balance in [1] isn't kept.
+// Rebuild the Other Accounts store: { version: 3, list, equity, coming, inBank }
+//   list: [0] column titles, then [name, balance today, "default" | "", starting amount, interest rate, interest
+//         since] (see Other Accounts in BUDGET LOGIC). The default account, Savings, is added if it's missing.
+//         Balances come only from entries, so a version 2 store's typed-in balance in [1] isn't kept.
 //   equity: the spreadsheet's business-version (LLC) equity tables, { tabName: table }, kept as stored
 //           (the website doesn't change them). A store without a version is only these tables.
 //   coming: each account's changes after today, for the Quick Entry page (accountChangesAhead fills it in again;
 //           it's kept as stored until then, so loading the budget alone doesn't count as a change)
+//   inBank: In Bank from today on, for the Quick Entry page (inBankAhead; kept as stored until then too)
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
   if (typeof parsed === 'string') {
@@ -3952,7 +4084,7 @@ function normalizeApiAccounts(rawData) {
 
   let list = normalizeApiTable(isCurrent ? parsed.list : [], TABLE_SHAPES.accounts);
   if (parsed.version === 2) list.forEach((row, i) => { if (i > 0) row[1] = formatMoney(0); });
-  list[0] = ["Account", "Balance", "Default", "Starting"];
+  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since"];
   if (!list.some((row, i) => i > 0 && isDefaultAccount(row))) {
     let savings = list.findIndex((row, i) => i > 0 && cleanString(row[0]) === cleanString(DEFAULT_ACCOUNT));
     if (savings !== -1) list[savings][2] = "default";
@@ -3962,6 +4094,8 @@ function normalizeApiAccounts(rawData) {
   const isChange = (item) => Array.isArray(item) && item.length === 3 && typeof item[0] === "string" &&
     /^\d{4}-\d{2}-\d{2}$/.test(item[1]) && Number.isFinite(item[2]);
   if (isCurrent && Array.isArray(parsed.coming)) accounts.coming = parsed.coming.filter(isChange);
+  const isDay = (item) => Array.isArray(item) && item.length === 2 && /^\d{4}-\d{2}-\d{2}$/.test(item[0]) && Number.isFinite(item[1]);
+  if (isCurrent && Array.isArray(parsed.inBank)) accounts.inBank = parsed.inBank.filter(isDay);
   return accounts;
 }
 
@@ -4396,6 +4530,12 @@ function addDays(date, days) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
+// The same day, this many months later (the 31st goes to a shorter month's last day)
+function addMonths(date, months = 1) {
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + months + 1, 0).getDate();
+  return new Date(date.getFullYear(), date.getMonth() + months, Math.min(date.getDate(), lastDay));
+}
+
 // Returns the Recurring tab index of the entry with this title + special type that hits on date, or false
 function recurringHits(title, date, targetSpecial) {
   const cleanTargetTitle = cleanString(title);
@@ -4599,46 +4739,46 @@ window.updateGridCell = async function(gridName, row, col, textValue) {
 // Home's calendar and History's days (both .elastic-table) zoom and move the same way. Home's table is wired
 // here; History draws its table later (and again after a change), so Budget Pages.js wires each one it draws.
 
-// 1. TOUCH: TWO-FINGER PINCH & DRAG
+// 1. TOUCH: TWO-FINGER PINCH ON A DAY, AND SWIPING BETWEEN ZOOMED DAYS
+// Two fingers on one day pinch, stretch, turn, and move just that day, which settles back when they let go. Two
+// fingers that start on different days (or off the days) zoom the page itself, like anywhere else on it.
 
 let isTransforming = false;
 let targetEl = null;
 let startDist = 0, startAngle = 0;
 let startCenterX = 0, startCenterY = 0;
-// Two fingers across days move the whole table this much faster than they go, so a short slide brings its
-// edge into view
-const TABLE_PAN_SPEED = 1.5;
 
 // Two fingers: how far apart they are, at what angle, and the point between them
 const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
 const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
 
+// A swipe on a zoomed day: at least this far sideways, and mostly sideways
+const DAY_SWIPE_PX = 50;
+let daySwipe = null; // { x, y, atLeft, atRight } for the finger on a zoomed day
+
 const wiredTables = new WeakSet();
 
-// Two-finger pinching, stretching, and moving, and tapping a day to zoom it, on this table (once)
+// Pinching a day, swiping a zoomed one, and tapping a day to zoom it, on this table (once)
 function wireElasticTable(table) {
   if (!table || wiredTables.has(table)) return;
   wiredTables.add(table);
 
   table.addEventListener('touchstart', (e) => {
+    noteDaySwipe(e);
     if (e.touches.length !== 2) return;
     const t1 = e.touches[0];
     const t2 = e.touches[1];
     const cell1 = t1.target.closest('td');
     const cell2 = t2.target.closest('td');
+    if (!cell1 || cell1 !== cell2 || !cell1.querySelector('.cell-content')) return;
 
-    if (cell1 && cell1 === cell2 && cell1.querySelector('.cell-content')) {
-      targetEl = cell1.querySelector('.cell-content');
-      // A zoomed day stays over the dimmed page, already shows everything, and keeps its scroll
-      if (!cell1.classList.contains('is-editing')) {
-        cell1.style.zIndex = '20';
-        targetEl.style.overflow = 'visible';
-      }
-    } else {
-      targetEl = table;
+    targetEl = cell1.querySelector('.cell-content');
+    // A zoomed day stays over the dimmed page, already shows everything, and keeps its scroll
+    if (!cell1.classList.contains('is-editing')) {
+      cell1.style.zIndex = '20';
+      targetEl.style.overflow = 'visible';
     }
-
     isTransforming = true;
     startDist = getDistance(t1, t2);
     startAngle = getAngle(t1, t2);
@@ -4653,23 +4793,24 @@ function wireElasticTable(table) {
     e.preventDefault();
     const t1 = e.touches[0];
     const t2 = e.touches[1];
-
     const scale = getDistance(t1, t2) / startDist;
     const rotate = getAngle(t1, t2) - startAngle;
     const center = getCenter(t1, t2);
-    const speed = targetEl === table ? TABLE_PAN_SPEED : 1;
-    const translateX = (center.x - startCenterX) * speed;
-    const translateY = (center.y - startCenterY) * speed;
-
-    targetEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`;
+    targetEl.style.transform = `translate(${center.x - startCenterX}px, ${center.y - startCenterY}px) scale(${scale}) rotate(${rotate}deg)`;
   }, { passive: false });
 
-  table.addEventListener('touchend', endTransform);
-  table.addEventListener('touchcancel', endTransform);
+  table.addEventListener('touchend', (e) => {
+    endTransform(e);
+    finishDaySwipe(e);
+  });
+  table.addEventListener('touchcancel', (e) => {
+    daySwipe = null;
+    endTransform(e);
+  });
   table.addEventListener('click', zoomTappedDay);
 }
 
-// The fingers let go: the day (or the table) settles back
+// The fingers let go: the day settles back
 function endTransform(e) {
   if (!isTransforming || e.touches.length >= 2) return;
   isTransforming = false;
@@ -4680,6 +4821,30 @@ function endTransform(e) {
   const parentTd = targetEl.closest('td');
   if (parentTd) parentTd.style.zIndex = '';
   targetEl = null;
+}
+
+// One finger down on the zoomed day: where, and whether its entries are already scrolled all the way to either side
+// (until they are, a sideways swipe scrolls them instead of moving to another day)
+function noteDaySwipe(e) {
+  daySwipe = null;
+  const cell = e.touches.length === 1 ? e.target.closest('td') : null;
+  if (!cell || cell !== activeEditCell || cell.classList.contains('isZoomClosing')) return;
+  const content = cell.querySelector('.cell-content');
+  const touch = e.touches[0];
+  const most = content ? content.scrollWidth - content.clientWidth : 0;
+  daySwipe = { x: touch.clientX, y: touch.clientY, atLeft: !content || content.scrollLeft <= 1, atRight: !content || content.scrollLeft >= most - 1 };
+}
+
+// The finger lifted: a swipe left goes to the next day, and a swipe right to the day before
+function finishDaySwipe(e) {
+  const swipe = daySwipe;
+  daySwipe = null;
+  if (!swipe || e.touches.length > 0 || !e.changedTouches[0]) return;
+  const dx = e.changedTouches[0].clientX - swipe.x;
+  const dy = e.changedTouches[0].clientY - swipe.y;
+  if (Math.abs(dx) < DAY_SWIPE_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  if (dx < 0 ? !swipe.atRight : !swipe.atLeft) return;
+  slideToDay(dx < 0 ? 1 : -1);
 }
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
@@ -4703,6 +4868,11 @@ let zoomBackdrop = null;
 const ZOOM_TEXT_MIN = 15;
 // What a zoom sets on its day (and closing it takes off)
 const ZOOM_PROPERTIES = ['transform', 'transform-origin', '--zoom', '--dayX', '--dayY', '--dayW', '--dayH', '--viewW', '--viewH'];
+// How long a phone's day takes to grow out of its spot, to shrink back into it, and to slide over to the day next to it
+const ZOOM_OPEN_MS = 420;
+const ZOOM_CLOSE_MS = 320;
+const DAY_SLIDE_MS = 340;
+const ZOOM_EASING = 'cubic-bezier(0.33, 0, 0.2, 1)';
 
 // A zoomed day's v (close), for Home's days and History's
 function zoomCloseButton() {
@@ -4750,22 +4920,7 @@ function closeZoomedDay(immediate = false) {
   activeEditCell = null;
   if (zoomBackdrop) zoomBackdrop.classList.remove('shown');
   if (!cell) return;
-  const content = cell.querySelector('.cell-content');
-  const finish = () => {
-    const animation = cell.zoomClose;
-    cell.zoomClose = null;
-    if (activeEditCell === cell) return; // Zoomed again in the meantime
-    // Straight back to the day: the day's own transform transition (budgetStyle.css) would otherwise slide it in
-    // from the middle of the screen, where the zoomed layout was, after it had already shrunk into place
-    cell.style.transition = 'none';
-    cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom', 'isZoomClosing');
-    for (const property of ZOOM_PROPERTIES) cell.style.removeProperty(property);
-    if (animation) animation.cancel(); // It held its last frame until now (fill: forwards)
-    // Its first lines show again (a day that isn't zoomed would keep a zoomed day's scroll, hidden)
-    if (content) content.scrollTop = content.scrollLeft = 0;
-    void cell.offsetWidth; // Apply that with no transition before turning transitions back on
-    cell.style.removeProperty('transition');
-  };
+  const finish = () => unzoomCell(cell);
   const scale = Number(cell.style.getPropertyValue('--zoom')) || 1;
   if (immediate || !cell.classList.contains('is-fullZoom') || !cell.animate || reducedMotion()) {
     finish();
@@ -4776,10 +4931,80 @@ function closeZoomedDay(immediate = false) {
   cell.classList.add('isZoomClosing');
   cell.zoomClose = cell.animate(
     [{ transform: cell.style.transform }, { transform: dayInPlace(cell, scale) }],
-    { duration: 200, easing: 'ease-in', fill: 'forwards' } // Holds the shrunk day until finish puts it back
+    { duration: ZOOM_CLOSE_MS, easing: 'cubic-bezier(0.4, 0, 0.6, 1)', fill: 'forwards' } // Holds the shrunk day until finish puts it back
   );
   cell.zoomClose.onfinish = finish;
 }
+
+// A day that was zoomed is just a day again (after it shrank back into its spot, or slid off the screen), unless it
+// was zoomed again in the meantime
+function unzoomCell(cell) {
+  const animation = cell.zoomClose;
+  cell.zoomClose = null;
+  if (activeEditCell === cell) return;
+  const content = cell.querySelector('.cell-content');
+  // Straight back to the day: the day's own transform transition (budgetStyle.css) would otherwise slide it in
+  // from the middle of the screen, where the zoomed layout was, after it had already shrunk into place
+  cell.style.transition = 'none';
+  cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom', 'isZoomClosing');
+  for (const property of ZOOM_PROPERTIES) cell.style.removeProperty(property);
+  if (animation) animation.cancel(); // It held its last frame until now (fill: forwards)
+  // Its first lines show again (a day that isn't zoomed would keep a zoomed day's scroll, hidden)
+  if (content) content.scrollTop = content.scrollLeft = 0;
+  void cell.offsetWidth; // Apply that with no transition before turning transitions back on
+  cell.style.removeProperty('transition');
+}
+
+// When a day is on a table, its date as a number (Home's days by their spot, History's by their date), or null
+function dayTime(td) {
+  if (td.dataset.date) {
+    const date = createSafeMidnight(td.dataset.date, true);
+    return isNaN(date.getTime()) ? null : date.getTime();
+  }
+  const row = gridDates[td.dataset.row];
+  return row && row[td.dataset.col] ? row[td.dataset.col].getTime() : null;
+}
+
+// The zoomed day moves to the next day (step 1) or the day before (-1) on its table. On a phone the zoomed day slides
+// off the screen as the next one slides on, each at its own size; on a computer the next one just zooms in.
+function slideToDay(step) {
+  const from = activeEditCell;
+  const table = from && from.closest('table');
+  if (!table) return;
+  const days = [...table.querySelectorAll('td')]
+    .filter(td => dayTime(td) !== null && td.querySelector('.cell-content')?.childElementCount)
+    .sort((a, b) => dayTime(a) - dayTime(b));
+  const to = days[days.indexOf(from) + step];
+  if (!to) return;
+  if (!from.classList.contains('is-fullZoom') || !from.animate || reducedMotion()) {
+    zoomDay(to, false);
+    return;
+  }
+  const width = document.documentElement.clientWidth || window.innerWidth;
+  const leaving = from.style.transform;
+  activeEditCell = null; // So zoomDay leaves it zoomed while it slides away
+  zoomDay(to, false);
+  const arriving = to.style.transform;
+  to.animate(
+    [{ transform: `translateX(${step * width}px) ${arriving}` }, { transform: arriving }],
+    { duration: DAY_SLIDE_MS, easing: ZOOM_EASING }
+  );
+  from.classList.add('isZoomClosing'); // Its entries don't open while it goes (Calendar Page.js)
+  from.zoomClose = from.animate(
+    [{ transform: leaving }, { transform: `translateX(${-step * width}px) ${leaving}` }],
+    { duration: DAY_SLIDE_MS, easing: ZOOM_EASING, fill: 'forwards' }
+  );
+  from.zoomClose.onfinish = () => unzoomCell(from);
+}
+
+// On a zoomed day, the left and right arrow keys go to the day before and the next day (not while typing, or with a
+// panel open)
+document.addEventListener('keydown', (e) => {
+  if (!activeEditCell || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('.budgetPanel')) return;
+  e.preventDefault();
+  slideToDay(e.key === 'ArrowRight' ? 1 : -1);
+});
 
 // A zoomed day goes back to normal when the page is left (so Back never shows it still zoomed)
 window.FloatingWindows?.closeOnPageExit(() => closeZoomedDay(true));
@@ -4801,6 +5026,16 @@ function widestDayLine(content) {
     if (!line.classList.contains('cell-action-btn')) widest = Math.max(widest, line.offsetWidth);
   }
   return widest > 0 ? widest + 2 * padding : 0;
+}
+
+// How tall a day's lines are together, as they're laid out now (the ones it shows: not its v, or History's big date
+// once it's zoomed), to the fraction of a pixel
+function dayLinesHeight(content) {
+  let height = 0;
+  for (const line of content.children) {
+    if (!line.classList.contains('cell-action-btn') && line.getClientRects().length > 0) height += line.getBoundingClientRect().height;
+  }
+  return height;
 }
 
 // On a computer the day doubles where it is (budgetStyle.css). When its widest entry would run off the right
@@ -4843,11 +5078,16 @@ function fitZoomedDay(animate = false) {
   const fitsEntries = (viewWidth * 0.96) / widest;
   const scale = Math.min(fitsScreen, Math.max(fitsEntries, ZOOM_TEXT_MIN / textSize));
   const width = box.width * scale;
-  const height = box.height * scale;
+  // A day shorter than its lines (History's, which only show their date until zoomed) gets taller to hold them, up to
+  // as tall as a day with room to spare gets (taller lines still scroll). They're measured laid out at the zoomed size:
+  // at a day's tiny size, text doesn't shrink evenly (lines keep a smallest height).
+  cell.style.setProperty('--zoom', String(scale));
+  const padding = parseFloat(getComputedStyle(content).paddingRight) || 0;
+  const linesHeight = dayLinesHeight(content) + 2 * padding;
+  const height = Math.max(box.height * scale, Math.min(linesHeight, viewHeight * 0.84));
   const left = Math.max(viewWidth * 0.02, (viewWidth - widest * scale) / 2);
   const top = (viewHeight - height) / 2;
   cell.zoomBox = { x: left, y: top, width, height };
-  cell.style.setProperty('--zoom', String(scale));
   for (const [name, pixels] of [['--dayX', left], ['--dayY', top], ['--dayW', width], ['--dayH', height], ['--viewW', viewWidth], ['--viewH', viewHeight]]) {
     cell.style.setProperty(name, `${pixels}px`);
   }
@@ -4859,16 +5099,21 @@ function fitZoomedDay(animate = false) {
   if (animate && cell.animate && !reducedMotion()) {
     cell.animate(
       [{ transform: dayInPlace(cell, scale) }, { transform: moved }],
-      { duration: 250, easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)' }
+      { duration: ZOOM_OPEN_MS, easing: ZOOM_EASING }
     );
   }
 }
 
 let refitFrame = 0;
-// Lay the zoomed day out again on the next frame (once, however often it's asked)
+// Lay the zoomed day out again on the next frame (once, however often it's asked). While it's still growing or sliding
+// in, that waits until it's in place: measured mid-animation, it would be measured at the animation's size.
 const refitZoomedDay = () => {
   cancelAnimationFrame(refitFrame);
-  refitFrame = requestAnimationFrame(() => fitZoomedDay(false));
+  refitFrame = requestAnimationFrame(() => {
+    const moving = activeEditCell?.getAnimations?.().find(animation => animation.playState === 'running');
+    if (moving) moving.finished.then(refitZoomedDay, () => {});
+    else fitZoomedDay(false);
+  });
 };
 window.addEventListener('scroll', () => { if (activeEditCell) refitZoomedDay(); }, { passive: true });
 window.addEventListener('resize', () => { if (activeEditCell) refitZoomedDay(); });

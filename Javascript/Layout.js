@@ -175,12 +175,21 @@ document.addEventListener("visibilitychange", () => {
 const getTransitionContainer = () => document.getElementById("transitionContainer");
 
 /* GROUP: Slide timing */
-// How long the container's slide takes, straight from the CSS (stylesheet.css section 11), so the two
-// never disagree. 0 when there's no slide (reduced motion), and then nothing waits for one.
-function getSlideDurationSeconds() {
+// How long the container's slide takes, straight from the CSS (stylesheet.css section 10), so the two
+// never disagree. 0 when there's no slide (reduced motion), and then nothing waits for one. Between the
+// budget's four pages only the page under the header and the tabs slides (TAB_SLIDE), so that's what's timed.
+function getSlideDurationSeconds(TAB_SLIDE = document.documentElement.classList.contains("tabSlide")) {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return 0;
-  return parseFloat(getComputedStyle(CONTAINER).transitionDuration) || 0;
+  if (!TAB_SLIDE) return parseFloat(getComputedStyle(CONTAINER).transitionDuration) || 0;
+  // (The parts only get their transition once they start sliding)
+  if (prefersReducedMotion()) return 0;
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--SLIDE_DURATION")) || 0;
+}
+
+// The first part of the page that slides between the budget's four pages (stylesheet.css section 10)
+function firstSlidingPart() {
+  return document.querySelector("#transitionContainer > main > :not(.pageTop), #transitionContainer .pageTop > :not(.pageTabs)");
 }
 
 /* GROUP: Navigation type detection */
@@ -276,6 +285,36 @@ function enableDocumentScroll() {
   document.documentElement.style.overflowY = "auto";
   document.body.style.overflowY = "visible";
   if (CONTAINER) CONTAINER.style.overflowY = "hidden";
+  settlePage();
+}
+
+/* GROUP: The page stays at its top while it slides in */
+// While a page is still sliding in, it's below the screen, so anything that brings a spot into view (a box taking the
+// focus, the browser filling in a password, a #spot in the address) would scroll the page down by that much, and it
+// would land scrolled to the bottom. So until it's in place it stays at its top (unless the browser is putting it back
+// where it was: Back, Forward, or a reload), and then a #spot in the address is scrolled to.
+let PAGE_SETTLED = false;
+
+// Is the browser putting this page back where it was? (Back, Forward, or a reload)
+function isReturningPage() {
+  if (isBackForwardNavigation()) return true;
+  try { return performance.getEntriesByType("navigation")[0]?.type === "reload"; } catch { return false; }
+}
+
+window.addEventListener("scroll", () => {
+  if (PAGE_SETTLED || isReturningPage()) return;
+  if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0);
+}, { passive: true });
+
+// The page has slid in: it scrolls normally from here, and a #spot in the address comes into view
+function settlePage() {
+  if (PAGE_SETTLED) return;
+  PAGE_SETTLED = true;
+  document.documentElement.classList.remove("tabSlide");
+  if (!location.hash || isReturningPage()) return;
+  let SPOT = null;
+  try { SPOT = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch {}
+  if (SPOT) SPOT.scrollIntoView();
 }
 
 /* #endregion 2) SCROLL OWNERSHIP (DOCUMENT IS SCROLLER) */
@@ -317,6 +356,14 @@ setTimeout(slideIn, SLIDE_IN_AT_THE_LATEST_MS);
 /* GROUP: Back button logic (supports multiple pages) */
 function setUpBackButton() {
   const { REFERRER, IS_INTERNAL_REFERRER, CAME_FROM_MENU_PAGE, CAME_FROM_HOME_PAGE, CAME_FROM_LOGIN_PAGE } = getReferrerInfo();
+
+  // The Menu's pages: Back goes to the page that opened this one (the Menu, unless another of the site's pages did)
+  const MENU_BACK = document.getElementById("menuBack");
+  if (MENU_BACK && IS_INTERNAL_REFERRER && !CAME_FROM_LOGIN_PAGE) {
+    try {
+      if (new URL(REFERRER).pathname !== location.pathname) MENU_BACK.href = REFERRER;
+    } catch {}
+  }
 
   // Some pages may have different back buttons; use whichever exists.
   const HOME_BACK = document.getElementById("homeBack");
@@ -376,8 +423,9 @@ window.addEventListener("pageshow", (EVENT) => {
 
   if (!isBackForwardNavigation(EVENT)) return;
 
-  CONTAINER.classList.remove("slide-out");
+  CONTAINER.classList.remove("slide-out", "tab-slide-out");
   CONTAINER.classList.add("ready");
+  document.documentElement.classList.remove("tabSlide");
   IS_TRANSITION_ACTIVE = false;
   enableDocumentScroll();
 
@@ -394,8 +442,9 @@ window.addEventListener("pageshow", (EVENT) => {
 
 /* GROUP: Transition navigation entry point */
 // Animate slide-out, then navigate after the animation duration.
-// URL may be a real href or the special keyword "back".
-function transitionTo(URL, useReplace = false) {
+// URL may be a real href or the special keyword "back". TAB_SLIDE: one of the budget's four pages' tabs was
+// followed, so only the page under the header and the tabs slides out (and the next page knows to do the same).
+function transitionTo(URL, useReplace = false, TAB_SLIDE = false) {
   if (IS_TRANSITION_ACTIVE) return;
   if (!URL) return;
 
@@ -414,7 +463,14 @@ function transitionTo(URL, useReplace = false) {
   };
 
   const CONTAINER = getTransitionContainer();
-  const DURATION_MS = getSlideDurationSeconds() * 1000;
+  const MOVING = TAB_SLIDE ? firstSlidingPart() : CONTAINER;
+  if (TAB_SLIDE && !MOVING) TAB_SLIDE = false;
+  // Leaving another way while this page is still sliding in by its tab: the whole page slides out after all
+  if (!TAB_SLIDE) document.documentElement.classList.remove("tabSlide");
+  const DURATION_MS = getSlideDurationSeconds(TAB_SLIDE) * 1000;
+  if (TAB_SLIDE) {
+    try { sessionStorage.setItem("prismal_tab_slide", "1"); } catch {}
+  }
 
   /* GROUP: Nothing to animate (no container, or reduced motion) */
   if (!CONTAINER || DURATION_MS === 0) {
@@ -425,7 +481,6 @@ function transitionTo(URL, useReplace = false) {
 
   clearPendingTransitionTimers();
   IS_TRANSITION_ACTIVE = true;
-  disableDocumentScroll();
 
   /* GROUP: Slide distance computation (supports different scroll owners) */
   const CONTAINER_SCROLL = CONTAINER.scrollTop || 0;
@@ -436,14 +491,19 @@ function transitionTo(URL, useReplace = false) {
 
   document.documentElement.style.setProperty("--SLIDE_DISTANCE", `${SLIDE_DISTANCE_PX}px`);
 
-  /* GROUP: Start slide-out */
-  CONTAINER.classList.add("slide-out");
+  // The header and the tabs stay: scrolled down, they glide back to the top while the page slides out, so they're
+  // right where the next page's are
+  if (TAB_SLIDE && DOC_SCROLL > 0) window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  disableDocumentScroll();
 
-  /* GROUP: Navigate when the container's own transform transition ends */
+  /* GROUP: Start slide-out */
+  CONTAINER.classList.add(TAB_SLIDE ? "tab-slide-out" : "slide-out");
+
+  /* GROUP: Navigate when the sliding part's own transform transition ends */
   const onDone = (EVENT) => {
-    // Only accept the container's transform finishing,
+    // Only accept that part's transform finishing,
     // not random child transitions bubbling up.
-    if (EVENT && (EVENT.target !== CONTAINER || EVENT.propertyName !== "transform")) return;
+    if (EVENT && (EVENT.target !== MOVING || EVENT.propertyName !== "transform")) return;
 
     CONTAINER.removeEventListener("transitionend", onDone);
     clearPendingTransitionTimers();
@@ -534,18 +594,18 @@ document.addEventListener("click", (EVENT) => {
   if (TARGET.origin !== location.origin || !/^https?:$/.test(TARGET.protocol)) return;
   if (TARGET.pathname === location.pathname && TARGET.search === location.search && TARGET.hash) return;
 
-  // Everything else: we own navigation timing
+  // Everything else: we own navigation timing (a tab of the budget's four pages slides only the page under the tabs)
   EVENT.preventDefault();
-  transitionTo(TARGET.href);
+  transitionTo(TARGET.href, false, !!LINK.closest(".pageTabs"));
 });
 
 /* GROUP: Signing out */
 // Signing out (or deleting the account) forgets everything this browser kept for the account, including
-// this tab's Undo history, but keeps the device's own choices: whether analytics is off here, and its
-// date format. Signing out also keeps which of Dave's tips were shown and when (just their names and days, not
+// this tab's Undo history, but keeps the device's own choices: whether analytics is off here, its date format,
+// and the kind of phone picked for the Steps for lists. Signing out also keeps which of Dave's tips were shown and when (just their names and days, not
 // what they said), so signing back in goes on to his next tip instead of starting the day's tips over;
 // deleting the account (FORGET_TIPS) forgets those too.
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format"];
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_device"];
 const DAVE_TIPS_PREFIX = "prismal_dave_";
 function clearSignedInData(FORGET_TIPS = false) {
   try {
@@ -612,6 +672,84 @@ function showMissingImage(IMG) {
 document.addEventListener("error", (EVENT) => {
   if (EVENT.target instanceof HTMLImageElement) showMissingImage(EVENT.target);
 }, true);
+
+/* GROUP: Steps for each kind of phone */
+// Steps that differ from phone to phone (like adding an icon to the home screen) are in a .deviceGuide: one part per
+// kind of device, each with data-device (the kinds it's for, like "pixel oneplus", or "other" for any kind without
+// its own part) and a .deviceName heading. Without JavaScript every part shows, under its heading. With it, a list
+// over them picks one, starting with the kind this device looks like, and the pick is kept on this device (for every
+// guide on the site, signed in or not).
+const DEVICES = [
+  ["iphone", "iPhone or iPad"],
+  ["samsung", "Samsung Galaxy"],
+  ["pixel", "Google Pixel"],
+  ["oneplus", "OnePlus"],
+  ["motorola", "Motorola"],
+  ["xiaomi", "Xiaomi, Redmi, or POCO"],
+  ["android", "Another Android phone"],
+  ["computer", "A computer"]
+];
+const DEVICE_KEY = "prismal_device";
+
+// The kind of device this looks like (Chrome on Android hides the phone's model from its name, so that's asked for
+// separately, see guessDeviceModel)
+function guessDevice(MODEL = "") {
+  const AGENT = `${navigator.userAgent} ${MODEL}`;
+  if (/iPhone|iPad|iPod/.test(AGENT) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "iphone";
+  if (!/Android/i.test(AGENT)) return "computer";
+  if (/SM-|Samsung|Galaxy/i.test(AGENT)) return "samsung";
+  if (/Pixel/i.test(AGENT)) return "pixel";
+  if (/OnePlus/i.test(AGENT)) return "oneplus";
+  if (/moto|Motorola/i.test(AGENT)) return "motorola";
+  if (/Xiaomi|Redmi|POCO|MIUI|HyperOS/i.test(AGENT)) return "xiaomi";
+  return "android";
+}
+
+// The kind picked on this device, or the one it looks like
+function pickedDevice(MODEL = "") {
+  const STORED = readStored(DEVICE_KEY);
+  return DEVICES.some(([KEY]) => KEY === STORED) ? STORED : guessDevice(MODEL);
+}
+
+// Show one kind's part in every guide on the page
+function showDevice(KEY) {
+  document.querySelectorAll(".deviceGuide.isPicking").forEach((GUIDE) => {
+    const SELECT = GUIDE.querySelector(".deviceSelect");
+    if (SELECT) SELECT.value = KEY;
+    const PARTS = [...GUIDE.children].filter(PART => PART.dataset.device);
+    const forKey = (PART, K) => PART.dataset.device.split(/\s+/).includes(K);
+    const SHOWN = PARTS.find(PART => forKey(PART, KEY)) || PARTS.find(PART => forKey(PART, "other")) || PARTS[0];
+    PARTS.forEach(PART => { PART.hidden = PART !== SHOWN; });
+  });
+}
+
+// A guide gets its list (once). Guides added to a page later call this too (window.DeviceGuides.wire).
+function wireDeviceGuide(GUIDE) {
+  if (GUIDE.classList.contains("isPicking")) return;
+  GUIDE.classList.add("isPicking");
+  const PICK = document.createElement("label");
+  PICK.className = "deviceGuidePick";
+  const SELECT = document.createElement("select");
+  SELECT.className = "selectInput deviceSelect";
+  for (const [KEY, NAME] of DEVICES) SELECT.append(new Option(NAME, KEY));
+  PICK.append(Object.assign(document.createElement("span"), { textContent: "Steps for" }), SELECT);
+  GUIDE.prepend(PICK);
+  SELECT.addEventListener("change", () => {
+    writeStored(DEVICE_KEY, SELECT.value);
+    showDevice(SELECT.value);
+  });
+  showDevice(pickedDevice());
+}
+
+window.DeviceGuides = { wire: wireDeviceGuide };
+
+// Chrome on Android can say the phone's model when asked, which picks Samsung, Pixel, and the rest more often
+function guessDeviceModel() {
+  if (readStored(DEVICE_KEY) || !navigator.userAgentData?.getHighEntropyValues || !document.querySelector(".deviceGuide")) return;
+  navigator.userAgentData.getHighEntropyValues(["model"]).then(({ model }) => {
+    if (model && !readStored(DEVICE_KEY)) showDevice(pickedDevice(model));
+  }).catch(() => {});
+}
 
 /* GROUP: Logout only when signed in */
 // Public pages (like the Privacy Policy) can be read signed out, and then there's nothing to log out of
@@ -707,6 +845,8 @@ onDOMReady(() => {
   });
   injectGlobalFooter();
   hideLogoutWhenSignedOut();
+  document.querySelectorAll(".deviceGuide").forEach(wireDeviceGuide);
+  guessDeviceModel();
   // Images that already failed before this script ran
   document.querySelectorAll("img").forEach((IMG) => {
     if (IMG.complete && IMG.naturalWidth === 0 && IMG.getAttribute("src")) showMissingImage(IMG);

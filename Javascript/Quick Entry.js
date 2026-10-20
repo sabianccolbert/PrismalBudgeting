@@ -1,10 +1,11 @@
 // Quick Entry: the page a home screen icon opens (quick.html?key=...). It's the calendar's New Entry
 // form with no login. The key in the link comes from Home's Quick Entry button (made
 // while signed in) and can only queue entries, which join the budget the next time it opens (see
-// applyQuickEntries in Process Budget.js). Besides that, it only gets the Other Accounts' names and
-// balances, for the account picker, and the account's prisms (preset entries, see PRISMS), which it can
-// change. Keys stop working when the password changes. Nothing on the site links here. Opened without a key,
-// or with one that stopped working, it goes to the sign-in page.
+// applyQuickEntries in Process Budget.js). Besides that, it only gets In Bank today and the lowest it gets (shown
+// at the top), the Other Accounts' names and balances, for the account picker, and the account's prisms (preset
+// entries, see PRISMS), which it can change. Keys stop working when the password changes. Nothing on the site links
+// here. Opened without a key, or with one that stopped working, it goes to the sign-in page. Opened on an Apple Watch
+// (a link tapped in Messages or Mail there), it shows only In Bank today.
 // Process Budget.js is only loaded for its helpers: it skips loading a budget here.
 
 // =====================================================================
@@ -24,6 +25,10 @@ let quickFormDay = null; // This phone's date when the form opened (see moveForm
 const quickUndo = [];
 const quickRedo = [];
 
+// An Apple Watch (its browser says "Watch" in its name; or any screen too small for the form) shows only In Bank today
+const onWatch = /\bWatch(\d|\b)|watchOS|Watch OS/i.test(navigator.userAgent) || Math.min(screen.width, screen.height) < 250;
+document.documentElement.classList.toggle("watchView", onWatch);
+
 // Just set up from the calendar page: show how to add it to the home screen, and drop setup=1 from the
 // link so the saved icon opens straight to the form
 if (quickKey && quickParams.has("setup")) {
@@ -39,6 +44,16 @@ const quickHomeLink = document.querySelector('.navButtons a[href="/"]');
 if (quickHomeLink && !quickSignedIn) quickHomeLink.href = "/login.html";
 
 checkQuickKey();
+
+// Help's Copy Link: this page's link (its key in it), for an iPhone shortcut that opens it from the Lock Screen
+document.getElementById("copyQuickLink")?.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    BudgetUI.showToast("Link copied. Paste it into the shortcut's Open URLs action.");
+  } catch (e) {
+    BudgetUI.showToast("Couldn't copy it here. Tap Share in Safari, then Copy, instead.", true);
+  }
+});
 
 //#endregion
 
@@ -58,6 +73,7 @@ async function checkQuickKey() {
   if (result.ok && result.data) {
     quickUsername = result.data.username;
     showQuickAccounts(result.data.accounts);
+    showQuickBalances(result.data.inBank);
     // Prisms need the server, so they show once the key is known to work
     quickPrisms = Array.isArray(result.data.prisms) ? result.data.prisms : [];
     document.getElementById("prismSection").hidden = false;
@@ -117,6 +133,7 @@ async function addQuickEntry(panel, fields) {
   BudgetUI.showToast(`Added ${describeQueued(queued)}.`);
   showQuickStatus(accountLine(result.data.waiting));
   showQuickAccounts(result.data.accounts);
+  showQuickBalances(result.data.inBank);
   if (Number.isInteger(result.data.id)) {
     quickUndo.push({ id: result.data.id, entry: queued });
     quickRedo.length = 0;
@@ -382,6 +399,7 @@ async function undoQuickEntry() {
     BudgetUI.showToast(`Took back ${describeQueued(last.entry)}.`);
     showQuickStatus(accountLine(result.data.waiting));
     showQuickAccounts(result.data.accounts);
+    showQuickBalances(result.data.inBank);
   } else if (result.data && result.data.joined) {
     quickUndo.pop(); // It's in the budget now: undo it there
     BudgetUI.showToast(result.data.error, true);
@@ -405,6 +423,7 @@ async function redoQuickEntry() {
     BudgetUI.showToast(`Added ${describeQueued(next)} again.`);
     showQuickStatus(accountLine(result.data.waiting));
     showQuickAccounts(result.data.accounts);
+    showQuickBalances(result.data.inBank);
   } else {
     BudgetUI.showToast((result.data && result.data.error) || "Couldn't reach Prismal Budget. Check your connection and try again.", true);
   }
@@ -443,6 +462,25 @@ function showQuickAccounts(accounts) {
     .filter(account => account && typeof account.name === "string" && account.name.trim())
     .map(account => ({ name: account.name, balance: typeof account.balance === "number" ? account.balance : null }));
   if (quickForm) quickForm.fields.setAccounts(quickAccounts);
+}
+
+// In Bank today and the lowest it gets from today on (with its day), as the API sent them ({ today, lowest, lowestDate },
+// each null when it isn't known; none at all before the budget has been opened since this came out). Red below $0.
+function showQuickBalances(inBank) {
+  const card = document.getElementById("quickBalances");
+  if (!card || inBank === undefined) return;
+  const known = !!inBank && (typeof inBank.today === "number" || typeof inBank.lowest === "number");
+  card.hidden = !known;
+  if (!known) return;
+  const show = (id, amount) => {
+    const el = document.getElementById(id);
+    el.textContent = typeof amount === "number" ? formatMoney(amount) : "--";
+    el.classList.toggle("negative", typeof amount === "number" && amount < 0);
+  };
+  show("quickInBank", inBank.today);
+  show("quickLowest", inBank.lowest);
+  const lowestDay = inBank.lowestDate ? createSafeMidnight(inBank.lowestDate, true) : null;
+  document.getElementById("quickLowestLabel").textContent = lowestDay && !isNaN(lowestDay.getTime()) ? `Lowest, on ${showDay(lowestDay)}` : "Lowest";
 }
 
 // This phone's date, "YYYY-MM-DD" (the API counts waiting entries in the balances up to it)
