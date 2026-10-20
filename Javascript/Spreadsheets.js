@@ -494,13 +494,14 @@ const Spreadsheets = (() => {
 
   // A date cell -> local midnight, or null when it isn't a date. Numbers in a date column are dates' serial
   // numbers (a date without a date format), and text is read like a typed date (this device's date order, or
-  // words like Oct 20, 2026).
+  // words like Oct 20, 2026), except digits alone (a phone types a date that way, but in a cell they're a number).
   function cellDate(cell) {
     if (!cell) return null;
     if (cell.t === "d") return createSafeMidnight(cell.v);
     if (cell.t === "n") return cell.v >= 20000 && cell.v <= 80000 ? serialDate(cell.v) : null;
     if (cell.t !== "s") return null;
     const text = String(cell.v).trim().replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+/i, "");
+    if (/^\d+$/.test(text)) return null;
     const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(text);
     const date = iso ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])) : parseTypedDate(text);
     if (isNaN(date.getTime())) return null;

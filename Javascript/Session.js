@@ -67,7 +67,7 @@ function updateIdleWarning() {
     idleWarning = document.createElement('div');
     idleWarning.className = 'idleWarning';
     idleWarning.setAttribute('role', 'alert');
-    document.body.appendChild(idleWarning);
+    (window.ScreenLayer ? window.ScreenLayer.element : document.body).appendChild(idleWarning); // On the visible screen (Layout.js)
   }
   idleWarning.textContent = `For your security, you'll be signed out in ${secondsLeft} second${secondsLeft === 1 ? '' : 's'}. Tap anywhere or press a key to stay signed in.`;
 }

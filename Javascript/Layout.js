@@ -1,6 +1,7 @@
 // Layout + page transitions for Prismal Budget.
-// This file owns navigation animations, bfcache hygiene, touch-safe tap handling, floating Help, the
-// footer, and signing out. Starfield is treated as a "passenger" that we freeze/save during transitions.
+// This file owns navigation animations, bfcache hygiene, touch-safe tap handling, the screen layer floating
+// windows live in, floating Help, the footer, and signing out. Starfield is treated as a "passenger" that we
+// freeze/save during transitions.
 
 /*======================================================================
  *  MENU
@@ -9,6 +10,7 @@
  *     - Transition guard flags
  *     - Timer hygiene for bfcache
  *     - Starfield freeze/save hooks
+ *     - The screen layer (floating windows stay on the visible screen)
  *     - Slide timing (read from the CSS)
  *     - Navigation type detection
  *     - Referrer analysis for back button behavior (menu vs homepage vs internal)
@@ -24,7 +26,7 @@
  *     - Repair state after bfcache restores
  *
  *  5) TRANSITION NAVIGATION (SLIDE-OUT THEN LEAVE)
- *     - Animate out
+ *     - Animate out (a tab's glow slides to the tab that was tapped)
  *     - Freeze+save near the end
  *     - Navigate on transitionend (with timeout fallback)
  *
@@ -79,6 +81,70 @@ function freezeAndSaveStarfield() {
   }
 }
 
+/* GROUP: The screen layer */
+// Floating windows (panels, Search, Help, the date picker), notes, and the version badge live in one layer that always
+// covers the part of the page that's on the screen, at its normal size: the browser's visual viewport, which moves and
+// shrinks when the page is pinch-zoomed or a phone's keyboard is up. (position: fixed on its own sticks to the page's
+// full-size layout viewport instead, which left them in odd spots then.) The layer's own pixels are the screen's, so
+// what's in it doesn't zoom with the page; its size and place follow the visual viewport (placeScreenLayer).
+const SCREEN_LAYER = document.createElement("div");
+SCREEN_LAYER.id = "screenLayer";
+document.body.appendChild(SCREEN_LAYER);
+// (Boot.js added the version badge before this ran)
+const VERSION_BADGE = document.getElementById("versionBadge");
+if (VERSION_BADGE) SCREEN_LAYER.appendChild(VERSION_BADGE);
+let SCREEN = { x: 0, y: 0, width: 0, height: 0, scale: 1 }; // Where the layer is (page pixels) and its size (its own)
+const SCREEN_LISTENERS = new Set();
+let SCREEN_FRAME = 0;
+
+// Put the layer over the visual viewport (and tell what's in it that the screen moved)
+function placeScreenLayer() {
+  SCREEN_FRAME = 0;
+  const VIEW = window.visualViewport;
+  const SCALE = VIEW && VIEW.scale > 0 ? VIEW.scale : 1;
+  const NEXT = VIEW
+    ? { x: VIEW.offsetLeft, y: VIEW.offsetTop, width: VIEW.width * SCALE, height: VIEW.height * SCALE, scale: SCALE }
+    : { x: 0, y: 0, width: document.documentElement.clientWidth, height: window.innerHeight, scale: 1 };
+  if (Object.keys(NEXT).every(KEY => Math.abs(NEXT[KEY] - SCREEN[KEY]) < 0.01)) return;
+  SCREEN = NEXT;
+  SCREEN_LAYER.style.width = `${NEXT.width}px`;
+  SCREEN_LAYER.style.height = `${NEXT.height}px`;
+  SCREEN_LAYER.style.transform = `translate(${NEXT.x}px, ${NEXT.y}px) scale(${1 / NEXT.scale})`;
+  SCREEN_LISTENERS.forEach((LISTENER) => {
+    try { LISTENER(); } catch (ERROR) { console.warn("Couldn't follow the screen:", ERROR); }
+  });
+}
+
+// Once per frame, however often the screen moves
+function queueScreenLayer() {
+  if (!SCREEN_FRAME) SCREEN_FRAME = requestAnimationFrame(placeScreenLayer);
+}
+
+placeScreenLayer();
+window.visualViewport?.addEventListener("resize", queueScreenLayer);
+window.visualViewport?.addEventListener("scroll", queueScreenLayer);
+window.addEventListener("resize", queueScreenLayer);
+
+window.ScreenLayer = {
+  element: SCREEN_LAYER,
+  // The page's zoom (1 when it isn't pinch-zoomed): a page pixel is this many of the layer's
+  scale: () => SCREEN.scale,
+  // The layer's size, in its own pixels
+  size: () => ({ width: SCREEN.width, height: SCREEN.height }),
+  // Where an element is, in the layer's own pixels: { left, top, right, bottom, width, height }
+  rectOf(EL) {
+    const BOX = EL.getBoundingClientRect();
+    const LEFT = (BOX.left - SCREEN.x) * SCREEN.scale;
+    const TOP = (BOX.top - SCREEN.y) * SCREEN.scale;
+    return { left: LEFT, top: TOP, right: LEFT + BOX.width * SCREEN.scale, bottom: TOP + BOX.height * SCREEN.scale, width: BOX.width * SCREEN.scale, height: BOX.height * SCREEN.scale };
+  },
+  // LISTENER runs after the screen moved or changed size (the page was zoomed or scrolled while zoomed, or a keyboard
+  // came up), so something placed by its box can be placed again
+  onChange(LISTENER) {
+    SCREEN_LISTENERS.add(LISTENER);
+  }
+};
+
 /* GROUP: Floating windows (Help, panels, search boxes) */
 // They zoom out of the button that opened them, and back into it when they close (Budget UI.js's panels do
 // the same). Each one also closes the moment the page is left, so the browser's Back button (which can
@@ -90,13 +156,15 @@ function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-// Where the window would sit as its button: its corner on the button's corner, shrunk to the button's size
+// Where the window would sit as its button: its corner on the button's corner, shrunk to the button's size. (A window in
+// the screen layer moves in the layer's own pixels, which are a page pixel times the page's zoom.)
 function zoomedToButton(EL, BUTTON) {
   const FROM = BUTTON.getBoundingClientRect();
   const TO = EL.getBoundingClientRect();
+  const UNZOOM = SCREEN_LAYER.contains(EL) ? SCREEN.scale : 1;
   const SCALE_X = Math.max(FROM.width / (TO.width || 1), 0.05);
   const SCALE_Y = Math.max(FROM.height / (TO.height || 1), 0.05);
-  return `translate(${FROM.left - TO.left}px, ${FROM.top - TO.top}px) scale(${SCALE_X}, ${SCALE_Y})`;
+  return `translate(${(FROM.left - TO.left) * UNZOOM}px, ${(FROM.top - TO.top) * UNZOOM}px) scale(${SCALE_X}, ${SCALE_Y})`;
 }
 
 // Can EL zoom out of BUTTON? (animations work, the button is on the page, and motion is allowed)
@@ -426,6 +494,10 @@ window.addEventListener("pageshow", (EVENT) => {
   CONTAINER.classList.remove("slide-out", "tab-slide-out");
   CONTAINER.classList.add("ready");
   document.documentElement.classList.remove("tabSlide");
+  // A tab's glow that was sliding over when the page was left goes back where it belongs
+  document.querySelectorAll(".tabGlow").forEach(GLOW => GLOW.remove());
+  document.querySelectorAll(".pageTabs.isGliding").forEach(TABS => TABS.classList.remove("isGliding"));
+  document.querySelectorAll(".isGlideTarget").forEach(TAB => TAB.classList.remove("isGlideTarget"));
   IS_TRANSITION_ACTIVE = false;
   enableDocumentScroll();
 
@@ -442,11 +514,13 @@ window.addEventListener("pageshow", (EVENT) => {
 
 /* GROUP: Transition navigation entry point */
 // Animate slide-out, then navigate after the animation duration.
-// URL may be a real href or the special keyword "back". TAB_SLIDE: one of the budget's four pages' tabs was
-// followed, so only the page under the header and the tabs slides out (and the next page knows to do the same).
-function transitionTo(URL, useReplace = false, TAB_SLIDE = false) {
+// URL may be a real href or the special keyword "back". TAB: the tab of the budget's four pages that was followed (or
+// null), so only the page under the header and the tabs slides out (and the next page knows to do the same), while
+// the glow on the tab that's showing slides over to it.
+function transitionTo(URL, useReplace = false, TAB = null) {
   if (IS_TRANSITION_ACTIVE) return;
   if (!URL) return;
+  let TAB_SLIDE = !!TAB;
 
   /* GROUP: "back" keyword support */
   if (URL === "back") {
@@ -498,6 +572,7 @@ function transitionTo(URL, useReplace = false, TAB_SLIDE = false) {
 
   /* GROUP: Start slide-out */
   CONTAINER.classList.add(TAB_SLIDE ? "tab-slide-out" : "slide-out");
+  if (TAB_SLIDE) glideTabGlow(TAB, DURATION_MS);
 
   /* GROUP: Navigate when the sliding part's own transform transition ends */
   const onDone = (EVENT) => {
@@ -520,6 +595,31 @@ function transitionTo(URL, useReplace = false, TAB_SLIDE = false) {
     freezeAndSaveStarfield,
     Math.max(0, DURATION_MS - 50)
   );
+}
+
+/* GROUP: The tab's glow slides to the tab that was tapped */
+// While the page under the tabs slides out, the glow on the tab that's showing (its blue-violet light, bright edge, and
+// dot) slides up or down to the tab that was tapped, where the next page has it already. A copy of it does the moving:
+// the tabs keep their places, and the one that was showing looks like the others meanwhile.
+function glideTabGlow(TAB, DURATION_MS) {
+  const TABS = TAB.closest(".pageTabs");
+  const CURRENT = TABS && TABS.querySelector('.pageTab[aria-current="page"]');
+  if (!CURRENT || CURRENT === TAB || !TABS.animate) return;
+  const BOX = (EL) => ({ left: EL.offsetLeft, top: EL.offsetTop, width: EL.offsetWidth, height: EL.offsetHeight });
+  const FROM = BOX(CURRENT);
+  const TO = BOX(TAB);
+  const GLOW = document.createElement("span");
+  GLOW.className = "tabGlow";
+  GLOW.setAttribute("aria-hidden", "true");
+  Object.assign(GLOW.style, { left: `${FROM.left}px`, top: `${FROM.top}px`, width: `${FROM.width}px`, height: `${FROM.height}px` });
+  TABS.appendChild(GLOW);
+  TABS.classList.add("isGliding");
+  TAB.classList.add("isGlideTarget");
+  // It gets there a little before the page leaves, so it rests on its tab for a moment
+  GLOW.animate([
+    { transform: "translate(0, 0)", width: `${FROM.width}px`, height: `${FROM.height}px` },
+    { transform: `translate(${TO.left - FROM.left}px, ${TO.top - FROM.top}px)`, width: `${TO.width}px`, height: `${TO.height}px` }
+  ], { duration: Math.max(200, DURATION_MS * 0.75), easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "forwards" });
 }
 
 /* #endregion 5) TRANSITION NAVIGATION (SLIDE-OUT THEN LEAVE) */
@@ -596,16 +696,17 @@ document.addEventListener("click", (EVENT) => {
 
   // Everything else: we own navigation timing (a tab of the budget's four pages slides only the page under the tabs)
   EVENT.preventDefault();
-  transitionTo(TARGET.href, false, !!LINK.closest(".pageTabs"));
+  transitionTo(TARGET.href, false, LINK.closest(".pageTabs") ? LINK : null);
 });
 
 /* GROUP: Signing out */
 // Signing out (or deleting the account) forgets everything this browser kept for the account, including
 // this tab's Undo history, but keeps the device's own choices: whether analytics is off here, its date format,
-// and the kind of phone picked for the Steps for lists. Signing out also keeps which of Dave's tips were shown and when (just their names and days, not
-// what they said), so signing back in goes on to his next tip instead of starting the day's tips over;
-// deleting the account (FORGET_TIPS) forgets those too.
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_device"];
+// the kind of phone picked for the Steps for lists, and the passkey it last signed in with (Passkeys.js; the
+// login page tries it by itself). Signing out also keeps which of Dave's tips were shown and when (just their
+// names and days, not what they said), so signing back in goes on to his next tip instead of starting the day's
+// tips over; deleting the account (FORGET_TIPS) forgets those too.
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_device", "prismal_last_passkey"];
 const DAVE_TIPS_PREFIX = "prismal_dave_";
 function clearSignedInData(FORGET_TIPS = false) {
   try {
@@ -648,13 +749,15 @@ function endServerSession() {
 }
 
 // Logout. A change that hasn't reached the server yet (offline) would be lost, so that asks first. Once
-// it's decided, nothing more is saved and leaving doesn't ask again.
+// it's decided, nothing more is saved and leaving doesn't ask again. The login page then waits for a sign-in
+// instead of trying this device's passkey by itself, so another account can sign in.
 function signOut() {
   const HAS_UNSAVED = typeof hasUnsavedChanges === "function" && typeof workspaceLoaded !== "undefined" && workspaceLoaded && hasUnsavedChanges();
   if (HAS_UNSAVED && !window.confirm("Some of your changes haven't been saved yet (they'll save once you're back online). Sign out anyway and lose them?")) return;
   if (typeof workspaceLoaded !== "undefined") workspaceLoaded = false;
   endServerSession();
   clearSignedInData();
+  try { sessionStorage.setItem("prismal_signed_out", "logout"); } catch {}
   transitionTo("/login.html", true);
 }
 
@@ -768,16 +871,16 @@ function onDOMReady(fn) {
 }
 /* GROUP: Floating help */
 // A page's Help (a .helpView section, opened by its data-toggle button) floats over the page instead of
-// pushing it around: × , Escape, or a tap outside closes it. It moves into <body> because the page's
-// #transitionContainer is transformed, which would make a fixed-position section scroll with the page.
+// pushing it around: × , Escape, or a tap outside closes it. It moves into the screen layer (above), out of the
+// page's #transitionContainer, which is transformed and would make a fixed-position section scroll with the page.
 let OPEN_HELP = null;
 const HELP_BACKDROP = document.createElement("div");
 HELP_BACKDROP.className = "overlayBackdrop";
 HELP_BACKDROP.hidden = true;
 
-// A page's Help moves into <body> as a floating dialog, with its ×
+// A page's Help moves into the screen layer as a floating dialog, with its ×
 function setupFloatingHelp(BUTTON, HELP) {
-  document.body.append(HELP_BACKDROP, HELP);
+  SCREEN_LAYER.append(HELP_BACKDROP, HELP);
   HELP.setAttribute("role", "dialog");
   HELP.setAttribute("aria-modal", "true");
   const CLOSE = document.createElement("button");

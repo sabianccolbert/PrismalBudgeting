@@ -358,7 +358,7 @@ function renderInfoRow() {
     const entry = BudgetUI.element("span", "upcomingEntry", line);
     if (upcoming.amount > 0) entry.classList.add("positive");
     button.appendChild(entry);
-    button.addEventListener("click", () => openEntryOptionsFor(button, line, upcoming.date));
+    button.addEventListener("click", () => BudgetUI.openEntryOptions(button, line, upcoming.date));
     item.appendChild(button);
     list.appendChild(item);
   }
@@ -508,100 +508,11 @@ function openQuickEntrySetup(origin) {
   });
 }
 
-// Options for an entry tapped inside a zoomed day: set or add to the amount, move it, or delete it
+// Options for an entry tapped inside a zoomed day: set or add to the amount, change its type or account, move it, or
+// delete it (BudgetUI.openEntryOptions, which History shares)
 function openEntryOptions(lineEl, r, c, lineIndex) {
   const line = String(calendarData[r][c]).split("\n")[lineIndex];
-  if (line) openEntryOptionsFor(lineEl, line, gridDates[r][c], lineIndex);
-}
-
-// The same options for any entry: line is the entry as a day shows it ("❗️ -$4.50 Coffee") on date (Upcoming's
-// entries, after the calendar, too)
-function openEntryOptionsFor(origin, line, date, lineIndex = 1) {
-  const parts = getParts(line);
-  const refraction = getSpecialType(parts[0]);
-  const currentAmount = parseAmount(parts[1]);
-  const title = parts.slice(2).join(" ");
-
-  BudgetUI.openPanel({
-    origin,
-    size: "small",
-    title: `${showDay(date)} Entry`,
-    build(form, panel) {
-      const display = BudgetUI.renderEntryLine(line, lineIndex);
-      display.classList.add("panelEntry");
-      // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own
-      const account = linkedAccount(parts[0], title);
-      const accountNote = account ? BudgetUI.element("p", "panelHint", refraction === "⭕️"
-        ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
-        : `${account.name} (Other Accounts) changes by this entry's amount, and In Bank doesn't.`) : null;
-
-      let mode = "set";
-      const amount = BudgetUI.amountField({ label: "Amount", amount: currentAmount });
-      const modeToggle = BudgetUI.segmented(
-        [{ key: "set", label: "Set to" }, { key: "add", label: "Add to it" }],
-        "set",
-        (key) => {
-          mode = key;
-          amount.input.value = key === "set" && Math.round(currentAmount * 100) !== 0 ? Math.abs(currentAmount).toFixed(2) : "";
-          amount.setSign(key === "set" && currentAmount > 0 ? 1 : -1);
-        }
-      );
-      const moveTo = BudgetUI.dateField({ label: "Move to", optional: true });
-
-      // Its refraction type and Other Account can change too. Then it comes off as it is and goes on as the new
-      // one, adding into an entry already on that day with the same title and type (changeEntryKind).
-      const { title: ownTitle } = splitAccount(title);
-      const type = BudgetUI.refractionField({ value: refraction, allowAuto: false, onChange: (key) => accountPicker.setVisible(BudgetUI.isAccountType(key)) });
-      const accountPicker = BudgetUI.accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "" });
-      accountPicker.setVisible(BudgetUI.isAccountType(refraction));
-      const startAccount = accountPicker.value();
-
-      form.append(display, ...(accountNote ? [accountNote] : []), type.el, accountPicker.el, BudgetUI.field("Change the amount", modeToggle.el), amount.el, moveTo.el, BudgetUI.buttonRow([
-        { label: "Save", kind: "primary", type: "submit" },
-        { label: "Delete", kind: "danger", onClick: deleteEntry },
-        { label: "Cancel", onClick: () => panel.close() }
-      ]));
-
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const newAmount = amount.value() ?? 0; // A blank box is 0 (Set to 0, or nothing added)
-        const move = moveTo.value();
-        if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
-        if (Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-        if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
-
-        const newSprite = type.value();
-        const newAccount = accountPicker.value();
-        if (newSprite !== refraction || newAccount !== startAccount) {
-          const total = mode === "set" ? newAmount : currentAmount + newAmount;
-          if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-          const newTitle = withAccount(ownTitle, newAccount);
-          // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
-          if (!newTitle) return panel.setError("This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
-          const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total };
-          if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
-          return BudgetUI.submit(panel, () => changeEntryKind(kind));
-        }
-
-        const change = { title, sprite: refraction, date, action: "set", amount: "" };
-        const amountChanged = mode === "set" ? newAmount !== currentAmount : newAmount !== 0;
-        if (amountChanged) {
-          change.action = mode === "set" ? "set" : (newAmount > 0 ? "add" : "subtract");
-          change.amount = mode === "set" ? String(newAmount) : String(Math.abs(newAmount));
-        }
-        if (move && move.getTime() !== date.getTime()) change.moveDate = move;
-        if (!amountChanged && !change.moveDate) return panel.close(); // Nothing changed
-
-        BudgetUI.submit(panel, () => changeCalendarEntry(change));
-      });
-
-      // Delete: it comes off its day (one that landed there by itself leaves a $0.00 temp)
-      function deleteEntry() {
-        if (!window.confirm(`Delete ${title} on ${showDay(date)}?`)) return;
-        BudgetUI.submit(panel, () => changeCalendarEntry({ title, sprite: refraction, date, action: "delete" }));
-      }
-    }
-  });
+  if (line) BudgetUI.openEntryOptions(lineEl, line, gridDates[r][c], { lineIndex });
 }
 
 //#endregion

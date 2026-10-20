@@ -1,13 +1,5 @@
-/* How a day looks: its fill and edge, and those of today (glowing) and a day below $0 (red). The fills are half
-   see-through (the stars show through them); the words and sprites on them aren't. */
-:root {
-  --DAY_FILL: linear-gradient(180deg, rgba(30, 32, 86, 0.5), rgba(12, 12, 38, 0.5));
-  --DAY_EDGE: rgba(120, 132, 255, 0.22);
-  --DAY_RADIUS: clamp(4px, 0.9vmin, 10px);
-  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(112, 12, 44, 0.5), rgba(42, 6, 24, 0.5));
-  --NEGATIVE_DAY_EDGE: rgba(255, 80, 100, 0.6);
-  --NEGATIVE_GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 70, 90, 0.5) 0%, rgba(200, 20, 50, 0.28) 50%, rgba(90, 0, 30, 0.1) 85%, transparent 100%);
-}
+/* How a day looks (its fill and edge, and today's and a day below $0's) is in stylesheet.css's tokens (--DAY_FILL and
+   the rest): the date picker draws its days the same way. */
 
 /* Static hit area (keeps the original bounds) */
 .elastic-table td {
@@ -64,6 +56,11 @@
   transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
+/* A day's lines keep their height (more lines than fit are cut off at its bottom, or scroll when it's zoomed on a phone) */
+.cell-content > * {
+  flex-shrink: 0;
+}
+
 /* A day that isn't zoomed (or magnified) cuts a line too long for it short, with "..." at its edge */
 .elastic-table td:not(.is-editing):not(.is-magnified) .cell-content > :not(.cell-action-btn):not(.historyDate) {
   max-width: 100%;
@@ -104,9 +101,22 @@
   filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.6));
 }
 
-/* Ensure child contents overflow properly if needed */
+/* A zoomed day on a computer is as tall as its lines (at least as tall as the day), and its entries run past its
+   edges */
 .elastic-table td.is-editing .cell-content {
   overflow: visible;
+}
+
+.elastic-table td.is-editing:not(.is-fullZoom) .cell-content {
+  height: auto;
+  min-height: 100%;
+}
+
+/* A zoomed or magnified day is solid, so the page behind doesn't show through its entries (today still glows, and a
+   day below $0 stays red: see Calendar days below) */
+.elastic-table td.is-editing:not(.is-fullZoom) .cell-content,
+.elastic-table td.is-magnified .cell-content {
+  background: var(--DAY_SOLID);
 }
 
 /* How much a day is zoomed: 2 on a computer (scaled, so the v inside divides by it to stay the same size on
@@ -116,12 +126,12 @@
   --zoom: 2;
 }
 
-/* Phones: a tapped day fills most of the screen (Process Budget.js works out where and how big), over a dimmed
-   page. It's laid out at that size (its text, spacing, and corners times --zoom) instead of scaled up from the
-   tiny day, so its text is sharp. Its content is as big as the screen (--viewW by --viewH, moved to the screen's
-   top left corner) and scrolls, and draws the day itself (::before) at --dayX, --dayY, --dayW by --dayH, with its
-   lines starting inside it: entries running past the day's edges show over the dimmed page, and ones past the
-   screen's edges can be scrolled to. Only Process Budget.js's grow and shrink animations scale it. */
+/* Phones: a tapped day is as wide as most of the screen and as tall as its lines (Process Budget.js works out where and
+   how big), over a dimmed page. It's laid out at that size (its spacing and corners times --zoom, its text times
+   --zoomText) instead of scaled up from the tiny day, so its text is sharp. Its content is as big as the screen (--viewW
+   by --viewH, moved to the screen's top left corner) and scrolls up and down, and draws the day itself (::before) at
+   --dayX, --dayY, --dayW by --dayH, with its lines starting inside it: a line too long for the screen ends in "..." at
+   the screen's edge (tapping it shows it whole). Only Process Budget.js's grow and shrink animations scale it. */
 .elastic-table td.is-editing.is-fullZoom {
   transform: none;
   z-index: 60;
@@ -137,12 +147,13 @@
   height: var(--viewH, 100vh);
   /* The lines start inside the day; under the last one, room for the space under the day */
   padding:
-    calc(var(--dayY, 0px) + 4px * var(--zoom, 1))
-    calc(4px * var(--zoom, 1))
+    calc(var(--dayY, 0px) + 4px * var(--zoomText, 1))
+    calc(4px * var(--zoomText, 1))
     calc(var(--viewH, 100vh) - var(--dayY, 0px) - var(--dayH, 0px))
-    calc(var(--dayX, 0px) + 4px * var(--zoom, 1));
-  font-size: calc(1em * var(--zoom, 1));
-  overflow: auto;
+    calc(var(--dayX, 0px) + 4px * var(--zoomText, 1));
+  font-size: calc(1em * var(--zoomText, var(--zoom, 1)));
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   pointer-events: auto; /* It covers the screen now, so taps land on it (Process Budget.js closes it for ones beside the day) */
   background: none;
@@ -158,26 +169,34 @@
   left: var(--dayX, 0px);
   width: var(--dayW, 100%);
   height: var(--dayH, 100%);
-  /* Like every day, but opaque here, so the page behind doesn't show through its entries. Its edge is an inset
+  /* Like every day, but solid here, so the page behind doesn't show through its entries. Its edge is an inset
      shadow, not a border, so the v stays in the very corner. */
-  background: linear-gradient(180deg, rgb(30, 32, 86), rgb(10, 10, 32));
+  background: var(--DAY_SOLID);
   border-radius: calc(var(--DAY_RADIUS) * var(--zoom, 1));
   box-shadow: inset 0 0 0 1px rgba(140, 152, 255, 0.4), 0 2px 12px rgba(0, 0, 0, 0.7);
 }
 
+/* Its lines stop at the screen's right edge (with a little room, and the content's padding after them), ending in "..."
+   when they're longer, so nothing in it reaches past the screen sideways */
+.elastic-table td.is-editing.is-fullZoom .cell-content > :not(.cell-action-btn) {
+  max-width: calc(var(--viewW, 100vw) - var(--dayX, 0px) - 8px * var(--zoomText, 1) - 2vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Today keeps its glow, and red days stay red, when zoomed */
 .elastic-table td.is-editing.is-fullZoom.isToday .cell-content::before {
-  background: var(--GLOW_FILL), linear-gradient(180deg, rgb(30, 32, 86), rgb(10, 10, 32));
+  background: var(--GLOW_FILL), var(--DAY_SOLID);
   box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 14px rgba(96, 112, 255, 0.65);
 }
 
 .elastic-table td.is-editing.is-fullZoom.isNegative .cell-content::before {
-  background: linear-gradient(180deg, rgb(112, 12, 44), rgb(42, 6, 24));
+  background: var(--NEGATIVE_DAY_SOLID);
   box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 2px 12px rgba(0, 0, 0, 0.7);
 }
 
 .elastic-table td.is-editing.is-fullZoom.isToday.isNegative .cell-content::before {
-  background: var(--NEGATIVE_GLOW_FILL), linear-gradient(180deg, rgb(112, 12, 44), rgb(42, 6, 24));
+  background: var(--NEGATIVE_GLOW_FILL), var(--NEGATIVE_DAY_SOLID);
   box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 0 14px rgba(255, 50, 70, 0.6);
 }
 
@@ -225,14 +244,19 @@
   transform-origin: right center;
 }
 
-/* A zoomed day's v (close): small and tucked into its top right corner. Its size is divided by the day's
-   zoom, so on screen it's about 22px however far the day is zoomed. */
+/* A zoomed day's v (close), tucked into its top right corner. Its size is divided by the day's zoom, so on screen it's
+   the same however far the day is zoomed: a 32px spot with a 20px v (--V_SPOT and --V_SIZE). */
+:root {
+  --V_SPOT: 32px;
+  --V_SIZE: 20px;
+}
+
 .cell-action-btn {
   position: absolute;
   top: 0;
   right: 0;
-  width: calc(22px / var(--zoom, 1));
-  height: calc(22px / var(--zoom, 1));
+  width: calc(var(--V_SPOT) / var(--zoom, 1));
+  height: calc(var(--V_SPOT) / var(--zoom, 1));
   margin: 0 !important;
   padding: 0 !important;
   pointer-events: auto;
@@ -243,9 +267,10 @@
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: calc(13px / var(--zoom, 1));
+  font-size: calc(var(--V_SIZE) / var(--zoom, 1));
   line-height: 1;
   font-family: sans-serif;
+  text-shadow: 0 0 4px #000;
   cursor: pointer;
   z-index: 5;
 
@@ -263,11 +288,11 @@
 /* A phone's zoomed day isn't scaled, so its v is just its size, in the top right corner of the day it draws */
 .elastic-table td.is-fullZoom .cell-action-btn {
   top: var(--dayY, 0px);
-  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 22px);
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - var(--V_SPOT));
   right: auto;
-  width: 22px;
-  height: 22px;
-  font-size: 13px;
+  width: var(--V_SPOT);
+  height: var(--V_SPOT);
+  font-size: var(--V_SIZE);
 }
 
 /*========================================*
@@ -284,9 +309,7 @@
   --PANEL_LINE: rgba(128, 140, 255, 0.16);
   --PANEL_BORDER: rgba(150, 165, 255, 0.35);
   --PANEL_RADIUS: var(--GLASS_RADIUS);
-  /* Floating windows (panels, Search, Help): deep violet to navy glass */
-  --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 26, 108, 0.98) 0%, rgba(24, 20, 84, 0.98) 48%, rgba(12, 18, 64, 0.98) 100%);
-  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 26px rgba(100, 90, 255, 0.28);
+  /* (Floating windows' glass, --HOVER_GRADIENT and --FLOAT_SHADOW, is in stylesheet.css: the date picker uses it too) */
   --NEGATIVE_TEXT: #ff6b7a;
   --POSITIVE_TEXT: #5ee39a;              /* Positive entries */
   --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
@@ -440,6 +463,22 @@
   opacity: 0.85;
 }
 
+/* The tracker's columns stay narrow (a row's title and the amounts' column titles can take two lines, and phones get
+   less space around each), so on a phone its Aliases column shows at the screen's edge, and a sideways swipe brings
+   the rest */
+.trackerTable th,
+.trackerTable td.titleCell {
+  white-space: normal;
+}
+
+@media (max-width: 560px) {
+  .trackerTable th,
+  .trackerTable td {
+    padding-left: 1vmin;
+    padding-right: 1vmin;
+  }
+}
+
 /* A row's aliases scroll in a box about two lines tall (Budget Pages.js aliasBox): tapped, it opens all the way */
 .dataTable .aliasBox {
   max-height: 2.7em;
@@ -517,20 +556,97 @@
   display: none;
 }
 
-/* Change Logs */
-.logsTable .timeCell {
+/* Recurring Entries and Change Logs fit the screen, with no sideways scrolling: column titles can take two lines, and the
+   title (or action) column gets the room that's left, left-aligned, its text cut short with "..." (Budget Pages.js
+   clippedCell: tapping it shows it whole, wrapped, and tapping again cuts it short) */
+.dataTable.recurringTable,
+.dataTable.logsTable {
+  table-layout: auto;
+}
+
+.recurringTable th,
+.logsTable th {
+  white-space: normal;
+}
+
+/* Recurring's Monthly and Yearly under the card's title: each on one line */
+.keepTogether {
   white-space: nowrap;
+}
+
+.dataTable .clipText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dataTable .clipText.isClipped {
+  cursor: zoom-in;
+}
+
+.dataTable .clipText.isOpen {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: zoom-out;
+}
+
+.recurringTable .titleHead,
+.recurringTable td.titleCell,
+.logsTable .actionHead,
+.logsTable td.actionCell {
+  text-align: left;
+}
+
+.recurringTable td.titleCell {
+  width: 100%;
+  max-width: 0; /* It takes the room the other columns leave, and no more */
+  white-space: normal;
+}
+
+.recurringTable td.dateCell,
+.recurringTable td.frequencyCell {
+  text-align: center;
+}
+
+.recurringTable td.frequencyCell {
+  white-space: normal;
+}
+
+/* With room to spare, the column titles, dates, and frequencies stay on one line (only the title column gives way) */
+@media (min-width: 700px) {
+  .recurringTable th,
+  .recurringTable td.dateCell,
+  .recurringTable td.frequencyCell {
+    white-space: nowrap;
+  }
+
+  /* (Some browsers break at a date's <wbr> even then) */
+  .recurringTable td.dateCell wbr {
+    display: none;
+  }
+}
+
+/* Change Logs: the time on two lines (its time over its day), and the details in a box about two lines tall that scrolls
+   (tapping it opens it all the way, like the tracker's aliases) */
+.logsTable .timeCell {
   font-size: 0.9em;
   opacity: 0.85;
 }
 
-.logsTable .actionCell {
-  white-space: nowrap;
+.logsTable td.actionCell {
+  width: 32%;
+  max-width: 0;
+  white-space: normal;
 }
 
 .logsTable .detailsCell {
-  white-space: pre-line;
   font-size: 0.9em;
+}
+
+.dataTable .aliasBox.detailsBox {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 .logsTable tr.errorRow td {
@@ -578,9 +694,22 @@
   box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 0 12px rgba(255, 50, 70, 0.6);
 }
 
-/* On Home, entries (and the day's In Bank) are tappable once their day is zoomed (sized with the text, so they
-   look the same at any zoom). History's days only show what happened. */
-.elastic-table:not(.historyGrid) td.is-editing .lineEntry,
+/* ...and solid while a computer zooms or magnifies them */
+.elastic-table td.isToday:is(.is-editing, .is-magnified):not(.is-fullZoom) .cell-content {
+  background: var(--GLOW_FILL), var(--DAY_SOLID);
+}
+
+.elastic-table td.isNegative:is(.is-editing, .is-magnified):not(.is-fullZoom) .cell-content {
+  background: var(--NEGATIVE_DAY_SOLID);
+}
+
+.elastic-table td.isToday.isNegative:is(.is-editing, .is-magnified):not(.is-fullZoom) .cell-content {
+  background: var(--NEGATIVE_GLOW_FILL), var(--NEGATIVE_DAY_SOLID);
+}
+
+/* Entries are tappable once their day is zoomed, on Home and History (sized with the text, so they look the same at any
+   zoom), and so is the day's In Bank on Home (History's In Bank is a record) */
+.elastic-table td.is-editing .lineEntry,
 .elastic-table:not(.historyGrid) td.is-editing .lineInBank {
   pointer-events: auto;
   cursor: pointer;
@@ -589,12 +718,19 @@
   margin: 0 -0.2em;
 }
 
-.elastic-table:not(.historyGrid) td.is-editing .lineEntry:hover,
+.elastic-table td.is-editing .lineEntry:hover,
 .elastic-table:not(.historyGrid) td.is-editing .lineInBank:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* Date picking: tap a day to fill the waiting date field (📅 opens the device's own picker instead) */
+/* While a day is zoomed, the page under it holds still (Process Budget.js lockPageScroll) */
+html.dayZoomed,
+html.dayZoomed body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+/* Date picking: tap a day to fill the waiting date field (its calendar button opens the date picker instead) */
 body.datePicking .elastic-table {
   outline: 2px dashed rgba(238, 0, 0, 0.55);
   outline-offset: 6px;
@@ -673,8 +809,9 @@ body.datePicking .elastic-table td {
   margin: 2vmin auto 3vmin;
 }
 
-/* Large panels float over the top of the screen (the page under them doesn't move). A tall one
-   scrolls inside itself. */
+/* Large panels float over the top of the screen (the page under them doesn't move). A tall one scrolls inside itself.
+   They're in the screen layer (stylesheet.css), so they're placed on the visible screen, and 100% is its height (which
+   leaves out a phone's keyboard). */
 .budgetPanel.large.floating {
   position: fixed;
   z-index: 1300;
@@ -682,63 +819,25 @@ body.datePicking .elastic-table td {
   left: 0;
   right: 0;
   margin: 0 auto;
-  max-height: 96vh;
-  max-height: calc(100dvh - 2 * max(2vh, env(safe-area-inset-top, 0px)));
+  max-height: 96%;
+  max-height: calc(100% - 2 * max(2vh, env(safe-area-inset-top, 0px)));
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--HOVER_GRADIENT);
 }
 
+/* Small panels sit by what opened them (Budget UI.js positionNear), on the visible screen; a tall one scrolls */
 .budgetPanel.small {
   position: absolute;
   z-index: 1300;
   width: min(88vw, 340px);
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--HOVER_GRADIENT);
 }
 
-/* A date box with its 📅 button */
-.dateRow {
-  display: flex;
-  gap: 0.5em;
-}
-
-.budgetPanel .dateRow input.dateInput,
-.searchBox .dateRow input.dateInput {
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-}
-
-/* 📅: a see-through date input covers the button, so a tap opens the device's own date picker
-   (BudgetUI.datePickerButton) */
-.pickDay {
-  position: relative;
-  flex: 0 0 auto;
-  padding: 0.3em 0.7em;
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.pickDay .nativeDate {
-  position: absolute;
-  inset: 0;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  font-size: 16px; /* Phones don't zoom in for 16px or more */
-  border: none;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.pickDay .nativeDate:hover,
-.pickDay .nativeDate:focus {
-  transform: none;
-  box-shadow: none;
-}
+/* (Date boxes, their calendar button, and the date picker are in stylesheet.css: the login page has one too) */
 
 /* Recurring frequency: Every [number] [Days / Weeks / Months] */
 .frequencyRow {
@@ -868,6 +967,9 @@ body.datePicking .elastic-table td {
   margin-top: 0.35em;
 }
 
+/* Boxes never ask for more room than their row has: iPhones size a box that has no width of its own by the font's
+   average letter, which for the site's font (it has Chinese and Japanese too) made a title's box wider than its panel,
+   so the panel scrolled sideways. max-width: 100% and min-width: 0 let it shrink to its row (and its row to the panel). */
 .budgetPanel input[type="text"],
 .budgetPanel textarea,
 .budgetPanel select,
@@ -875,7 +977,8 @@ body.datePicking .elastic-table td {
 .searchBar select {
   box-sizing: border-box;
   width: 100%;
-  max-width: none;
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: 0.5em 0.8em;
   font-family: 'Main Font', sans-serif;
@@ -948,6 +1051,7 @@ input.dateInput.isPickTarget {
 .amountRow input {
   flex: 1 1 8em;
   width: auto;
+  min-width: 0;
 }
 
 .segmented {
@@ -977,11 +1081,19 @@ input.dateInput.isPickTarget {
   color: var(--BASE_COLOR);
 }
 
-/* Title lists (tracker aliases, the search bar): a title box, its buttons, and × on each line */
+/* Title lists (tracker aliases, the search bar): a title box, its buttons, and × on each line. Every part can shrink to
+   the panel's width (see the boxes above). */
 .termList {
   display: flex;
   flex-direction: column;
   gap: 0.5em;
+  min-width: 0;
+}
+
+.termField,
+.panelField,
+.searchTerms {
+  min-width: 0;
 }
 
 /* Each line in its own box, so its buttons clearly go with its title when the line wraps */
@@ -1005,14 +1117,16 @@ input.dateInput.isPickTarget {
    wraps under the title (instead of × on a line of its own) */
 .termControls {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 0.4em;
+  min-width: 0;
   margin-left: auto;
 }
 
 .termRow .segmented {
   flex: 0 1 auto;
+  min-width: 0;
 }
 
 .budgetButton.termAdd {
@@ -1029,11 +1143,14 @@ input.dateInput.isPickTarget {
   align-self: flex-start;
 }
 
+/* The entry an entry's options are for, whole: a long title wraps instead of being cut short like on its day */
 .panelEntry {
   padding: 0.45em 0.7em;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.4);
   font-size: 1.05em;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .panelError {
@@ -1175,7 +1292,7 @@ input.dateInput.isPickTarget {
 }
 
 /* Search: the Search button above the calendar opens it, floating over the page like a large panel (it
-   lives in <body>, see wireSearch in Calendar Page.js). Its results show under its form. */
+   lives in the screen layer, see wireSearch in Budget Search.js). Its results show under its form. */
 .searchBar {
   --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   position: fixed;
@@ -1185,8 +1302,8 @@ input.dateInput.isPickTarget {
   right: 0;
   box-sizing: border-box;
   width: min(94vw, 760px);
-  max-height: 96vh;
-  max-height: calc(100dvh - 2 * max(2vh, env(safe-area-inset-top, 0px)));
+  max-height: 96%;
+  max-height: calc(100% - 2 * max(2vh, env(safe-area-inset-top, 0px)));
   margin: 0 auto;
   padding: 0 1em 1em;
   overflow-y: auto;
@@ -1486,6 +1603,7 @@ input.dateInput.isPickTarget {
 }
 
 .pageTabs {
+  position: relative; /* The glow sliding to a tab that was tapped (below) */
   display: flex;
   flex-direction: column;
   gap: clamp(5px, 1vmin, 10px);
@@ -1524,8 +1642,8 @@ input.dateInput.isPickTarget {
   box-shadow: var(--GLASS_SHADOW), 0 0 10px rgba(96, 112, 255, 0.35);
 }
 
-/* The page that's showing glows: a blue-violet radial gradient from its center, a bright edge, and a neon bar at
-   its left */
+/* The page that's showing glows: a blue-violet radial gradient from its center, a bright edge, and a neon dot on its left
+   edge */
 .pageTabs a.pageTab[aria-current="page"] {
   color: var(--TEXT_BRIGHT);
   background: var(--GLOW_FILL), var(--GLASS);
@@ -1534,16 +1652,47 @@ input.dateInput.isPickTarget {
   cursor: default;
 }
 
-.pageTabs a.pageTab[aria-current="page"]::before {
+.pageTabs a.pageTab[aria-current="page"]::before,
+.tabGlow::before {
   content: "";
   position: absolute;
-  top: 20%;
-  bottom: 20%;
-  left: -1px;
-  width: 3px;
-  border-radius: 3px;
+  top: 50%;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
   background: linear-gradient(var(--NEON_CYAN), var(--NEON_VIOLET));
   box-shadow: 0 0 8px var(--NEON_BLUE);
+}
+
+/* A tab tapped: the glow (a copy of it, Layout.js glideTabGlow) slides over to it while the page slides out, and the tab
+   it left looks like the others. The copy lightens what's under it, so the tabs' words show through. */
+.tabGlow {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  border: 1px solid var(--GLOW_EDGE);
+  border-radius: 12px;
+  background: var(--GLOW_FILL);
+  box-shadow: var(--GLOW_SHADOW);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.pageTabs.isGliding a.pageTab[aria-current="page"] {
+  color: var(--BASE_COLOR);
+  background: var(--GLASS);
+  border-color: var(--GLASS_LINE);
+  box-shadow: var(--GLASS_SHADOW);
+}
+
+.pageTabs.isGliding a.pageTab[aria-current="page"]::before {
+  content: none;
+}
+
+.pageTabs.isGliding a.pageTab.isGlideTarget {
+  color: var(--TEXT_BRIGHT);
 }
 
 .tabIcon {
@@ -2029,14 +2178,15 @@ input.dateInput.isPickTarget {
   transition: box-shadow var(--SLOW_SHADOW);
 }
 
-/* The colors are only its ring: its middle is solid dark blue, under the + */
+/* The colors are only a thin ring: its middle glows, a blue-violet radial gradient from its center to dark blue at its
+   edge, under the + */
 .newEntryPrism::before {
   content: "";
   position: absolute;
-  inset: 15%;
+  inset: 8%;
   border-radius: 50%;
-  background: #0b1145;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.55), inset 0 0 8px rgba(0, 0, 0, 0.5);
+  background: radial-gradient(circle at center, rgba(120, 140, 255, 0.62) 0%, rgba(96, 70, 240, 0.4) 34%, rgba(34, 26, 120, 0.92) 64%, #0b1145 100%);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.55), inset 0 0 10px rgba(130, 150, 255, 0.45);
 }
 
 /* Hovered or focused: the red-orange edge and red glow, and a red radial gradient from its center */
@@ -2271,7 +2421,7 @@ html.watchView .quickBalanceAmount {
   display: none;
 }
 
-/* A long title ends in … instead of running off the screen */
+/* A long title ends in "..." instead of running off the screen */
 .prismButton {
   display: inline-block;
   max-width: 100%;
@@ -2511,7 +2661,6 @@ html.watchView .quickBalanceAmount {
 /* Inputs inside cards (the global input style is a big centered pill) */
 .budgetCard input[type="text"],
 .budgetCard input[type="time"],
-.budgetCard input[type="date"],
 .budgetCard input[type="email"],
 .budgetCard input[type="password"],
 .budgetCard select {
@@ -2535,8 +2684,6 @@ html.watchView .quickBalanceAmount {
 .budgetCard input[type="text"]:focus,
 .budgetCard input[type="time"]:hover,
 .budgetCard input[type="time"]:focus,
-.budgetCard input[type="date"]:hover,
-.budgetCard input[type="date"]:focus,
 .budgetCard input[type="email"]:hover,
 .budgetCard input[type="email"]:focus,
 .budgetCard input[type="password"]:hover,
@@ -2610,6 +2757,16 @@ a.budgetButton:hover {
   align-items: stretch;
 }
 
+/* A pill switch in a Settings card (like Show balances on Quick Entry icons), and what it does under it */
+.budgetCard .settingsSwitch {
+  margin: 1em 0 0.3em;
+}
+
+/* The Spreadsheets page's note that other emails are added in Settings */
+.budgetCard .sheetsOtherEmails {
+  margin: 1em 0 0;
+}
+
 .settingsForm .panelButtons {
   margin-top: 0.6em;
 }
@@ -2623,7 +2780,7 @@ a.budgetButton:hover {
   border-top: 1px solid var(--PANEL_LINE);
 }
 
-/* Passkeys (Settings) and Other Emails (the Spreadsheets page): each one's name and details, with its buttons beside it */
+/* Passkeys and Other Emails (Settings): each one's name and details, with its buttons beside it */
 .passkeyList,
 .sheetEmailList {
   margin: 0.8em 0 1em;
@@ -2958,20 +3115,9 @@ a.budgetButton:hover {
   top: calc(max(2vh, env(safe-area-inset-top, 0px)) + 1.2em);
 }
 
-/* Date boxes in cards (Settings' birth date): a line of text tall even when empty, with the date at the left */
-.budgetCard input[type="date"] {
-  min-height: calc(1.2em + 1em + 4px);
-}
-
-.budgetCard input[type="date"]::-webkit-date-and-time-value {
-  text-align: left;
-}
-
-/* Settings' birth date box */
-.budgetCard .settingsField .ageInput {
-  width: 11em;
-  align-self: flex-start;
-  text-align: center;
+/* Settings' birth date: its box and calendar button, as wide as a date needs */
+.budgetCard .settingsField .ageRow {
+  width: min(100%, 15em);
 }
 
 /* Help: the Help button at the bottom of a page opens the page's help, floating over a dimmed page. The
@@ -2993,8 +3139,8 @@ a.budgetButton:hover {
   left: 0;
   right: 0;
   margin: 0 auto;
-  max-height: 94vh;
-  max-height: calc(100dvh - 2 * max(3vh, env(safe-area-inset-top, 0px)));
+  max-height: 94%;
+  max-height: calc(100% - 2 * max(3vh, env(safe-area-inset-top, 0px)));
   overflow-y: auto;
   overscroll-behavior: contain;
   line-height: 1.45;

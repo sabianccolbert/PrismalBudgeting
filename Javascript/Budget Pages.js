@@ -58,13 +58,19 @@ function renderRecurringPage(view) {
   renderToolbar("recurring", (origin) => openRecurringPanel(origin, null));
   view.replaceChildren();
 
-  // Monthly and Yearly, under the card's title
+  // Monthly and Yearly, under the card's title (each stays on one line, so a minus sign isn't left behind)
   const summary = recurringData[0] || [];
   const monthly = String(summary[2] || "").trim();
   const yearly = String(summary[5] || "").trim();
   const subtitle = document.getElementById("pageSubtitle");
   if (subtitle) {
-    subtitle.textContent = [monthly ? "Monthly: " + monthly : "", yearly ? "Yearly: " + yearly : ""].filter(Boolean).join(" • ");
+    const parts = [monthly ? "Monthly: " + monthly : "", yearly ? "Yearly: " + yearly : ""].filter(Boolean).map((text) => {
+      const part = document.createElement("span");
+      part.className = "keepTogether";
+      part.textContent = text;
+      return part;
+    });
+    subtitle.replaceChildren(...parts.flatMap((part, i) => (i ? [" • ", part] : [part])));
     subtitle.hidden = !monthly && !yearly;
   }
 
@@ -76,21 +82,25 @@ function renderRecurringPage(view) {
   const duplicates = recurringDuplicates();
   if (duplicates.length > 0) view.appendChild(recurringProblems(duplicates));
 
+  // The whole table fits the screen: the title column gets the room that's left (a long title is cut short; tapping it
+  // shows it whole), and dates and frequencies can take two lines
   const tableEl = buildRowTable({
     tableName: "recurring",
-    columns: ["Type", "Title", "Amount", "Start Date", "Frequency", "End Date"],
+    columns: ["Type", { label: "Title", className: "titleHead" }, "Amount", "Start Date", "Frequency", "End Date"],
     rows,
+    extraClass: "recurringTable",
     renderEntry(tr, row) {
       tr.appendChild(cell(row[5], "typeCell"));
-      tr.appendChild(noTranslate(cell(row[0], "titleCell")));
+      tr.appendChild(noTranslate(clippedCell(row[0], "titleCell")));
       tr.appendChild(noTranslate(cell(row[1], "amountCell")));
-      tr.appendChild(noTranslate(cell(showStoredDate(row[2]))));
-      tr.appendChild(cell(describeFrequency(row[3])));
-      tr.appendChild(noTranslate(cell(showStoredDate(row[4]))));
+      tr.appendChild(noTranslate(dateCell(row[2])));
+      tr.appendChild(cell(describeFrequency(row[3]), "frequencyCell"));
+      tr.appendChild(noTranslate(dateCell(row[4])));
     },
     onEntryClick: (index, origin) => openRecurringPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
+  markClipped(tableEl);
 }
 
 // "Needs a look" over the table: recurring entries that match another one in title, Other Account, and refraction type,
@@ -111,7 +121,8 @@ function recurringProblems(duplicates) {
 // History tab: [0] column titles, then one row per week (Sunday-Saturday), newest first.
 // Each cell is "MM/DD/YYYY\n✅ $X In Bank\nentries..."
 // Each day shows just its date, big, until it's tapped: then it zooms in with its In Bank and entries, the same
-// way (and with the same gestures) as Home's days (Process Budget.js LAYOUT FUNCTIONS).
+// way (and with the same gestures) as Home's days (Process Budget.js LAYOUT FUNCTIONS), and its entries can be changed
+// like Home's, without changing any balances.
 function renderHistoryPage(view) {
   // A zoomed day is zoomed again once the days are drawn again (after a change)
   const zoomedDate = view.querySelector("td.is-editing:not(.isZoomClosing)")?.dataset.date;
@@ -143,6 +154,17 @@ function renderHistoryPage(view) {
     event.preventDefault();
     BudgetUI.pickDate(date, td);
   }, true);
+  // Tapping an entry on a zoomed day opens its options, like on Home (not while the day shrinks back: a tap then zooms it
+  // in again). Changing a day in History keeps the balances (changeHistoryEntry).
+  tableEl.addEventListener("click", (event) => {
+    const lineEl = event.target.closest(".lineEntry");
+    const td = lineEl && lineEl.closest("td");
+    if (!td || !td.classList.contains("is-editing") || td.classList.contains("isZoomClosing")) return;
+    const date = createSafeMidnight(td.dataset.date, true);
+    const spot = isNaN(date.getTime()) ? null : historySpot(date);
+    const line = spot && String(historyData[spot.r][spot.c]).split("\n")[Number(lineEl.dataset.line)];
+    if (line) BudgetUI.openEntryOptions(lineEl, line, date, { lineIndex: Number(lineEl.dataset.line), inHistory: true });
+  });
   view.appendChild(tableEl);
   wireElasticTable(tableEl);
   const zoomed = zoomedDate && [...tableEl.querySelectorAll("td")].find(td => td.dataset.date === zoomedDate);
@@ -197,7 +219,7 @@ function renderTrackerPage(view) {
     onEntryClick: (index, origin) => openTrackerPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
-  markClippedAliases(tableEl);
+  markClipped(tableEl);
 }
 
 // A tracker row's cells (the page's table, and its Search results)
@@ -216,26 +238,59 @@ function trackerCells(tr, row) {
 
 // A row's aliases scroll in a short box, so a long list doesn't make its row tall. Tapping a box with more in it than
 // shows opens it all the way (no scrolling), and tapping it again closes it; tapping one that shows everything opens
-// the row, like the rest of it (in Edit, a tap always checks the row instead).
-function aliasBox(text) {
-  const box = BudgetUI.element("div", "aliasBox", text);
+// the row, like the rest of it (in Edit, a tap always checks the row instead). Change Logs' details use it too.
+function aliasBox(text, className = "") {
+  const box = BudgetUI.element("div", `aliasBox ${className}`.trim(), text);
   box.addEventListener("click", (event) => {
     const open = box.classList.contains("isOpen");
     if (editMode || (!open && box.scrollHeight <= box.clientHeight + 1)) return;
     event.stopPropagation();
     box.classList.toggle("isOpen", !open);
     box.scrollTop = 0;
-    markClippedAliases(box.closest("table"));
+    markClipped(box.closest("table"));
   });
   return box;
 }
 
-// Boxes with more in them than they show get a fade at the bottom, so it's clear there's more
-function markClippedAliases(table) {
+// A cell whose text stays on one line, cut short with "..." when its column is too narrow for it (Recurring Entries'
+// titles, Change Logs' actions). Tapping one that's cut short shows it whole, and tapping it again cuts it short again;
+// tapping one that shows everything opens its row, like the rest of it (in Edit, a tap checks the row instead). The
+// same as an alias box, sideways.
+function clippedCell(text, className) {
+  const td = cell("", className);
+  const box = BudgetUI.element("div", "clipText", text ?? "");
+  box.addEventListener("click", (event) => {
+    const open = box.classList.contains("isOpen");
+    if (editMode || (!open && box.scrollWidth <= box.clientWidth + 1)) return;
+    event.stopPropagation();
+    box.classList.toggle("isOpen", !open);
+    markClipped(box.closest("table"));
+  });
+  td.appendChild(box);
+  return td;
+}
+
+// A stored date in a cell, as people read it, which can break onto two lines after its day and month ("10/05/" over
+// "2026", or "2026-" over "10-05") when the table needs the room
+function dateCell(stored) {
+  const td = cell("", "dateCell");
+  const text = showStoredDate(stored);
+  const parts = text.match(/^(\d{1,2}[\/.]\d{1,2}[\/.])(\d{4})$/) || text.match(/^(\d{4}-)(\d{1,2}-\d{1,2})$/);
+  if (parts) td.append(parts[1], document.createElement("wbr"), parts[2]);
+  else td.textContent = text;
+  return td;
+}
+
+// Alias boxes with more in them than they show get a fade at the bottom, and cut-short cells their "...", so it's clear
+// there's more (and a tap shows it)
+function markClipped(table) {
   if (!table) return;
   requestAnimationFrame(() => {
     for (const box of table.querySelectorAll(".aliasBox")) {
       box.classList.toggle("isClipped", !box.classList.contains("isOpen") && box.scrollHeight > box.clientHeight + 1);
+    }
+    for (const box of table.querySelectorAll(".clipText")) {
+      box.classList.toggle("isClipped", !box.classList.contains("isOpen") && box.scrollWidth > box.clientWidth + 1);
     }
   });
 }
@@ -303,15 +358,18 @@ function renderLogsPage(view) {
     return;
   }
 
+  // The whole table fits the screen: the time takes two lines, the action is cut short (tap it to see it whole), and the
+  // details scroll in a box about two lines tall (tap it to open it all the way), like the tracker's aliases
   const tableEl = createDataTable(LOG_COLUMNS);
   tableEl.classList.add("logsTable");
   const fragment = document.createDocumentFragment();
   for (let row of rows) fragment.appendChild(logRow(row));
   tableEl.tBodies[0].appendChild(fragment);
   view.appendChild(wrapScroll(tableEl));
+  markClipped(tableEl);
 }
 
-const LOG_COLUMNS = ["Time", "Took", "Action", "Details"];
+const LOG_COLUMNS = ["Time", "Took", { label: "Action", className: "actionHead" }, "Details"];
 
 // One Change Logs row (the page's table, and its Search results)
 function logRow(row) {
@@ -320,10 +378,12 @@ function logRow(row) {
   if (row[7] === "Not Found") tr.className = "notFoundRow";
   tr.appendChild(noTranslate(cell(row[0], "timeCell")));
   tr.appendChild(noTranslate(cell(String(row[1]).replace(" Seconds", "s"), "timeCell")));
-  tr.appendChild(cell(row[2], "actionCell"));
+  tr.appendChild(clippedCell(row[2], "actionCell"));
   const details = row.slice(3, 7).filter(detail => String(detail).trim() !== "");
   if (row[7]) details.push("Status: " + row[7]);
-  tr.appendChild(noTranslate(cell(details.join("\n"), "detailsCell"))); // Titles, amounts, and dates
+  const detailsCell = cell("", "detailsCell");
+  detailsCell.appendChild(aliasBox(details.join("\n"), "detailsBox"));
+  tr.appendChild(noTranslate(detailsCell)); // Titles, amounts, and dates
   return tr;
 }
 
@@ -532,8 +592,8 @@ function setPageSearchOpen(open, immediately = false) {
   window.FloatingWindows.zoomClose(search.box, button, () => { search.box.hidden = true; });
 }
 
-// The floating box, in <body> (the page's #transitionContainer is transformed, which would make a fixed box
-// scroll with it)
+// The floating box, in the screen layer (Layout.js; the page's #transitionContainer is transformed, which would make a
+// fixed box scroll with it)
 function makePageSearch() {
   const config = PAGE_SEARCHES[window.PAGE];
   const box = BudgetUI.element("section", "searchBar searchBox pageSearch");
@@ -565,7 +625,7 @@ function makePageSearch() {
   results.setAttribute("aria-live", "polite");
   results.hidden = true;
   box.append(header, input, results);
-  document.body.appendChild(box);
+  (window.ScreenLayer ? window.ScreenLayer.element : document.body).appendChild(box);
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && pageSearch.isOpen && !document.querySelector(".budgetPanel")) setPageSearchOpen(false);
@@ -608,7 +668,7 @@ function renderPageSearch() {
   const scroll = BudgetUI.element("div", "dataScroll searchScroll");
   scroll.appendChild(tableEl);
   results.appendChild(scroll);
-  markClippedAliases(tableEl);
+  markClipped(tableEl);
 }
 
 //#endregion
@@ -1184,13 +1244,15 @@ function openCategoryPanel(tableName, origin, index, atIndex) {
 // #region TABLE HELPERS
 // =====================================================================
 
+// A table with its column titles: each a title, or { label, className } for one its column's styles go by
 function createDataTable(headers) {
   const tableEl = document.createElement("table");
   tableEl.className = "dataTable";
   const headRow = tableEl.createTHead().insertRow();
   for (let header of headers) {
     const th = document.createElement("th");
-    th.textContent = header;
+    th.textContent = typeof header === "string" ? header : header.label;
+    if (header && header.className) th.className = header.className;
     headRow.appendChild(th);
   }
   tableEl.createTBody();

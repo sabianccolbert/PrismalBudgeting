@@ -651,8 +651,8 @@ function addCalendarEntry(entry) {
   }, { label: `added ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
-// Change, move, or delete a calendar entry. change: { title, sprite, date, action, amount, moveDate }.
-// Can be undone.
+// Change, move, or delete a calendar entry (or one in Upcoming; History's go through changeHistoryEntry). change: { title,
+// sprite, date, action, amount, moveDate }. Can be undone.
 function changeCalendarEntry(change) {
   return runBudgetAction("", () => unique(change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
@@ -663,15 +663,82 @@ function changeCalendarEntry(change) {
 // as the new one, adding into an entry already there with that title and type (a day has one of each). Can be
 // undone in one step.
 function changeEntryKind(change) {
-  const day = change.moveDate || change.date;
-  const label = `changed ${capitalize(String(change.title || "").trim())} on ${showDay(createSafeMidnight(change.date))} to ${capitalize(change.newTitle)} (${REFRACTION_NAMES.get(change.newSprite) || "Regular"})`;
+  return runBudgetAction("", () => entryKindChange(change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+}
+
+// changeEntryKind's change itself: off as it was, then on as the new one
+function entryKindChange(change) {
+  const amount = Math.round(Number(change.amount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount === 0) throw new BudgetInputError("Enter an amount, like 12.50. To take the entry off, tap Delete.");
+  unique({ title: change.title, sprite: change.sprite, date: change.date, action: "delete" });
+  if (notFound) return {};
+  return unique({ title: change.newTitle, sprite: change.newSprite, date: change.moveDate || change.date, action: amount > 0 ? "add" : "subtract", amount: String(Math.abs(amount)) });
+}
+
+// "changed Payday on 10/05 to Payday → HSA (Transfer)", for Undo and Redo
+function describeKindChange(change) {
+  return `changed ${capitalize(String(change.title || "").trim())} on ${showDay(createSafeMidnight(change.date))} to ${capitalize(change.newTitle)} (${REFRACTION_NAMES.get(change.newSprite) || "Regular"})`;
+}
+
+// An entry on a day in History changed from History's zoomed day: changeCalendarEntry's change (Set to, Add to it, Move
+// to, Delete), or changeEntryKind's (one with newTitle: its refraction type or Other Account). History is a record of
+// what happened, so the balances it led to stay as they are: In Bank doesn't change (each History day keeps its own In
+// Bank line, and the calendar goes on from the newest one), and neither does any Other Account's balance today
+// (keepAccountBalances). It can only move to another day in History. The tracker and Search count the change. Can be
+// undone, and undoing it keeps the balances too.
+function changeHistoryEntry(change) {
+  const isKind = change.newTitle !== undefined;
+  const dates = [change.date, change.moveDate].filter(Boolean);
+  const label = isKind ? describeKindChange(change) : describeEntryChange(change);
   return runBudgetAction("", () => {
-    const amount = Math.round(Number(change.amount) * 100) / 100;
-    if (!Number.isFinite(amount) || amount === 0) throw new BudgetInputError("Enter an amount, like 12.50. To take the entry off, tap Delete.");
-    unique({ title: change.title, sprite: change.sprite, date: change.date, action: "delete" });
-    if (notFound) return {};
-    return unique({ title: change.newTitle, sprite: change.newSprite, date: day, action: amount > 0 ? "add" : "subtract", amount: String(Math.abs(amount)) });
-  }, { label, dates: [change.date, change.moveDate].filter(Boolean) });
+    if (dates.some(date => date >= gridStartDate || !historyHasDay(date))) {
+      throw new BudgetInputError(`An entry in History can only move to another day in History (${showDate(oldestHistoryDay() || gridStartDate)} through ${showDate(addDays(gridStartDate, -1))}).`);
+    }
+    const balances = accountBalancesToday();
+    const result = (isKind ? entryKindChange(change) : unique(change)) || {};
+    return { ...result, afterRefresh: () => keepAccountBalances(balances) };
+  }, { label, dates, keepBalances: true });
+}
+
+// History's first day, or null without History
+function oldestHistoryDay() {
+  for (let r = historyData.length - 1; r >= 1; r--) {
+    for (let c = 0; c < 7; c++) {
+      const header = String(historyData[r][c] ?? "").split("\n")[0].trim();
+      const date = header ? createSafeMidnight(header, true) : null;
+      if (date && !isNaN(date.getTime())) return date;
+    }
+  }
+  return null;
+}
+
+// Each Other Account's balance today, as the budget last worked it out: account row -> amount
+function accountBalancesToday() {
+  return new Map(accountRows().map(account => [account.index, parseAmount(account.row[1])]));
+}
+
+// After a change to History (worked out again: refreshBudgetData), each Other Account's balance today goes back to what
+// it was (balances, from accountBalancesToday): its starting amount moves by the difference, so its entries stay as they
+// are. An account with interest whose interest that would change (an entry moved after its interest started counting)
+// starts counting its interest again from today instead, like typing its balance does (accountEntry).
+function keepAccountBalances(balances) {
+  let moved = false;
+  for (const summary of accountSummaries()) {
+    const target = balances.get(summary.index);
+    if (target === undefined || Math.abs(summary.today - target) < 0.005) continue;
+    const row = accountsData.list[summary.index];
+    const start = Math.round((summary.start - (summary.today - target)) * 100) / 100;
+    row[3] = start ? formatMoney(start) : "";
+    moved = true;
+    if (!summary.interest) continue;
+    const after = accountSummaries().find(account => account.index === summary.index);
+    if (after && Math.abs(after.today - target) >= 0.005) {
+      const rebased = Math.round((target - after.entriesToday) * 100) / 100;
+      row[3] = rebased ? formatMoney(rebased) : "";
+      row[5] = formatToMMDDYYYY(today);
+    }
+  }
+  if (moved) updateAccountBalances();
 }
 
 // "deleted Coffee on 10/05", for Undo and Redo
@@ -832,8 +899,9 @@ function historyHasDay(date) {
 /* ---------- Running a change ---------- */
 
 // Queue one change through the full budget flow. change(before) gets the tables as they were before it
-// (snapshotTables). undo: { label, dates } makes it a step Undo can take back (calendar and quick entries;
-// see UNDO + REDO)
+// (snapshotTables), and can return afterRefresh, which runs once everything is worked out again. undo: { label, dates,
+// keepBalances } makes it a step Undo can take back (calendar and quick entries, and History's changes, which keep the
+// accounts' balances; see UNDO + REDO)
 function runBudgetAction(logType, change, undo = null) {
   const requestedAt = performance.now(); // The change log's start: when the change was asked for
   const run = budgetQueue.then(() => processBudgetAction(logType, change, undo, requestedAt));
@@ -863,7 +931,10 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
     stripRecurringEntries();
     result = change(snapshot) || {};
     refreshBudgetData();
-    if (undo) result.newUndoStep = makeUndoStep(undo.label, undoBefore);
+    // A change can finish once everything is worked out again (History's changes keep the accounts' balances)
+    if (result.afterRefresh) result.afterRefresh();
+    delete result.afterRefresh;
+    if (undo) result.newUndoStep = makeUndoStep(undo.label, undoBefore, !!undo.keepBalances);
   } catch (err) {
     restoreTables(snapshot);
     // A remembered change that can't be undone (or redone) anymore is dropped, so older ones still can be
@@ -3474,12 +3545,19 @@ function catchupTip() {
 // The next big uncommon bill: a recurring cost of $200 or more that lands every 3 months or less often, a
 // connected spreadsheet's cost of $200 or more with no other like it within 90 days, or a one-time cost of $200
 // or more added for a later day (on the calendar or in Upcoming), in the next 60 days (not transfers), and how
-// much to set aside from each paycheck until then (today's counts)
+// much to set aside from each paycheck until then (today's counts). A recurring entry that lands more often (like every
+// month) is never one: not as it lands, not changed for its day (a temp, on the calendar or in Upcoming), and not an
+// entry with its title and type added for a day by hand.
 function savingsTip() {
   const lastDay = addDays(today, DAVE_BILL_DAYS);
-  const uncommon = getParsedRecurringRows().filter(row => row.amt <= -DAVE_BIG_BILL && !isTransferEntry(row.sprite) && isUncommonFrequency(row.parsed.frequency));
+  const recurringRows = getParsedRecurringRows();
+  const uncommon = recurringRows.filter(row => row.amt <= -DAVE_BIG_BILL && !isTransferEntry(row.sprite) && isUncommonFrequency(row.parsed.frequency));
   const uncommonKeys = new Set(uncommon.map(row => row.parsed.cleanTitle + "|" + row.parsed.special));
+  const frequentKeys = new Set(recurringRows.filter(row => !isUncommonFrequency(row.parsed.frequency)).map(row => row.parsed.cleanTitle + "|" + row.parsed.special));
   const uncommonSheets = uncommonSheetKeys(); // A spreadsheet's cost with no other like it within 90 days
+  // Is this cost (title and type as compared, on its day) one to remind about?
+  const isUncommonBill = (key, mark, day) => !frequentKeys.has(key) &&
+    (!mark || (mark === RECURRING_MARK ? uncommonKeys.has(key) : uncommonSheets.has(day.getTime() + "|" + key)));
   const bills = [];
 
   // On the calendar after today: uncommon recurring and spreadsheet ones as they are there (one changed for its
@@ -3490,9 +3568,7 @@ function savingsTip() {
       const parts = getParts(line);
       const amount = parseAmount(parts[1]);
       if (amount > -DAVE_BIG_BILL || systemEmojis.includes(parts[0]) || isTransferEntry(parts[0])) continue;
-      const key = extractTitle(line) + "|" + getSpecialType(parts[0]);
-      const mark = entryMark(parts[0]);
-      if (!mark || (mark === RECURRING_MARK ? uncommonKeys.has(key) : uncommonSheets.has(day.getTime() + "|" + key))) {
+      if (isUncommonBill(extractTitle(line) + "|" + getSpecialType(parts[0]), entryMark(parts[0]), day)) {
         bills.push({ date: day, title: parts.slice(2).join(" "), amount });
       }
     }
@@ -3515,13 +3591,14 @@ function savingsTip() {
   for (const [time, day] of sheetEntriesByDay(nextFourStart, lastDay)) {
     for (const entry of day.values()) {
       const key = time + "|" + entry.clean + "|" + entry.special;
-      if (entry.amount <= -DAVE_BIG_BILL && entry.special !== "⭕️" && uncommonSheets.has(key) && !changed.has(key)) {
+      if (entry.amount <= -DAVE_BIG_BILL && entry.special !== "⭕️" && isUncommonBill(entry.clean + "|" + entry.special, SHEET_MARK, new Date(time)) && !changed.has(key)) {
         bills.push({ date: new Date(time), title: entry.title, amount: entry.amount });
       }
     }
   }
   for (const row of upcoming) {
-    if (row.date > gridEndDate && row.date <= lastDay && row.amount <= -DAVE_BIG_BILL && !isTransferEntry(row.sprite)) bills.push(row);
+    if (row.date <= gridEndDate || row.date > lastDay || row.amount > -DAVE_BIG_BILL || isTransferEntry(row.sprite)) continue;
+    if (isUncommonBill(cleanString(row.title) + "|" + getSpecialType(row.sprite), entryMark(row.sprite), row.date)) bills.push(row);
   }
   if (bills.length === 0) return null;
 
@@ -4121,194 +4198,6 @@ function normalizeApiGrid(rawData, rows, cols) {
   return grid;
 }
 
-// A day (a Date, or stored text: "MM/DD", "MM/DD/YYYY", or "YYYY-MM-DD") as local midnight in this device's
-// time zone. Text it can't read is today, or an invalid Date when failable.
-function createSafeMidnight(input, failable = false) {
-  if (!input) input = new Date();
-
-  const getLocalMidnight = (year, monthIndex, day) => {
-    return new Date(year, monthIndex, day, 0, 0, 0, 0);
-  };
-
-  if (input instanceof Date) {
-    if (isNaN(input)) {
-      return failable ? new Date("invalid") : getLocalMidnight(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-    }
-    return getLocalMidnight(input.getFullYear(), input.getMonth(), input.getDate());
-  }
-
-  if (typeof input === 'string') {
-    let trimmed = input.trim();
-
-    // "MM/DD" (a calendar day's first line): the nearest year, around New Year's too
-    if (/^\d{1,2}\/\d{1,2}$/.test(trimmed)) {
-      let [m, d] = trimmed.split("/").map(Number);
-      let now = new Date();
-      let currentYear = now.getFullYear();
-      let currentMonth = now.getMonth() + 1;
-
-      let targetYear = currentYear;
-      if (m === 12 && currentMonth === 1) targetYear--;
-      else if (m === 1 && currentMonth === 12) targetYear++;
-
-      return getLocalMidnight(targetYear, m - 1, d);
-    }
-
-    // "MM/DD/YYYY" (or "M/D/YYYY")
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
-      let [m, d, y] = trimmed.split("/").map(Number);
-      return getLocalMidnight(y, m - 1, d);
-    }
-
-    // "YYYY-MM-DD"
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      let [y, m, d] = trimmed.split("-").map(Number);
-      return getLocalMidnight(y, m - 1, d);
-    }
-
-    // Words, like "Oct 12, 2026"
-    let parsedDate = new Date(trimmed);
-    if (!isNaN(parsedDate.getTime())) {
-      return getLocalMidnight(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
-    }
-  }
-
-  // (A caller that can fail says so itself, like a spreadsheet cell that isn't a date)
-  if (failable) return new Date("invalid");
-  console.warn("createSafeMidnight couldn't read:", input);
-
-  let now = new Date();
-  return getLocalMidnight(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-/* ---------- Dates people see and type ---------- */
-// Stored dates never depend on the device's language, region, or time zone: a day is always stored as
-// MM/DD/YYYY (MM/DD on a calendar day's first line, YYYY-MM-DD for the API) and read back as that same
-// calendar day wherever the device is. Only what people see and type follows their date format: this
-// device's own (from its language and region), or the one picked in Settings. So 05/10/2026 is October 5
-// to someone who writes the day first, and YYYY-MM-DD can always be typed too.
-
-const DATE_FORMATS = {
-  mdy: { pattern: "MM/DD/YYYY" },
-  dmy: { pattern: "DD/MM/YYYY" },
-  ymd: { pattern: "YYYY-MM-DD" }
-};
-const DATE_FORMAT_KEY = "prismal_date_format"; // This device's pick ("mdy", "dmy", "ymd"); none = its own
-
-// The device's own order, from its language and region (en-US: mdy, en-GB and most of the world: dmy,
-// ja, zh, ko, sv, and others: ymd)
-let deviceFormatCache = null;
-function deviceDateFormat() {
-  if (deviceFormatCache) return deviceFormatCache;
-  deviceFormatCache = "mdy";
-  try {
-    const order = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })
-      .formatToParts(new Date(2026, 9, 5))
-      .map(part => part.type)
-      .filter(type => type === "year" || type === "month" || type === "day");
-    if (order[0] === "year") deviceFormatCache = "ymd";
-    else if (order[0] === "day") deviceFormatCache = "dmy";
-  } catch (e) {}
-  return deviceFormatCache;
-}
-
-// "mdy", "dmy", or "ymd": picked in Settings on this device, or the device's own
-function dateFormat() {
-  let picked = null;
-  try { picked = localStorage.getItem(DATE_FORMAT_KEY); } catch (e) {}
-  return Object.prototype.hasOwnProperty.call(DATE_FORMATS, picked) ? picked : deviceDateFormat();
-}
-
-// What a date box asks for, like "DD/MM/YYYY"
-function datePattern() {
-  return DATE_FORMATS[dateFormat()].pattern;
-}
-
-// A day as people read it: "10/05/2026", "05/10/2026", or "2026-10-05"
-function showDate(date) {
-  if (!(date instanceof Date) || isNaN(date.getTime())) return "";
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const format = dateFormat();
-  if (format === "ymd") return `${date.getFullYear()}-${mm}-${dd}`;
-  return format === "dmy" ? `${dd}/${mm}/${date.getFullYear()}` : `${mm}/${dd}/${date.getFullYear()}`;
-}
-
-// A day without its year: "10/05", "05/10", or "10-05"
-function showDay(date) {
-  if (!(date instanceof Date) || isNaN(date.getTime())) return "";
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const format = dateFormat();
-  if (format === "ymd") return `${mm}-${dd}`;
-  return format === "dmy" ? `${dd}/${mm}` : `${mm}/${dd}`;
-}
-
-// A stored date ("10/05/2026", or "10/05" on a calendar day) as people read it. Anything that isn't a
-// date (like "None") is shown as it is.
-function showStoredDate(text) {
-  const trimmed = String(text ?? "").trim();
-  if (/^\d{1,2}\/\d{1,2}$/.test(trimmed)) return showDay(createSafeMidnight(trimmed));
-  if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) return trimmed;
-  const date = createSafeMidnight(trimmed, true);
-  return isNaN(date.getTime()) ? trimmed : showDate(date);
-}
-
-// A typed date as local midnight, or an invalid Date when it isn't a real day (31/02 doesn't quietly roll
-// over into March). Numbers go in this device's date order (dateFormat), split by /, ., -, or spaces; a
-// 4-digit year first is always year-month-day. Without a year, it's the nearest one (12/30 typed in January
-// is last December). A 2-digit year is in the 2000s. Month names work too, either way around and with or
-// without a year or a weekday ("Oct 5", "5 October 2026", "Mon, Oct 5, 2026"), the same in every browser.
-function parseTypedDate(text) {
-  const trimmed = String(text || "").trim();
-  const invalid = new Date("invalid");
-  if (!trimmed) return invalid;
-  let year, month, day;
-  let numbers = trimmed.match(/^(\d{4})[\/.\-\s](\d{1,2})[\/.\-\s](\d{1,2})$/);
-  const named = numbers ? null : namedDate(trimmed);
-  if (numbers) {
-    [year, month, day] = numbers.slice(1).map(Number);
-  } else if (named) {
-    ({ month, day } = named);
-    year = named.year ?? nearestYear(month);
-  } else {
-    numbers = trimmed.match(/^(\d{1,2})[\/.\-\s](\d{1,2})(?:[\/.\-\s](\d{2}|\d{4}))?\.?$/);
-    if (!numbers) {
-      // Anything else only when it says its year (browsers guess one differently, like 2001)
-      if (/^[\d\s\/.\-]+$/.test(trimmed) || !/\d{4}/.test(trimmed)) return invalid;
-      return createSafeMidnight(trimmed, true);
-    }
-    const [first, second] = [Number(numbers[1]), Number(numbers[2])];
-    [month, day] = dateFormat() === "dmy" ? [second, first] : [first, second];
-    year = numbers[3] ? Number(numbers[3]) + (numbers[3].length === 2 ? 2000 : 0) : nearestYear(month);
-  }
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return invalid;
-  return createSafeMidnight(date);
-}
-
-// The year a date typed without one is in: this one, or next or last year around New Year's (month: 1-12)
-function nearestYear(month) {
-  if (month === 12 && today.getMonth() === 0) return today.getFullYear() - 1;
-  if (month === 1 && today.getMonth() === 11) return today.getFullYear() + 1;
-  return today.getFullYear();
-}
-
-// "Oct 5", "October 5th, 2026", "5 Oct 2026", or "Monday, Oct 5" -> { month (1-12), day, year (or null) };
-// null when it isn't a date written with its month's name
-const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-function namedDate(text) {
-  const words = text.replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+/i, "");
-  const monthFirst = words.match(/^([a-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?$/i);
-  const dayFirst = monthFirst ? null : words.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,})\.?,?(?:\s+(\d{4}))?$/i);
-  if (!monthFirst && !dayFirst) return null;
-  const [name, dayText] = monthFirst ? [monthFirst[1], monthFirst[2]] : [dayFirst[2], dayFirst[1]];
-  const month = MONTH_NAMES.findIndex(full => full.startsWith(name.toLowerCase())) + 1;
-  if (month === 0) return null;
-  const yearText = (monthFirst || dayFirst)[3];
-  return { month, day: Number(dayText), year: yearText ? Number(yearText) : null };
-}
-
 // The calendar's 28 days, 4 rows of Sunday through Saturday, starting with the budget's week (today)
 function getGridDates() {
   let now = createSafeMidnight(today ? new Date(today.getTime()) : new Date());
@@ -4337,21 +4226,6 @@ function getDayDifference(date1, date2) {
 // A line's words: [sprite, amount, ...title]
 function getParts(line) {
   return String(line).trim().split(/\s+/);
-}
-
-// A day as stored: MM/DD/YYYY
-function formatToMMDDYYYY(dateObj) {
-  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const dd = String(dateObj.getDate()).padStart(2, '0');
-  const yyyy = dateObj.getFullYear();
-  return `${mm}/${dd}/${yyyy}`;
-}
-
-// "YYYY-MM-DD" (local date), the API's reminder plan format
-function formatToYMD(dateObj) {
-  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const dd = String(dateObj.getDate()).padStart(2, '0');
-  return `${dateObj.getFullYear()}-${mm}-${dd}`;
 }
 
 // A calendar day's first line: MM/DD
@@ -4523,17 +4397,6 @@ function entryMark(sprite) {
   if (text.includes(RECURRING_MARK)) return RECURRING_MARK;
   if (text.includes(SHEET_MARK)) return SHEET_MARK;
   return "";
-}
-
-// Local midnight N days after date (handles month/year/DST rollover)
-function addDays(date, days) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
-
-// The same day, this many months later (the 31st goes to a shorter month's last day)
-function addMonths(date, months = 1) {
-  const lastDay = new Date(date.getFullYear(), date.getMonth() + months + 1, 0).getDate();
-  return new Date(date.getFullYear(), date.getMonth() + months, Math.min(date.getDate(), lastDay));
 }
 
 // Returns the Recurring tab index of the entry with this title + special type that hits on date, or false
@@ -4831,7 +4694,8 @@ function noteDaySwipe(e) {
   if (!cell || cell !== activeEditCell || cell.classList.contains('isZoomClosing')) return;
   const content = cell.querySelector('.cell-content');
   const touch = e.touches[0];
-  const most = content ? content.scrollWidth - content.clientWidth : 0;
+  // (A phone's zoomed day doesn't scroll sideways: its long lines end in "..." instead)
+  const most = content && getComputedStyle(content).overflowX !== 'hidden' ? content.scrollWidth - content.clientWidth : 0;
   daySwipe = { x: touch.clientX, y: touch.clientY, atLeft: !content || content.scrollLeft <= 1, atRight: !content || content.scrollLeft >= most - 1 };
 }
 
@@ -4848,14 +4712,15 @@ function finishDaySwipe(e) {
 }
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
-// A tapped day zooms in over a dimmed page and stays zoomed until its v, or anything outside it, is tapped.
-// Entries never wrap: a day that isn't zoomed cuts them off at its edge, and a zoomed one lets them run past
-// its edges, over the dimmed page. On a computer it doubles in size (scaled, see budgetStyle.css), moved left
-// when its widest entry would run off the screen. On phones (touch screens and narrow windows) it fills most
-// of the screen, laid out at that size (--zoom times its own: its text, sprites, and spacing), not scaled up
-// from the tiny day, so everything in it stays sharp; a scale only runs while it grows out of the day and
-// shrinks back into it. There its entries scroll in an area as big as the screen, so ones that run past the
-// screen's edge can be scrolled to.
+// A tapped day zooms in over a dimmed page and stays zoomed until its v, or anything outside it, is tapped. The page
+// under it holds still meanwhile (lockPageScroll). Entries never wrap: a day that isn't zoomed cuts them off at its
+// edge. On a computer it doubles in size (scaled, see budgetStyle.css), as tall as its lines, and its entries run
+// past its edges over the dimmed page (it moves left when its widest entry would run off the screen). On phones
+// (touch screens and narrow windows) every day zooms the same: as wide as most of the screen, as tall as its lines
+// (more lines than fit scroll), and an entry longer than the screen ends in "..." at its edge (tapping it shows it
+// whole). It's laid out at that size (--zoom times its own spacing, its text a bit less: --zoomText), not scaled up
+// from the tiny day, so everything in it stays sharp; a scale only runs while it grows out of the day and shrinks
+// back into it.
 
 window.editingCell = false;
 let activeEditCell = null;
@@ -4863,11 +4728,18 @@ const fullZoomQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)")
 // Does the device ask for less motion?
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let zoomBackdrop = null;
-// A phone's zoomed day gets smaller to fit a long entry across the screen, but its text stays at least this
-// many pixels tall (a longer entry is scrolled to)
+// A phone's zoomed day: this share of the screen's width (up to ZOOM_MAX_WIDTH pixels); its text this share of what that
+// zoom would make it, between ZOOM_TEXT_MIN and ZOOM_TEXT_MAX pixels; at least this share of its width tall; and up to
+// this share of the screen's height (taller lines scroll)
+const ZOOM_WIDTH_SHARE = 0.92;
+const ZOOM_MAX_WIDTH = 560;
+const ZOOM_TEXT_SHARE = 0.82;
 const ZOOM_TEXT_MIN = 15;
+const ZOOM_TEXT_MAX = 19;
+const ZOOM_MIN_HEIGHT_SHARE = 0.3;
+const ZOOM_HEIGHT_SHARE = 0.84;
 // What a zoom sets on its day (and closing it takes off)
-const ZOOM_PROPERTIES = ['transform', 'transform-origin', '--zoom', '--dayX', '--dayY', '--dayW', '--dayH', '--viewW', '--viewH'];
+const ZOOM_PROPERTIES = ['transform', 'transform-origin', '--zoom', '--zoomText', '--dayX', '--dayY', '--dayW', '--dayH', '--viewW', '--viewH'];
 // How long a phone's day takes to grow out of its spot, to shrink back into it, and to slide over to the day next to it
 const ZOOM_OPEN_MS = 420;
 const ZOOM_CLOSE_MS = 320;
@@ -4905,6 +4777,7 @@ function zoomDay(cell, animate = true) {
     document.getElementById('transitionContainer')?.appendChild(zoomBackdrop);
   }
   zoomBackdrop.classList.add('shown');
+  lockPageScroll(true);
   if (!fullZoomQuery.matches) {
     keepDoubledDayOnScreen(cell, place);
     return;
@@ -4919,6 +4792,7 @@ function closeZoomedDay(immediate = false) {
   window.editingCell = false;
   activeEditCell = null;
   if (zoomBackdrop) zoomBackdrop.classList.remove('shown');
+  lockPageScroll(false);
   if (!cell) return;
   const finish = () => unzoomCell(cell);
   const scale = Number(cell.style.getPropertyValue('--zoom')) || 1;
@@ -4934,6 +4808,25 @@ function closeZoomedDay(immediate = false) {
     { duration: ZOOM_CLOSE_MS, easing: 'cubic-bezier(0.4, 0, 0.6, 1)', fill: 'forwards' } // Holds the shrunk day until finish puts it back
   );
   cell.zoomClose.onfinish = finish;
+}
+
+// While a day is zoomed, the page under it holds still (html.dayZoomed, budgetStyle.css), so sliding from day to day
+// doesn't move the page too. A finger that drags anywhere but the zoomed day's own lines (when they scroll) or a box over
+// it doesn't scroll the page either (phones don't always honor the page's overflow). That listener is only there while
+// a day is zoomed: one that can stop scrolling makes the browser wait on the page before every scroll.
+function lockPageScroll(locked) {
+  document.documentElement.classList.toggle('dayZoomed', locked);
+  if (locked) document.addEventListener('touchmove', holdPageStill, { passive: false });
+  else document.removeEventListener('touchmove', holdPageStill);
+}
+
+// A finger dragging while a day is zoomed (see lockPageScroll)
+function holdPageStill(e) {
+  if (!activeEditCell || e.touches.length !== 1) return;
+  const lines = activeEditCell.querySelector('.cell-content');
+  if (lines && lines.contains(e.target) && lines.scrollHeight > lines.clientHeight + 1) return;
+  if (e.target.closest?.('.budgetPanel, .datePicker, .searchBar')) return;
+  e.preventDefault();
 }
 
 // A day that was zoomed is just a day again (after it shrank back into its spot, or slid off the screen), unless it
@@ -5053,14 +4946,15 @@ function keepDoubledDayOnScreen(cell, place) {
   if (shift > 0) cell.style.transform = `translateX(${-shift}px) scale(${zoom})`;
 }
 
-// Lay a phone's zoomed day out: how big (--zoom) and where. It keeps its shape, as big as fits the screen, or
-// smaller when an entry is wider than it, so the widest one fits across the screen too (its text no smaller than
-// ZOOM_TEXT_MIN; a longer one is scrolled to). The day (with an entry running past it) is centered. Its content
-// is as big as the screen, from the screen's top left corner, and draws the day itself (budgetStyle.css) at
-// --dayX, --dayY, --dayW by --dayH, so entries past its edges show over the dimmed page and scroll with it.
-// Measured at its own size (which nothing draws in between), then moved there. animate: it grows out of the day
-// (opening); without, it just moves (when the page scrolls or resizes, or the day's entries change), keeping
-// its scroll.
+// Lay a phone's zoomed day out: how big (--zoom, and --zoomText for its text) and where. Every day of a table zooms the
+// same (they're all one size): ZOOM_WIDTH_SHARE of the screen's width (up to ZOOM_MAX_WIDTH), with its text
+// ZOOM_TEXT_SHARE of what that zoom would make it (ZOOM_TEXT_MIN to ZOOM_TEXT_MAX pixels). It's as tall as its lines, laid
+// out at that size (at a day's tiny size, text doesn't shrink evenly), from ZOOM_MIN_HEIGHT_SHARE of its width up to
+// ZOOM_HEIGHT_SHARE of the screen (more lines scroll), and centered. Its content is as big as the screen, from the
+// screen's top left corner, and draws the day itself (budgetStyle.css) at --dayX, --dayY, --dayW by --dayH; a line that
+// would run off the screen ends in "..." instead. Measured at its own size (which nothing draws in between), then moved
+// there. animate: it grows out of the day (opening); without, it just moves (when the screen resizes, or the day's
+// entries change), keeping its scroll.
 function fitZoomedDay(animate = false) {
   const cell = activeEditCell;
   if (!cell || !cell.classList.contains('is-fullZoom')) return;
@@ -5069,23 +4963,20 @@ function fitZoomedDay(animate = false) {
   const scrolled = { left: content.scrollLeft, top: content.scrollTop };
   cell.style.transform = 'none';
   cell.style.setProperty('--zoom', '1');
+  cell.style.setProperty('--zoomText', '1');
   const box = cell.getBoundingClientRect();
-  const widest = Math.max(box.width, widestDayLine(content));
   const textSize = parseFloat(getComputedStyle(content).fontSize) || 1;
   const viewWidth = document.documentElement.clientWidth || window.innerWidth;
   const viewHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  const fitsScreen = Math.min((viewWidth * 0.92) / box.width, (viewHeight * 0.84) / box.height);
-  const fitsEntries = (viewWidth * 0.96) / widest;
-  const scale = Math.min(fitsScreen, Math.max(fitsEntries, ZOOM_TEXT_MIN / textSize));
-  const width = box.width * scale;
-  // A day shorter than its lines (History's, which only show their date until zoomed) gets taller to hold them, up to
-  // as tall as a day with room to spare gets (taller lines still scroll). They're measured laid out at the zoomed size:
-  // at a day's tiny size, text doesn't shrink evenly (lines keep a smallest height).
+  const width = Math.min(viewWidth * ZOOM_WIDTH_SHARE, ZOOM_MAX_WIDTH);
+  const scale = width / box.width;
+  const textScale = Math.min(Math.max(textSize * scale * ZOOM_TEXT_SHARE, ZOOM_TEXT_MIN), ZOOM_TEXT_MAX) / textSize;
   cell.style.setProperty('--zoom', String(scale));
+  cell.style.setProperty('--zoomText', String(textScale));
   const padding = parseFloat(getComputedStyle(content).paddingRight) || 0;
   const linesHeight = dayLinesHeight(content) + 2 * padding;
-  const height = Math.max(box.height * scale, Math.min(linesHeight, viewHeight * 0.84));
-  const left = Math.max(viewWidth * 0.02, (viewWidth - widest * scale) / 2);
+  const height = Math.min(Math.max(linesHeight, width * ZOOM_MIN_HEIGHT_SHARE), viewHeight * ZOOM_HEIGHT_SHARE);
+  const left = (viewWidth - width) / 2;
   const top = (viewHeight - height) / 2;
   cell.zoomBox = { x: left, y: top, width, height };
   for (const [name, pixels] of [['--dayX', left], ['--dayY', top], ['--dayW', width], ['--dayH', height], ['--viewW', viewWidth], ['--viewH', viewHeight]]) {
@@ -5144,7 +5035,7 @@ wireElasticTable(document.querySelector('.elastic-table')); // Home's calendar (
 document.addEventListener('click', (e) => {
   if (!window.editingCell || !activeEditCell) return;
   if (activeEditCell.contains(e.target) && !missesZoomedDay(e)) return;
-  if (e.target.closest('.budgetPanel')) return; // Working in an entry's panel keeps its day zoomed
+  if (e.target.closest('.budgetPanel, .datePicker')) return; // Working in an entry's panel (or its calendar) keeps its day zoomed
   closeZoomedDay();
 });
 
@@ -5219,7 +5110,8 @@ document.addEventListener('pointerout', (e) => {
 // from before and after it. Undo puts a day's "before" entries back, but only while it still holds the
 // "after" ones, so it never erases anything changed since (it says so, and lets that step go, instead);
 // Redo is the same the other way. Everything else (In Bank, recurring entries, the tracker, account
-// balances) is worked out again from there, like after any change. Kept for this tab in sessionStorage
+// balances) is worked out again from there, like after any change; a change made in History keeps the accounts'
+// balances undone or redone too (keepAccountBalances). Kept for this tab in sessionStorage
 // (so going to another page and back keeps it), up to 25 steps, and forgotten on sign-out.
 
 const MAX_UNDO_STEPS = 25;
@@ -5279,11 +5171,13 @@ function stepThroughHistory(direction) {
     const what = changed ? showDay(createSafeMidnight(changed.date)) : "your Other Accounts";
     throw new StaleHistoryError(`That (${step.label}) can't be ${direction === "undo" ? "undone" : "redone"} anymore, because ${what} changed since.`, direction);
   }
+  // (A change made in History keeps the accounts' balances, undone or redone too)
+  const balances = step.keepBalances ? accountBalancesToday() : null;
   for (const day of step.days) setDayEntries(createSafeMidnight(day.date), day[to]);
   if (step.equity) accountsData.equity = JSON.parse(step.equity[to]);
   formEntryRow[3] = step.label;
   formEntryRow[4] = "Days: " + step.days.map(day => showStoredDate(day.date)).join(", ");
-  return { historyStep: { direction, label: step.label } };
+  return { historyStep: { direction, label: step.label }, ...(balances ? { afterRefresh: () => keepAccountBalances(balances) } : {}) };
 }
 
 // After a change that can be undone: remember it (and a new change means nothing to redo)
@@ -5323,8 +5217,9 @@ function captureEntryDays(dates) {
   return { days, equity: JSON.stringify(accountsData?.equity ?? null) };
 }
 
-// A change's step: the days whose entries it changed, before and after (null when there's nothing to put back)
-function makeUndoStep(label, before) {
+// A change's step: the days whose entries it changed, before and after (null when there's nothing to put back).
+// keepBalances: it was made in History, so undoing or redoing it keeps the accounts' balances (changeHistoryEntry).
+function makeUndoStep(label, before, keepBalances = false) {
   const after = captureEntryDays(before.days.map(day => createSafeMidnight(day.date)));
   const days = before.days
     .map((day, i) => ({ date: day.date, before: day.lines, after: after.days[i].lines }))
@@ -5332,7 +5227,8 @@ function makeUndoStep(label, before) {
   // A day that isn't in the budget (before History starts) can't be put back
   if (days.some(day => day.before === null || day.after === null)) return null;
   const equity = before.equity !== after.equity ? { before: before.equity, after: after.equity } : null;
-  return days.length > 0 || equity ? { label, days, equity } : null;
+  if (days.length === 0 && !equity) return null;
+  return keepBalances ? { label, days, equity, keepBalances } : { label, days, equity };
 }
 
 // A day's own entry lines, in order, from the calendar, History, or Upcoming; null when the day isn't in

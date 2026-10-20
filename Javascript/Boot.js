@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.19.2026.B";
+  const SITE_VERSION = "10.20.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,22 +26,23 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "35336dab8e",
-    "/Javascript/Budget Search.js": "ebfd263fb9",
-    "/Javascript/Budget UI.js": "329c377b8f",
-    "/Javascript/Calendar Page.js": "dcd0defb42",
+    "/Javascript/Budget Pages.js": "2e289270be",
+    "/Javascript/Budget Search.js": "d2bf7dd6ac",
+    "/Javascript/Budget UI.js": "7dae80a077",
+    "/Javascript/Calendar Page.js": "db8a832ff9",
+    "/Javascript/Dates.js": "f8cf704fe1",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "d0d75b2223",
-    "/Javascript/Login.js": "44f2e77ba4",
-    "/Javascript/Passkeys.js": "67a10905c2",
-    "/Javascript/Process Budget.js": "56d446a2d9",
+    "/Javascript/Layout.js": "696c7ad676",
+    "/Javascript/Login.js": "9e6e1a34a1",
+    "/Javascript/Passkeys.js": "2403cf6847",
+    "/Javascript/Process Budget.js": "a97c336117",
     "/Javascript/Quick Entry.js": "887c663fc1",
-    "/Javascript/Session.js": "ec241e0ce9",
-    "/Javascript/Settings Page.js": "870f6615a8",
+    "/Javascript/Session.js": "4967552407",
+    "/Javascript/Settings Page.js": "8b8dff3367",
     "/Javascript/Sheet Import.js": "3bf75b5912",
-    "/Javascript/Spreadsheets Page.js": "9841bde22d",
-    "/Javascript/Spreadsheets.js": "a1b13cbfeb",
+    "/Javascript/Spreadsheets Page.js": "2d9bb4bb47",
+    "/Javascript/Spreadsheets.js": "b4b0b3b517",
     "/Javascript/Sprites.js": "5b494b26db",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
     "/Resources/Sprites/Costs.webp": "6c239b521e",
@@ -141,8 +142,8 @@
     : "https://prismal-budget-api.prismalbudget.workers.dev";
 
   // The links in a password reset email (/login.html?reset=...), an email verification email
-  // (/login.html?verify=...), and the email that confirms another email for spreadsheets
-  // (/login.html?sheet-email=...) open the login page even when signed in. Login.js moves a reset code into this
+  // (/login.html?verify=...), and the email that confirms another email of the account's (Other Emails,
+  // /login.html?sheet-email=...) open the login page even when signed in. Login.js moves a reset code into this
   // tab's session storage, so a reload of that page still counts.
   let hasResetCode = false;
   try { hasResetCode = !!sessionStorage.getItem("prismal_reset_token"); } catch (e) {}
@@ -242,6 +243,7 @@
       appendScript("/Javascript/Passkeys.js");
     }
     if (PAGE === "login") {
+      appendScript("/Javascript/Dates.js"); // The birth date's box and its calendar
       appendScript("/Javascript/Login.js");
     }
     else if (!IS_PUBLIC) {
@@ -253,6 +255,7 @@
     // Every page that shows budget data loads + saves it through Process Budget,
     // then draws itself: the calendar page, settings, or the menu data pages (the front page shows none)
     if (BUDGET_PAGES.includes(PAGE) && !FRONT_PAGE) {
+      appendScript("/Javascript/Dates.js"); // Days stored, shown, typed, and picked (Process Budget.js uses it)
       appendScript("/Javascript/Process Budget.js");
       appendScript("/Javascript/Budget UI.js");
       // Connected spreadsheets' reading (Quick Entry never reads them)
@@ -260,8 +263,9 @@
       // Search (Home's and History's): before the page script, which opens it
       if (PAGE === "home" || PAGE === "history") appendScript("/Javascript/Budget Search.js");
       appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");
-      // Temporary: bringing a Google Sheets budget over (see Sheet Import.js)
-      if (PAGE === "home") appendScript("/Javascript/Sheet Import.js");
+      // May need again in the future: bringing a Google Sheets budget over (see Sheet Import.js, and its card at the
+      // bottom of index.html, which is commented out too)
+      // if (PAGE === "home") appendScript("/Javascript/Sheet Import.js");
     }
   }
 

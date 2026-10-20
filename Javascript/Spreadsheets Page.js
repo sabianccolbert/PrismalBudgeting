@@ -1,15 +1,14 @@
 // Spreadsheets Page (Menu > Spreadsheets): connected spreadsheets, whose entries land on the calendar. Add one,
 // change it, turn it on or off, delete it, and see what's wrong with any of its cells (see CONNECTED SPREADSHEETS
 // in Process Budget.js, and Spreadsheets.js for the reading). Connecting one needs a verified email, so until it
-// is, the page says so and can email a new link. Other Emails: the Google accounts with another email that the
-// account's spreadsheets are shared from (with admin@prismalbudget.org), each confirmed by a link we email it.
+// is, the page says so and can email a new link. (Other emails, for spreadsheets shared from a Google account with
+// another email, are added in Settings, under Email.)
 
 // =====================================================================
 // #region SETUP
 // =====================================================================
 
-let account = null;     // From the API: { username, email, emailVerified, canEmail (emails are set up) }
-let sheetEmails = null; // From the API: [{ email, verified }], the account's other emails
+let account = null; // From the API: { username, email, emailVerified, canEmail (emails are set up) }
 
 window.workspaceReady.then(async (loaded) => {
   const status = document.getElementById("dataStatus");
@@ -20,14 +19,12 @@ window.workspaceReady.then(async (loaded) => {
   status.hidden = true;
   wireSheets();
   renderSheets();
-  // Whether the email is verified (until it's known, the server says so if it isn't), and the other emails
-  const [result, emails] = await Promise.all([budgetApi("/api/account"), budgetApi("/api/sheets/emails")]);
+  // Whether the email is verified (until it's known, the server says so if it isn't)
+  const result = await budgetApi("/api/account");
   if (result.ok && result.data) {
     account = result.data;
     renderSheets();
   }
-  if (emails.ok && emails.data) sheetEmails = emails.data.emails;
-  renderSheetEmails();
 });
 
 //#endregion
@@ -45,11 +42,10 @@ const SHEET_SIGNS = [{ key: "written", label: "As Written" }, { key: "costs", la
 const SHEET_PREVIEW_LINES = 8;
 const SHARING_EMAIL = "admin@prismalbudget.org";
 
-// Add Spreadsheet, the verification note's button, Add Email, and redrawing after every change
+// Add Spreadsheet, the verification note's button, and redrawing after every change
 function wireSheets() {
   document.getElementById("addSheetButton").addEventListener("click", (event) => openSheetPanel(null, event.currentTarget));
   document.getElementById("sheetsVerifyButton").addEventListener("click", sendSheetVerification);
-  document.getElementById("addSheetEmailButton").addEventListener("click", (event) => openSheetEmailPanel(event.currentTarget));
   document.addEventListener("budget:updated", renderSheets);
 }
 
@@ -539,7 +535,7 @@ function sharingHelp() {
     list.append(li);
   };
   item("Anyone with the link: ", "in Google Sheets, tap Share, then set General access to Anyone with the link (Viewer). In Excel (OneDrive), tap Share and pick Anyone with the link can view. Dropbox links work too. Then copy the link here.");
-  item(`Or share it with ${SHARING_EMAIL}: `, `in Google Sheets (or a file in Google Drive), tap Share and add ${SHARING_EMAIL} as a Viewer, from the Google account that uses your Prismal Budget email (or one whose email you added under Other Emails on this page). Then only you can connect it, and it doesn't need to be public.`);
+  item(`Or share it with ${SHARING_EMAIL}: `, `in Google Sheets (or a file in Google Drive), tap Share and add ${SHARING_EMAIL} as a Viewer, from the Google account that uses your Prismal Budget email (or one whose email you added under Other Emails, in Settings under Email). Then only you can connect it, and it doesn't need to be public.`);
   item("Keep the rest private: ", "anyone with a public link can see the whole spreadsheet. So make a separate spreadsheet with just what Prismal Budget needs, filled from your main one (in Google Sheets, =IMPORTRANGE(\"main spreadsheet's link\", \"Bills!A2:C50\") brings those cells over and keeps them up to date), and connect that one.");
   item("Apple Numbers: ", "it can't share a spreadsheet other sites can read, so keep it in Google Sheets or Excel (in Numbers, File > Export To > Excel).");
   content.append(list);
@@ -590,139 +586,7 @@ document.addEventListener("visibilitychange", async () => {
   if (!result.ok || !result.data || !result.data.emailVerified) return;
   account = result.data;
   renderSheets();
-  renderSheetEmails();
   BudgetUI.showToast("Your email is verified, so you can connect spreadsheets now.");
-});
-
-//#endregion
-
-// =====================================================================
-// #region OTHER EMAILS
-// =====================================================================
-// Spreadsheets shared with admin@prismalbudget.org are read for the account whose email shared them. Other Emails adds
-// more: the email of another Google account the spreadsheets are in. We email it a link, and once it's opened (the
-// login page checks it), spreadsheets that email shares can be connected too. Each one shows whether it's confirmed or
-// waiting (with Send Again), and Remove.
-
-const MAX_SHEET_EMAILS = 5;
-
-// The card: each email, and Add Email (once the account's own email is verified)
-function renderSheetEmails() {
-  const view = document.getElementById("sheetEmailsView");
-  if (!view || !account || !sheetEmails) return;
-  view.hidden = false;
-  const list = document.getElementById("sheetEmailList");
-  list.replaceChildren(...sheetEmails.map(sheetEmailItem));
-  list.hidden = sheetEmails.length === 0;
-  document.getElementById("addSheetEmailButton").disabled = !account.emailVerified || !account.canEmail || sheetEmails.length >= MAX_SHEET_EMAILS;
-}
-
-// One email: confirmed or waiting, Send Again (waiting), and Remove
-function sheetEmailItem(entry) {
-  const item = BudgetUI.element("li", "sheetEmailItem");
-  const about = BudgetUI.element("div", "sheetEmailAbout");
-  about.append(
-    BudgetUI.noTranslate(BudgetUI.element("strong", "", entry.email)),
-    BudgetUI.element("span", "panelHint", entry.verified
-      ? "Confirmed: spreadsheets it shares can be connected."
-      : "Waiting: open the link we emailed it (check its spam folder too).")
-  );
-  const buttons = BudgetUI.element("div", "sheetEmailButtons");
-  if (!entry.verified) {
-    const again = settingsButton("Send Again", "", () => sendSheetEmailLink(entry.email, again));
-    again.setAttribute("aria-label", `Send the link to ${entry.email} again`);
-    buttons.append(again);
-  }
-  const remove = settingsButton("Remove", "danger", () => removeSheetEmail(entry, remove));
-  remove.setAttribute("aria-label", `Remove ${entry.email}`);
-  buttons.append(remove);
-  item.append(about, buttons);
-  return item;
-}
-
-// Add Email: the Google account's email, then Send Link
-function openSheetEmailPanel(origin) {
-  BudgetUI.openPanel({
-    origin,
-    size: "large",
-    title: "Add Email",
-    build(form, panel) {
-      const email = BudgetUI.textField({
-        label: "Email",
-        placeholder: "you@gmail.com",
-        hint: `The email of the Google account your spreadsheets are shared from. We'll email it a link: open it, and the spreadsheets it shares with ${SHARING_EMAIL} can be connected.`
-      });
-      email.input.type = "email";
-      email.input.autocomplete = "email";
-      email.input.spellcheck = false;
-      email.input.maxLength = 254;
-      form.append(email.el, BudgetUI.buttonRow([
-        { label: "Send Link", kind: "primary", type: "submit" },
-        { label: "Cancel", onClick: () => panel.close() }
-      ]));
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        panel.setError("");
-        const typed = email.input.value.trim();
-        if (!typed) return panel.setError("Type the email of the Google account your spreadsheets are in.");
-        panel.setBusy(true);
-        const result = await budgetApi("/api/sheets/emails/add", { email: typed });
-        panel.setBusy(false);
-        if (!result.ok || !result.data) return panel.setError(accountError(result, "Couldn't send the link. Please try again."));
-        panel.close();
-        showSheetEmails(result.data);
-      });
-    }
-  });
-}
-
-// Send Again: a new link to an email that's waiting (the one sent before stops working)
-async function sendSheetEmailLink(email, button) {
-  button.disabled = true;
-  const result = await budgetApi("/api/sheets/emails/add", { email });
-  button.disabled = false;
-  if (!result.ok || !result.data) return BudgetUI.showToast(accountError(result, "Couldn't send the link. Please try again."), true);
-  showSheetEmails(result.data);
-}
-
-// The list after adding one (or sending its link again), and what happened
-function showSheetEmails(data) {
-  sheetEmails = data.emails;
-  renderSheetEmails();
-  BudgetUI.showToast(data.alreadyVerified
-    ? "That email is already confirmed."
-    : `Link sent to ${data.sent}. Open it within 24 hours (if it isn't in that inbox, check its spam folder), and the spreadsheets it shares with ${SHARING_EMAIL} can be connected.`);
-}
-
-// Remove (after asking): its spreadsheets aren't read for this account anymore
-async function removeSheetEmail(entry, button) {
-  const what = entry.verified
-    ? `Spreadsheets it shares with ${SHARING_EMAIL} won't be read for your account anymore (ones anyone with the link can view still are).`
-    : "The link we sent it stops working.";
-  if (!window.confirm(`Remove ${entry.email}? ${what}`)) return;
-  button.disabled = true;
-  const result = await budgetApi("/api/sheets/emails/remove", { email: entry.email });
-  if (!result.ok || !result.data) {
-    button.disabled = false;
-    return BudgetUI.showToast(accountError(result, "Couldn't remove that email. Please try again."), true);
-  }
-  sheetEmails = result.data.emails;
-  renderSheetEmails();
-  BudgetUI.showToast(`${entry.email} was removed.`);
-}
-
-// Back on this page after opening a link (another tab or app): check whether a waiting email is confirmed now
-document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState !== "visible" || !sheetEmails || !sheetEmails.some(entry => !entry.verified)) return;
-  const waiting = new Set(sheetEmails.filter(entry => !entry.verified).map(entry => entry.email));
-  const result = await budgetApi("/api/sheets/emails");
-  if (!result.ok || !result.data) return;
-  sheetEmails = result.data.emails;
-  renderSheetEmails();
-  const confirmed = sheetEmails.filter(entry => entry.verified && waiting.has(entry.email)).map(entry => entry.email);
-  if (confirmed.length > 0) {
-    BudgetUI.showToast(`${confirmed.join(" and ")} ${confirmed.length === 1 ? "is" : "are"} confirmed, so the spreadsheets ${confirmed.length === 1 ? "it shares" : "they share"} with ${SHARING_EMAIL} can be connected now.`);
-  }
 });
 
 //#endregion

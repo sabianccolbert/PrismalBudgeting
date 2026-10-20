@@ -1,8 +1,8 @@
 // Passkeys: signing in with Face ID, Touch ID, Windows Hello, a fingerprint, or a device PIN (WebAuthn).
-// Shared by the login page (signing in, and turning passkeys on right after a password sign-in) and
-// Settings (adding and removing passkeys, and turning passkey sign-in on or off). The API (passkey.js)
-// makes every challenge and checks every answer; the browser and the device do the rest, and a face or
-// fingerprint never leaves the device.
+// Shared by the login page (signing in, trying the passkey this device last used by itself, and turning passkeys on
+// right after a password sign-in) and Settings (adding and removing passkeys, and turning passkey sign-in on or off).
+// The API (passkey.js) makes every challenge and checks every answer; the browser and the device do the rest, and a
+// face or fingerprint never leaves the device.
 
 window.Passkeys = (() => {
   "use strict";
@@ -55,15 +55,55 @@ window.Passkeys = (() => {
     }
   }
 
+  // ---------- The passkey this device last signed in with ----------
+  // Kept on this device (it's the device's, not an account's, so signing out keeps it: Layout.js DEVICE_SETTINGS), so the
+  // login page can try it by itself as soon as it shows. Only its ID, which isn't a secret, and "|declined" after it when
+  // the last try by itself was cancelled (a passkey ID never has a |).
+  const LAST_KEY = "prismal_last_passkey";
+  const DECLINED = "|declined";
+
+  function storedLast() {
+    try { return localStorage.getItem(LAST_KEY) || ""; } catch { return ""; }
+  }
+
+  // The ID of the passkey this device last signed in with (or made), or ""
+  function lastUsed() {
+    return storedLast().split("|")[0];
+  }
+
+  // This passkey signed in (or was just made), when it's on this device. One on another device (a phone reached by its QR
+  // code, or a security key) isn't kept: asked for by itself here, the browser would open its "use another device" window.
+  function rememberLast(credential) {
+    if (!credential || !credential.id || credential.authenticatorAttachment === "cross-platform") return;
+    try { localStorage.setItem(LAST_KEY, credential.id); } catch {}
+  }
+
+  // Its try by itself was cancelled (or the device doesn't have it anymore, and the person closed the browser's window
+  // asking for another device): the first time, that's noted; the second time in a row, it's forgotten
+  function declinedLast(credentialId) {
+    const stored = storedLast();
+    if (!credentialId || stored.split("|")[0] !== credentialId) return;
+    try {
+      if (stored.endsWith(DECLINED)) localStorage.removeItem(LAST_KEY);
+      else localStorage.setItem(LAST_KEY, credentialId + DECLINED);
+    } catch {}
+  }
+
+  // Forget it (only when it's this one, if one is named): it can't sign in anymore, or the account is gone
+  function forgetLast(credentialId = "") {
+    try { if (!credentialId || lastUsed() === credentialId) localStorage.removeItem(LAST_KEY); } catch {}
+  }
+
   // ---------- The API's options -> what the browser takes ----------
 
-  function signInRequest(options) {
+  // only: one passkey's ID, so the device goes straight to that one (none: the device offers every passkey it has)
+  function signInRequest(options, only = "") {
     return {
       challenge: toBytes(options.challenge),
       rpId: options.rpId,
       timeout: options.timeout,
       userVerification: options.userVerification,
-      allowCredentials: []
+      allowCredentials: only ? [{ type: "public-key", id: toBytes(only) }] : []
     };
   }
 
@@ -172,6 +212,10 @@ window.Passkeys = (() => {
     unlockName,
     deviceName,
     autofillAvailable,
+    lastUsed,
+    rememberLast,
+    declinedLast,
+    forgetLast,
     signInRequest,
     addRequest,
     signInAnswer,

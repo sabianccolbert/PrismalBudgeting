@@ -2,12 +2,12 @@
 // reminder time, then turn on push notifications (per device) and/or a calendar link for Google or Apple Calendar.
 // Both are optional. Which days get a reminder comes from the budget (buildReminderPlan in Process Budget.js); the API
 // sends and serves them.
-// Then the account: the email (change it, which needs the password, and verify it), the birth date (18 or older:
-// fix one typed wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID,
-// Windows Hello: add or remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices
-// (turn off Quick Entry icons, Sign Out Everywhere); your data and privacy (Download My Data, analytics on or
-// off for this device); and deleting the account (needs the password). Emails go out through Resend (see
-// account.js in the API).
+// Then the account: the email (change it, which needs the password, and verify it) and other emails (each confirmed by
+// a link; they sign in too, and their spreadsheets can be connected), the birth date (18 or older: fix one typed
+// wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID, Windows Hello: add or
+// remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices (turn off Quick Entry icons, or
+// their balances, and Sign Out Everywhere); your data and privacy (Download My Data, analytics on or off for this
+// device); and deleting the account (needs the password). Emails go out through Resend (see account.js in the API).
 
 // =====================================================================
 // #region SETUP
@@ -16,7 +16,8 @@
 let reminderSettings = null; // From the API: { time, timezone, calendarUrl, push: { available, publicKey, devices } }
 let pushSubscription = null; // This device's push subscription, while push is on here
 let timeSaveTimer = null;
-let account = null;          // From the API: { username, email, emailVerified, age, canEmail (emails are set up), quickIcons }
+let account = null;          // From the API: { username, email, emailVerified, birthdate, age, canEmail (emails are set up), quickIcons, quickBalances }
+let otherEmails = null;      // From the API: [{ email, verified }], the account's other emails (null until they load)
 let passkeyInfo = null;      // From the API: { on, userHandle, passkeys: [{ id, name, site, synced, createdAt, lastUsedAt }] }
 let passkeyLoadStatus = 0;   // The list's HTTP status, when it didn't load (404: the API doesn't have passkeys yet)
 let passkeyAdd = null;       // { options, at }: a password-checked challenge, kept so trying again starts right away
@@ -28,20 +29,24 @@ wireDateFormat(); // This device's choice, so it works before (and without) the 
 
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
-  const [reminders, accountResult, passkeyResult] = await Promise.all([
+  const [reminders, accountResult, passkeyResult, emailsResult] = await Promise.all([
     loaded ? budgetApi("/api/notify/settings") : null,
     budgetApi("/api/account"),
-    budgetApi("/api/passkey/list")
+    budgetApi("/api/passkey/list"),
+    budgetApi("/api/sheets/emails")
   ]);
   const accountLoaded = accountResult.ok && !!accountResult.data;
   if (accountLoaded) {
     account = accountResult.data;
     if (passkeyResult.ok && passkeyResult.data) passkeyInfo = passkeyResult.data;
     else passkeyLoadStatus = passkeyResult.status;
+    if (emailsResult.ok && emailsResult.data) otherEmails = emailsResult.data.emails;
     wireAccount();
     renderAccount();
     renderPasskeys();
     document.getElementById("accountView").hidden = false;
+    // A link to a card (like Spreadsheets' to #email) goes to it once it's there
+    if (location.hash === "#email") document.getElementById("email").scrollIntoView();
   }
 
   const remindersLoaded = !!reminders && reminders.ok && !!reminders.data;
@@ -120,7 +125,7 @@ function formatTime12(hhmm) {
 // =====================================================================
 // Translating is the browser's own (the card says how). The date format is this device's own (from its
 // language and region) unless one is picked here; it's kept on this device, even after signing out, and
-// decides how dates show and how typed ones are read (see "Dates people see and type" in Process Budget.js).
+// decides how dates show and how typed ones are read (see "Dates people see and type" in Dates.js).
 
 function wireDateFormat() {
   const select = document.getElementById("dateFormat");
@@ -141,14 +146,20 @@ function wireDateFormat() {
       BudgetUI.showToast("This browser isn't keeping site data, so the date format can't be saved.", true);
     }
     renderDateFormatNote();
-    BudgetUI.showToast(`Dates show like ${showDate(new Date(2026, 9, 5))} now.`);
+    BudgetUI.showToast(`Dates show like ${showDate(sampleDate())} now.`);
   });
+}
+
+// The example date: October 5 this year (its day and month differ, so each order looks different)
+function sampleDate() {
+  return new Date(new Date().getFullYear(), 9, 5);
 }
 
 // An example of how dates show (and are read) in the format in use
 function renderDateFormatNote() {
+  const sample = sampleDate();
   document.getElementById("dateFormatNote").textContent =
-    `October 5, 2026 shows as ${showDate(new Date(2026, 9, 5))}, and dates you type are read the same way (${DATE_FORMATS.ymd.pattern} always works too).`;
+    `October 5, ${sample.getFullYear()} shows as ${showDate(sample)}, and dates you type are read the same way (${DATE_FORMATS.ymd.pattern} always works too).`;
 }
 
 //#endregion
@@ -364,7 +375,16 @@ async function copyCalendarLink() {
 
 function wireAccount() {
   document.getElementById("emailForm").addEventListener("submit", changeEmail);
+  document.getElementById("addOtherEmailButton").addEventListener("click", (event) => openOtherEmailPanel(event.currentTarget));
   document.getElementById("ageForm").addEventListener("submit", changeAge);
+  // The birth date: typed (a 2-digit year is a past one), or picked on a calendar (up to 120 years ago; it starts on the
+  // box's date)
+  const ageInput = document.getElementById("ageInput");
+  const now = createSafeMidnight(new Date());
+  ageInput.placeholder = datePattern();
+  ageInput.translate = false;
+  ageInput.after(BudgetUI.datePickerButton(ageInput, "Birth date", { min: new Date(now.getFullYear() - MAX_AGE, now.getMonth(), now.getDate()), max: now, today: false, pastYears: true }));
+  document.getElementById("quickBalancesSwitch").addEventListener("change", (event) => setQuickBalances(event.currentTarget));
   document.getElementById("passwordForm").addEventListener("submit", changePassword);
   document.getElementById("passkeyForm").addEventListener("submit", addPasskey);
   document.getElementById("signOutEverywhereButton").addEventListener("click", signOutEverywhere);
@@ -393,7 +413,9 @@ function renderAccount() {
     status.textContent = `Get a link at ${account.email} to choose a new password. It works once, for an hour. A reset signs you out on every device, and turns passkey sign-in off until you turn it back on.`;
     buttons.append(settingsButton("Email Me A Reset Link", "primary", sendResetLink));
   }
+  renderOtherEmails();
   renderQuickIcons();
+  renderQuickBalances();
   renderAnalytics();
 }
 
@@ -498,7 +520,8 @@ document.addEventListener("visibilitychange", async () => {
   if (!result.ok || !result.data || !result.data.emailVerified) return;
   account = result.data;
   renderVerification();
-  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets now (Menu, then Spreadsheets).");
+  renderOtherEmails();
+  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets (Menu, then Spreadsheets) and add other emails now.");
 });
 
 // Prismal Budget is for people 18 and older. The birth date given when signing up can be fixed here (like a
@@ -506,27 +529,27 @@ document.addEventListener("visibilitychange", async () => {
 const MIN_AGE = 18;
 const MAX_AGE = 120;
 
-// The Birth Date card (an account from before birth dates has only an age, so its box starts empty)
+// The Birth Date card (an account from before birth dates has only an age, so its box starts empty). The box shows it in
+// this device's date format.
 function renderAge() {
   const status = account.birthdate
     ? `Prismal Budget is for people ${MIN_AGE} and older. Typed the wrong birth date when you signed up? Fix it here.`
     : `Prismal Budget is for people ${MIN_AGE} and older. Add your birth date here.`;
   document.getElementById("ageStatus").textContent = status;
-  const input = document.getElementById("ageInput");
-  input.value = account.birthdate || "";
-  input.max = formatToYMD(today);
+  document.getElementById("ageInput").value = account.birthdate ? showDate(createSafeMidnight(account.birthdate, true)) : "";
 }
 
-// Save Birth Date (18 to 120 years ago)
+// Save Birth Date (18 to 120 years ago): typed in this device's date format (or picked), sent as YYYY-MM-DD
 async function changeAge(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const birthdate = document.getElementById("ageInput").value;
-  const match = birthdate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return BudgetUI.showToast("Enter your birth date.", true);
-  const [year, month, day] = match.slice(1).map(Number);
-  let age = today.getFullYear() - year;
-  if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) age--;
+  const typed = document.getElementById("ageInput").value.trim();
+  const date = typed ? parseTypedDate(typed, { pastYears: true }) : new Date(NaN);
+  if (isNaN(date.getTime())) return BudgetUI.showToast(typed ? `That date isn't a real day. Use ${datePattern()}.` : "Enter your birth date.", true);
+  const birthdate = formatToYMD(date);
+  const now = createSafeMidnight(new Date());
+  let age = now.getFullYear() - date.getFullYear();
+  if (now.getMonth() < date.getMonth() || (now.getMonth() === date.getMonth() && now.getDate() < date.getDate())) age--;
   if (age < 0 || age > MAX_AGE) return BudgetUI.showToast("Enter your birth date.", true);
   if (age < MIN_AGE) return BudgetUI.showToast(`Prismal Budget is for people ${MIN_AGE} and older.`, true);
   if (birthdate === account.birthdate) return;
@@ -572,6 +595,7 @@ async function deleteAccount(event) {
   // choices, like analytics off)
   if (pushSubscription) await pushSubscription.unsubscribe().catch(() => {});
   if (passkeyInfo) Passkeys.syncList(passkeyInfo.userHandle, []);
+  Passkeys.forgetLast();
   clearSignedInData(true);
   window.location.replace("/login.html?deleted=1");
 }
@@ -591,8 +615,173 @@ function setFormBusy(form, busy) {
 //#endregion
 
 // =====================================================================
-// #region SIGNED-IN DEVICES (Quick Entry icons, Sign Out Everywhere)
+// #region OTHER EMAILS (they sign in too, and their spreadsheets can be connected)
 // =====================================================================
+// Another email of the account's owner: we email it a link, and once it's opened (the login page checks it), the email
+// signs in to the account (with its password, and Forgot Password sends its link there), and spreadsheets its Google
+// account shares with admin@prismalbudget.org can be connected. Each one shows whether it's confirmed or waiting (with
+// Send Again), and Remove. Adding one needs the account's own email verified first.
+
+const MAX_OTHER_EMAILS = 5;
+const SHARING_EMAIL = "admin@prismalbudget.org";
+
+// The list, and Add Email (once the account's own email is verified)
+function renderOtherEmails() {
+  const list = document.getElementById("otherEmailList");
+  const status = document.getElementById("otherEmailsStatus");
+  const button = document.getElementById("addOtherEmailButton");
+  if (!otherEmails) {
+    status.textContent = "Couldn't load your other emails. Please refresh to try again.";
+    list.hidden = true;
+    button.disabled = true;
+    return;
+  }
+  status.textContent = !account.emailVerified
+    ? `Add another email of yours: it signs in to your account too, and spreadsheets its Google account shares with ${SHARING_EMAIL} can be connected. Verify your own email first (above).`
+    : `Add another email of yours (up to ${MAX_OTHER_EMAILS}), and open the link we send it. Then it signs in to your account too (with your password), and spreadsheets its Google account shares with ${SHARING_EMAIL} can be connected.`;
+  list.replaceChildren(...otherEmails.map(otherEmailItem));
+  list.hidden = otherEmails.length === 0;
+  button.disabled = !account.emailVerified || !account.canEmail || otherEmails.length >= MAX_OTHER_EMAILS;
+}
+
+// One email: confirmed or waiting, Send Again (waiting), and Remove
+function otherEmailItem(entry) {
+  const item = BudgetUI.element("li", "sheetEmailItem");
+  const about = BudgetUI.element("div", "sheetEmailAbout");
+  about.append(
+    BudgetUI.noTranslate(BudgetUI.element("strong", "", entry.email)),
+    BudgetUI.element("span", "panelHint", entry.verified
+      ? "Confirmed: it signs in, and spreadsheets it shares can be connected."
+      : "Waiting: open the link we emailed it (check its spam folder too).")
+  );
+  const buttons = BudgetUI.element("div", "sheetEmailButtons");
+  if (!entry.verified) {
+    const again = settingsButton("Send Again", "", () => sendOtherEmailLink(entry.email, again));
+    again.setAttribute("aria-label", `Send the link to ${entry.email} again`);
+    buttons.append(again);
+  }
+  const remove = settingsButton("Remove", "danger", () => removeOtherEmail(entry, remove));
+  remove.setAttribute("aria-label", `Remove ${entry.email}`);
+  buttons.append(remove);
+  item.append(about, buttons);
+  return item;
+}
+
+// Add Email: the email, then Send Link
+function openOtherEmailPanel(origin) {
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "Add Email",
+    build(form, panel) {
+      const email = BudgetUI.textField({
+        label: "Email",
+        placeholder: "you@gmail.com",
+        hint: `Another email of yours. We'll email it a link: open it, and the email signs in to your account too, and spreadsheets its Google account shares with ${SHARING_EMAIL} can be connected.`
+      });
+      email.input.type = "email";
+      email.input.autocomplete = "email";
+      email.input.spellcheck = false;
+      email.input.maxLength = 254;
+      form.append(email.el, BudgetUI.buttonRow([
+        { label: "Send Link", kind: "primary", type: "submit" },
+        { label: "Cancel", onClick: () => panel.close() }
+      ]));
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        panel.setError("");
+        const typed = email.input.value.trim();
+        if (!typed) return panel.setError("Type the email to add.");
+        panel.setBusy(true);
+        const result = await budgetApi("/api/sheets/emails/add", { email: typed });
+        panel.setBusy(false);
+        if (!result.ok || !result.data) return panel.setError(accountError(result, "Couldn't send the link. Please try again."));
+        panel.close();
+        showOtherEmails(result.data);
+      });
+    }
+  });
+}
+
+// Send Again: a new link to an email that's waiting (the one sent before stops working)
+async function sendOtherEmailLink(email, button) {
+  button.disabled = true;
+  const result = await budgetApi("/api/sheets/emails/add", { email });
+  button.disabled = false;
+  if (!result.ok || !result.data) return BudgetUI.showToast(accountError(result, "Couldn't send the link. Please try again."), true);
+  showOtherEmails(result.data);
+}
+
+// The list after adding one (or sending its link again), and what happened
+function showOtherEmails(data) {
+  otherEmails = data.emails;
+  renderOtherEmails();
+  BudgetUI.showToast(data.alreadyVerified
+    ? "That email is already confirmed."
+    : `Link sent to ${data.sent}. Open it within 24 hours (if it isn't in that inbox, check its spam folder), and that email signs in to your account too.`);
+}
+
+// Remove (after asking): it can't sign in anymore, and its spreadsheets aren't read for this account
+async function removeOtherEmail(entry, button) {
+  const what = entry.verified
+    ? `It won't sign in to your account anymore, and spreadsheets it shares with ${SHARING_EMAIL} won't be read for you (ones anyone with the link can view still are).`
+    : "The link we sent it stops working.";
+  if (!window.confirm(`Remove ${entry.email}? ${what}`)) return;
+  button.disabled = true;
+  const result = await budgetApi("/api/sheets/emails/remove", { email: entry.email });
+  if (!result.ok || !result.data) {
+    button.disabled = false;
+    return BudgetUI.showToast(accountError(result, "Couldn't remove that email. Please try again."), true);
+  }
+  otherEmails = result.data.emails;
+  renderOtherEmails();
+  BudgetUI.showToast(`${entry.email} was removed.`);
+}
+
+// Back on this page after opening a link (another tab or app): check whether a waiting email is confirmed now
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || !otherEmails || !otherEmails.some(entry => !entry.verified)) return;
+  const waiting = new Set(otherEmails.filter(entry => !entry.verified).map(entry => entry.email));
+  const result = await budgetApi("/api/sheets/emails");
+  if (!result.ok || !result.data) return;
+  otherEmails = result.data.emails;
+  renderOtherEmails();
+  const confirmed = otherEmails.filter(entry => entry.verified && waiting.has(entry.email)).map(entry => entry.email);
+  if (confirmed.length > 0) {
+    BudgetUI.showToast(`${confirmed.join(" and ")} ${confirmed.length === 1 ? "is" : "are"} confirmed, so ${confirmed.length === 1 ? "it signs" : "they sign"} in to your account now.`);
+  }
+});
+
+//#endregion
+
+// =====================================================================
+// #region SIGNED-IN DEVICES (Quick Entry icons and their balances, Sign Out Everywhere)
+// =====================================================================
+
+// Whether Quick Entry icons show balances: In Bank today, the lowest it gets, and the Other Accounts' balances (a
+// setting of the account, so every icon follows it; off, they show the accounts' names only)
+function renderQuickBalances() {
+  const toggle = document.getElementById("quickBalancesSwitch");
+  toggle.checked = account.quickBalances !== false;
+  document.getElementById("quickBalancesNote").textContent = toggle.checked
+    ? "Quick Entry icons show In Bank today, the lowest it gets, and your Other Accounts' balances."
+    : "Off: Quick Entry icons don't show In Bank or any balances, just your Other Accounts' names (to pick one).";
+}
+
+// The switch was flipped: saved with the account (the icons follow it the next time they're opened or add an entry)
+async function setQuickBalances(toggle) {
+  const on = toggle.checked;
+  toggle.disabled = true;
+  const result = await budgetApi("/api/account/quick-balances", { on });
+  toggle.disabled = false;
+  if (result.ok && result.data) {
+    account = result.data;
+    BudgetUI.showToast(on ? "Quick Entry icons show balances again." : "Quick Entry icons don't show balances now.");
+  } else {
+    BudgetUI.showToast(accountError(result, "Couldn't change that. Please try again."), true);
+  }
+  renderQuickBalances();
+}
 
 function renderQuickIcons() {
   const status = document.getElementById("quickIconStatus");
@@ -603,7 +792,7 @@ function renderQuickIcons() {
     status.textContent = "Quick Entry icons: none right now. The Quick Entry button on Home makes one for a phone's home screen.";
     return;
   }
-  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see In Bank today and the lowest it gets, see your Other Accounts' balances (for its account picker), and keep your prisms, but nothing else.`;
+  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see your Other Accounts (for its account picker) and, unless they're off below, In Bank today, the lowest it gets, and the accounts' balances, and keep your prisms, but nothing else.`;
   buttons.append(settingsButton(count === 1 ? "Turn Off The Icon" : "Turn Off Icons", "danger", turnOffQuickIcons));
 }
 
@@ -808,6 +997,7 @@ async function addPasskey(event) {
     BudgetUI.showToast(accountError(result, "Couldn't add the passkey. Please try again."), true);
     return;
   }
+  Passkeys.rememberLast(credential); // The login page tries it by itself next time (when it's on this device)
   passkeyInfo = result.data;
   form.reset();
   renderPasskeys();
@@ -837,6 +1027,7 @@ async function removePasskey(passkey) {
   if (result.ok && result.data) {
     passkeyInfo = result.data;
     Passkeys.syncList(passkeyInfo.userHandle, passkeyInfo.passkeys); // Browsers that support it stop offering it
+    Passkeys.forgetLast(passkey.id); // The login page doesn't try it by itself anymore
     BudgetUI.showToast(`Passkey removed: ${passkey.name}.`);
   } else {
     BudgetUI.showToast(accountError(result, "Couldn't remove the passkey. Please try again."), true);

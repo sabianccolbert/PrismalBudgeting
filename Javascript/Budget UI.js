@@ -1,6 +1,7 @@
 // Budget UI: shared pieces for the budget pages. Panels that expand out of the button or entry
 // that opened them (like a cell zoom), form fields, the refraction type picker, date fields
-// (type a date, or tap a day on the calendar), toasts, and entry line rendering.
+// (type a date, pick one with the calendar button, or tap a day on the calendar), an entry's options (Home's and
+// History's), toasts, and entry line rendering.
 
 const BudgetUI = (() => {
 
@@ -90,18 +91,19 @@ const BudgetUI = (() => {
       }
     };
 
+    api.inline = inline;
     build(form, api);
     const buttons = form.querySelector(".panelButtons");
     if (buttons) buttons.parentNode.insertBefore(error, buttons);
     else form.append(error);
     closeButton.addEventListener("click", () => closePanel());
 
-    // Floating panels go in <body>: the page's #transitionContainer is transformed, which would make a
-    // fixed-position panel scroll with the page
+    // Floating panels go in the screen layer (Layout.js), which stays on the visible screen however the page is zoomed
+    // or scrolled (and isn't in the page's #transitionContainer, which is transformed)
     if (inline) {
       (document.getElementById("panelSlot") || document.querySelector("main") || document.body).appendChild(panel);
     } else {
-      document.body.appendChild(panel);
+      onScreen(panel);
       if (size === "small") positionNear(panel, origin);
     }
     // It grows out of what opened it (the same zoom as Help and Search: FloatingWindows in Layout.js)
@@ -148,20 +150,36 @@ const BudgetUI = (() => {
     while (currentPanel) closePanel(immediate);
   }
 
-  // Small panels sit just below their origin (or above it near the bottom of the screen)
+  // Into the screen layer (Layout.js), or the page's <body> without one
+  function onScreen(el) {
+    (window.ScreenLayer ? window.ScreenLayer.element : document.body).appendChild(el);
+    return el;
+  }
+
+  // Small panels sit just below their origin (or above it near the bottom of the screen), kept on the screen: in the
+  // screen layer's own pixels, placed again when the screen moves (like a phone's keyboard coming up)
   function positionNear(panel, origin) {
     const margin = 8;
-    const rect = origin.getBoundingClientRect();
-    const box = panel.getBoundingClientRect();
+    const layer = window.ScreenLayer;
+    const area = layer ? layer.size() : { width: document.documentElement.clientWidth, height: window.innerHeight };
+    const box = layer ? layer.rectOf(panel) : panel.getBoundingClientRect();
+    // (An origin that's gone, like a redrawn day's entry, leaves the panel where it is, kept on the screen)
+    const rect = !origin || !origin.isConnected ? { ...box, bottom: box.top - margin, top: box.top - margin, width: box.width }
+      : layer ? layer.rectOf(origin) : origin.getBoundingClientRect();
     let left = rect.left + rect.width / 2 - box.width / 2;
-    left = Math.min(Math.max(left, margin), window.innerWidth - box.width - margin);
+    left = Math.max(margin, Math.min(left, area.width - box.width - margin));
     let top = rect.bottom + margin;
-    if (top + box.height > window.innerHeight - margin && rect.top - box.height - margin > margin) {
-      top = rect.top - box.height - margin;
+    if (top + box.height > area.height - margin) {
+      top = rect.top - box.height - margin > margin ? rect.top - box.height - margin : Math.max(margin, area.height - box.height - margin);
     }
-    panel.style.left = `${left + window.scrollX}px`;
-    panel.style.top = `${top + window.scrollY}px`;
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
   }
+
+  // The open small panel follows the screen (it stays by its origin while that's still there)
+  window.ScreenLayer?.onChange(() => {
+    if (currentPanel && currentPanel.panel.classList.contains("small") && currentPanel.origin) positionNear(currentPanel.panel, currentPanel.origin);
+  });
 
   // Run a budget change from a panel: busy while it runs, the error stays in the panel,
   // success closes it. Resolves to the change's result.
@@ -193,10 +211,12 @@ const BudgetUI = (() => {
     if (event.key === "Escape" && currentPanel && currentPanel.closable) closePanel();
   });
 
-  // Leaving the page closes the panel, any date box's waiting for a day, and notes, right away, so the
-  // browser's Back button never brings the page back with them still up (see FloatingWindows in Layout.js)
+  // Leaving the page closes the floating panels, any date box's waiting for a day, and notes, right away, so the
+  // browser's Back button never brings the page back with them still up (see FloatingWindows in Layout.js). A panel
+  // that's part of the page (inline: the Quick Entry page's form) stays, so coming back (Back, or a phone closing the
+  // page it opened over this one) finds it there.
   window.FloatingWindows?.closeOnPageExit(() => {
-    closeAllPanels(true);
+    while (currentPanel && !currentPanel.inline) closePanel(true);
     setPickTarget(null);
     if (toastStack) toastStack.replaceChildren();
   });
@@ -435,9 +455,10 @@ const BudgetUI = (() => {
 
   const isAccountType = (key) => key === "✖️" || key === "⭕️";
 
-  // Date field. value(): Date, null when blank, undefined when it isn't a real date. 📅 opens the device's
-  // own date picker. With the calendar on the page, tapping a day while the box is waiting fills it too.
-  function dateField({ label = "Date", date = null, optional = false } = {}) {
+  // Date field. value(): Date, null when blank, undefined when it isn't a real date. The calendar button opens a calendar to pick one
+  // (Dates.js), from min to max when they're given. With the calendar (or History) on the page, tapping a day while the
+  // box is waiting fills it too. hint: what's under it (it says how to fill it in, unless one is given).
+  function dateField({ label = "Date", date = null, optional = false, min = null, max = null, hint = "" } = {}) {
     const input = element("input", "dateInput");
     input.type = "text";
     input.inputMode = "numeric";
@@ -446,8 +467,8 @@ const BudgetUI = (() => {
     if (date) input.value = showDate(date);
     input.addEventListener("focus", () => setPickTarget(input));
     const control = element("div", "dateRow");
-    control.append(input, datePickerButton(input, label));
-    const hint = hasCalendar() ? "Type a date, tap 📅, or tap a day on the calendar." : "Type a date, or tap 📅 to pick one.";
+    control.append(input, datePickerButton(input, label, { min, max }));
+    if (!hint) hint = hasCalendar() ? "Type a date, use the calendar button, or tap a day on the calendar." : "Type a date, or use the calendar button to pick one.";
     return {
       el: field(label, control, { optional, hint }),
       input,
@@ -731,6 +752,107 @@ const BudgetUI = (() => {
     };
   }
 
+  // An entry's options (an entry tapped on a zoomed day on Home or History, or in Upcoming): line is the entry as its day
+  // shows it ("❗️ -$4.50 Coffee") on date. Set to or Add to it, its refraction type and Other Account, Move to another
+  // day, or Delete. Changing its type or account takes it off as it is and puts it on as the new one, adding into an entry
+  // already on that day with the same title and type (changeEntryKind). inHistory: a day in History, where the same
+  // changes keep the balances (In Bank, and the Other Accounts'; see changeHistoryEntry) and it only moves to another day
+  // in History. The panel shows the whole entry, however long its title.
+  function openEntryOptions(origin, line, date, { lineIndex = 1, inHistory = false } = {}) {
+    const parts = getParts(line);
+    const refraction = getSpecialType(parts[0]);
+    const currentAmount = parseAmount(parts[1]);
+    const title = parts.slice(2).join(" ");
+    const changeEntry = inHistory ? changeHistoryEntry : changeCalendarEntry;
+    const changeKind = inHistory ? changeHistoryEntry : changeEntryKind;
+
+    openPanel({
+      origin,
+      size: "small",
+      title: `${inHistory ? showDate(date) : showDay(date)} Entry`,
+      build(form, panel) {
+        const display = renderEntryLine(line, lineIndex);
+        display.classList.add("panelEntry");
+        // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own
+        const account = linkedAccount(parts[0], title);
+        const accountNote = account ? element("p", "panelHint", refraction === "⭕️"
+          ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
+          : `${account.name} (Other Accounts) changes by this entry's amount, and In Bank doesn't.`) : null;
+        const historyNote = inHistory
+          ? element("p", "panelHint", "This day is in History, so changing this entry doesn't change In Bank or your Other Accounts' balances. The tracker and Search count the change.")
+          : null;
+
+        let mode = "set";
+        const amount = amountField({ label: "Amount", amount: currentAmount });
+        const modeToggle = segmented(
+          [{ key: "set", label: "Set to" }, { key: "add", label: "Add to it" }],
+          "set",
+          (key) => {
+            mode = key;
+            amount.input.value = key === "set" && Math.round(currentAmount * 100) !== 0 ? Math.abs(currentAmount).toFixed(2) : "";
+            amount.setSign(key === "set" && currentAmount > 0 ? 1 : -1);
+          }
+        );
+        const moveTo = inHistory
+          ? dateField({ label: "Move to", optional: true, min: oldestHistoryDay(), max: addDays(gridStartDate, -1), hint: "Another day in History: type it, or use the calendar button to pick one." })
+          : dateField({ label: "Move to", optional: true });
+
+        // Its refraction type and Other Account can change too. Then it comes off as it is and goes on as the new
+        // one, adding into an entry already on that day with the same title and type.
+        const { title: ownTitle } = splitAccount(title);
+        const type = refractionField({ value: refraction, allowAuto: false, onChange: (key) => accountPicker.setVisible(isAccountType(key)) });
+        const accountPicker = accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "" });
+        accountPicker.setVisible(isAccountType(refraction));
+        const startAccount = accountPicker.value();
+
+        form.append(display, ...[accountNote, historyNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, buttonRow([
+          { label: "Save", kind: "primary", type: "submit" },
+          { label: "Delete", kind: "danger", onClick: deleteEntry },
+          { label: "Cancel", onClick: () => panel.close() }
+        ]));
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const newAmount = amount.value() ?? 0; // A blank box is 0 (Set to 0, or nothing added)
+          const move = moveTo.value();
+          if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
+          if (Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+          if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+
+          const newSprite = type.value();
+          const newAccount = accountPicker.value();
+          if (newSprite !== refraction || newAccount !== startAccount) {
+            const total = mode === "set" ? newAmount : currentAmount + newAmount;
+            if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+            const newTitle = withAccount(ownTitle, newAccount);
+            // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
+            if (!newTitle) return panel.setError("This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
+            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total };
+            if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
+            return submit(panel, () => changeKind(kind));
+          }
+
+          const change = { title, sprite: refraction, date, action: "set", amount: "" };
+          const amountChanged = mode === "set" ? newAmount !== currentAmount : newAmount !== 0;
+          if (amountChanged) {
+            change.action = mode === "set" ? "set" : (newAmount > 0 ? "add" : "subtract");
+            change.amount = mode === "set" ? String(newAmount) : String(Math.abs(newAmount));
+          }
+          if (move && move.getTime() !== date.getTime()) change.moveDate = move;
+          if (!amountChanged && !change.moveDate) return panel.close(); // Nothing changed
+
+          submit(panel, () => changeEntry(change));
+        });
+
+        // Delete: it comes off its day (one that landed there by itself leaves a $0.00 temp)
+        function deleteEntry() {
+          if (!window.confirm(`Delete ${title} on ${showDay(date)}?`)) return;
+          submit(panel, () => changeEntry({ title, sprite: refraction, date, action: "delete" }));
+        }
+      }
+    });
+  }
+
   // Buttons: [{ label, kind: "primary" | "danger" | "", type: "submit" | "button", onClick }]
   function buttonRow(buttons) {
     const row = element("div", "panelButtons");
@@ -748,52 +870,18 @@ const BudgetUI = (() => {
   // =====================================================================
   // #region DATE PICKING
   // =====================================================================
-  // 📅 next to a date box opens the device's own date picker. And with the calendar (or History) on the
-  // page, while a date box is the "pick target", tapping a day fills it in: panels (and the search box) keep
+  // The calendar button next to a date box opens a calendar to pick a day (DatePicker, in Dates.js). And with the calendar (or History)
+  // on the page, while a date box is the "pick target", tapping a day fills it in: panels (and the search box) keep
   // their date box as the target while they're open; other date boxes stop when you tap somewhere else.
 
   const DAY_TABLES = ".elastic-table"; // Tables whose days can be tapped to pick them (Home's and History's)
   let pickTarget = null;
   const hasCalendar = () => !!document.querySelector(DAY_TABLES);
 
-  // 📅 for a typed date box: a see-through date input fills the button, so a tap lands right on it and the
-  // device's picker opens (showPicker opens it on a click elsewhere on the button, where browsers allow it).
-  // The picker starts on the typed date, and the picked one is written back in this device's date format. With no
-  // date typed, the picker starts with nothing picked (it shows this month), so picking today counts as a pick too
-  // (a picker that already had today picked wouldn't say anything when today was picked again).
-  function datePickerButton(textInput, label = "Date") {
-    const button = element("span", "budgetButton pickDay", "📅");
-    button.title = "Pick a date";
-    const picker = element("input", "nativeDate");
-    picker.type = "date";
-    picker.tabIndex = -1;
-    picker.setAttribute("aria-label", `Pick the ${label.toLowerCase()}`);
-    button.appendChild(picker);
-
-    const startOnTyped = () => {
-      const typed = textInput.value.trim() ? parseTypedDate(textInput.value) : new Date(NaN);
-      picker.value = isNaN(typed.getTime()) ? "" : formatToYMD(typed);
-    };
-    button.addEventListener("pointerdown", startOnTyped);
-    button.addEventListener("click", (event) => {
-      startOnTyped();
-      if (typeof picker.showPicker !== "function") return;
-      try {
-        picker.showPicker();
-        event.preventDefault();
-      } catch (e) {} // Then the tap on the date input itself opens it
-    });
-    const usePicked = () => {
-      if (!picker.value) return;
-      const shown = showDate(createSafeMidnight(picker.value, true));
-      if (textInput.value === shown) return;
-      textInput.value = shown;
-      textInput.dispatchEvent(new Event("input", { bubbles: true }));
-      textInput.dispatchEvent(new Event("change", { bubbles: true }));
-    };
-    picker.addEventListener("input", usePicked);
-    picker.addEventListener("change", usePicked);
-    return button;
+  // The calendar button for a typed date box: it opens a calendar on the typed date (or this month), and the day picked is written into
+  // the box in this device's date format. options: { min, max } (Dates) when only those days can be picked.
+  function datePickerButton(textInput, label = "Date", options = {}) {
+    return DatePicker.button(textInput, { label, ...options });
   }
 
   // The date box a calendar tap fills: it glows, and the calendar gets a dashed outline, so it's clear
@@ -915,10 +1003,7 @@ const BudgetUI = (() => {
   // the other. A longer note stays longer, so there's time to read it (4.5 to 12 seconds).
   let toastStack = null;
   function showToast(message, isWarning = false) {
-    if (!toastStack || !toastStack.isConnected) {
-      toastStack = element("div", "toastStack");
-      document.body.appendChild(toastStack);
-    }
+    if (!toastStack || !toastStack.isConnected) toastStack = onScreen(element("div", "toastStack"));
     const toast = element("div", `budgetToast${isWarning ? " warning" : ""}`, message);
     toast.setAttribute("role", "status");
     toastStack.appendChild(toast);
@@ -956,6 +1041,7 @@ const BudgetUI = (() => {
     aliasField,
     segmented,
     newEntryFields,
+    openEntryOptions,
     buttonRow,
     setPickTarget,
     datePickerButton,

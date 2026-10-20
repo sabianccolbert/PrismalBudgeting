@@ -44,6 +44,8 @@
  *
  * 13) GRADIENT BORDERS
  *
+ * 14) DATE BOXES AND THE CALENDAR THAT PICKS A DAY
+ *
  *  NOTE: Sections use /* #region ... *\/ for editor folding.
  *==============================================================*/
 
@@ -113,6 +115,22 @@
   /* The red-orange diagonal gradient on the borders of chosen, hovered, and focused controls
      (see GRADIENT BORDERS at the end) */
   --EDGE_GRADIENT: linear-gradient(135deg, #ee0000 0%, #ff4500 55%, #ff9a1a 100%);
+
+  /* Floating windows (panels, Search, Help, the date picker): deep violet to navy glass */
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 26, 108, 0.98) 0%, rgba(24, 20, 84, 0.98) 48%, rgba(12, 18, 64, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 26px rgba(100, 90, 255, 0.28);
+
+  /* How a day looks (Home's calendar, History, and the date picker): a glass tile whose fill fades from its top to clear
+     by its middle (the stars show through it; its words and sprites don't), and its edge. A day below $0 is red. A zoomed
+     day (budgetStyle.css) is solid (--DAY_SOLID). Today glows (--GLOW_FILL). */
+  --DAY_FILL: linear-gradient(180deg, rgba(34, 36, 96, 0.62) 0%, rgba(34, 36, 96, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(30, 32, 86), rgb(10, 10, 32));
+  --DAY_EDGE: rgba(120, 132, 255, 0.22);
+  --DAY_RADIUS: clamp(4px, 0.9vmin, 10px);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(122, 14, 48, 0.68) 0%, rgba(122, 14, 48, 0) 50%);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(112, 12, 44), rgb(42, 6, 24));
+  --NEGATIVE_DAY_EDGE: rgba(255, 80, 100, 0.6);
+  --NEGATIVE_GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 70, 90, 0.5) 0%, rgba(200, 20, 50, 0.28) 50%, rgba(90, 0, 30, 0.1) 85%, transparent 100%);
 }
 
 /* #endregion 1) DESIGN TOKENS (ROOT VARIABLES) */
@@ -427,6 +445,12 @@ button:hover {
 .iconSearch { background-image: url("/Resources/Icons/Search.webp?v=46152f5765"); }
 .iconQuick  { background-image: url("/Resources/Icons/QuickEntry.webp?v=a219571ba6"); }
 
+/* The calendar (a date box's button): the dark blue icon, lifted to a bright neon blue like Home's calendar card's */
+.iconCalendar {
+  background-image: url("/Resources/Icons/Calendar.webp?v=d6ac912434");
+  filter: brightness(2.8) drop-shadow(0 0 4px rgba(60, 120, 255, 0.9));
+}
+
 /* #endregion 8) BUTTONS */
 
 
@@ -592,12 +616,13 @@ header .stacked h2 {
   object-fit: contain;
 }
 
-/* Each icon glows in its own color (the colored ones are dark on their own, so they're lifted a little) */
+/* Each icon glows in its own color (the colored ones are dark on their own, so they're lifted a little). Home's is green
+   like Menu's, and Back's red (HomeNav and BackNav: the tabs' Home and the Undo buttons keep their own icons). */
 .navIcon[src*="/Settings."] { filter: brightness(1.35) drop-shadow(0 0 6px rgba(40, 100, 255, 0.85)); }
-.navIcon[src*="/Menu."]     { filter: drop-shadow(0 0 6px rgba(40, 220, 40, 0.6)); }
+.navIcon[src*="/Menu."],
+.navIcon[src*="/HomeNav."]  { filter: drop-shadow(0 0 6px rgba(40, 220, 40, 0.6)); }
+.navIcon[src*="/BackNav."]  { filter: drop-shadow(0 0 6px rgba(255, 50, 40, 0.65)); }
 .navIcon[src*="/Logout."]   { filter: brightness(1.2) drop-shadow(0 0 6px rgba(230, 0, 200, 0.7)); }
-.navIcon[src*="/Home."],
-.navIcon[src*="/Undo."]     { filter: drop-shadow(0 0 5px rgba(170, 180, 255, 0.6)); }
 
 /* Logout's name is pink, like its icon */
 .logoutButton span {
@@ -769,14 +794,38 @@ img.sprite {
   overflow: visible;
 }
 
+/* The screen layer (Layout.js): floating windows, notes, and the version badge, always over the part of the page that's
+   on the screen, at its normal size, even while the page is pinch-zoomed or a phone's keyboard is up (Layout.js sizes
+   and places it from the browser's visual viewport). Taps go through it, except on what's in it. Fixed boxes in it are
+   placed in it, not on the page. */
+#screenLayer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+#screenLayer > * {
+  pointer-events: auto;
+}
+
+#screenLayer > .toastStack,
+#screenLayer > #versionBadge {
+  pointer-events: none;
+}
+
+/* The release's name, small, in the screen's bottom left corner */
 #versionBadge {
-  position:fixed;
-  bottom:4px;
-  left:6px;
-  font:10px monospace;
-  opacity:.45;
-  z-index:9999;
-  pointer-events:none;
+  position: absolute;
+  bottom: 4px;
+  left: 6px;
+  font: 10px monospace;
+  opacity: .45;
+  z-index: 9999;
 }
 
 /*========================================*
@@ -830,16 +879,6 @@ input {
 input[type="password"] {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   letter-spacing: 0.12em;
-}
-
-/* Date boxes (the birth date): iPhones draw an empty one shorter than the other boxes and put a date at the
-   left, so they get a line's height and center like the rest */
-input[type="date"] {
-  min-height: 1.2em;
-}
-
-input[type="date"]::-webkit-date-and-time-value {
-  text-align: center;
 }
 
 /* Hover and focus states: it grows a little and glows red (the border turns into the gradient: GRADIENT BORDERS) */
@@ -1159,11 +1198,258 @@ button:not([class]):hover::before,
   pointer-events: none;
 }
 
-input:not([type="checkbox"]):not([type="range"]):not([type="number"]):not([type="date"]):hover,
-input:not([type="checkbox"]):not([type="range"]):not([type="number"]):not([type="date"]):focus,
+input:not([type="checkbox"]):not([type="range"]):not([type="number"]):hover,
+input:not([type="checkbox"]):not([type="range"]):not([type="number"]):focus,
 input.dateInput.isPickTarget,
 select:focus,
 textarea:focus {
   border-color: transparent;
   background: linear-gradient(var(--EDGE_FILL), var(--EDGE_FILL)) padding-box, var(--EDGE_GRADIENT) border-box;
+}
+
+/*========================================*
+ *  14) DATE BOXES AND THE CALENDAR THAT PICKS A DAY (Dates.js)
+ *========================================*
+ *  A date box is typed in, with a calendar button beside it. The button opens a small calendar like Home's: the month
+ *  and the year (each a box to type in, with a list that drops down under it) between ‹ and ›, then square days, each
+ *  with its number. Here, not in budgetStyle.css: the login page (the birth date) uses it too.
+ */
+
+.dateRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.dateRow input.dateInput {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+/* The login page's: the row keeps the boxes' spacing (its em is the boxes' text size, like theirs) */
+.authCard .dateRow {
+  margin: 0 0 1.1em;
+  font-size: clamp(16px, 3.4vmin, 21px);
+}
+
+.authCard .dateRow input.dateInput {
+  margin: 0;
+}
+
+/* The calendar button: a small glass button with the calendar icon, as tall as its box */
+button.pickDay {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: auto;
+  margin: 0;
+  padding: 0 0.85em;
+  font-size: clamp(15px, 2.8vmin, 18px);
+  line-height: 1;
+}
+
+.authCard button.pickDay {
+  width: auto;
+  margin: 0;
+  font-size: clamp(15px, 2.8vmin, 18px);
+}
+
+button.pickDay .buttonIcon {
+  width: 1.35em;
+  height: 1.35em;
+}
+
+/* Open: it glows red, like a chosen button */
+button.pickDay[aria-expanded="true"] {
+  background: var(--PICK_FILL), var(--GLASS_BUTTON);
+  box-shadow: var(--PICK_SHADOW);
+}
+
+.datePicker {
+  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
+  position: absolute;
+  z-index: 1350;
+  box-sizing: border-box;
+  width: min(calc(100% - 16px), 340px);
+  padding: 0.7em 0.75em 0.75em;
+  font-size: clamp(14px, 2.6vmin, 17px);
+  line-height: 1.2;
+  color: var(--BASE_COLOR);
+  text-align: center;
+  background: var(--HOVER_GRADIENT);
+  border: 1px solid var(--GLASS_LINE_BRIGHT);
+  border-radius: 16px;
+  box-shadow: var(--FLOAT_SHADOW);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The month and the year between ‹ and › */
+.pickerHead {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: 0 0 0.6em;
+}
+
+.pickerChoice {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pickerChoice:has(.pickerMonth) {
+  flex-grow: 1.45;
+}
+
+.datePicker input.pickerInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.4em 0.4em;
+  font-size: max(16px, 1em); /* Phones don't zoom in on a box of 16px or more */
+  line-height: 1.2;
+  text-align: center;
+  border-radius: 10px;
+}
+
+.datePicker input.pickerInput:hover,
+.datePicker input.pickerInput:focus {
+  transform: none;
+  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+}
+
+.datePicker .pickerStep {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 2em;
+  height: 2em;
+  margin: 0;
+  padding: 0 0 0.1em;
+  font-size: 1.15em;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+/* A box's list, dropped down under it */
+.pickerList {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  max-height: 12.5em;
+  margin: 0;
+  padding: 0.3em 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  background: rgb(20, 17, 62);
+  border: 1px solid var(--GLASS_LINE_BRIGHT);
+  border-radius: 10px;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.65);
+}
+
+.pickerOption {
+  padding: 0.38em 0.5em;
+  cursor: pointer;
+}
+
+.pickerOption:hover,
+.pickerOption.isActive {
+  color: #fff;
+  background: var(--PICK_FILL), rgba(120, 0, 20, 0.35);
+}
+
+/* The weekdays over the days, like Home's calendar */
+.pickerWeekdays,
+.pickerDays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.pickerWeekdays {
+  margin: 0 0 4px;
+  font-size: 0.68em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--TEXT_DIM);
+}
+
+/* Each day a square glass tile with its number, big, like a day on Home's calendar */
+.datePicker .pickerDay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  aspect-ratio: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  font-size: 1.15em;
+  font-weight: bold;
+  line-height: 1;
+  color: var(--TEXT_BRIGHT);
+  background: var(--DAY_FILL);
+  border: none;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--DAY_EDGE);
+  transition: box-shadow var(--SLOW_BORDER), background-color var(--SLOW_BORDER);
+}
+
+.datePicker .pickerDay.isOtherMonth {
+  opacity: 0.4;
+  font-weight: normal;
+}
+
+.datePicker .pickerDay.isToday {
+  background: var(--GLOW_FILL), var(--DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 10px rgba(96, 112, 255, 0.6);
+}
+
+.datePicker .pickerDay:hover,
+.datePicker .pickerDay:focus-visible {
+  transform: none;
+  outline: none;
+  text-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 10px rgba(96, 112, 255, 0.55);
+}
+
+/* The picked day: red, like a chosen button */
+.datePicker .pickerDay.isPicked {
+  color: #fff;
+  background: var(--PICK_FILL), rgba(120, 0, 20, 0.4);
+  box-shadow: inset 0 0 0 2px #ff4500, 0 0 10px rgba(200, 0, 0, 0.6);
+}
+
+.datePicker .pickerDay:disabled {
+  opacity: 0.18;
+  cursor: default;
+  box-shadow: inset 0 0 0 1px var(--DAY_EDGE);
+}
+
+.pickerFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5em;
+  margin: 0.65em 0 0;
+}
+
+.pickerFoot button {
+  margin: 0;
+  padding: 0.4em 1.1em;
+  font-size: 0.95em;
+}
+
+.pickerFoot button:first-child:not(:last-child) {
+  margin-right: auto;
 }
