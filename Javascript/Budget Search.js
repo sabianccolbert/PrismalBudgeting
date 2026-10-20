@@ -84,7 +84,11 @@ function wireSearch() {
     // Tracker looks for tracker rows by title, so those get suggested
     placeholder: (mode) => (mode === "category" ? "Tracker row, like Food" : "Title, like rent"),
     suggestions: (mode) => (mode === "category" ? "trackerRowTitles" : null),
-    onEnterEmpty: () => submitButton.click()
+    onEnterEmpty: () => submitButton.click(),
+    // Exact: only entries with just this title; off, any title with it in it ("gas" finds Gas Station too). A
+    // tracker row is always found by its own title.
+    exact: true,
+    noExact: ["category"]
   });
   // The page has a first line already (so nothing moves while the page loads); the working list
   // looks the same
@@ -112,7 +116,7 @@ function wireSearch() {
     event.preventDefault();
     submitButton.disabled = true;
     const result = await searchBudget({
-      terms: terms.items().map(({ title, mode }) => ({ title, match: mode })),
+      terms: terms.items().map(({ title, mode, exact }) => ({ title, match: mode, exact })),
       from: document.getElementById("searchFrom").value,
       to: document.getElementById("searchTo").value,
       type: typeFilter.value,
@@ -191,8 +195,24 @@ function renderSearchResults({ results, from, to, searchingFor }) {
   BudgetUI.spanHeaderBar(tableEl);
 
   const body = tableEl.createTBody();
-  const checkboxes = results.map(result => {
+  // Entries after today come first, under "Coming up", and a line sets them apart from today and before
+  const dividerRow = (text) => {
     const tr = body.insertRow();
+    tr.className = "searchDivider";
+    const td = tr.insertCell();
+    td.colSpan = 4;
+    td.textContent = text;
+  };
+  const hasComing = results.some(result => result.date > today);
+  let pastShown = false;
+  if (hasComing) dividerRow("Coming up");
+  const checkboxes = results.map(result => {
+    if (hasComing && !pastShown && result.date <= today) {
+      pastShown = true;
+      dividerRow("Today and before");
+    }
+    const tr = body.insertRow();
+    if (result.date > today) tr.classList.add("searchComing");
     const checkCell = tr.insertCell();
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";

@@ -197,6 +197,7 @@ function renderTrackerPage(view) {
     onEntryClick: (index, origin) => openTrackerPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
+  markClippedAliases(tableEl);
 }
 
 // A tracker row's cells (the page's table, and its Search results)
@@ -207,9 +208,36 @@ function trackerCells(tr, row) {
   tr.appendChild(noTranslate(cell(row[1], "amountCell")));
   tr.appendChild(noTranslate(cell(row[2], "amountCell")));
   tr.appendChild(noTranslate(cell(row[3], "amountCell")));
-  const aliases = cell(trackerAliasText(row), "aliasCell");
+  const aliases = cell("", "aliasCell");
+  aliases.appendChild(aliasBox(trackerAliasText(row)));
   // (Undefined and Transfers list entry titles, which are the person's words)
   tr.appendChild(isAuto && !["undefined", "transfers"].includes(cleanString(row[0])) ? aliases : noTranslate(aliases));
+}
+
+// A row's aliases scroll in a short box, so a long list doesn't make its row tall. Tapping a box with more in it than
+// shows opens it all the way (no scrolling), and tapping it again closes it; tapping one that shows everything opens
+// the row, like the rest of it (in Edit, a tap always checks the row instead).
+function aliasBox(text) {
+  const box = BudgetUI.element("div", "aliasBox", text);
+  box.addEventListener("click", (event) => {
+    const open = box.classList.contains("isOpen");
+    if (editMode || (!open && box.scrollHeight <= box.clientHeight + 1)) return;
+    event.stopPropagation();
+    box.classList.toggle("isOpen", !open);
+    box.scrollTop = 0;
+    markClippedAliases(box.closest("table"));
+  });
+  return box;
+}
+
+// Boxes with more in them than they show get a fade at the bottom, so it's clear there's more
+function markClippedAliases(table) {
+  if (!table) return;
+  requestAnimationFrame(() => {
+    for (const box of table.querySelectorAll(".aliasBox")) {
+      box.classList.toggle("isClipped", !box.classList.contains("isOpen") && box.scrollHeight > box.clientHeight + 1);
+    }
+  });
 }
 
 // Other Accounts: [0] column titles, then [name, balance, "default" | "", starting amount] (see Other Accounts
@@ -219,6 +247,7 @@ function renderAccountsPage(view) {
   renderToolbar("accounts", (origin) => openAccountPanel(origin, null), { newLabel: "New Account", newInEditMode: true });
   view.replaceChildren();
   const summaries = new Map(accountSummaries().map(summary => [summary.index, summary]));
+  view.appendChild(accountsTotal([...summaries.values()]));
 
   const tableEl = buildRowTable({
     tableName: "accounts",
@@ -237,7 +266,30 @@ function renderAccountsPage(view) {
     onEntryClick: (index, origin) => openAccountPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
-  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", "Balances come from each account's Hidden and Transfer entries. Tap an account to see them or rename it."));
+  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", "Balances come from each account's Hidden and Transfer entries (and its interest, when it has some). Tap an account to see them, rename it, or set its interest."));
+}
+
+// Over the accounts: everything together, In Bank (the budget's own account) and every Other Account, today and on the
+// calendar's last day, and In Bank on its own
+function accountsTotal(summaries) {
+  const todaySpot = calendarSpot(today);
+  const inBankToday = (todaySpot && readInBank(calendarData[todaySpot.r][todaySpot.c])) ?? 0;
+  const inBankEnd = readInBank(calendarData[3][6]) ?? 0;
+  const sum = (key) => summaries.reduce((total, summary) => total + summary[key], 0);
+  const box = BudgetUI.element("div", "accountsTotal");
+  const figure = (label, amount, main = false) => {
+    const part = BudgetUI.element("div", main ? "totalFigure main" : "totalFigure");
+    const value = noTranslate(BudgetUI.element("span", "totalAmount", formatMoney(amount)));
+    if (amount < 0) value.classList.add("negative");
+    part.append(BudgetUI.element("span", "infoLabel", label), value);
+    return part;
+  };
+  box.append(
+    figure("Total today, with In Bank", inBankToday + sum("today"), true),
+    figure(`Total by ${showDay(gridEndDate)}`, inBankEnd + sum("calendarEnd")),
+    figure("In Bank today", inBankToday)
+  );
+  return box;
 }
 
 // Change Logs (the spreadsheet's "Form Entries" tab), newest first:
@@ -332,7 +384,8 @@ function paycheckBreakdown(paycheck, inputs) {
   return card;
 }
 
-// The calculator inputs, grouped like the spreadsheet's. Blank counts as 0.
+// The calculator inputs, grouped like the spreadsheet's. Blank counts as 0. Dollar amounts are typed like a cash register
+// (Budget UI.js cashRegister); hours, multipliers, and percentages are typed as they are.
 function calculatorForm(inputs) {
   const form = BudgetUI.element("form", "budgetCard calculatorForm");
   form.noValidate = true;
@@ -349,11 +402,13 @@ function calculatorForm(inputs) {
       form.appendChild(section);
     }
     const input = BudgetUI.element("input", "calculatorInput");
+    const isMoney = field.unit.startsWith("$");
     input.type = "text";
     input.inputMode = "decimal";
-    input.placeholder = "0";
+    input.placeholder = isMoney ? "0.00" : "0";
     input.name = field.key;
-    input.value = inputs[field.key] ? String(inputs[field.key]) : "";
+    input.value = inputs[field.key] ? (isMoney ? Math.abs(inputs[field.key]).toFixed(2) : String(inputs[field.key])) : "";
+    if (isMoney) BudgetUI.cashRegister(input);
     const wrapper = BudgetUI.element("div", "unitInput");
     wrapper.append(input, BudgetUI.element("span", "inputUnit", field.unit));
     section.appendChild(BudgetUI.field(field.label, wrapper));
@@ -553,6 +608,7 @@ function renderPageSearch() {
   const scroll = BudgetUI.element("div", "dataScroll searchScroll");
   scroll.appendChild(tableEl);
   results.appendChild(scroll);
+  markClippedAliases(tableEl);
 }
 
 //#endregion
@@ -908,11 +964,11 @@ function openRecurringPanel(origin, index) {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         if (title.value().includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
-        const fields = { title: withAccount(title.value(), account.value()), amount: amount.value(), startDate: start.value(), endDate: end.value() };
+        // (A blank amount is $0.00)
+        const fields = { title: withAccount(title.value(), account.value()), amount: amount.value() ?? 0, startDate: start.value(), endDate: end.value() };
         if (!fields.title) return panel.setError("Give the recurring entry a title.");
         if (Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
-        if (!existing && fields.amount === null) return panel.setError("Enter an amount, like 12.50.");
-        if (fields.amount !== null && Math.abs(fields.amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+        if (Math.abs(fields.amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
         fields.frequency = frequency.value();
         if (!fields.frequency) return panel.setError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
@@ -991,9 +1047,15 @@ function openAccountPanel(origin, index) {
     title: existing ? "Change Account" : "New Account",
     build(form, panel) {
       const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Cash, investments, HSA...", maxLength: MAX_ACCOUNT_NAME });
-      const balance = BudgetUI.textField({ label: "Balance today", value: (summary ? summary.today : 0).toFixed(2), placeholder: "0.00", hint: "What's in the account today. Changing it doesn't add an entry: Hidden and Transfer entries with this account picked add to it from here." });
-      balance.input.inputMode = "decimal";
-      const fields = [name.el, balance.el];
+      // Negative: money owed, like on a credit card
+      const balance = BudgetUI.amountField({
+        label: "Balance today",
+        amount: summary ? summary.today : null,
+        signs: BudgetUI.BALANCE_SIGNS,
+        hint: "What's in the account today (Negative for money owed, like a credit card's). Changing it doesn't add an entry: Hidden and Transfer entries with this account picked add to it from here."
+      });
+      const interest = interestFields(summary ? summary.interest : null);
+      const fields = [name.el, balance.el, interest.el];
       if (isDefault) fields.push(BudgetUI.element("p", "panelHint", `${existing[0]} is your default account, so it can't be deleted.`));
       if (summary) fields.push(accountEntriesField(summary));
       const buttons = existing
@@ -1004,11 +1066,12 @@ function openAccountPanel(origin, index) {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         if (!name.value()) return panel.setError("Give the account a name.");
-        const typed = balance.value();
-        const amount = typed === "" ? 0 : readMoneyInput(typed);
+        const amount = balance.value() ?? 0; // Blank is $0.00
         if (!Number.isFinite(amount)) return panel.setError("Enter the balance, like 3000.00.");
         if (Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), balance: amount }, index));
+        const rate = interest.value();
+        if (Number.isNaN(rate)) return panel.setError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}), or turn Interest off.`);
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), balance: amount, interest: rate ? { rate } : null }, index));
       });
 
       // Delete: the account goes, and its entries stay where they are
@@ -1020,13 +1083,44 @@ function openAccountPanel(origin, index) {
   });
 }
 
-// An account's entries for its panel: the ones still to come on the calendar, then the latest ones.
-// Amounts are what the account gets (a Transfer's opposite amount, or a Hidden entry's own; see accountChange).
+// An account's Interest: a pill switch, and while it's on, the rate for a year (APR). Each month (on the day of the
+// month it was turned on, or the balance was last typed) the account changes by a twelfth of it (interestCredits in
+// Process Budget.js). value(): the rate (a number above 0), 0 when it's off, NaN when the rate can't be read.
+function interestFields(current) {
+  const toggle = BudgetUI.checkboxField({ label: "Add interest each month", checked: !!current });
+  const rate = BudgetUI.textField({
+    label: "Interest rate (APR, % a year)",
+    value: current ? String(current.rate) : "",
+    placeholder: "Like 24.99",
+    hint: "Like a credit card's APR. Once a month (on the day of the month you turn it on or last set the balance), the balance changes by a twelfth of it: one below $0 (money owed) goes further below, and one above $0 grows."
+  });
+  rate.input.inputMode = "decimal";
+  rate.el.hidden = !current;
+  toggle.input.addEventListener("change", () => {
+    rate.el.hidden = !toggle.value();
+    if (toggle.value() && window.matchMedia("(pointer: fine)").matches) rate.input.focus();
+  });
+  const el = BudgetUI.element("div", "interestFields");
+  el.append(BudgetUI.field("Interest", toggle.el), rate.el);
+  return {
+    el,
+    value() {
+      if (!toggle.value()) return 0;
+      const number = readMoneyInput(rate.value().replace(/%/g, ""));
+      return Number.isFinite(number) && number > 0 && number <= MAX_INTEREST_RATE ? number : NaN;
+    }
+  };
+}
+
+// An account's entries for its panel: the ones still to come on the calendar, then the latest ones (its interest
+// too). Amounts are what the account gets (a Transfer's opposite amount, or a Hidden entry's own; see accountChange).
 const ACCOUNT_ENTRIES_SHOWN = 8;
 
 function accountEntriesField(summary) {
-  const upcoming = summary.entries.filter(entry => entry.date > today);
-  const latest = summary.entries.filter(entry => entry.date <= today).slice(0, ACCOUNT_ENTRIES_SHOWN);
+  const all = [...summary.entries, ...summary.interestCredits.filter(credit => credit.date <= gridEndDate).map(credit => ({ ...credit, sprite: "", title: "", interest: true }))]
+    .sort((a, b) => b.date - a.date);
+  const upcoming = all.filter(entry => entry.date > today);
+  const latest = all.filter(entry => entry.date <= today).slice(0, ACCOUNT_ENTRIES_SHOWN);
   if (upcoming.length === 0 && latest.length === 0) {
     return BudgetUI.field("Entries", BudgetUI.element("p", "panelText", `None yet. Hidden and Transfer entries with ${summary.name} picked under Other Account change it.`));
   }
@@ -1040,7 +1134,7 @@ function accountEntriesField(summary) {
     item.appendChild(amount);
     // Its own title ("Payday"), or its type when it has none
     const sprite = getSpecialType(entry.sprite) === "⭕️" ? "⭕️" : "✖️";
-    const label = `${sprite} ${entry.title || (sprite === "⭕️" ? "Transfer" : "Hidden")}`;
+    const label = entry.interest ? "% Interest" : `${sprite} ${entry.title || (sprite === "⭕️" ? "Transfer" : "Hidden")}`;
     const what = BudgetUI.element("span", "accountEntryType", entry.date > today ? `${label}, coming up` : label);
     item.appendChild(entry.title ? noTranslate(what) : what);
     list.appendChild(item);

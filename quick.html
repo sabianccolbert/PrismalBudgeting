@@ -5,9 +5,9 @@
     <!-- First, before anything loads: no request from this page says its address, which carries the key -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=d7417ad1bb">
+    <link rel="stylesheet" href="/stylesheet.css?v=086d447e9b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=cf7cf06c2a">
+    <link rel="stylesheet" href="/budgetStyle.css?v=0450ef5bc9">
     <title>Prismal Budget - Quick Entry</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
     <meta name="robots" content="noindex, nofollow">
@@ -48,15 +48,49 @@
         </nav>
       </header>
       <main>
+        <!-- In Bank today and the lowest it gets (with its day), side by side (Quick Entry.js). On an Apple Watch
+             (html.watchView), In Bank today is all the page shows. -->
+        <section id="quickBalances" class="quickBalances" aria-label="In Bank" hidden>
+          <div class="quickBalance">
+            <span class="infoLabel">In Bank today</span>
+            <span id="quickInBank" class="quickBalanceAmount" translate="no">--</span>
+          </div>
+          <div class="quickBalance">
+            <span id="quickLowestLabel" class="infoLabel">Lowest</span>
+            <span id="quickLowest" class="quickBalanceAmount" translate="no">--</span>
+          </div>
+        </section>
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <section id="setupCard" class="budgetCard settingsCard" aria-labelledby="setupHeading" hidden>
           <h3 id="setupHeading">Add This Page To Your Home Screen</h3>
-          <ul class="settingsList">
-            <li>📱 On iPhone or iPad: in Safari, tap Share, then Add to Home Screen.</li>
-            <li>🤖 On Android: in Chrome, tap ⋮, then Add to Home screen.</li>
-          </ul>
-          <p class="panelHint">Use Safari (or Chrome) itself, not this page opened inside another app like Gmail, Instagram, or Facebook. If it's open inside one, use that app's menu (like ⋯) to open it in Safari first.</p>
-          <p class="panelHint">Then tap the new icon whenever you want to add an entry. No login needed.</p>
+          <div class="deviceGuide">
+            <div data-device="iphone">
+              <p class="deviceName">iPhone or iPad</p>
+              <p>In Safari, tap Share (on newer iPhones it can be under ⋯ first), then Add to Home Screen, then Add. Chrome on an iPhone works the same way: Share, then Add to Home Screen.</p>
+            </div>
+            <div data-device="samsung">
+              <p class="deviceName">Samsung Galaxy</p>
+              <p>In Samsung Internet, tap ☰ (bottom right), then Add page to, then Home screen. In Chrome, tap ⋮ (top right), then Add to Home screen, then Add.</p>
+            </div>
+            <div data-device="pixel oneplus motorola">
+              <p class="deviceName">Google Pixel, OnePlus, or Motorola</p>
+              <p>In Chrome, tap ⋮ (top right), then Add to Home screen, then Add (if it asks, pick the shortcut). Touch and hold the new icon to move it where you like.</p>
+            </div>
+            <div data-device="xiaomi">
+              <p class="deviceName">Xiaomi, Redmi, or POCO</p>
+              <p>In Chrome, tap ⋮ (top right), then Add to Home screen, then Add. If no icon shows up, let Chrome add one: Settings, Apps, Manage apps, Chrome, Other permissions, Home screen shortcuts (Allow), then try again.</p>
+            </div>
+            <div data-device="android other">
+              <p class="deviceName">Another Android phone</p>
+              <p>In Chrome, tap ⋮ (top right), then Add to Home screen. In Firefox or another browser, look for Add to Home screen in its menu.</p>
+            </div>
+            <div data-device="computer">
+              <p class="deviceName">A computer</p>
+              <p>Bookmark this page (Ctrl+D, or ⌘D on a Mac), or keep it in your bookmarks bar for one click.</p>
+            </div>
+          </div>
+          <p class="panelHint">Use the browser itself, not this page opened inside another app like Gmail, Instagram, or Facebook. If it's open inside one, use that app's menu (like ⋯) to open it in your browser first.</p>
+          <p class="panelHint">Then tap the new icon whenever you want to add an entry. No login needed. Help (at the bottom) shows how to open it from your Lock Screen or check In Bank on an Apple Watch.</p>
         </section>
         <!-- Undo takes back an entry added here while it's still waiting to join the budget; Redo adds it again -->
         <div id="quickUndo" class="undoButtons quickUndo" hidden>
@@ -83,6 +117,77 @@
           </div>
           <p id="prismEmpty" class="panelHint prismEmpty" hidden>No prisms yet. Tap Add Prism to save an entry you add often.</p>
           <ul id="prismList" class="prismList"></ul>
+        </section>
+
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Quick Entry Help</h3>
+          <p>This page adds entries to your budget with no login: they show up there the next time you open Prismal Budget, and until then, Undo here can take one back. At the top, <strong>In Bank today</strong> and the <strong>lowest</strong> it gets (and on what day) count the entries added here too. This page can't see the rest of your budget. If your password changes, or icons are turned off in Settings, it stops working.</p>
+
+          <h4>On Your Home Screen</h4>
+          <div class="deviceGuide">
+            <div data-device="iphone">
+              <p class="deviceName">iPhone or iPad</p>
+              <p>In Safari, tap Share (on newer iPhones it can be under ⋯ first), then Add to Home Screen, then Add.</p>
+            </div>
+            <div data-device="samsung">
+              <p class="deviceName">Samsung Galaxy</p>
+              <p>In Samsung Internet, tap ☰, then Add page to, then Home screen. In Chrome, tap ⋮, then Add to Home screen.</p>
+            </div>
+            <div data-device="pixel oneplus motorola android other">
+              <p class="deviceName">Google Pixel, OnePlus, Motorola, or another Android phone</p>
+              <p>In Chrome, tap ⋮, then Add to Home screen, then Add.</p>
+            </div>
+            <div data-device="xiaomi">
+              <p class="deviceName">Xiaomi, Redmi, or POCO</p>
+              <p>In Chrome, tap ⋮, then Add to Home screen. If no icon shows up, allow it in Settings, Apps, Manage apps, Chrome, Other permissions, Home screen shortcuts.</p>
+            </div>
+            <div data-device="computer">
+              <p class="deviceName">A computer</p>
+              <p>Bookmark this page (Ctrl+D, or ⌘D on a Mac).</p>
+            </div>
+          </div>
+
+          <h4>One Tap From Your Lock Screen</h4>
+          <div class="deviceGuide">
+            <div data-device="iphone">
+              <p class="deviceName">iPhone</p>
+              <ol>
+                <li>Copy this page's link: <button id="copyQuickLink" class="budgetButton" type="button">Copy Link</button></li>
+                <li>In the Shortcuts app, tap +, add the <strong>Open URLs</strong> action, paste the link into it, and name the shortcut (like Quick Entry).</li>
+                <li>Touch and hold your Lock Screen, tap Customize, then Lock Screen. Tap one of the two buttons at the bottom (like the flashlight), remove it, tap + and pick <strong>Shortcut</strong>, then your shortcut (iOS 18 or newer). A Shortcuts widget under the clock works too.</li>
+                <li>More ways to run it: an iPhone with an Action button (Settings, Action Button, Shortcut), or Back Tap, a double or triple tap on the back of the phone (Settings, Accessibility, Touch, Back Tap).</li>
+              </ol>
+            </div>
+            <div data-device="samsung">
+              <p class="deviceName">Samsung Galaxy</p>
+              <p>Samsung lets you pick the two Lock Screen shortcuts (Settings, Lock screen and AOD, Shortcuts), but they can only open apps, not a web page. Keep the Quick Entry icon in the row at the bottom of your home screen instead, for one tap right after unlocking.</p>
+            </div>
+            <div data-device="pixel oneplus motorola xiaomi android other">
+              <p class="deviceName">Google Pixel, OnePlus, Motorola, Xiaomi, or another Android phone</p>
+              <p>Android's Lock Screen shortcuts are for things like the camera and flashlight, so they can't open a web page. Keep the Quick Entry icon in the row at the bottom of your home screen instead, for one tap right after unlocking.</p>
+            </div>
+            <div data-device="computer">
+              <p class="deviceName">A computer</p>
+              <p>Keep this page in your bookmarks bar for one click.</p>
+            </div>
+          </div>
+
+          <h4>In Bank On Your Watch</h4>
+          <div class="deviceGuide">
+            <div data-device="iphone">
+              <p class="deviceName">Apple Watch</p>
+              <p>Send this page's link to yourself in Messages (or email it to yourself), then open that message on your Apple Watch and tap the link: the watch shows just In Bank today. Pin the conversation to find it fast next time.</p>
+            </div>
+            <div data-device="samsung pixel oneplus motorola xiaomi android other computer">
+              <p class="deviceName">Other watches</p>
+              <p>Most Wear OS watches (like Galaxy Watch and Pixel Watch) open links on the phone instead. If your watch has a browser app (like Samsung Internet for Galaxy Watch), open this page's link in it and it shows just In Bank today.</p>
+            </div>
+          </div>
+
+          <h4>Prisms</h4>
+          <p>Prisms are entries you add often, saved with your budget so every icon has them. The ? next to Add Prism says how they work.</p>
         </section>
       </main>
     </div>

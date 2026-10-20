@@ -612,37 +612,56 @@ header .stacked h2 {
  *========================================*
  *  #transitionContainer holds the whole page. Layout.js gives it .ready once it has slid in (its
  *  resting place) and .slide-out when a link is followed. Boot.js gives html .homeJs on Home and
- *  .otherJs everywhere else, which pick the direction. .noJs (JavaScript is off) hides the page and
- *  asks for JavaScript instead.
+ *  .otherJs everywhere else. Every page slides up into view, and down and out. .noJs (JavaScript is
+ *  off) hides the page and asks for JavaScript instead.
+ *  Between the budget's four pages (their tabs), the header and the tabs stay put and only the rest
+ *  of the page slides: Layout.js gives the container .tab-slide-out when a tab is followed, and Boot.js
+ *  gives the next page html.tabSlide until it has slid in.
  */
 
-/* Homepage: slides DOWN into view, OUT up */
-.homeJs #transitionContainer {
-  transform: translateY(-100%);
-  transition: transform 1s ease-in-out;
-}
-
-.homeJs #transitionContainer.ready {
-  transform: translateY(0);
-}
-
-.homeJs #transitionContainer.slide-out {
-  transform: translateY(-100%);
-}
-
-/* Other pages: slides UP into view, OUT down */
+.homeJs #transitionContainer,
 .otherJs #transitionContainer {
   transform: translateY(100vh);
-  transition: transform 0.6s ease-in-out;
+  transition: transform var(--SLIDE_DURATION) ease-in-out;
 }
 
+.homeJs #transitionContainer.ready,
 .otherJs #transitionContainer.ready {
   transform: translateY(0);
 }
 
+.homeJs #transitionContainer.slide-out,
 .otherJs #transitionContainer.slide-out {
   transition: transform var(--SLIDE_DURATION) ease-in-out;
   transform: translateY(var(--SLIDE_DISTANCE));
+}
+
+/* A tab followed: everything but the header and the tabs slides down and out */
+#transitionContainer.tab-slide-out > main > :not(.pageTop),
+#transitionContainer.tab-slide-out .pageTop > :not(.pageTabs),
+#transitionContainer.tab-slide-out > footer {
+  transform: translateY(var(--SLIDE_DISTANCE));
+  transition: transform var(--SLIDE_DURATION) ease-in-out;
+}
+
+/* ...and on the next page, the header and the tabs are already in place while the rest slides up into view (at
+   rest, the parts have no transform at all: one would keep a zoomed day under the dimmed page) */
+html.tabSlide #transitionContainer,
+html.tabSlide #transitionContainer.ready {
+  transform: none;
+  transition: none;
+}
+
+html.tabSlide #transitionContainer > main > :not(.pageTop),
+html.tabSlide #transitionContainer .pageTop > :not(.pageTabs),
+html.tabSlide #transitionContainer > footer {
+  transition: transform var(--SLIDE_DURATION) ease-in-out;
+}
+
+html.tabSlide #transitionContainer:not(.ready) > main > :not(.pageTop),
+html.tabSlide #transitionContainer:not(.ready) .pageTop > :not(.pageTabs),
+html.tabSlide #transitionContainer:not(.ready) > footer {
+  transform: translateY(100vh);
 }
 
 /* No javascript fallback: nothing works without it, so the page only asks for it (the front page, which is
@@ -696,7 +715,16 @@ header .stacked h2 {
   .homeJs #transitionContainer.ready,
   .otherJs #transitionContainer.ready,
   .homeJs #transitionContainer.slide-out,
-  .otherJs #transitionContainer.slide-out {
+  .otherJs #transitionContainer.slide-out,
+  #transitionContainer.tab-slide-out > main > :not(.pageTop),
+  #transitionContainer.tab-slide-out .pageTop > :not(.pageTabs),
+  #transitionContainer.tab-slide-out > footer,
+  html.tabSlide #transitionContainer > main > :not(.pageTop),
+  html.tabSlide #transitionContainer .pageTop > :not(.pageTabs),
+  html.tabSlide #transitionContainer > footer,
+  html.tabSlide #transitionContainer:not(.ready) > main > :not(.pageTop),
+  html.tabSlide #transitionContainer:not(.ready) .pageTop > :not(.pageTabs),
+  html.tabSlide #transitionContainer:not(.ready) > footer {
     transform: none;
     transition: none;
   }
