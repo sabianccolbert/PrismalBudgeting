@@ -641,6 +641,7 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
   disableDocumentScroll();
 
   /* GROUP: Start slide-out */
+  window.Sounds?.playTransition(); // (A crystal rolling across crystals, over before the next page opens)
   if (WAY === "tab") {
     CONTAINER.classList.add("tab-slide-out");
     glideTabGlow(TAB, DURATION_MS);
@@ -826,11 +827,12 @@ document.addEventListener("click", (EVENT) => {
 /* GROUP: Signing out */
 // Signing out (or deleting the account) forgets everything this browser kept for the account, including
 // this tab's Undo history, but keeps the device's own choices: whether analytics is off here, its date format,
-// the kind of phone picked for the Steps for lists, and the passkey it last signed in with (Passkeys.js; the
-// login page tries it by itself). Signing out also keeps which of Dave's tips were shown and when (just their
-// names and days, not what they said), so signing back in goes on to his next tip instead of starting the day's
-// tips over; deleting the account (FORGET_TIPS) forgets those too.
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_device", "prismal_last_passkey"];
+// whether music and sound effects are off (Sounds.js), the kind of phone picked for the Steps for lists, the passkey
+// it last signed in with (Passkeys.js; the login page tries it by itself), and the Quick Entry icons it made or used
+// (their entries are added when the budget opens here, see holdQuickEntries). Signing out also keeps which of Dave's
+// tips were shown and when (just their names and days, not what they said), so signing back in goes on to his next
+// tip instead of starting the day's tips over; deleting the account (FORGET_TIPS) forgets those too.
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons"];
 const DAVE_TIPS_PREFIX = "prismal_dave_";
 function clearSignedInData(FORGET_TIPS = false) {
   try {

@@ -242,7 +242,7 @@ async function loadWorkspace() {
     if (allSaved && pendingProcessedDate) {
       if (await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
     }
-    await applyQuickEntries(data.quick_entries); // Made with the home screen Quick Entry icon since last time
+    await holdQuickEntries(data.quick_entries); // Made with Quick Entry icons: this device's are added, the rest wait on Home
     queueReminderPlanSync();
     return true;
 
@@ -339,6 +339,9 @@ async function performDailyUpdate() {
   // Days from a month after the budget was last used only get Upcoming entries and In Bank
   let lightFromTime = fullCatchUpEnd(lastActiveDay || lastDailyUpdate).getTime();
   let sheetDays = sheetEntriesByDay(lastDailyUpdate, new Date(Math.min(yesterday.getTime(), lightFromTime - 1)));
+  // % entries (see PERCENT_MARK) on the days that scrolled in while away are worked out one day at a time, from the Other
+  // Accounts' balances when the budget was last worked out (a saved day's already were)
+  let percents = hasPercentEntries() ? percentRunner(accountBalancesToday()) : null;
 
   // 4. One pass over the timeline in date order, stopping at today
   timelineLoop:
@@ -364,7 +367,7 @@ async function performDailyUpdate() {
         }
         if (cellTime < lightFromTime) {
           cell.text = writeRecurringToCell(cell.text, cell.date, recurringRows);
-          cell.text = writeSheetsToCell(cell.text, sheetDays.get(cellTime));
+          cell.text = writeSheetsToCell(cell.text, sheetDays.get(cellTime), cell.date);
         }
       }
 
@@ -377,7 +380,13 @@ async function performDailyUpdate() {
         if (!cell.isNew) rechain = true;
       }
 
-      // Every missed day: turn recurring and spreadsheet entries into temps (they stay as they were that day)
+      if (percents && cellTime > missedFromTime) {
+        const day = percents.day(cell.text, cell.date);
+        if (cell.isNew) cell.text = day.text;
+      }
+
+      // Every missed day: turn recurring and spreadsheet entries into temps (they stay as they were that day), and %
+      // entries into plain amounts (what they came to)
       if (isMissed) {
         let lines = cell.text.split("\n");
         for (let l = 1; l < lines.length; l++) {
@@ -385,8 +394,11 @@ async function performDailyUpdate() {
           let mark = entryMark(parts[0]);
           if (mark) {
             let newSprite = getSpecialType(parts[0]) + mark;
-            if (newSprite !== parts[0]) uniquesCreated++;
+            if (newSprite !== baseSprite(parts[0])) uniquesCreated++;
             parts[0] = newSprite;
+            lines[l] = parts.join(" ");
+          } else if (percentOf(parts[0]) !== null) {
+            parts[0] = percentSprite(parts[0], null);
             lines[l] = parts.join(" ");
           }
         }
@@ -490,6 +502,7 @@ function getParsedRecurringRows() {
       title: String(recurringData[i][0]).trim(),
       amt: parseAmount(String(recurringData[i][1])),
       sprite: recurringData[i][5],
+      percent: percentOf(recurringData[i][5]),
       parsed: parsed
     });
   }
@@ -501,6 +514,7 @@ function writeRecurringToCell(cellText, cellDate, recurringRows) {
   for (let row of recurringRows) {
     if (!recurringRowHits(row.parsed, cellDate)) continue;
 
+    let amt = landingAmount({ amount: row.amt, percent: row.percent, sprite: row.sprite, title: row.title }, cellDate);
     let cellLines = cellText.split("\n");
     let hasTemp = false;
     let hasUnique = false;
@@ -514,16 +528,17 @@ function writeRecurringToCell(cellText, cellDate, recurringRows) {
         hasTemp = true;
         break;
       }
-      // A unique with the same special type absorbs the recurring amount (a placeholder only if both are)
+      // A unique with the same special type absorbs the recurring amount (a placeholder only if both are, and a plain
+      // amount: what the two come to)
       hasUnique = true;
-      let newAmt = row.amt + parseAmount(parts[1]);
-      let newSprite = placeholderSprite(withoutPlaceholder(parts[0]) + "✔️", isPlaceholder(parts[0]) && isPlaceholder(row.sprite));
+      let newAmt = amt + parseAmount(parts[1]);
+      let newSprite = placeholderSprite(baseSprite(parts[0]) + "✔️", isPlaceholder(parts[0]) && isPlaceholder(row.sprite));
       cellLines[l] = newSprite + " " + formatMoney(newAmt) + " " + row.title;
       cellText = cellLines.join("\n");
       break;
     }
     if (!hasTemp && !hasUnique) {
-      cellText += `\n${row.sprite} ${formatMoney(row.amt)} ${row.title}`;
+      cellText += `\n${row.sprite} ${formatMoney(amt)} ${row.title}`;
     }
   }
   return cellText;
@@ -657,21 +672,25 @@ let changeLogStart = 0;
 
 /* ---------- Actions the page UI calls (each resolves to { ok, saved, notFound, message, ... }) ---------- */
 
-// New calendar entry. entry: { title, sprite, amount (signed number), date, placeholder }. Can be undone.
+// New calendar entry. entry: { title, sprite, amount (signed number), percent (signed, for a % amount instead; see
+// PERCENT_MARK), date, placeholder }. Can be undone.
 function addCalendarEntry(entry) {
+  const hasPercent = typeof entry.percent === "number";
+  const signed = hasPercent ? entry.percent : entry.amount;
   return runBudgetAction("", () => {
     const added = unique({
       title: entry.title,
       sprite: entry.sprite,
-      action: entry.amount > 0 ? "add" : "subtract",
-      amount: String(Math.abs(entry.amount)),
+      action: signed > 0 ? "add" : "subtract",
+      amount: hasPercent ? "" : String(Math.abs(entry.amount)),
+      percent: hasPercent ? entry.percent : null,
       date: entry.date,
       placeholder: entry.placeholder === true,
       adding: true
     });
     // (A placeholder isn't a purchase yet, so Dave's refund tip leaves it be)
-    return entry.placeholder === true ? {} : { purchase: { title: entry.title, amount: entry.amount, date: createSafeMidnight(entry.date || today), type: added.entryType } };
-  }, { label: `added ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
+    return entry.placeholder === true || hasPercent ? {} : { purchase: { title: entry.title, amount: entry.amount, date: createSafeMidnight(entry.date || today), type: added.entryType } };
+  }, { label: `added ${capitalize(String(entry.title || "").trim())} (${hasPercent ? showPercent(entry.percent) : formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
 // Change, move, or delete a calendar entry (or one in Upcoming; History's go through changeHistoryEntry). change: { title,
@@ -681,21 +700,31 @@ function changeCalendarEntry(change) {
 }
 
 // A calendar entry's refraction type or Other Account changed (and maybe its amount and day too). change: { title,
-// sprite, date (the entry as it is), newTitle ("Payday → HSA"), newSprite, amount (the new signed amount), moveDate,
-// placeholder }. It comes off its day the way Delete takes it off (one that landed by itself leaves a $0.00 temp), then
-// goes on as the new one, adding into an entry already there with that title and type (a day has one of each). Can be
-// undone in one step.
+// sprite, date (the entry as it is), newTitle ("Payday → HSA"), newSprite, amount (the new signed amount), percent (a %
+// amount instead, signed), moveDate, placeholder }. It comes off its day the way Delete takes it off (one that landed by
+// itself leaves a $0.00 temp), then goes on as the new one, adding into an entry already there with that title and type
+// (a day has one of each). Can be undone in one step.
 function changeEntryKind(change) {
   return runBudgetAction("", () => entryKindChange(change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
 // changeEntryKind's change itself: off as it was, then on as the new one
 function entryKindChange(change) {
+  const percent = readPercent(change.percent);
   const amount = Math.round(Number(change.amount) * 100) / 100;
-  if (!Number.isFinite(amount) || amount === 0) throw new BudgetInputError("Enter an amount, like 12.50. To take the entry off, tap Delete.");
+  if (percent === null && (!Number.isFinite(amount) || amount === 0)) throw new BudgetInputError("Enter an amount, like 12.50. To take the entry off, tap Delete.");
   unique({ title: change.title, sprite: change.sprite, date: change.date, action: "delete" });
   if (notFound) return {};
-  return unique({ title: change.newTitle, sprite: change.newSprite, date: change.moveDate || change.date, action: amount > 0 ? "add" : "subtract", amount: String(Math.abs(amount)), placeholder: change.placeholder, adding: true });
+  return unique({
+    title: change.newTitle,
+    sprite: change.newSprite,
+    date: change.moveDate || change.date,
+    action: (percent ?? amount) > 0 ? "add" : "subtract",
+    amount: percent === null ? String(Math.abs(amount)) : "",
+    percent,
+    placeholder: change.placeholder,
+    adding: true
+  });
 }
 
 // "changed Payday on 10/05 to Payday → HSA (Transfer)", for Undo and Redo
@@ -769,15 +798,16 @@ function describeEntryChange(change) {
   const title = capitalize(String(change.title || "").trim());
   const day = (date) => showDay(createSafeMidnight(date || today));
   const action = String(change.action || "").toLowerCase();
+  const hasPercent = typeof change.percent === "number";
   const amount = Number(change.amount);
-  const amountChanged = action !== "delete" && String(change.amount ?? "").trim() !== "";
+  const amountChanged = action !== "delete" && (hasPercent || String(change.amount ?? "").trim() !== "");
   if (change.moveDate && day(change.moveDate) !== day(change.date)) {
     return `moved ${title} from ${day(change.date)} to ${day(change.moveDate)}${amountChanged ? " and changed its amount" : ""}`;
   }
   if (action === "delete") return `deleted ${title} on ${day(change.date)}`;
-  if (action === "set" && amountChanged) return `set ${title} on ${day(change.date)} to ${formatMoney(amount)}`;
-  if (action === "add") return `added ${formatMoney(amount)} to ${title} on ${day(change.date)}`;
-  if (action === "subtract") return `took ${formatMoney(amount)} off ${title} on ${day(change.date)}`;
+  if (action === "set" && amountChanged) return `set ${title} on ${day(change.date)} to ${hasPercent ? showPercent(change.percent) : formatMoney(amount)}`;
+  if (action === "add") return `added ${hasPercent ? showPercent(change.percent) : formatMoney(amount)} to ${title} on ${day(change.date)}`;
+  if (action === "subtract") return `took ${hasPercent ? showPercent(change.percent) : formatMoney(amount)} off ${title} on ${day(change.date)}`;
   // (Only its Placeholder switch changed)
   if (change.placeholder === true) return `made ${title} on ${day(change.date)} a placeholder`;
   if (change.placeholder === false) return `made ${title} on ${day(change.date)} no longer a placeholder`;
@@ -854,50 +884,123 @@ function updateSheetReads(reads) {
 }
 
 /* ---------- Quick Entry (the home screen icon's page, quick.html) ---------- */
-// The Quick Entry page can't open the budget (its key can only queue entries), so its entries wait in
-// the API until the budget opens here. Each is added like a New Entry, then leaves the API's queue in
-// the same request that saves the table it landed in (see saveChanges): never lost, never added twice.
+// The Quick Entry page can't open the budget (its key can only queue entries), so its entries wait in the API until a
+// budget opens. The ones from this device's own icons are added then, each like a New Entry; the ones from other
+// devices' icons (someone else sharing the budget) wait on Home (Calendar Page.js), where whoever has it open adds them
+// or deletes them. One that's added leaves the API's queue in the same request that saves the table it landed in (see
+// saveChanges): never lost, never added twice. Once a budget has loaded them, the icon can't change them or take them
+// back anymore.
 
 // Refraction types by name, as the Quick Entry page sends them
 const QUICK_ENTRY_TYPES = { auto: "", regular: "❗️", hidden: "✖️", transfer: "⭕️" };
 // Queued entry ids to send with the next save of the table each one landed in
 let quickEntryAcks = { calendar: [], history: [], future: [] };
+// The quick entries waiting on Home: [{ id, entry: { title, type, amount, date: "YYYY-MM-DD", placeholder }, createdAt,
+// icon }], oldest first
+let waitingQuickEntries = [];
 
-// queue: [{ id, entry: { title, type, amount, date: "YYYY-MM-DD", placeholder } }] from the API, oldest first
-async function applyQuickEntries(queue) {
-  if (!Array.isArray(queue) || queue.length === 0) return;
+// The Quick Entry icons this device made (Home's Quick Entry button) or used (the Quick Entry page, where it shares this
+// site's storage), each as the start of its key's hash (the API's icon for each waiting entry), newest first. Kept on
+// this device, even after signing out, so its own entries are still its own.
+const OWN_ICONS_KEY = "prismal_quick_icons";
+const MAX_OWN_ICONS = 20;
+const ICON_ID_LENGTH = 16;
+
+async function quickIconId(key) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(key)));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("").slice(0, ICON_ID_LENGTH);
+}
+
+function ownQuickIcons() {
+  try {
+    const list = JSON.parse(localStorage.getItem(OWN_ICONS_KEY) || "[]");
+    return Array.isArray(list) ? list.filter(id => typeof id === "string") : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function rememberQuickIcon(key) {
+  if (!key || !window.crypto || !crypto.subtle) return;
+  try {
+    const id = await quickIconId(key);
+    const list = [id, ...ownQuickIcons().filter(known => known !== id)].slice(0, MAX_OWN_ICONS);
+    localStorage.setItem(OWN_ICONS_KEY, JSON.stringify(list));
+  } catch (e) {}
+}
+
+// queue: the waiting entries the budget loaded, from the API. A placeholder whose day passed before the budget opened
+// goes right away (like one on the calendar would); this device's own are added now (one that can't be goes, and a
+// note says why); the rest wait on Home.
+async function holdQuickEntries(queue) {
+  if (!Array.isArray(queue)) return;
+  const own = new Set(ownQuickIcons());
+  const passed = [];
+  const mine = [];
+  waitingQuickEntries = [];
+  for (const quick of queue) {
+    if (!quick || !quick.entry) continue;
+    const date = createSafeMidnight(quick.entry.date, true);
+    if (quick.entry.placeholder === true && date < today) passed.push(quick);
+    else if (quick.icon && own.has(quick.icon)) mine.push(quick);
+    else waitingQuickEntries.push(quick);
+  }
   let added = 0;
   const failed = [];
-  const passed = []; // Placeholders whose day passed before the budget opened: they go, like one on the calendar would
-  for (const quick of queue) {
-    // Each can be undone on the calendar, like a New Entry
-    const entry = quick && quick.entry;
-    const date = entry ? createSafeMidnight(entry.date, true) : null;
-    if (entry && entry.placeholder === true && date && date < today) {
-      passed.push(quick);
-      continue;
-    }
-    const undo = entry && date && !isNaN(date.getTime())
-      ? { label: `quick entry ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${showDay(date)}`, dates: [date] }
-      : null;
-    const result = await runBudgetAction("", () => quickEntry(quick), undo);
+  for (const quick of mine) {
+    const result = await runBudgetAction("", () => quickEntry(quick), quickEntryUndo(quick));
     if (result.ok) added++;
     else failed.push({ quick, message: result.message });
   }
-  // The toast below says why, so entries that can't be added (or that passed) stop coming back
-  const dropped = [...failed.map(({ quick }) => quick), ...passed];
+  const dropped = [...passed, ...failed.map(({ quick }) => quick)];
   if (dropped.length > 0) await budgetApi("/api/quick/dismiss", { ids: dropped.map(quick => quick.id) });
 
   if (typeof BudgetUI === "undefined") return;
   const plural = (count) => `${count} quick ${count === 1 ? "entry" : "entries"}`;
   const messages = [];
-  if (added > 0) messages.push(`Added ${plural(added)} from your home screen icon.`);
-  if (passed.length > 0) messages.push(`Left out ${passed.length === 1 ? "a placeholder" : passed.length + " placeholders"} from your home screen icon: ${passed.length === 1 ? "its day has" : "their days have"} passed.`);
+  if (added > 0) messages.push(`Added ${plural(added)} from this device's Quick Entry icon.`);
+  if (passed.length > 0) messages.push(`Left out ${passed.length === 1 ? "a placeholder" : passed.length + " placeholders"} from your Quick Entry icons: ${passed.length === 1 ? "its day has" : "their days have"} passed.`);
   if (failed.length > 0) {
     const first = failed[0];
     messages.push(`Couldn't add ${failed.length === 1 ? "the quick entry" : plural(failed.length) + ", like"} "${first.quick?.entry?.title ?? "Untitled"}": ${first.message}`);
   }
-  BudgetUI.showToast(messages.join(" "), failed.length > 0);
+  if (messages.length > 0) BudgetUI.showToast(messages.join(" "), failed.length > 0);
+}
+
+// A quick entry's Undo step (null for one without a real day)
+function quickEntryUndo(quick) {
+  const date = createSafeMidnight(quick.entry.date, true);
+  return isNaN(date.getTime()) ? null : { label: `quick entry ${describeQuickEntry(quick.entry)}`, dates: [date] };
+}
+
+// "Coffee (-$4.50) on 10/05" (or "Card → Visa (3%) on 10/05"), for the waiting list's notes and Undo
+function describeQuickEntry(entry) {
+  const date = createSafeMidnight(entry.date, true);
+  const amount = typeof entry.percent === "number" ? showPercent(entry.percent) : formatMoney(entry.amount);
+  return `${capitalize(String(entry.title || "").trim())} (${amount}) on ${isNaN(date.getTime()) ? entry.date : showDay(date)}`;
+}
+
+// Home's Add: a waiting quick entry goes into the budget, like a New Entry (Undo can take it back). Resolves like any
+// change ({ ok, message }); one that can't be added stays waiting, and the message says why.
+async function addWaitingQuickEntry(id) {
+  const quick = waitingQuickEntries.find(item => item.id === id);
+  if (!quick) return { ok: false, message: "That quick entry isn't waiting anymore." };
+  const result = await runBudgetAction("", () => quickEntry(quick), quickEntryUndo(quick));
+  if (result.ok) waitingQuickEntries = waitingQuickEntries.filter(item => item !== quick);
+  return result;
+}
+
+// Home's Delete: a waiting quick entry leaves the API's queue without joining the budget (the Change Logs keep a note)
+async function deleteWaitingQuickEntry(id) {
+  const quick = waitingQuickEntries.find(item => item.id === id);
+  if (!quick) return { ok: false, message: "That quick entry isn't waiting anymore." };
+  const answer = await budgetApi("/api/quick/dismiss", { ids: [id] });
+  if (!answer.ok) return { ok: false, message: "That quick entry couldn't be deleted. Please check your connection and try again." };
+  waitingQuickEntries = waitingQuickEntries.filter(item => item !== quick);
+  return runBudgetAction("⚡ Delete Quick Entry", () => {
+    formEntryRow[3] = describeQuickEntry(quick.entry);
+    return {};
+  });
 }
 
 // One queued entry, added like the calendar's New Entry. Says which table it landed in.
@@ -909,17 +1012,21 @@ function quickEntry(quick) {
   if (table === "history" && !historyHasDay(date)) {
     throw new BudgetInputError(`${showDate(date)} is before your budget's History starts.`);
   }
+  // (A % entry is worked out again here; on a day that passed before the budget opened, it's the amount the Quick Entry
+  // page worked out)
+  const hasPercent = typeof entry.percent === "number" && date >= today;
   const added = unique({
     title: entry.title,
     sprite: Object.prototype.hasOwnProperty.call(QUICK_ENTRY_TYPES, entry.type) ? QUICK_ENTRY_TYPES[entry.type] : "",
-    action: entry.amount > 0 ? "add" : "subtract",
-    amount: String(Math.abs(entry.amount)),
+    action: (hasPercent ? entry.percent : entry.amount) > 0 ? "add" : "subtract",
+    amount: hasPercent ? "" : String(Math.abs(entry.amount)),
+    percent: hasPercent ? entry.percent : null,
     date,
     placeholder: entry.placeholder === true,
     adding: true
   });
   formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
-  const purchase = entry.placeholder === true ? null : { title: entry.title, amount: entry.amount, date, type: added.entryType };
+  const purchase = entry.placeholder === true || hasPercent ? null : { title: entry.title, amount: entry.amount, date, type: added.entryType };
   return { quickEntry: { id: quick.id, table }, purchase };
 }
 
@@ -1111,6 +1218,7 @@ function refreshBudgetData() {
   releaseSheetTemps();
   if (deleteExpiredRecurrings()) recurringEdited = true;
   organizeCellEntries();
+  resolvePercentEntries();
   writeBudgetMath();
   commenceDave();
   updateTrackerTab();
@@ -1126,6 +1234,8 @@ function refreshBudgetData() {
 //          amount: string ("" with "set" keeps the current amount),
 //          date: Date, moveDate: Date (optional, moves the entry there),
 //          placeholder: true | false (optional: whether it's a placeholder; left out, it stays as it was),
+//          percent: a % amount instead of amount (see PERCENT_MARK): its percent (signed with "set"; "subtract" and "add"
+//          sign it), or null for a plain amount; left out, an entry that has one keeps it unless its amount changes,
 //          adding: true for a new entry (New Entry, Quick Entry), which a placeholder only joins as one if the entry
 //          already there is one too }
 function unique(entry) {
@@ -1144,6 +1254,8 @@ function unique(entry) {
   amt = Math.round(amt * 100) / 100;
   if (Math.abs(amt) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   if (action === "subtract") amt = amt * -1;
+  let percent = action === "delete" ? null : readPercent(entry.percent);
+  if (percent !== null && (action === "subtract" || action === "add")) percent = (action === "subtract" ? -1 : 1) * Math.abs(percent);
   if (action === "subtract" || action === "add") action = "append";
 
   let dateObj = createSafeMidnight(entry.date || today);
@@ -1194,6 +1306,12 @@ function unique(entry) {
     if (matched) source = matched;
   }
   let targetIncomingSpecial = getSpecialType(sprite);
+  // A % amount is its percent of the Other Account's balance on the day it goes on
+  if (percent !== null) {
+    if (!linkedAccount(targetIncomingSpecial, title)) throw new BudgetInputError(PERCENT_NEEDS_ACCOUNT);
+    if (dateMove < today) throw new BudgetInputError(PERCENT_PAST_DAY);
+    amt = percentAmount(percent, dateMove, targetIncomingSpecial, title);
+  }
   let originalMark = isExisting ? entryMark(outData.oldSprite) : "";
   let hasOriginalCheckmark = originalMark !== "";
   // A changed day keeps the mark of where it came from
@@ -1230,11 +1348,17 @@ function unique(entry) {
   // 4. Calculate Amounts for the Moved Entry
   let finalAmt = amt;
   let baseAmtOriginal = (isOriginalVirginRecurring || isMismatchedVirgin) ? source.amount : 0;
+  let wasThere = isExisting || isOriginalVirginRecurring || isMismatchedVirgin;
   if (action === "append") {
     finalAmt = (isExisting ? outData.oldAmt : baseAmtOriginal) + amt;
-  } else if (action === "set" && rawAmtString === "") {
+  } else if (action === "set" && rawAmtString === "" && percent === null) {
     finalAmt = isExisting ? outData.oldAmt : baseAmtOriginal;
   }
+  // Its %: a new one stays one unless it adds into an entry that's there (the one entry is a plain amount then, what the
+  // two come to), and one that's only moved (or made a placeholder) keeps its own
+  let finalPercent = null;
+  if (percent !== null) finalPercent = action === "append" && wasThere ? null : percent;
+  else if (entry.percent === undefined && action === "set" && rawAmtString === "" && wasThere) finalPercent = percentOf(isExisting ? outData.oldSprite : source.sprite);
 
   // 5. Inject $0 Blockers (Unless is going into history tab). A placeholder's blocker is one too, so it goes with
   // its day.
@@ -1280,8 +1404,9 @@ function unique(entry) {
         if (mergeValid && targetIncomingSpecial === destSpecial) {
           moveAmt += destAmt;
           moveSprite = targetIncomingSpecial + (destMark || (isOriginalVirginRecurring ? virginMark : "") || entryMark(moveSprite));
-          // (Two entries become one there: a placeholder only if both were)
+          // (Two entries become one there: a placeholder only if both were, and a plain amount)
           placeholder = placeholder && isPlaceholder(moveIsExisting ? moveOutData.oldSprite : moveBaseSprite);
+          finalPercent = null;
         } else if (isOriginalVirginRecurring) {
           moveSprite = targetIncomingSpecial + virginMark;
         }
@@ -1290,6 +1415,9 @@ function unique(entry) {
           moveSprite = targetIncomingSpecial + virginMark;
         }
       }
+      // (A % entry needs its Other Account, and stays what it came to on a day that passed)
+      if (finalPercent !== null && (dateMove < today || !linkedAccount(moveSprite || "❗️", title))) finalPercent = null;
+      if (finalPercent !== null || percentOf(moveSprite) !== null) moveSprite = percentSprite(moveSprite, finalPercent);
       // 7. Inject combined result back into target date
       injectOrDefer("set", dateMove, moveAmt, title, moveSprite, {}, placeholder);
       if (placeholder && dateMove >= today) formEntryRow[3] += " (Placeholder)";
@@ -1307,7 +1435,7 @@ function unique(entry) {
   if (isExisting && !source) formEntryType = "❗️ Change Unique";
   if (isOriginalVirginRecurring || (isExisting && hasOriginalCheckmark)) formEntryType = `❗️${virginMark || "✔️"} Make Unique`;
   formEntryRow[2] = formEntryType;
-  let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : formatMoney(rawAmtString);
+  let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : percent !== null ? `${showPercent(percent)} (${formatMoney(Math.abs(amt))})` : formatMoney(rawAmtString);
   formEntryRow[6] = capitalize(rawAction) + ": " + formEntrySuffix;
   return { entryType: targetIncomingSpecial }; // The refraction type it landed as (Auto picks one)
 }
@@ -1351,6 +1479,8 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
       let oldAmt = parseAmount(parts[1]);
       let updatedTitle = parts.slice(2).join(" ");
       let updatedSprite = combineSprites(matchedOldSprite, currentSprite);
+      // (Set writes the entry as it's given, its % too)
+      if (action === "set" && percentOf(currentSprite) !== null) updatedSprite = percentSprite(updatedSprite, percentOf(currentSprite));
       let updatedAmt = 0;
       let shouldDelete = false;
 
@@ -1477,7 +1607,9 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
       outData.oldSprite = matchedFutureSprite;
 
       // Let unique() handle the $0 blocker repopulation
+      const setPercent = action === "set" ? percentOf(sprite) : null;
       sprite = combineSprites(matchedFutureSprite, sprite);
+      if (setPercent !== null) sprite = percentSprite(sprite, setPercent);
       if (action === "append") newAmt += matchedFutureAmt;
       if (action !== "delete") shouldDelete = false;
 
@@ -1584,9 +1716,9 @@ function readFrequency(text) {
 }
 
 // Create a recurring entry (refused when one with its title, Other Account, and refraction type already exists).
-// fields: { title, sprite: "✔️" | "✔️✖️" | "✔️⭕️", amount: number, frequency: "Every 2 Weeks" (blank = every
-//           month), startDate: Date | null (today), endDate: Date | "None" | null, placeholder: every day it lands on
-//           gets a placeholder }
+// fields: { title, sprite: "✔️" | "✔️✖️" | "✔️⭕️", amount: number, percent (signed, for a % amount instead; see
+//           PERCENT_MARK), frequency: "Every 2 Weeks" (blank = every month), startDate: Date | null (today), endDate:
+//           Date | "None" | null, placeholder: every day it lands on gets a placeholder }
 function recurring(fields) {
   let title = capitalize(String(fields.title || "").replace(/\s+/g, ' ').trim());
   if (!title) throw new BudgetInputError("Give the recurring entry a title.");
@@ -1597,16 +1729,26 @@ function recurring(fields) {
   if (hasAmount && Math.abs(fields.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(today);
   let endDate = resolveEndDate(fields.endDate, "None");
-
-  let amount = formatMoney(hasAmount ? fields.amount : 0);
+  let percent = readPercent(fields.percent);
+  if (percent !== null) sprite = percentSprite(sprite, percent);
+  let amount = formatMoney(recurringAmount(percent, hasAmount ? fields.amount : 0, startDate, sprite, title));
   recurringData.push([title, amount, formatToMMDDYYYY(startDate), frequency, endDate, sprite]);
 
   formEntryRow[2] = "✔️ Create Recurring";
-  formEntryRow[3] = withoutPlaceholder(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
+  formEntryRow[3] = baseSprite(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
   formEntryRow[4] = frequency + ": " + showDate(startDate);
   formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
-  formEntryRow[6] = "Amount: " + amount;
+  formEntryRow[6] = "Amount: " + (percent !== null ? `${showPercent(percent)} (${amount})` : amount);
   return {};
+}
+
+// A recurring entry's stored amount: its own, or for a % entry (percent, checked here), about what it comes to the first
+// time it lands from today on (each day works its own out)
+function recurringAmount(percent, amount, startDate, sprite, title) {
+  if (percent === null) return amount;
+  const amountOn = percentAmount(percent, startDate > today ? startDate : today, sprite, title);
+  if (amountOn === null) throw new BudgetInputError(PERCENT_NEEDS_ACCOUNT);
+  return amountOn;
 }
 
 // Change the recurring entry that was clicked (every field comes from the edit panel). Its title, Other Account, and
@@ -1622,6 +1764,9 @@ function editRecurringRow(index, fields) {
   if (hasAmount && Math.abs(fields.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   let sprite = String(fields.sprite || "").trim() || String(row[5] || "").trim() || "✔️";
   sprite = placeholderSprite(sprite, fields.placeholder === undefined ? isPlaceholder(row[5]) : fields.placeholder === true);
+  // (Left out, a % entry stays one unless it's given an amount)
+  let percent = fields.percent === undefined ? (hasAmount ? null : percentOf(row[5])) : readPercent(fields.percent);
+  sprite = percentSprite(sprite, percent);
   let oldTitle = String(row[0]).trim();
   let oldSpecial = getSpecialType(String(row[5] || ""));
   let newSpecial = getSpecialType(sprite);
@@ -1636,18 +1781,18 @@ function editRecurringRow(index, fields) {
     moveRecurringTemps(cleanString(oldTitle), oldSpecial, title, newSpecial);
   }
 
+  row[1] = formatMoney(recurringAmount(percent, hasAmount ? fields.amount : parseAmount(row[1]), startDate, sprite, title));
   row[0] = title;
-  row[1] = formatMoney(hasAmount ? fields.amount : parseAmount(row[1]));
   row[2] = formatToMMDDYYYY(startDate);
   row[3] = frequency;
   row[4] = endDate;
   row[5] = sprite;
 
   formEntryRow[2] = "✔️ Change Recurring";
-  formEntryRow[3] = withoutPlaceholder(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
+  formEntryRow[3] = baseSprite(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
   formEntryRow[4] = frequency + ": " + showStoredDate(row[2]);
   formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
-  formEntryRow[6] = "New Amount: " + row[1];
+  formEntryRow[6] = "New Amount: " + (percent !== null ? `${showPercent(percent)} (${row[1]})` : row[1]);
   return {};
 }
 
@@ -1666,8 +1811,8 @@ function resolveEndDate(endDate, current) {
 // entry would land on those days again under its new name, next to the old temp (counted twice), and on days
 // it was deleted from. Days that already passed keep the name they had.
 function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
-  // (A placeholder temp stays one)
-  const isOldTemp = (sprite, title) => withoutPlaceholder(String(sprite ?? "").trim()) === oldSpecial + "✔️" && cleanString(title) === oldClean;
+  // (A placeholder temp stays one, and a % one stays one)
+  const isOldTemp = (sprite, title) => baseSprite(String(sprite ?? "").trim()) === oldSpecial + "✔️" && cleanString(title) === oldClean;
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] < today) continue;
@@ -1676,7 +1821,7 @@ function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
       for (let l = 1; l < lines.length; l++) {
         let parts = getParts(lines[l]);
         if (parts.length < 3 || !isOldTemp(parts[0], parts.slice(2).join(" "))) continue;
-        lines[l] = `${placeholderSprite(newSpecial + "✔️", isPlaceholder(parts[0]))} ${parts[1]} ${newTitle}`;
+        lines[l] = `${rebasedSprite(parts[0], newSpecial + "✔️")} ${parts[1]} ${newTitle}`;
         moved = true;
       }
       if (moved) calendarData[r][c] = lines.join("\n");
@@ -1688,7 +1833,7 @@ function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
     let date = createSafeMidnight(row[2], true);
     if (isNaN(date.getTime()) || date < today || !isOldTemp(row[3], row[0])) continue;
     row[0] = newTitle;
-    row[3] = placeholderSprite(newSpecial + "✔️", isPlaceholder(row[3]));
+    row[3] = rebasedSprite(row[3], newSpecial + "✔️");
     movedUpcoming = true;
   }
   if (movedUpcoming) combineSameUpcoming();
@@ -2196,6 +2341,11 @@ function renameAccountEntries(oldClean, newName) {
     row[4] = normalizeAliases(aliases.map(alias => ({ title: alias.clean === oldClean ? newName : alias.title, count: alias.count })));
   }
 
+  // Goals for it
+  for (const goal of accountsData.goals || []) {
+    if (goal.kind === "account" && cleanString(goal.account) === oldClean) goal.account = newName;
+  }
+
   // Connected spreadsheets: one set up with this account typed in (for every entry) follows it, so the next read
   // still finds the account. The entries each one read last move with it too. (One whose cells name the account
   // needs those cells changed: its Needs a look says so.)
@@ -2241,23 +2391,144 @@ function combineSameEntries(lines) {
 }
 
 // The same for Upcoming: entries on one day with the same title and type become one, their amounts added (a
-// placeholder only if both were)
+// placeholder only if both were, and a plain amount)
 function combineSameUpcoming() {
   let kept = [futureData[0]];
   let byKey = new Map();
   for (let f = 1; f < futureData.length; f++) {
     let row = futureData[f];
-    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + withoutPlaceholder(String(row[3]).trim());
+    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + baseSprite(String(row[3]).trim());
     let same = cleanString(row[0]) ? byKey.get(key) : undefined;
     if (same) {
       same[1] = formatMoney(parseAmount(same[1]) + parseAmount(row[1]));
-      if (!isPlaceholder(row[3])) same[3] = withoutPlaceholder(same[3]);
+      same[3] = decoratedSprite(same[3], { placeholder: isPlaceholder(same[3]) && isPlaceholder(row[3]) });
       continue;
     }
     byKey.set(key, row);
     kept.push(row);
   }
   futureData = kept;
+}
+
+/* ---------- Goals (Dave's card) ---------- */
+// A goal is an amount to reach by a day, with a title, and what it's for: an Other Account, In Bank, the Total (In Bank
+// and every Other Account together, like Other Accounts' Total today), or nothing. A % goal is that percent of what it's
+// for on the day it's set, and stays that amount (its percent is kept to show it). Home lists them under Dave's message,
+// with how far along each one is. They're kept with the Other Accounts (accountsData.goals): [{ title, kind: "none" |
+// "inBank" | "total" | "account", account (the account's name, for "account"), amount, percent (null for a plain
+// amount), date (the day to reach it by), made (the day it was set) }], dates as MM/DD/YYYY. Dave doesn't mention them.
+
+const MAX_GOALS = 20;
+const GOAL_KINDS = ["none", "inBank", "total", "account"];
+
+// New goal (index null) or change one, and delete one
+function saveGoal(fields, index = null) {
+  return runBudgetAction("", (before) => goalEntry(fields, index, JSON.parse(before.calendar)));
+}
+
+function deleteGoal(index) {
+  return runBudgetAction("", () => removeGoal(index));
+}
+
+// The stored goals, checked (one that can't be read is left out)
+function normalizeGoals(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(goal => goal && typeof goal === "object" && GOAL_KINDS.includes(goal.kind) && typeof goal.title === "string" && Number.isFinite(goal.amount))
+    .slice(0, MAX_GOALS)
+    .map(goal => ({
+      title: goal.title.slice(0, MAX_TITLE),
+      kind: goal.kind,
+      account: goal.kind === "account" ? String(goal.account ?? "").slice(0, MAX_ACCOUNT_NAME) : "",
+      amount: Math.round(goal.amount * 100) / 100,
+      percent: Number.isFinite(goal.percent) ? goal.percent : null,
+      date: String(goal.date ?? "").slice(0, 10),
+      made: String(goal.made ?? "").slice(0, 10)
+    }));
+}
+
+// What a goal is for, as people read it: "Savings", "In Bank", "Total", or ""
+function goalTarget(goal) {
+  return goal.kind === "account" ? goal.account : goal.kind === "inBank" ? "In Bank" : goal.kind === "total" ? "Total" : "";
+}
+
+// What a goal is for, today: In Bank, the Total, or its account's balance; null for none (or an account that's gone).
+// calendar: the calendar with its In Bank lines (a change takes them off while it runs, see stripRecurringEntries)
+function goalBalance(goal, calendar = calendarData) {
+  if (goal.kind === "none") return null;
+  const todaySpot = calendarSpot(today);
+  const inBank = (todaySpot && readInBank(calendar[todaySpot.r][todaySpot.c])) ?? 0;
+  if (goal.kind === "inBank") return inBank;
+  const accounts = otherAccounts();
+  if (goal.kind === "total") return Math.round((inBank + accounts.reduce((total, account) => total + account.balance, 0)) * 100) / 100;
+  const account = accounts.find(known => cleanString(known.name) === cleanString(goal.account));
+  return account ? account.balance : null;
+}
+
+// fields: { title, kind, account (its name, for "account"), amount (a number), percent (a signed percent of what it's
+// for today, instead of amount), date (the day to reach it by) }. A % goal that keeps its percent and what it's for keeps
+// its amount (the one worked out when it was set). calendar: the calendar as it was before the change (with In Bank).
+function goalEntry(fields, index, calendar = calendarData) {
+  const goals = accountsData.goals || [];
+  const isNew = index === null || index === undefined;
+  const old = isNew ? null : goals[index];
+  if (!isNew && !old) throw new BudgetInputError("That goal couldn't be found. Please try again.");
+  if (isNew && goals.length >= MAX_GOALS) throw new BudgetInputError(`You can have up to ${MAX_GOALS} goals. Delete one first.`);
+  const title = capitalize(String(fields.title || "").replace(/\s+/g, " ").trim());
+  if (!title) throw new BudgetInputError("Give the goal a title.");
+  if (title.length > MAX_TITLE) throw new BudgetInputError(`Titles can be up to ${MAX_TITLE} characters.`);
+  const kind = GOAL_KINDS.includes(fields.kind) ? fields.kind : "none";
+  let account = "";
+  if (kind === "account") {
+    const found = accountRows().find(known => known.clean === cleanString(fields.account));
+    if (!found) throw new BudgetInputError("Pick one of your Other Accounts.");
+    account = found.name;
+  }
+  const date = fields.date instanceof Date && !isNaN(fields.date.getTime()) ? createSafeMidnight(fields.date) : null;
+  if (!date) throw new BudgetInputError("Pick the day to reach it by.");
+
+  const percent = readPercent(fields.percent);
+  const goal = { title, kind, account, amount: 0, percent, date: formatToMMDDYYYY(date), made: formatToMMDDYYYY(today) };
+  if (percent !== null) {
+    if (old && old.percent === percent && old.kind === kind && cleanString(old.account) === cleanString(account)) {
+      goal.amount = old.amount;
+      goal.made = old.made;
+    } else {
+      const balance = goalBalance(goal, calendar);
+      if (balance === null) throw new BudgetInputError("A % goal is a percent of what it's for, so pick an Other Account, In Bank, or Total.");
+      goal.amount = percentValue(percent, balance);
+    }
+  } else {
+    goal.amount = Math.round(Number(fields.amount) * 100) / 100;
+    if (!Number.isFinite(goal.amount)) throw new BudgetInputError("Enter the amount, like 2000.00.");
+    if (Math.abs(goal.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
+    if (old && old.percent === null && old.amount === goal.amount) goal.made = old.made;
+  }
+  if (isNew) goals.push(goal);
+  else goals[index] = goal;
+  accountsData.goals = goals;
+
+  formEntryRow[2] = isNew ? "🎯 New Goal" : "🎯 Change Goal";
+  formEntryRow[3] = "Goal: " + title + (goalTarget(goal) ? ` (${goalTarget(goal)})` : "");
+  formEntryRow[4] = "By: " + showDate(date);
+  formEntryRow[5] = "";
+  formEntryRow[6] = "Amount: " + (percent !== null ? `${showPercent(percent)} (${formatMoney(goal.amount)})` : formatMoney(goal.amount));
+  return {};
+}
+
+function removeGoal(index) {
+  const goals = accountsData.goals || [];
+  const goal = goals[index];
+  if (!goal) throw new BudgetInputError("That goal couldn't be found. Please try again.");
+  goals.splice(index, 1);
+  if (goals.length > 0) accountsData.goals = goals;
+  else delete accountsData.goals;
+  formEntryRow[2] = "🎯 Delete Goal";
+  formEntryRow[3] = "Goal: " + goal.title;
+  formEntryRow[4] = "";
+  formEntryRow[5] = "";
+  formEntryRow[6] = "";
+  return {};
 }
 
 /* ---------- Connected spreadsheets ---------- */
@@ -2306,13 +2577,19 @@ function normalizeSheetConnection(item) {
     fields: isObject(item.fields) ? JSON.parse(JSON.stringify(item.fields)) : {},
     entries: (Array.isArray(item.entries) ? item.entries : [])
       .filter(entry => Array.isArray(entry) && entry.length >= 4)
-      .map(entry => [text(entry[0], 10), getSpecialType(text(entry[1], 8)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], MAX_ENTRY_TITLE)])
+      .map(entry => [text(entry[0], 10), sheetEntryType(text(entry[1], 20)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], MAX_ENTRY_TITLE)])
       .filter(entry => Math.abs(entry[2]) <= MAX_AMOUNT), // Spreadsheets.js never reads a bigger one
     problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
     tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
     access: item.access === "shared" ? "shared" : "public",
     ...(item.placeholder === true ? { placeholder: true } : {}) // Its entries are placeholders
   };
+}
+
+// A spreadsheet entry's type as it's kept: its refraction type, and a % entry's percent (see PERCENT_MARK)
+function sheetEntryType(sprite) {
+  const percent = percentOf(sprite);
+  return decoratedSprite(getSpecialType(sprite), { percent: percent !== null && Math.abs(percent) <= MAX_PERCENT ? percent : null });
 }
 
 // The connection with this ID, or null
@@ -2412,7 +2689,7 @@ function sheetEntriesByDay(from, to, includeOff = false) {
   for (const connection of sheetsData.list) {
     if (!connection.on && !includeOff) continue;
     const placeholder = connection.placeholder === true;
-    for (const { date, time, title, clean, special, amount } of parsedSheetEntries(connection)) {
+    for (const { date, time, title, clean, special, sprite, amount, percent } of parsedSheetEntries(connection)) {
       if (time < fromTime || time > toTime) continue;
       if (!includeOff && recurringHits(title, date, special) !== false) continue;
       if (!days.has(time)) days.set(time, new Map());
@@ -2420,10 +2697,12 @@ function sheetEntriesByDay(from, to, includeOff = false) {
       const key = clean + "|" + special;
       const same = day.get(key);
       if (same) {
-        same.amount = Math.round((same.amount + amount) * 100) / 100;
+        // (Two become one: a plain amount, what they come to that day)
+        same.amount = Math.round((landingAmount(same, date) + landingAmount({ amount, percent, sprite, title }, date)) * 100) / 100;
+        same.percent = null;
         same.placeholder = same.placeholder && placeholder;
       } else {
-        day.set(key, { title, clean, special, amount, placeholder });
+        day.set(key, { title, clean, special, sprite, amount, percent, placeholder });
       }
     }
   }
@@ -2441,7 +2720,7 @@ function parsedSheetEntries(connection) {
   for (const [dateText, sprite, amount, title] of connection.entries) {
     const date = createSafeMidnight(dateText, true);
     const clean = cleanString(title);
-    if (!isNaN(date.getTime()) && clean) parsed.push({ date, time: date.getTime(), title, clean, special: getSpecialType(sprite), amount });
+    if (!isNaN(date.getTime()) && clean) parsed.push({ date, time: date.getTime(), title, clean, special: getSpecialType(sprite), sprite, amount, percent: percentOf(sprite) });
   }
   parsedSheetCache.set(connection.entries, parsed);
   return parsed;
@@ -2456,9 +2735,14 @@ function sheetHit(title, date, special = null) {
   if (!day) return null;
   const clean = cleanString(title);
   for (const entry of day.values()) {
-    if (entry.clean === clean && (!special || entry.special === special)) return { amount: entry.amount, sprite: placeholderSprite(SHEET_MARK + entry.special, entry.placeholder), mark: SHEET_MARK };
+    if (entry.clean === clean && (!special || entry.special === special)) return { amount: landingAmount(entry, date), sprite: sheetSprite(entry), mark: SHEET_MARK };
   }
   return null;
+}
+
+// A spreadsheet's entry as it lands: ➕ and its type ("➕❗️"), with its % and placeholder mark
+function sheetSprite(entry) {
+  return decoratedSprite(SHEET_MARK + entry.special, { placeholder: entry.placeholder, percent: entry.percent });
 }
 
 // What lands on date by itself with this title (and type): a recurring entry first, then a spreadsheet's.
@@ -2466,7 +2750,11 @@ function sheetHit(title, date, special = null) {
 function scheduledHit(title, date, special = null, mark = null) {
   if (mark !== SHEET_MARK) {
     const index = recurringHits(title, date, special);
-    if (index !== false) return { amount: parseAmount(String(recurringData[index][1])), sprite: String(recurringData[index][5] || RECURRING_MARK), mark: RECURRING_MARK };
+    if (index !== false) {
+      const row = recurringData[index];
+      const sprite = String(row[5] || RECURRING_MARK);
+      return { amount: landingAmount({ amount: parseAmount(String(row[1])), percent: percentOf(sprite), sprite, title: String(row[0]).trim() }, date), sprite, mark: RECURRING_MARK };
+    }
   }
   return mark === RECURRING_MARK ? null : sheetHit(title, date, special);
 }
@@ -2478,30 +2766,31 @@ function writeSheetEntries() {
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
       const day = days.get(gridDates[r][c].getTime());
-      if (day) calendarData[r][c] = writeSheetsToCell(calendarData[r][c], day);
+      if (day) calendarData[r][c] = writeSheetsToCell(calendarData[r][c], day, gridDates[r][c]);
     }
   }
 }
 
-// One day's spreadsheet entries (a Map from sheetEntriesByDay) written into its cell: a temp with its title
+// One day's spreadsheet entries (a Map from sheetEntriesByDay, for date) written into its cell: a temp with its title
 // and type (or a recurring entry's) keeps one off, and a unique entry takes in its amount (it's a placeholder then only
-// if both are)
-function writeSheetsToCell(cellText, day) {
+// if both are, and a plain amount)
+function writeSheetsToCell(cellText, day, date) {
   if (!day || day.size === 0) return cellText;
   const lines = String(cellText).split("\n");
   for (const entry of day.values()) {
+    const amount = landingAmount(entry, date);
     const at = lines.findIndex((line, l) => {
       if (l === 0) return false;
       const read = readLine(line);
       return !read.system && read.clean === entry.clean && getSpecialType(read.sprite) === entry.special;
     });
     if (at === -1) {
-      lines.push(`${placeholderSprite(SHEET_MARK + entry.special, entry.placeholder)} ${formatMoney(entry.amount)} ${entry.title}`);
+      lines.push(`${sheetSprite(entry)} ${formatMoney(amount)} ${entry.title}`);
       continue;
     }
     const line = readLine(lines[at]);
     if (entryMark(line.sprite)) continue;
-    lines[at] = `${placeholderSprite(entry.special + SHEET_MARK, entry.placeholder && isPlaceholder(line.sprite))} ${formatMoney(line.amount + entry.amount)} ${line.title}`;
+    lines[at] = `${placeholderSprite(entry.special + SHEET_MARK, entry.placeholder && isPlaceholder(line.sprite))} ${formatMoney(line.amount + amount)} ${line.title}`;
   }
   return lines.join("\n");
 }
@@ -2515,10 +2804,10 @@ function releaseSheetTemps() {
   for (const connection of sheetsData?.list || []) {
     for (const entry of parsedSheetEntries(connection)) known.add(entry.clean + "|" + entry.special);
   }
-  // (A placeholder stays one)
+  // (A placeholder stays one, and a % entry stays one)
   const isReleased = (sprite, title) => {
     const special = getSpecialType(sprite);
-    return withoutPlaceholder(String(sprite).trim()) === special + SHEET_MARK && !known.has(cleanString(title) + "|" + special);
+    return baseSprite(String(sprite).trim()) === special + SHEET_MARK && !known.has(cleanString(title) + "|" + special);
   };
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
@@ -2529,7 +2818,7 @@ function releaseSheetTemps() {
         const parts = getParts(lines[l]);
         if (parts.length < 3 || !isReleased(parts[0], parts.slice(2).join(" "))) continue;
         if (parseAmount(parts[1]) === 0) lines.splice(l, 1);
-        else lines[l] = [placeholderSprite(getSpecialType(parts[0]), isPlaceholder(parts[0])), ...parts.slice(1)].join(" ");
+        else lines[l] = [rebasedSprite(parts[0], getSpecialType(parts[0])), ...parts.slice(1)].join(" ");
         changed = true;
       }
       if (changed) calendarData[r][c] = lines.join("\n");
@@ -2540,7 +2829,7 @@ function releaseSheetTemps() {
     const date = createSafeMidnight(row[2], true);
     if (isNaN(date.getTime()) || date < today || !isReleased(row[3], row[0])) continue;
     if (parseAmount(row[1]) === 0) futureData.splice(f, 1);
-    else row[3] = placeholderSprite(getSpecialType(String(row[3])), isPlaceholder(row[3]));
+    else row[3] = rebasedSprite(String(row[3]), getSpecialType(String(row[3])));
   }
 }
 
@@ -2776,11 +3065,11 @@ function search(query, calendar = calendarData) {
         if (shown.has(key) || !recurringRowHits(row.parsed, day)) continue;
         shown.add(key);
         if (blockers.has(day.getTime() + "|" + key)) continue;
-        addIfFound(new Date(day), row.amt, String(row.sprite || ""), row.title);
+        addIfFound(new Date(day), landingAmount({ amount: row.amt, percent: row.percent, sprite: row.sprite, title: row.title }, day), String(row.sprite || ""), row.title);
       }
       for (let entry of sheetDays.get(day.getTime())?.values() || []) {
         if (blockers.has(day.getTime() + "|" + entry.clean + "|" + entry.special)) continue;
-        addIfFound(new Date(day), entry.amount, SHEET_MARK + entry.special, entry.title);
+        addIfFound(new Date(day), landingAmount(entry, day), decoratedSprite(SHEET_MARK + entry.special, { percent: entry.percent }), entry.title);
       }
     }
   }
@@ -2954,8 +3243,8 @@ function writeRecurring() {
       continue;
     }
     // If not expired, every calendar day from today on that it lands on gets it
-    const amt = parseAmount(String(row[1]));
     const sprite = row[5];
+    const landing = { amount: parseAmount(String(row[1])), percent: percentOf(sprite), sprite, title };
     const cleanTitle = cleanString(title);
     const special = getSpecialType(String(sprite || ""));
     const parsed = parseRecurringRow(row);
@@ -2966,6 +3255,7 @@ function writeRecurring() {
         if (cellDate.getTime() < todayTime) break calendarChecks;
         if (!recurringRowHits(parsed, cellDate)) continue;
 
+        const amt = landingAmount(landing, cellDate);
         const cellLines = calendarData[r][c].split("\n");
         let hasTemp = false;
         let hasUnique = false;
@@ -2979,9 +3269,9 @@ function writeRecurring() {
             hasTemp = true;
             break;
           }
-          // A unique entry takes in its amount (a placeholder only if both are)
+          // A unique entry takes in its amount (a placeholder only if both are, and a plain amount)
           hasUnique = true;
-          cellLines[l] = `${placeholderSprite(withoutPlaceholder(line.sprite) + "✔️", isPlaceholder(line.sprite) && isPlaceholder(sprite))} ${formatMoney(amt + line.amount)} ${title}`;
+          cellLines[l] = `${placeholderSprite(baseSprite(line.sprite) + "✔️", isPlaceholder(line.sprite) && isPlaceholder(sprite))} ${formatMoney(amt + line.amount)} ${title}`;
           calendarData[r][c] = cellLines.join("\n");
           break;
         }
@@ -3041,13 +3331,13 @@ function releaseEndedTemps() {
       for (let l = lines.length - 1; l >= 1; l--) {
         let parts = getParts(lines[l]);
         let special = getSpecialType(parts[0]);
-        if (withoutPlaceholder(parts[0]) !== special + "✔️") continue; // Only temps (a placeholder stays one)
+        if (baseSprite(parts[0]) !== special + "✔️") continue; // Only temps (a placeholder or % entry stays one)
         let from = releaseFrom(extractTitle(lines[l]), special);
         if (from === null || gridDates[r][c].getTime() < from) continue;
         if (parseAmount(parts[1]) === 0) {
           lines.splice(l, 1);
         } else {
-          parts[0] = placeholderSprite(special, isPlaceholder(parts[0]));
+          parts[0] = rebasedSprite(parts[0], special);
           lines[l] = parts.join(" ");
         }
         changed = true;
@@ -3060,12 +3350,12 @@ function releaseEndedTemps() {
     let row = futureData[f];
     let sprite = String(row[3] ?? "").trim();
     let special = getSpecialType(sprite);
-    if (withoutPlaceholder(sprite) !== special + "✔️") continue;
+    if (baseSprite(sprite) !== special + "✔️") continue;
     let from = releaseFrom(cleanString(row[0]), special);
     let date = createSafeMidnight(row[2], true);
     if (from === null || isNaN(date.getTime()) || date.getTime() < from) continue;
     if (parseAmount(row[1]) === 0) futureData.splice(f, 1);
-    else row[3] = placeholderSprite(special, isPlaceholder(sprite));
+    else row[3] = rebasedSprite(sprite, special);
   }
 }
 
@@ -3106,8 +3396,8 @@ function organizeCellEntries() {
         let currentLine = oldLines[l];
         // Guard against blank/whitespace lines
         if (!currentLine.trim()) continue;
-        // (Sorted with its kind, a placeholder or not)
-        let kindLine = shownLine(currentLine);
+        // (Sorted with its kind, a placeholder or % entry or not)
+        let kindLine = plainLine(currentLine);
         if (kindLine.startsWith("❗️ ")) cellArray.oneTimes.push(currentLine + "\n");
         else if (kindLine.startsWith("❗️✔️ ")) cellArray.temps.push(currentLine + "\n");
         else if (kindLine.startsWith("❗️➕ ")) cellArray.sheetTemps.push(currentLine + "\n");
@@ -3256,10 +3546,10 @@ function getPredictionData(lastInBank) {
       }
       if (String(row.sprite || "").includes("✖️") || testLanded.has(key) || !recurringRowHits(row.parsed, testDay)) continue;
       testLanded.add(key);
-      if (!overridden(row.parsed.cleanTitle, row.parsed.special)) dayTotal += row.amt;
+      if (!overridden(row.parsed.cleanTitle, row.parsed.special)) dayTotal += landingAmount({ amount: row.amt, percent: row.percent, sprite: row.sprite, title: row.title }, testDay);
     }
     for (let entry of sheetDays.get(currentTestTime)?.values() || []) {
-      if (entry.special !== "✖️" && !overridden(entry.clean, entry.special)) dayTotal += entry.amount;
+      if (entry.special !== "✖️" && !overridden(entry.clean, entry.special)) dayTotal += landingAmount(entry, testDay);
     }
 
     for (let f = 0; f < parsedFuture.length; f++) {
@@ -4050,7 +4340,7 @@ function dayAfterCalendar(day, recurringRows, futureByDate, sheetDays, scheduled
   for (let f of futureByDate.get(day.getTime()) || []) {
     text += `\n${String(futureData[f][3])} ${formatMoney(parseAmount(futureData[f][1]))} ${String(futureData[f][0]).trim()}`;
   }
-  return scheduled ? writeSheetsToCell(writeRecurringToCell(text, day, recurringRows), sheetDays.get(day.getTime())) : text;
+  return scheduled ? writeSheetsToCell(writeRecurringToCell(text, day, recurringRows), sheetDays.get(day.getTime()), day) : text;
 }
 
 // Send the plan (and this device's time zone) to the API when it changed. Never blocks the page.
@@ -4273,6 +4563,8 @@ function normalizeApiAccounts(rawData) {
   if (isCurrent && Array.isArray(parsed.coming)) accounts.coming = parsed.coming.filter(isChange);
   const isDay = (item) => Array.isArray(item) && item.length === 2 && /^\d{4}-\d{2}-\d{2}$/.test(item[0]) && Number.isFinite(item[1]);
   if (isCurrent && Array.isArray(parsed.inBank)) accounts.inBank = parsed.inBank.filter(isDay);
+  const goals = isCurrent ? normalizeGoals(parsed.goals) : [];
+  if (goals.length > 0) accounts.goals = goals; // (Goals, see goalEntry)
   return accounts;
 }
 
@@ -4515,16 +4807,212 @@ function withoutPlaceholder(sprite) {
   return String(sprite ?? "").split(PLACEHOLDER_MARK).join("");
 }
 
-// A sprite as a placeholder (placeholder true) or not
+// A sprite as a placeholder (placeholder true) or not (a % stays)
 function placeholderSprite(sprite, placeholder) {
-  return withoutPlaceholder(sprite) + (placeholder ? PLACEHOLDER_MARK : "");
+  return decoratedSprite(baseSprite(sprite), { placeholder, percent: percentOf(sprite) });
 }
 
-// An entry line as people see it (and logs keep it): without the placeholder mark ("❗️⏳ -$40.00 Gas" -> "❗️ -$40.00 Gas")
+// A % entry's amount is that percent of its Other Account's balance on its day (before that day's entries), so only an
+// entry with an Other Account can be one. It's worked out again with every change from today on (resolvePercentEntries),
+// and once its day passes it stays what it came to (the daily update makes it a plain amount). It's kept as ％ and the
+// percent, signed like the amount (a cost's is below 0), after the entry's type and mark and before a placeholder's ⏳
+// ("⭕️％-3", "✔️⭕️％-3", "⭕️✔️％-3⏳"), which nothing reading those notices; the amount after it is what it comes to.
+// When two entries become one (the same title and type on a day), the one entry is a plain amount: what the two came
+// to together.
+const PERCENT_MARK = "％";
+const MAX_PERCENT = 1000;
+const PERCENT_PART = /％(-?\d+(?:\.\d+)?)/;
+
+// The percent a sprite keeps (signed), or null for an entry with a plain amount
+function percentOf(sprite) {
+  const found = PERCENT_PART.exec(String(sprite ?? ""));
+  return found ? Number(found[1]) : null;
+}
+
+// A sprite with just its type and mark: no % and no placeholder (to compare kinds of entries)
+function baseSprite(sprite) {
+  return withoutPlaceholder(sprite).replace(new RegExp(PERCENT_PART.source, "g"), "");
+}
+
+// A sprite with its % (a number, or null for none) and its placeholder mark, in their places
+function decoratedSprite(base, { placeholder = false, percent = null } = {}) {
+  const hasPercent = typeof percent === "number" && Number.isFinite(percent) && percent !== 0;
+  return baseSprite(base) + (hasPercent ? PERCENT_MARK + Math.round(percent * 100) / 100 : "") + (placeholder ? PLACEHOLDER_MARK : "");
+}
+
+// A sprite with a % (or null for a plain amount); its placeholder mark stays
+function percentSprite(sprite, percent) {
+  return decoratedSprite(baseSprite(sprite), { placeholder: isPlaceholder(sprite), percent });
+}
+
+// A sprite with a new type and mark (base), keeping its % and placeholder mark
+function rebasedSprite(sprite, base) {
+  return decoratedSprite(base, { placeholder: isPlaceholder(sprite), percent: percentOf(sprite) });
+}
+
+// percent of base, to the cent: a % entry's amount (base is an account's balance; a cost's percent is below 0)
+function percentValue(percent, base) {
+  return Math.round(percent * Math.abs(base)) / 100;
+}
+
+const PERCENT_NEEDS_ACCOUNT = "A % amount is a percent of an Other Account's balance, so it needs Hidden or Transfer with an account picked under Other Account.";
+const PERCENT_PAST_DAY = "A % amount is worked out from today on, so it can't go on a day that already passed. Enter the amount instead.";
+
+// A percent as typed for an entry (signed like its amount): the number, checked, or null for none
+function readPercent(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const percent = Math.round(Number(value) * 100) / 100;
+  if (!Number.isFinite(percent) || percent === 0) throw new BudgetInputError("Enter the percent, like 3 or 12.5.");
+  if (Math.abs(percent) > MAX_PERCENT) throw new BudgetInputError(`A percent can be up to ${MAX_PERCENT}%.`);
+  return percent;
+}
+
+// Each Other Account's balance at the start of every day from today on, from the last time the budget was worked out
+// (resolvePercentEntries): { byDay: Map(day's time -> Map(account row index -> balance)), until (the last day), last
+// (Map: each balance after it) }. null while there are no % entries.
+let percentBases = null;
+
+// A % entry's amount on date: percent of its Other Account's balance at the start of that day, or null when it isn't
+// for an account (sprite and title: the entry's)
+function percentAmount(percent, date, sprite, title) {
+  const account = linkedAccount(sprite, title);
+  if (!account) return null;
+  const day = percentBases?.byDay.get(date.getTime());
+  let base = day?.get(account.index);
+  if (base === undefined) base = percentBases && date > percentBases.until ? percentBases.last.get(account.index) : undefined;
+  if (base === undefined) base = parseAmount(account.row[1]); // (Today's, before any % entries were worked out)
+  return percentValue(percent, base);
+}
+
+// What an entry that lands by itself (a recurring row or a spreadsheet's entry: { amount, percent, sprite, title })
+// comes to on date
+function landingAmount(entry, date) {
+  return entry.percent === null || entry.percent === undefined ? entry.amount : percentAmount(entry.percent, date, entry.sprite, entry.title) ?? entry.amount;
+}
+
+// Walks days in order with each Other Account's balance (balances: Map(account row index -> its balance at the start of
+// the first day)): each day's % entries are worked out from the balances that morning, then the day's entries (and
+// interest) go into them. day(text, date) returns the day's text with its % entries' amounts.
+function percentRunner(balances) {
+  const accounts = accountTitleMap();
+  const interest = new Map(accountRows().map(account => [account.index, accountInterest(account.row)]).filter(([, rate]) => rate));
+  const round = (amount) => Math.round(amount * 100) / 100;
+  const creditDay = (rate, date) => {
+    const months = (date.getFullYear() - rate.since.getFullYear()) * 12 + date.getMonth() - rate.since.getMonth();
+    return months >= 1 && addMonths(rate.since, months).getTime() === date.getTime();
+  };
+  return {
+    balances,
+    day(text, date) {
+      const morning = new Map(balances);
+      // (Interest the way interestCredits works it out)
+      for (const [index, rate] of interest) {
+        if (balances.has(index) && creditDay(rate, date)) balances.set(index, round(balances.get(index) + Math.round(balances.get(index) * rate.rate / 12) / 100));
+      }
+      const lines = String(text ?? "").split("\n");
+      let changed = false;
+      for (let l = 1; l < lines.length; l++) {
+        const line = readLine(lines[l]);
+        if (!line.title || line.system) continue;
+        const percent = percentOf(line.sprite);
+        const account = linkedAccount(line.sprite, line.title, accounts);
+        if (!account) {
+          // (A % entry that isn't for an account anymore keeps what it came to last)
+          if (percent !== null) {
+            lines[l] = `${percentSprite(line.sprite, null)} ${formatMoney(line.amount)} ${line.title}`;
+            changed = true;
+          }
+          continue;
+        }
+        let amount = line.amount;
+        if (percent !== null) {
+          amount = percentValue(percent, morning.get(account.index) ?? 0);
+          if (amount !== line.amount) {
+            lines[l] = `${line.sprite} ${formatMoney(amount)} ${line.title}`;
+            changed = true;
+          }
+        }
+        balances.set(account.index, round((balances.get(account.index) ?? 0) + accountChange(line.sprite, amount)));
+      }
+      return { text: changed ? lines.join("\n") : text, morning };
+    }
+  };
+}
+
+// Is there a % entry anywhere from today on (or one that lands by itself)?
+function hasPercentEntries() {
+  const marked = (text) => String(text ?? "").includes(PERCENT_MARK);
+  return calendarData.some(row => row.some(marked)) || futureData.some(row => marked(row[3])) ||
+    recurringData.some(row => marked(row?.[5])) || (sheetsData?.list || []).some(connection => connection.entries.some(entry => marked(entry[1])));
+}
+
+// Every % entry from today on comes to its percent of its Other Account's balance at the start of its day: the calendar's
+// (in their cells), and Upcoming's (their stored amounts), through AHEAD_MONTHS from today (and the last Upcoming one).
+// The balances each day starts with are kept (percentBases) for what lands by itself (recurring and spreadsheets'
+// entries, see landingAmount) and the days after the calendar.
+function resolvePercentEntries() {
+  if (!hasPercentEntries()) {
+    percentBases = null;
+    return;
+  }
+  const start = new Map();
+  for (const summary of accountSummaries()) {
+    const before = [...summary.entries, ...summary.interestCredits].filter(item => item.date < today);
+    start.set(summary.index, Math.round((summary.start + before.reduce((total, item) => total + item.change, 0)) * 100) / 100);
+  }
+  const runner = percentRunner(start);
+  const byDay = new Map();
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (gridDates[r][c] < today) continue;
+      const day = runner.day(calendarData[r][c], gridDates[r][c]);
+      calendarData[r][c] = day.text;
+      byDay.set(gridDates[r][c].getTime(), day.morning);
+    }
+  }
+  let until = addMonths(today, AHEAD_MONTHS);
+  for (const row of futureData.slice(1)) {
+    const date = createSafeMidnight(row[2], true);
+    if (String(row[3] ?? "").includes(PERCENT_MARK) && date > until) until = date;
+  }
+  const recurringRows = getParsedRecurringRows();
+  const futureByDate = groupFutureRowsByDate();
+  const sheetDays = sheetEntriesByDay(nextFourStart, until);
+  for (let day = nextFourStart; day <= until; day = addDays(day, 1)) {
+    byDay.set(day.getTime(), runner.day(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), day).morning);
+  }
+  percentBases = { byDay, until, last: new Map(runner.balances) };
+
+  // Upcoming's % entries, from the balances just worked out
+  for (const row of futureData.slice(1)) {
+    const percent = percentOf(row[3]);
+    const date = createSafeMidnight(row[2], true);
+    if (percent === null || isNaN(date.getTime()) || date < today) continue;
+    const amount = percentAmount(percent, date, row[3], String(row[0]).trim());
+    if (amount === null) row[3] = percentSprite(row[3], null);
+    else row[1] = formatMoney(amount);
+  }
+}
+
+// "3%" for a % entry, as people read it (its sign is the amount's)
+const showPercent = (percent) => `${Math.abs(percent)}%`;
+
+// An entry line as people see it (and logs keep it): without the placeholder mark, and with a % entry's percent after
+// its amount ("⭕️％-3⏳ -$30.00 Card" -> "⭕️ -$30.00 (3%) Card")
 function shownLine(line) {
   const text = String(line ?? "");
+  const parts = getParts(text);
+  const sprite = parts[0] || "";
+  const percent = percentOf(sprite);
+  if (percent === null) return isPlaceholder(sprite) ? text.replace(sprite, withoutPlaceholder(sprite)) : text;
+  return [baseSprite(sprite), parts[1], `(${showPercent(percent)})`, ...parts.slice(2)].join(" ");
+}
+
+// A line with just its type and mark in front (no % or placeholder), to sort it with its kind
+function plainLine(line) {
+  const text = String(line ?? "");
   const sprite = getParts(text)[0] || "";
-  return isPlaceholder(sprite) ? text.replace(sprite, withoutPlaceholder(sprite)) : text;
+  return baseSprite(sprite) === sprite ? text : text.replace(sprite, baseSprite(sprite));
 }
 
 // Returns the Recurring tab index of the entry with this title + special type that hits on date, or false
@@ -5059,6 +5547,7 @@ function slideToDay(step, dragged = 0) {
   const from = activeEditCell;
   const to = nextZoomableDay(from, step);
   if (!to) return;
+  window.Sounds?.play("soft");
   if (!from.classList.contains('is-fullZoom') || !from.animate || reducedMotion()) {
     zoomDay(to, false);
     return;

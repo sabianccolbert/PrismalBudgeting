@@ -8,6 +8,7 @@
 // remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices (turn off Quick Entry icons, or
 // their balances, and Sign Out Everywhere); your data and privacy (Download My Data, analytics on or off for this
 // device); and deleting the account (needs the password). Emails go out through Resend (see account.js in the API).
+// This device's own choices (the date format, and music and sound effects) work without the server.
 
 // =====================================================================
 // #region SETUP
@@ -25,7 +26,8 @@ let passkeyAdd = null;       // { options, at }: a password-checked challenge, k
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";
 
-wireDateFormat(); // This device's choice, so it works before (and without) the server
+wireDateFormat(); // This device's choices, so they work before (and without) the server
+wireSounds();
 
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
@@ -167,6 +169,51 @@ function renderDateFormatNote() {
   const sample = sampleDate();
   document.getElementById("dateFormatNote").textContent =
     `October 5, ${sample.getFullYear()} shows as ${showDate(sample)}, and dates you type are read the same way (${DATE_FORMATS.ymd.pattern} always works too).`;
+}
+
+//#endregion
+
+// =====================================================================
+// #region SOUNDS (this device)
+// =====================================================================
+// Music and sound effects, each on or off for this device (Sounds.js keeps them). Sounds pause for the rest of a visit
+// when something else takes the speaker (another app's audio, a call); the card says so, and can turn them back on.
+
+function wireSounds() {
+  const music = document.getElementById("musicSwitch");
+  const effects = document.getElementById("effectsSwitch");
+  if (!music || !effects || !window.Sounds) {
+    document.getElementById("soundView")?.setAttribute("hidden", "");
+    return;
+  }
+  music.checked = Sounds.musicOn();
+  effects.checked = Sounds.effectsOn();
+  music.addEventListener("change", () => {
+    Sounds.setMusic(music.checked);
+    renderSoundNote();
+  });
+  effects.addEventListener("change", () => {
+    Sounds.setEffects(effects.checked);
+    if (effects.checked) Sounds.play("ding");
+    renderSoundNote();
+  });
+  renderSoundNote();
+}
+
+function renderSoundNote() {
+  const note = document.getElementById("soundNote");
+  const buttons = document.getElementById("soundButtons");
+  buttons.replaceChildren();
+  if (Sounds.paused() && (Sounds.musicOn() || Sounds.effectsOn())) {
+    note.textContent = "Sounds are paused for this visit: something else (like another app's music, or a call) took over your speaker, so they stopped to stay out of its way.";
+    buttons.appendChild(settingsButton("Turn Sounds Back On", "primary", () => {
+      Sounds.resume();
+      Sounds.play("ding");
+      renderSoundNote();
+    }));
+    return;
+  }
+  note.textContent = "They mix with your own music or podcasts instead of stopping them (on an iPhone, the silent switch silences them), and if anything interrupts them, they stop for the rest of your visit.";
 }
 
 //#endregion

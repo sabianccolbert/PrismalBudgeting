@@ -1122,6 +1122,16 @@ input.dateInput.isPickTarget {
   min-width: 0;
 }
 
+/* An amount's $ / % switch (shown while an Other Account is picked): small, before the box */
+.amountRow .unitToggle {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.amountRow .unitToggle .budgetButton {
+  padding: 0.35em 0.7em;
+}
+
 .segmented {
   display: flex;
   flex-wrap: wrap;
@@ -2075,7 +2085,96 @@ input.dateInput.isPickTarget {
 }
 
 .daveText {
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+/* Goals, under Dave's message (Calendar Page.js renderGoals): each one a button that opens it, with a thin bar for how
+   far along it is, then the Goals button */
+.goalList {
+  margin: 0.7em 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.goalItem + .goalItem {
+  margin-top: 0.4em;
+}
+
+.goalButton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  width: 100%;
+  margin: 0;
+  padding: 0.45em 0.6em;
+  font: inherit;
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: rgba(8, 10, 32, 0.45);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.goalButton:hover,
+.goalButton:focus-visible {
+  border-color: var(--PANEL_BORDER);
+}
+
+.goalTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6em;
+}
+
+.goalTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--TEXT_BRIGHT);
+}
+
+.goalStatus {
+  flex-shrink: 0;
+  font-size: 0.9em;
+  color: var(--TEXT_DIM);
+}
+
+.goalItem.isReached .goalStatus {
+  color: #7dffb0;
+}
+
+.goalDetails {
+  font-size: 0.88em;
+  line-height: 1.35;
+  color: var(--TEXT_DIM);
+}
+
+.goalBar {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+.goalFill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6a5cff, #c14dff);
+  box-shadow: 0 0 6px rgba(160, 90, 255, 0.6);
+}
+
+.goalItem.isReached .goalFill {
+  background: linear-gradient(90deg, #2fd88a, #7dffb0);
+}
+
+.goalsButton {
+  margin-top: 0.7em;
+  padding: 0.3em 0.9em;
+  font-size: 0.9em;
 }
 
 /* Dave's tip (Process Budget.js DAVE'S TIPS): for its 10 minutes, his card gets the red-orange gradient border
@@ -2549,6 +2648,28 @@ html.watchView .quickBalanceAmount {
 
 .waitingItem .waitingDelete {
   flex: 0 0 auto;
+}
+
+/* Home's Quick Entries To Add (Calendar Page.js): the same rows, each with Add and Delete */
+.budgetCard.quickWaiting {
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2vmin, 18px);
+}
+
+.quickWaiting h3 {
+  margin: 0 0 0.3em;
+}
+
+.quickWaiting .panelHint {
+  margin: 0 0 0.7em;
+}
+
+.waitingItem .waitingAdd,
+.quickWaiting .waitingItem .waitingDelete {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.35em 0.9em;
+  font-size: 0.9em;
 }
 
 /* One the budget has picked up: on its way in, so it can't be changed here */

@@ -190,8 +190,10 @@ function openSheetPanel(id, origin) {
       titleInput.type = "text";
       titleInput.placeholder = "Rent, paycheck...";
       titleInput.maxLength = MAX_TITLE;
-      // Amount, typed, with Cost / Gain
-      const amount = BudgetUI.amountField({ amount: typeof draft.fields.amount?.value === "number" ? draft.fields.amount.value : null });
+      // Amount, typed, with Cost / Gain (or a % of the Other Account picked, see PERCENT_MARK in Process Budget.js)
+      const typedValue = typeof draft.fields.amount?.value === "number" ? draft.fields.amount.value : null;
+      const typedPercent = draft.fields.amount?.percent === true;
+      const amount = BudgetUI.amountField({ amount: typedPercent ? null : typedValue, percent: typedPercent ? typedValue : null });
       const amountControl = amount.el.querySelector(".amountRow");
       // How cell amounts read
       const sign = BudgetUI.segmented(SHEET_SIGNS, draft.fields.amount?.sign || "written", () => updatePreview());
@@ -227,9 +229,12 @@ function openSheetPanel(id, origin) {
       section.append(name.el, ...SHEET_FIELD_KEYS.map(key => rows[key].el), placeholder.el, preview);
       form.append(link.el, openedNote, section, buttons);
 
-      [titleInput, amount.input].forEach(input => input.addEventListener("input", updatePreview));
-      amountControl.addEventListener("click", () => setTimeout(updatePreview)); // Cost / Gain
-      account.addEventListener("change", updatePreview);
+      [titleInput, amountControl].forEach(input => input.addEventListener("input", updatePreview));
+      amountControl.addEventListener("click", () => setTimeout(updatePreview)); // Cost / Gain, $ / %
+      account.addEventListener("change", () => {
+        showAccountRow();
+        updatePreview();
+      });
       for (const key of SHEET_FIELD_KEYS) showFieldRow(key);
       showAccountRow();
       updatePreview();
@@ -290,6 +295,8 @@ function openSheetPanel(id, origin) {
         const typeLinked = Spreadsheets.isLinked(draft.fields.type);
         const accountLinked = Spreadsheets.isLinked(draft.fields.account);
         rows.account.el.hidden = !(typeLinked || accountLinked || BudgetUI.isAccountType(type.value())) || (accountNames.length === 0 && !accountLinked);
+        // (A typed amount can be a % of the account's balance once there's one)
+        amount.setPercentAllowed(!rows.account.el.hidden && (accountLinked || !!account.value));
       }
 
       // Every part as it's set now: cells, or what's typed
@@ -303,8 +310,8 @@ function openSheetPanel(id, origin) {
         }
         if (!fields.title) fields.title = { value: titleInput.value.replace(/\s+/g, " ").trim() };
         if (!fields.amount) {
-          const value = amount.value();
-          fields.amount = { value: value === null || Number.isNaN(value) ? null : value };
+          const value = amount.isPercent() ? amount.percent() : amount.value();
+          fields.amount = { value: value === null || Number.isNaN(value) ? null : value, ...(amount.isPercent() ? { percent: true } : {}) };
         }
         if (!fields.type) fields.type = { value: type.value() };
         if (!fields.account) fields.account = { value: rows.account.el.hidden ? "" : account.value };
@@ -325,7 +332,7 @@ function openSheetPanel(id, origin) {
         const read = Spreadsheets.readConnection(currentFields(), draft.workbook);
         // From today on, without the ones a recurring entry keeps off
         const upcoming = read.entries.filter(entry => createSafeMidnight(entry[0], true) >= today &&
-          recurringHits(entry[3], createSafeMidnight(entry[0], true), entry[1]) === false);
+          recurringHits(entry[3], createSafeMidnight(entry[0], true), getSpecialType(entry[1])) === false);
         const { keptOff } = sheetLanding(read.entries);
         const heading = BudgetUI.element("p", "sheetPreviewHeading", upcoming.length === 0
           ? "Entries: none from today on yet."
@@ -335,7 +342,8 @@ function openSheetPanel(id, origin) {
           const list = BudgetUI.noTranslate(BudgetUI.element("ul", `sheetPreviewList${placeholder.value() ? " isPlaceholder" : ""}`));
           for (const [dateText, special, entryAmount, title] of upcoming.slice(0, SHEET_PREVIEW_LINES)) {
             const line = BudgetUI.element("li", entryAmount > 0 ? "positive" : "");
-            line.append(BudgetUI.element("span", "sheetPreviewDate", showDay(createSafeMidnight(dateText, true))), ` ➕${special} ${formatMoney(entryAmount)} ${title}`);
+            const percent = percentOf(special);
+            line.append(BudgetUI.element("span", "sheetPreviewDate", showDay(createSafeMidnight(dateText, true))), ` ➕${baseSprite(special)} ${formatMoney(entryAmount)}${percent !== null ? ` (${showPercent(percent)})` : ""} ${title}`);
             list.append(line);
           }
           preview.append(list);
@@ -385,7 +393,10 @@ function openSheetPanel(id, origin) {
         if (!Spreadsheets.isLinked(fields.date)) return panel.setError("Tap ➕ next to Date to pick the cells with the dates.");
         if (!Spreadsheets.isLinked(fields.title) && String(fields.title.value || "").includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
         if (!Spreadsheets.isLinked(fields.title) && !fields.title.value && !fields.account.value) return panel.setError("Type a title, or tap ➕ next to Title to pick its cells.");
-        if (!Spreadsheets.isLinked(fields.amount)) {
+        if (!Spreadsheets.isLinked(fields.amount) && amount.isPercent()) {
+          const { error } = BudgetUI.readPercentField(amount);
+          if (error) return panel.setError(error);
+        } else if (!Spreadsheets.isLinked(fields.amount)) {
           const value = amount.value();
           if (value === null || Number.isNaN(value)) return panel.setError("Type an amount, like 25.00, or tap ➕ next to Amount to pick its cells.");
           if (Math.abs(value) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);

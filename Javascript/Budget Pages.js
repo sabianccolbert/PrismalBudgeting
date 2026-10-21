@@ -90,11 +90,13 @@ function renderRecurringPage(view) {
     rows,
     extraClass: "recurringTable",
     renderEntry(tr, row) {
-      // (A placeholder's row is yellow, its type without the ⏳ it's stored with)
+      // (A placeholder's row is yellow, its type without the ⏳ it's stored with. A % entry shows its percent: each day
+      // it lands works out its own amount.)
       if (isPlaceholder(row[5])) tr.classList.add("isPlaceholder");
-      tr.appendChild(cell(withoutPlaceholder(row[5]), "typeCell"));
+      tr.appendChild(cell(baseSprite(row[5]), "typeCell"));
       tr.appendChild(noTranslate(clippedCell(row[0], "titleCell")));
-      tr.appendChild(noTranslate(cell(row[1], "amountCell")));
+      const percent = percentOf(row[5]);
+      tr.appendChild(noTranslate(cell(percent !== null ? `${percent < 0 ? "-" : ""}${showPercent(percent)}` : row[1], "amountCell")));
       tr.appendChild(noTranslate(dateCell(row[2])));
       tr.appendChild(cell(describeFrequency(row[3]), "frequencyCell"));
       tr.appendChild(noTranslate(dateCell(row[4])));
@@ -1021,7 +1023,7 @@ function openRecurringPanel(origin, index) {
       // Its title and its Other Account ("Payday → Savings") are separate boxes
       const existingTitle = splitAccount(existing ? String(existing[0]).trim() : "");
       const title = BudgetUI.textField({ label: "Title", value: existingTitle.title, placeholder: "Rent, paycheck, phone...", maxLength: MAX_TITLE });
-      const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : null });
+      const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : null, percent: existing ? percentOf(existing[5]) : null });
       const frequency = BudgetUI.frequencyField({ value: existing ? existing[3] : "Every Month" });
       const start = BudgetUI.dateField({ label: "Start Date", date: existing ? (isNaN(existingStart) ? null : existingStart) : today });
       const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : null, optional: true });
@@ -1052,10 +1054,12 @@ function openRecurringPanel(origin, index) {
         event.preventDefault();
         if (title.value().includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
         // (A blank amount is $0.00)
-        const fields = { title: withAccount(title.value(), account.value()), amount: amount.value() ?? 0, startDate: start.value(), endDate: end.value() };
+        const { percent, error: percentError } = BudgetUI.readPercentField(amount);
+        if (percentError) return panel.setError(percentError);
+        const fields = { title: withAccount(title.value(), account.value()), amount: percent !== null ? undefined : amount.value() ?? 0, percent, startDate: start.value(), endDate: end.value() };
         if (!fields.title) return panel.setError("Give the recurring entry a title.");
-        if (Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
-        if (Math.abs(fields.amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+        if (percent === null && Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
+        if (percent === null && Math.abs(fields.amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
         fields.frequency = frequency.value();
         if (!fields.frequency) return panel.setError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);

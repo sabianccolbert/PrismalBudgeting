@@ -244,7 +244,8 @@ function renderSearchResults({ results, from, to, searchingFor }) {
     if (result.amount > 0) amountCell.classList.add("positive");
     if (result.amount < 0) amountCell.classList.add("negative");
     tr.appendChild(amountCell);
-    const entryCell = BudgetUI.element("td", "", `${withoutPlaceholder(result.sprite)} ${result.title}`);
+    const percent = percentOf(result.sprite);
+    const entryCell = BudgetUI.element("td", "", `${baseSprite(result.sprite)} ${result.title}${percent !== null ? ` (${showPercent(percent)})` : ""}`);
     tr.appendChild(entryCell);
     // (A placeholder's amount and entry are yellow)
     if (isPlaceholder(result.sprite)) [amountCell, entryCell].forEach(td => td.classList.add("isPlaceholder"));

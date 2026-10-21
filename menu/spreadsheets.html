@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=632588708d">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=96a5e0dad5">
+    <link rel="stylesheet" href="/budgetStyle.css?v=10df1c0586">
     <title>Prismal Budget - Spreadsheets</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -99,7 +99,7 @@
           </ol>
           <ul>
             <li>Pick more rows than you use: empty rows are skipped, so entries you add later are picked up.</li>
-            <li>Amounts in cells: As Written reads -25 as a cost and 25 as a gain. Most bill lists write costs without a minus sign, so pick All Costs for those (or All Gains for paychecks).</li>
+            <li>Amounts in cells: As Written reads -25 as a cost and 25 as a gain. Most bill lists write costs without a minus sign, so pick All Costs for those (or All Gains for paychecks). A cell that's a percent (like 3%) makes the entry a percent of its Other Account's balance as its day starts, so its entry needs an Other Account; a typed amount can be a % too, with the $ / % switch, once an account is picked.</li>
             <li>Refraction types in cells: Regular, Hidden, or Transfer (an empty cell is Regular). Other Accounts in cells: the account's name, like Savings (an empty cell is none). If you rename an account, a spreadsheet with its name typed in follows it, but cells that name it need the new name.</li>
             <li>Amounts can be up to $1,000,000,000, and titles up to 100 characters.</li>
             <li>To keep the rest of a spreadsheet private, make a separate spreadsheet with only what Prismal Budget needs, filled from the first one (in Google Sheets, with =IMPORTRANGE), and connect that one instead.</li>

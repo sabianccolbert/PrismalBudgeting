@@ -7,7 +7,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=632588708d">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=96a5e0dad5">
+    <link rel="stylesheet" href="/budgetStyle.css?v=10df1c0586">
     <title>Prismal Budget - Quick Entry</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
     <meta name="robots" content="noindex, nofollow">
@@ -101,7 +101,7 @@
         </div>
         <section id="waitingSection" class="budgetCard waitingSection" aria-labelledby="waitingTitle" hidden>
           <h3 id="waitingTitle">Waiting Entries</h3>
-          <p class="panelHint">Entries added here that haven't joined your budget yet. They do the next time you open Prismal Budget, and until then, you can change or delete them here.</p>
+          <p class="panelHint">Entries added here that haven't joined your budget yet. The next time Prismal Budget opens on the device that made this icon, they're added; opened on another device first, they wait on its Home, where whoever has it open adds them or deletes them. Until then, you can change or delete them here.</p>
           <ul id="waitingList" class="waitingList"></ul>
           <p id="waitingNote" class="panelHint" hidden></p>
         </section>
@@ -131,7 +131,7 @@
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Quick Entry Help</h3>
-          <p>This page adds entries to your budget with no login: they show up there the next time you open Prismal Budget. Until then, Undo here can take one back, and <strong>Waiting</strong> (next to Undo) lists the ones you added here, to change or delete. At the top, <strong>In Bank today</strong> and the <strong>lowest</strong> it gets (and on what day) count the entries added here too. <strong>Placeholder</strong> (for a day from today on) adds one as a placeholder: a stand-in for an entry you expect, like an estimate, shown in yellow. It counts like any entry until its day passes, then your budget deletes it. Settings (Signed-In Devices) can turn those, and the Other Accounts' balances, off for every icon. This page can't see the rest of your budget. If your password changes, or icons are turned off in Settings, it stops working.</p>
+          <p>This page adds entries to your budget with no login: the next time Prismal Budget opens on the device that made this icon, they're added, and opened on another device first (like by someone you share it with), they wait on its Home, where whoever has it open adds them or deletes them. Until then, Undo here can take one back, and <strong>Waiting</strong> (next to Undo) lists the ones you added here, to change or delete. At the top, <strong>In Bank today</strong> and the <strong>lowest</strong> it gets (and on what day) count the entries added here too. <strong>Placeholder</strong> (for a day from today on) adds one as a placeholder: a stand-in for an entry you expect, like an estimate, shown in yellow. It counts like any entry until its day passes, then your budget deletes it. With Hidden or Transfer and an Other Account picked, the $ / % switch makes the amount a percent of that account's balance, which your budget works out for its day. Settings (Signed-In Devices) can turn those, and the Other Accounts' balances, off for every icon. This page can't see the rest of your budget. If your password changes, or icons are turned off in Settings, it stops working.</p>
 
           <h4>On Your Home Screen</h4>
           <div class="deviceGuide">

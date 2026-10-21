@@ -1,4 +1,4 @@
-// Calendar Page: the home page. "Lowest in bank after today", Dave,
+// Calendar Page: the home page. "Lowest in bank after today", Dave (and the goals under his message),
 // Upcoming, the calendar's day cells, and the new-entry / entry-options panels.
 // Zooming a day is handled in Process Budget.js (LAYOUT FUNCTIONS); tapping an entry inside a
 // zoomed day opens its options here.
@@ -21,6 +21,8 @@ window.workspaceReady.then((loaded) => {
   wireCalendar();
   wireGettingStarted();
   wireUndoButtons();
+  wireQuickWaiting();
+  wireGoals();
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => openNewEntryPanel(event.currentTarget));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
 });
@@ -32,9 +34,95 @@ document.addEventListener("budget:updated", () => {
 // Draw everything on Home from the budget
 function renderHome() {
   renderGettingStarted();
+  renderQuickWaiting();
   renderCalendar();
   renderInfoRow();
+  renderGoals();
   renderUndoButtons();
+}
+
+//#endregion
+
+// =====================================================================
+// #region QUICK ENTRIES TO ADD (from other devices' Quick Entry icons; see holdQuickEntries in Process Budget.js)
+// =====================================================================
+// Each waiting entry with Add (it goes into the budget like a New Entry, and Undo can take it back) and Delete (it's
+// gone, never added), and Add All when there are more than one. The card goes away once none are waiting.
+
+let quickWaitingBusy = false;
+
+function wireQuickWaiting() {
+  document.getElementById("quickWaitingAll")?.addEventListener("click", async () => {
+    if (quickWaitingBusy) return;
+    quickWaitingBusy = true;
+    renderQuickWaiting();
+    let added = 0;
+    let firstProblem = null;
+    for (const quick of [...waitingQuickEntries]) {
+      const result = await addWaitingQuickEntry(quick.id);
+      if (result.ok) added++;
+      else if (!firstProblem) firstProblem = `${describeQuickEntry(quick.entry)}: ${result.message}`;
+    }
+    quickWaitingBusy = false;
+    renderQuickWaiting();
+    if (added > 0) BudgetUI.showToast(`Added ${added} quick ${added === 1 ? "entry" : "entries"}.`);
+    if (firstProblem) BudgetUI.showToast(`Couldn't add ${firstProblem}`, true);
+  });
+}
+
+function renderQuickWaiting() {
+  const card = document.getElementById("quickWaiting");
+  const list = document.getElementById("quickWaitingList");
+  if (!card || !list) return;
+  card.hidden = waitingQuickEntries.length === 0;
+  list.replaceChildren(...waitingQuickEntries.map(quickWaitingRow));
+  const all = document.getElementById("quickWaitingAll");
+  all.hidden = waitingQuickEntries.length < 2;
+  all.disabled = quickWaitingBusy;
+}
+
+// One waiting entry: its type and title over its amount and day, with Add and Delete (a placeholder's words are yellow)
+function quickWaitingRow(quick) {
+  const entry = quick.entry;
+  const row = BudgetUI.element("li", `waitingItem${entry.placeholder ? " isPlaceholder" : ""}`);
+  const sprite = QUICK_ENTRY_TYPES[entry.type] || "";
+  const day = createSafeMidnight(entry.date, true);
+  const shown = formatMoney(entry.amount) + (typeof entry.percent === "number" ? ` (${showPercent(entry.percent)})` : "");
+  const amount = BudgetUI.element("span", `waitingAmount${entry.amount < 0 ? " negative" : entry.amount > 0 ? " positive" : ""}`, shown);
+  const details = BudgetUI.element("span", "waitingDetails");
+  details.append(amount, ` on ${isNaN(day.getTime()) ? entry.date : showDate(day)}${entry.placeholder ? " (a placeholder)" : ""}`);
+  const text = BudgetUI.noTranslate(BudgetUI.element("span", "waitingText"));
+  text.append(BudgetUI.element("span", "waitingTitle", `${sprite ? sprite + " " : ""}${capitalize(String(entry.title || ""))}`), details);
+  const add = BudgetUI.element("button", "budgetButton primary waitingAdd", "Add");
+  add.type = "button";
+  add.setAttribute("aria-label", `Add ${describeQuickEntry(entry)}`);
+  add.disabled = quickWaitingBusy;
+  add.addEventListener("click", async () => {
+    if (quickWaitingBusy) return;
+    quickWaitingBusy = true;
+    renderQuickWaiting();
+    const result = await addWaitingQuickEntry(quick.id);
+    quickWaitingBusy = false;
+    renderQuickWaiting();
+    if (result.ok) BudgetUI.showToast(`Added ${describeQuickEntry(entry)}.`);
+    else BudgetUI.showToast(result.message, true);
+  });
+  const remove = BudgetUI.element("button", "budgetButton danger waitingDelete", "Delete");
+  remove.type = "button";
+  remove.setAttribute("aria-label", `Delete ${describeQuickEntry(entry)}`);
+  remove.disabled = quickWaitingBusy;
+  remove.addEventListener("click", async () => {
+    if (quickWaitingBusy || !window.confirm(`Delete ${describeQuickEntry(entry)}? It won't be added to your budget.`)) return;
+    quickWaitingBusy = true;
+    renderQuickWaiting();
+    const result = await deleteWaitingQuickEntry(quick.id);
+    quickWaitingBusy = false;
+    renderQuickWaiting();
+    if (result.ok) BudgetUI.showToast(`Deleted ${describeQuickEntry(entry)}.`);
+    else BudgetUI.showToast(result.message, true);
+  });
+  row.append(text, add, remove);
+  return row;
 }
 
 //#endregion
@@ -407,6 +495,112 @@ function renderDave() {
 //#endregion
 
 // =====================================================================
+// #region GOALS (Dave's card; see Goals in Process Budget.js)
+// =====================================================================
+// Under Dave's message: each goal with how far along it is (tap one to change or delete it), and the Goals button, which
+// sets a new one.
+
+function wireGoals() {
+  document.getElementById("goalsButton")?.addEventListener("click", (event) => openGoalPanel(event.currentTarget));
+}
+
+function renderGoals() {
+  const list = document.getElementById("goalList");
+  if (!list) return;
+  const goals = accountsData?.goals || [];
+  list.hidden = goals.length === 0;
+  list.replaceChildren(...goals.map(goalRow));
+}
+
+// Its title, then what it's for and its amount ("Savings: $1200.00 of $2000.00 by 06/01/2027"), how far along it is (a
+// bar), and Reached, how much of it so far, or that its day passed
+function goalRow(goal, index) {
+  const balance = goalBalance(goal);
+  const date = createSafeMidnight(goal.date, true);
+  const target = goalTarget(goal);
+  const reached = balance !== null && balance >= goal.amount;
+  const share = balance !== null && goal.amount > 0 ? Math.max(0, Math.min(100, Math.floor(balance / goal.amount * 100))) : null;
+  const amount = formatMoney(goal.amount) + (goal.percent !== null ? ` (${showPercent(goal.percent)} when set)` : "");
+  const by = isNaN(date.getTime()) ? "" : ` by ${showDate(date)}`;
+  let details = balance !== null ? `${target}: ${formatMoney(balance)} of ${amount}${by}` : `${target ? target + ": " : ""}${amount}${by}`;
+  if (goal.kind === "account" && balance === null) details += ` (${goal.account} isn't one of your Other Accounts anymore)`;
+  const status = reached ? "Reached" : date < today ? "Its day passed" : share !== null ? `${share}%` : "";
+
+  const item = BudgetUI.element("li", `goalItem${reached ? " isReached" : ""}`);
+  const button = BudgetUI.element("button", "goalButton");
+  button.type = "button";
+  button.setAttribute("aria-label", `Change the goal ${goal.title}`);
+  const top = BudgetUI.element("span", "goalTop");
+  top.append(BudgetUI.noTranslate(BudgetUI.element("span", "goalTitle", `🎯 ${goal.title}`)));
+  if (status) top.append(BudgetUI.element("span", "goalStatus", status));
+  button.append(top, BudgetUI.noTranslate(BudgetUI.element("span", "goalDetails", details)));
+  if (share !== null) {
+    const bar = BudgetUI.element("span", "goalBar");
+    const fill = BudgetUI.element("span", "goalFill");
+    fill.style.width = `${reached ? 100 : share}%`;
+    bar.append(fill);
+    button.append(bar);
+  }
+  button.addEventListener("click", () => openGoalPanel(button, index));
+  item.append(button);
+  return item;
+}
+
+// New goal (index null) or change one: its title, amount (or a % of what it's for today, which stays that amount), what
+// it's for, and the day to reach it by
+function openGoalPanel(origin, index = null) {
+  const existing = index === null ? null : (accountsData?.goals || [])[index];
+  BudgetUI.openPanel({
+    origin,
+    size: "small",
+    title: existing ? "Change Goal" : "New Goal",
+    build(form, panel) {
+      const intro = BudgetUI.element("p", "panelHint", "An amount to reach by a day, like $2000.00 in Savings by June. With what it's for picked, Home shows how far along it is.");
+      const title = BudgetUI.textField({ label: "Title", value: existing ? existing.title : "", placeholder: "Vacation, emergency fund...", maxLength: MAX_TITLE });
+      const amount = BudgetUI.amountField({ label: "Amount", amount: existing ? existing.amount : null, percent: existing ? existing.percent : null, signs: BudgetUI.BALANCE_SIGNS });
+      const target = BudgetUI.element("select", "selectInput");
+      target.append(new Option("Nothing", "none"), new Option("In Bank", "inBank"), new Option("Total (In Bank and every Other Account)", "total"),
+        ...otherAccounts().map(account => new Option(`${account.name} (${formatMoney(account.balance)})`, `account:${account.name}`)));
+      if (existing) target.value = existing.kind === "account" ? `account:${existing.account}` : existing.kind;
+      if (!target.value) target.value = "none";
+      const targetHint = "A % goal is that percent of it today, and stays that amount.";
+      const targetField = BudgetUI.field("For", target, { optional: true, hint: targetHint });
+      const allowPercent = () => amount.setPercentAllowed(target.value !== "none");
+      target.addEventListener("change", allowPercent);
+      allowPercent();
+      const date = BudgetUI.dateField({ label: "By", date: existing ? createSafeMidnight(existing.date, true) : null });
+
+      const buttons = existing
+        ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: removeIt }, { label: "Cancel", onClick: () => panel.close() }]
+        : [{ label: "Add Goal", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
+      form.append(...(existing ? [] : [intro]), title.el, amount.el, targetField, date.el, BudgetUI.buttonRow(buttons));
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const { percent, error } = BudgetUI.readPercentField(amount);
+        if (error) return panel.setError(error);
+        const value = amount.value();
+        if (percent === null && (value === null || Number.isNaN(value))) return panel.setError("Enter the amount, like 2000.00.");
+        if (percent === null && Math.abs(value) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+        const by = date.value();
+        if (by === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+        if (!by) return panel.setError("Pick the day to reach it by.");
+        const [kind, ...name] = target.value.split(":");
+        const fields = { title: title.value(), kind, account: name.join(":"), amount: value, percent, date: by };
+        BudgetUI.submit(panel, () => saveGoal(fields, index));
+      });
+
+      function removeIt() {
+        if (!window.confirm(`Delete the goal ${existing.title}?`)) return;
+        BudgetUI.submit(panel, () => deleteGoal(index));
+      }
+    }
+  });
+}
+
+//#endregion
+
+// =====================================================================
 // #region ENTRY PANELS
 // =====================================================================
 
@@ -462,7 +656,8 @@ function openNewEntryPanel(origin) {
         findMatch();
         if (match && mode === "set") {
           const sprite = entry.sprite || getSpecialType(match.sprite);
-          return BudgetUI.submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", amount: String(entry.amount), placeholder: entry.placeholder }));
+          const amount = typeof entry.percent === "number" ? { amount: "", percent: entry.percent } : { amount: String(entry.amount) };
+          return BudgetUI.submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder }));
         }
         BudgetUI.submit(panel, () => addCalendarEntry(entry));
       });
@@ -501,6 +696,8 @@ function openQuickEntrySetup(origin) {
           panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't set it up. Please try again.");
           return;
         }
+        // (This device's own icon: its entries are added as soon as the budget opens here, see holdQuickEntries)
+        await rememberQuickIcon(result.data.key);
         const url = `/quick.html?key=${encodeURIComponent(result.data.key)}&setup=1`;
         if (typeof window.transitionTo === "function") window.transitionTo(url);
         else window.location.href = url;
