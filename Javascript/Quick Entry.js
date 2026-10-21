@@ -1,8 +1,9 @@
 // Quick Entry: the page a home screen icon opens (quick.html?key=...). It's the calendar's New Entry
 // form with no login. The key in the link comes from Home's Quick Entry button (made
-// while signed in) and can only queue entries, which join the budget the next time it opens (see
-// applyQuickEntries in Process Budget.js), and change or delete the ones it queued until then (see WAITING
-// ENTRIES). Besides those, it only gets In Bank today and the lowest it gets (shown at the top), the Other Accounts'
+// while signed in) and can only queue entries, which the budget adds the next time it opens on the device that made
+// the icon, or which wait on its Home to be added or deleted on another device (see holdQuickEntries in Process
+// Budget.js), and change or delete the ones it queued until a budget has
+// loaded them (see WAITING ENTRIES). Besides those, it only gets In Bank today and the lowest it gets (shown at the top), the Other Accounts'
 // names and balances, for the account picker, and the account's prisms (preset entries, see PRISMS), which it can
 // change. Keys stop working when the password changes. Nothing on the site links here. Opened without a key, or with
 // one that stopped working, it goes to the sign-in page. Opened on an Apple Watch (a link tapped in Messages or Mail
@@ -75,6 +76,8 @@ async function checkQuickKey() {
   if (result.status === 401) return keyStopped();
   // Offline, or the server is down: the form still shows, and adding an entry says what went wrong
   if (result.ok && result.data) {
+    // This device's own icon (where the page shares the budget's storage): the budget adds its entries when it opens here
+    rememberQuickIcon(quickKey);
     quickUsername = result.data.username;
     showQuickAnswer(result.data);
     // Prisms need the server, so they show once the key is known to work
@@ -153,9 +156,13 @@ async function addQuickEntry(panel, fields) {
 }
 
 // The form's entry as the API keeps it: { title (with its Other Account), type, amount, date: "YYYY-MM-DD", and
-// placeholder: true for a placeholder }
+// placeholder: true for a placeholder, percent for a % amount (see PERCENT_MARK in Process Budget.js), whose amount is
+// what it comes to with the account's balance today; the budget works it out again for its day }
 function toQueued(entry) {
-  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount: entry.amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}) };
+  const hasPercent = typeof entry.percent === "number";
+  const account = quickAccounts.find(known => cleanString(known.name) === cleanString(splitAccount(entry.title).account));
+  const amount = hasPercent ? percentValue(entry.percent, account?.balance ?? 0) : entry.amount;
+  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}), ...(hasPercent ? { percent: entry.percent } : {}) };
 }
 
 // A home screen icon's page often stays open in the background for days. Looked at again on a later day, New
@@ -265,8 +272,9 @@ function prismEditRow(prism, index) {
 function prismLabel(prism, inWords = false) {
   const sprite = prism.type ? QUICK_ENTRY_TYPES[prism.type] : "";
   const type = sprite ? REFRACTION_NAMES.get(sprite) : "";
-  const parts = [inWords ? "" : sprite, withAccount(prism.title, prism.account), prism.amount === null ? "" : formatMoney(prism.amount)].filter(Boolean);
-  if (!prism.title && !prism.account && prism.amount === null) parts.push(type);
+  const amount = typeof prism.percent === "number" ? showPercent(prism.percent) : prism.amount === null ? "" : formatMoney(prism.amount);
+  const parts = [inWords ? "" : sprite, withAccount(prism.title, prism.account), amount].filter(Boolean);
+  if (!prism.title && !prism.account && !amount) parts.push(type);
   else if (inWords && type) parts.push(`(${type})`);
   if (inWords && prism.placeholder) parts.push("(Placeholder)");
   return parts.join(" ");
@@ -277,7 +285,7 @@ function prismLabel(prism, inWords = false) {
 function applyPrism(prism) {
   if (!quickForm || quickForm.mode === "prism") openQuickEntryForm("entry");
   const { fields } = quickForm;
-  fields.fill({ title: prism.title, amount: prism.amount, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "", placeholder: !!prism.placeholder });
+  fields.fill({ title: prism.title, amount: prism.amount, percent: prism.percent ?? null, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "", placeholder: !!prism.placeholder });
   // An account renamed or deleted since the prism was saved isn't in the list, so it says to pick one
   if (prism.account && !quickAccounts.some(account => cleanString(account.name) === cleanString(prism.account))) {
     BudgetUI.showToast(`${prism.account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
@@ -302,13 +310,17 @@ function highlightForm() {
 // Save Prism: whatever's filled in or picked (Auto counts as nothing picked), and at least one thing (Placeholder alone
 // doesn't count: it goes with what the prism fills in)
 async function savePrismFromForm(panel, fields) {
-  const { title, amount, sprite, account, placeholder } = fields.values();
+  const { title, amount: typedAmount, percent, sprite, account, placeholder } = fields.values();
   if (title.includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
+  // (A % box left empty keeps no amount, like an empty amount box)
+  if (Number.isNaN(percent)) return panel.setError("Enter the percent as a number, like 3 or 12.5, or leave it blank.");
+  if (percent !== null && Math.abs(percent) > MAX_PERCENT) return panel.setError(`A percent can be up to ${MAX_PERCENT}%.`);
+  const amount = percent !== null ? null : typedAmount;
   if (Number.isNaN(amount)) return panel.setError("Enter an amount, like 12.50, or leave it blank.");
   if (amount !== null && Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
   // The title and the Other Account are kept apart, so the title is never the account's name unless it was typed
-  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null, ...(placeholder ? { placeholder: true } : {}) };
-  if (!prism.title && prism.amount === null && !prism.type && !prism.account) {
+  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null, ...(placeholder ? { placeholder: true } : {}), ...(percent ? { percent } : {}) };
+  if (!prism.title && prism.amount === null && !prism.percent && !prism.type && !prism.account) {
     return panel.setError("Fill in or pick at least one thing for this prism: a title, an amount, a type, or an account.");
   }
   if (quickPrisms.length >= MAX_PRISMS) return panel.setError(`You can have up to ${MAX_PRISMS} prisms. Delete one in Edit Prisms first.`);
@@ -455,9 +467,10 @@ function setQuickUndoBusy(busy) {
   document.getElementById("quickRedoButton").disabled = busy || !quickRedo.length;
 }
 
-// "Coffee, -$4.50 on 10/05/2026" (the day in this device's date format), and "(a placeholder)" for one
+// "Coffee, -$4.50 on 10/05/2026" (the day in this device's date format), "(a placeholder)" for one, and a % entry's percent
 function describeQueued(entry) {
-  return `${capitalize(entry.title)}, ${formatMoney(entry.amount)} on ${showDate(createSafeMidnight(entry.date, true))}${entry.placeholder ? " (a placeholder)" : ""}`;
+  const percent = typeof entry.percent === "number" ? ` (${showPercent(entry.percent)})` : "";
+  return `${capitalize(entry.title)}, ${formatMoney(entry.amount)}${percent} on ${showDate(createSafeMidnight(entry.date, true))}${entry.placeholder ? " (a placeholder)" : ""}`;
 }
 
 //#endregion
@@ -467,8 +480,8 @@ function describeQueued(entry) {
 // =====================================================================
 // Waiting (beside Undo and Redo) lists the entries added with this icon that haven't joined the budget yet, newest
 // first: Change puts one in the form (Change Entry) to fix it, and × deletes it. Other icons' entries are only
-// counted. Once the budget has picked one up (it's opening somewhere right then, or it opened and couldn't save
-// yet), it's on its way in and can only be changed there, so it just says so.
+// counted. Once a budget has loaded one, it's being added there (or waits on its Home, where whoever has it open adds
+// it or deletes it), so it can't be changed here anymore, and it just says so.
 
 let showingWaiting = false; // The list is open
 let stashedEntry = null;    // What New Entry had when Change was tapped ({ title, amount, sprite, account }), to put back
@@ -489,7 +502,7 @@ function showWaiting(data) {
   note.textContent = `${others} more ${others === 1 ? "entry is" : "entries are"} waiting from your other Quick Entry icons.`;
   // One being changed that isn't waiting here anymore (the budget has it now) can't be saved
   if (quickForm && quickForm.mode === "change" && !quickQueued.some(item => item.id === quickForm.changing.id && !item.joining)) {
-    BudgetUI.showToast("That entry joined your budget, so it can only be changed there now.", true);
+    BudgetUI.showToast("That entry is in your budget now (or waiting on its Home to be added), so it can only be changed there.", true);
     backToNewEntry();
   }
   renderWaiting();
@@ -514,7 +527,8 @@ function waitingRow(item) {
   const row = BudgetUI.element("li", `waitingItem${item.placeholder ? " isPlaceholder" : ""}`);
   const sprite = QUICK_ENTRY_TYPES[item.type] || "";
   const day = createSafeMidnight(item.date, true);
-  const amount = BudgetUI.element("span", `waitingAmount${item.amount < 0 ? " negative" : item.amount > 0 ? " positive" : ""}`, formatMoney(item.amount));
+  const shown = formatMoney(item.amount) + (typeof item.percent === "number" ? ` (${showPercent(item.percent)})` : "");
+  const amount = BudgetUI.element("span", `waitingAmount${item.amount < 0 ? " negative" : item.amount > 0 ? " positive" : ""}`, shown);
   const details = BudgetUI.element("span", "waitingDetails");
   details.append(amount, ` on ${isNaN(day.getTime()) ? item.date : showDate(day)}`);
   const text = BudgetUI.noTranslate(BudgetUI.element("span", "waitingText"));
@@ -522,7 +536,7 @@ function waitingRow(item) {
   row.append(text);
   if (item.joining) {
     row.classList.add("isJoining");
-    row.append(BudgetUI.element("span", "waitingJoining", "Joining your budget"));
+    row.append(BudgetUI.element("span", "waitingJoining", "Picked up by your budget"));
     return row;
   }
   const change = BudgetUI.element("button", "budgetButton waitingChange", "Change");
@@ -541,7 +555,7 @@ function waitingRow(item) {
 function changeWaiting(item) {
   if (quickForm && quickForm.mode === "entry") stashedEntry = quickForm.fields.values();
   const { title, account } = splitAccount(item.title);
-  openQuickEntryForm("change", { title, amount: item.amount, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, placeholder: !!item.placeholder }, item);
+  openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, placeholder: !!item.placeholder }, item);
   // An account renamed or deleted since isn't in the list, so it says to pick one
   if (account && !quickAccounts.some(known => cleanString(known.name) === cleanString(account))) {
     BudgetUI.showToast(`${account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
@@ -561,7 +575,7 @@ async function saveWaitingChange(panel, fields, changing) {
   if (result.status === 401) return keyStopped();
   if (!result.ok && !(result.data && result.data.joined)) return panel.setError(quickProblem(result));
   if (!result.ok) {
-    // It joined the budget meanwhile, so it's changed there now (showWaiting goes back to New Entry, and says so)
+    // A budget loaded it meanwhile, so it's on Home now (showWaiting goes back to New Entry, and says so)
     forgetUndo(changing.id);
     showWaiting(result.data);
     leaveChangeOf(changing.id);
@@ -590,7 +604,7 @@ async function deleteWaiting(item, row) {
   } else if (result.data && result.data.joined) {
     forgetUndo(item.id);
     showWaiting(result.data);
-    BudgetUI.showToast("That entry already joined your budget, so it can only be deleted there now.", true);
+    BudgetUI.showToast("That entry is in your budget now (or waiting on its Home to be added), so it can only be deleted there.", true);
   } else {
     row.querySelectorAll("button").forEach(button => { button.disabled = false; });
     BudgetUI.showToast(quickProblem(result), true);

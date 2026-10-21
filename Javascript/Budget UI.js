@@ -262,10 +262,14 @@ const BudgetUI = (() => {
   // Amount with a Cost/Gain toggle (or another pair of names for the two signs: BALANCE_SIGNS for a balance, which
   // starts on + instead). It's typed like a cash register (cashRegister below), and an amount of 0 shows as a blank
   // box with 0.00 as its hint. value(): signed number, null when blank (callers count that as 0), NaN when unreadable.
+  // An entry's amount can be a % of the Other Account picked instead (see PERCENT_MARK in Process Budget.js): a $ / %
+  // switch shows while the account field allows it (setPercentAllowed; never with allowPercent false, like for a day
+  // that passed), and percent starts it on % (signed). isPercent(): % is picked. percent(): the signed percent typed,
+  // null when blank, NaN when unreadable.
   const ENTRY_SIGNS = ["− Cost", "+ Gain"];
   const BALANCE_SIGNS = ["− Negative", "+ Positive"];
 
-  function amountField({ label = "Amount", amount = null, optional = false, hint = "", signs = ENTRY_SIGNS, startSign = signs === ENTRY_SIGNS ? -1 : 1 } = {}) {
+  function amountField({ label = "Amount", amount = null, percent = null, allowPercent = true, optional = false, hint = "", signs = ENTRY_SIGNS, startSign = signs === ENTRY_SIGNS ? -1 : 1 } = {}) {
     const input = element("input", "amountInput");
     input.type = "text";
     input.placeholder = "0.00";
@@ -273,18 +277,53 @@ const BudgetUI = (() => {
     if (amount !== null && Math.round(amount * 100) !== 0) input.value = Math.abs(amount).toFixed(2);
 
     let sign = amount !== null && Math.round(amount * 100) !== 0 ? Math.sign(amount) : startSign;
+    if (percent) sign = Math.sign(percent);
     const toggle = segmented([{ key: -1, label: signs[0] }, { key: 1, label: signs[1] }], sign, (key) => setSign(key));
+    const percentInput = element("input", "amountInput percentInput");
     // Cost (-1) or Gain (1); a gain's box shows green
     function setSign(key) {
       sign = key;
       toggle.set(key);
       input.classList.toggle("positive", sign > 0); // Positive entries show green
+      percentInput.classList.toggle("positive", sign > 0);
     }
     setSign(sign);
     cashRegister(input, setSign); // Typing - or + flips the toggle instead
 
+    // The % box: typed as it reads ("3", "12.5"), with - or + flipping the toggle too
+    percentInput.type = "text";
+    percentInput.inputMode = "decimal";
+    percentInput.placeholder = "0%";
+    percentInput.autocomplete = "off";
+    percentInput.setAttribute("aria-label", "Percent");
+    if (percent) percentInput.value = String(Math.abs(percent));
+    percentInput.addEventListener("input", (event) => {
+      if (event.isComposing) return;
+      const typedSigns = percentInput.value.match(/[-+]/g);
+      if (typedSigns) setSign(typedSigns[typedSigns.length - 1] === "+" ? 1 : -1);
+      const [whole, ...rest] = percentInput.value.replace(/,/g, ".").replace(/[^\d.]/g, "").split(".");
+      percentInput.value = (rest.length > 0 ? `${whole}.${rest.join("").slice(0, 2)}` : whole).slice(0, 8);
+    });
+    // $ or % (picked), shown as % only while the switch is allowed
+    let unit = percent ? "%" : "$";
+    const unitToggle = segmented([{ key: "$", label: "$" }, { key: "%", label: "%" }], unit, (key) => setUnit(key));
+    unitToggle.el.classList.add("unitToggle");
+    unitToggle.el.setAttribute("aria-label", "Dollars or a percent of the Other Account");
+    unitToggle.el.hidden = true;
+    const isPercent = () => unit === "%" && !unitToggle.el.hidden;
+    function showUnit() {
+      input.hidden = isPercent();
+      percentInput.hidden = !isPercent();
+    }
+    function setUnit(key) {
+      unit = key;
+      unitToggle.set(key);
+      showUnit();
+    }
+    showUnit();
+
     const row = element("div", "amountRow");
-    row.append(input, toggle.el);
+    row.append(unitToggle.el, input, percentInput, toggle.el);
     return {
       el: field(label, row, { optional, hint }),
       input,
@@ -293,8 +332,37 @@ const BudgetUI = (() => {
         if (input.value.trim() === "") return null;
         const number = readMoneyInput(input.value); // "4,50" is 4.50 (see Process Budget.js)
         return Number.isFinite(number) ? sign * Math.abs(number) : NaN;
+      },
+      isPercent,
+      percentShown: () => !unitToggle.el.hidden,
+      percent() {
+        if (percentInput.value.trim() === "") return null;
+        const number = Number(percentInput.value);
+        return Number.isFinite(number) ? sign * Math.abs(number) : NaN;
+      },
+      // A % to put in (signed), picking %; null empties the % box
+      setPercent(value) {
+        percentInput.value = value ? String(Math.abs(value)) : "";
+        if (!value) return;
+        setSign(value > 0 ? 1 : -1);
+        setUnit("%");
+      },
+      // The $ / % switch shows (allowed) or not (the amount is in $ then)
+      setPercentAllowed(allowed) {
+        unitToggle.el.hidden = !allowed || !allowPercent;
+        showUnit();
       }
     };
+  }
+
+  // An amount field's % for a change, checked: { percent } (null when it's on $), or { error }
+  function readPercentField(amount) {
+    if (!amount.isPercent()) return { percent: null };
+    const percent = amount.percent();
+    if (percent === null || percent === 0) return { error: "Enter the percent, like 3 or 12.5." };
+    if (Number.isNaN(percent)) return { error: "Enter the percent as a number, like 3 or 12.5." };
+    if (Math.abs(percent) > MAX_PERCENT) return { error: `A percent can be up to ${MAX_PERCENT}%.` };
+    return { percent };
   }
 
   // A money box typed like a cash register: digits fill in from the cents, so the decimal point never needs typing
@@ -413,13 +481,21 @@ const BudgetUI = (() => {
     }
     setAccounts(accounts);
 
-    // The hint under the picker: what the entry does to the account
+    // The hint under the picker: what the entry does to the account. With an account picked, the amount can be a % of
+    // its balance instead.
     function describe() {
       const name = select.value;
+      amount.setPercentAllowed?.(shown && !wrapper.hidden && !!name);
       const value = amount.value();
       const isTransfer = type() === "⭕️";
+      const percent = amount.isPercent?.() ? amount.percent() : null;
       if (!name) hint.textContent = "Pick an account if this money moves into or out of it.";
-      else if (value === null || Number.isNaN(value) || value === 0) {
+      else if (amount.isPercent?.()) {
+        const share = `${Math.abs(percent)}% of what's in ${name} as that day starts`;
+        if (!percent || Number.isNaN(percent)) hint.textContent = `A percent of what's in ${name} as that day starts, worked out again whenever it changes. Once the day passes, it stays what it came to.`;
+        else if (isTransfer) hint.textContent = percent < 0 ? `Moves ${share}, from In Bank into ${name}.` : `Moves ${share}, from ${name} into In Bank.`;
+        else hint.textContent = percent < 0 ? `Takes ${share}, out of ${name}.` : `Adds ${share}, to ${name}.`;
+      } else if (value === null || Number.isNaN(value) || value === 0) {
         hint.textContent = isTransfer
           ? `A cost moves money from In Bank into ${name}, and a gain moves it back.`
           : `A cost takes from ${name}, and a gain adds to it (In Bank stays the same).`;
@@ -436,7 +512,7 @@ const BudgetUI = (() => {
 
     select.addEventListener("change", describe);
     amount.el.addEventListener("input", describe);
-    amount.el.addEventListener("click", describe); // The Cost / Gain buttons
+    amount.el.addEventListener("click", describe); // The Cost / Gain and $ / % buttons
 
     return {
       el: wrapper,
@@ -778,9 +854,9 @@ const BudgetUI = (() => {
       els: [title.el, amount.el, dateInput.el, refraction.el, account.el, placeholder.el],
       dateEl: dateInput.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value(), account: account.value(), date: dateInput.value(), placeholder: placeholder.value() }),
+      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), date: dateInput.value(), placeholder: placeholder.value() }),
       setAccounts: account.setAccounts,
-      fill({ title: newTitle = "", amount: newAmount = null, sprite = "", account: newAccount = "", placeholder: newPlaceholder = false } = {}) {
+      fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", placeholder: newPlaceholder = false } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
           amount.input.value = Math.round(newAmount * 100) !== 0 ? Math.abs(newAmount).toFixed(2) : "";
@@ -791,15 +867,23 @@ const BudgetUI = (() => {
         if (newPlaceholder) placeholder.set(true);
         title.input.dispatchEvent(new Event("input", { bubbles: true }));
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
+        if (typeof percent === "number" && percent !== 0) amount.setPercent(percent);
       },
       read() {
         if (title.value().includes(ACCOUNT_ARROW)) return { error: TITLE_ARROW };
         const entry = { title: withAccount(title.value(), account.value()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value() };
         if (!entry.title) return { error: "Give the entry a title." };
+        const { percent, error } = readPercentField(amount);
+        if (error) return { error };
+        if (percent !== null) {
+          entry.percent = percent;
+          entry.amount = 0;
+        }
         if (Number.isNaN(entry.amount)) return { error: "Enter an amount, like 12.50." };
         if (Math.abs(entry.amount) > MAX_AMOUNT) return { error: AMOUNT_TOO_BIG };
         if (entry.date === undefined) return { error: `That date isn't a real day. Use ${datePattern()}.` };
         entry.date = entry.date || date;
+        if (percent !== null && entry.date < today) return { error: PERCENT_PAST_DAY };
         entry.placeholder = placeholder.value() && entry.date >= today;
         return { entry };
       }
@@ -818,6 +902,7 @@ const BudgetUI = (() => {
     const refraction = getSpecialType(parts[0]);
     const wasPlaceholder = isPlaceholder(parts[0]);
     const currentAmount = parseAmount(parts[1]);
+    const currentPercent = percentOf(parts[0]); // A % entry's (see PERCENT_MARK)
     const title = parts.slice(2).join(" ");
     const changeEntry = inHistory ? changeHistoryEntry : changeCalendarEntry;
     const changeKind = inHistory ? changeHistoryEntry : changeEntryKind;
@@ -839,7 +924,7 @@ const BudgetUI = (() => {
           : null;
 
         let mode = "set";
-        const amount = amountField({ label: "Amount", amount: currentAmount });
+        const amount = amountField({ label: "Amount", amount: currentAmount, percent: currentPercent, allowPercent: !inHistory && date >= today });
         const modeToggle = segmented(
           [{ key: "set", label: "Set to" }, { key: "add", label: "Add to it" }],
           "set",
@@ -847,6 +932,7 @@ const BudgetUI = (() => {
             mode = key;
             amount.input.value = key === "set" && Math.round(currentAmount * 100) !== 0 ? Math.abs(currentAmount).toFixed(2) : "";
             amount.setSign(key === "set" && currentAmount > 0 ? 1 : -1);
+            amount.setPercent(key === "set" ? currentPercent : null);
           }
         );
         const moveTo = inHistory
@@ -879,32 +965,41 @@ const BudgetUI = (() => {
 
         form.addEventListener("submit", (event) => {
           event.preventDefault();
-          const newAmount = amount.value() ?? 0; // A blank box is 0 (Set to 0, or nothing added)
+          const { percent: newPercent, error: percentError } = readPercentField(amount);
+          if (percentError) return panel.setError(percentError);
+          const newAmount = newPercent !== null ? 0 : amount.value() ?? 0; // A blank box is 0 (Set to 0, or nothing added)
           const move = moveTo.value();
           if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
           if (Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
           if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+          if (newPercent !== null && (move instanceof Date ? move : date) < today) return panel.setError(PERCENT_PAST_DAY);
           // (Left as it is when the switch isn't there: a day before today never has one)
           const newPlaceholder = placeholder.el.hidden ? undefined : placeholder.value();
 
           const newSprite = type.value();
           const newAccount = accountPicker.value();
           if (newSprite !== refraction || newAccount !== startAccount) {
+            if (newPercent !== null && mode === "add") return panel.setError("To add a percent to it, save its new type or account first.");
             const total = mode === "set" ? newAmount : currentAmount + newAmount;
             if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
             const newTitle = withAccount(ownTitle, newAccount);
             // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
             if (!newTitle) return panel.setError("This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
-            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, placeholder: newPlaceholder };
+            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
             return submit(panel, () => changeKind(kind));
           }
 
           const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder };
-          const amountChanged = mode === "set" ? newAmount !== currentAmount : newAmount !== 0;
+          // (A % entry set to dollars becomes a plain amount, even the same one)
+          const amountChanged = mode === "set"
+            ? (newPercent !== null ? newPercent !== currentPercent : newAmount !== currentAmount || (currentPercent !== null && amount.percentShown()))
+            : (newPercent !== null || newAmount !== 0);
           if (amountChanged) {
-            change.action = mode === "set" ? "set" : (newAmount > 0 ? "add" : "subtract");
-            change.amount = mode === "set" ? String(newAmount) : String(Math.abs(newAmount));
+            const signed = newPercent ?? newAmount;
+            change.action = mode === "set" ? "set" : (signed > 0 ? "add" : "subtract");
+            change.amount = newPercent !== null ? "" : mode === "set" ? String(newAmount) : String(Math.abs(newAmount));
+            change.percent = newPercent;
           }
           if (move && move.getTime() !== date.getTime()) change.moveDate = move;
           const placeholderChanged = newPlaceholder !== undefined && newPlaceholder !== wasPlaceholder;
@@ -1098,6 +1193,7 @@ const BudgetUI = (() => {
     field,
     textField,
     amountField,
+    readPercentField,
     BALANCE_SIGNS,
     cashRegister,
     refractionField,

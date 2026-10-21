@@ -10,8 +10,8 @@
 //     href="/stylesheet.css?v=..." or url("/Fonts/MainFont-Latin.woff2?v=..."). An address without ?v= is
 //     left alone, so add ?v= to a new one to opt it in. A file that doesn't exist yet (like an image still
 //     to be made) gets an empty fingerprint until it does.
-//   - FILE_VERSIONS in Javascript/Boot.js: every script in Javascript/, every image in Resources/Sprites/, and
-//     the starfield's Resources/Star.webp, which pages load through Boot.js's assetUrl.
+//   - FILE_VERSIONS in Javascript/Boot.js: every script in Javascript/, every image in Resources/Sprites/, every
+//     sound in Resources/Sounds/, and the starfield's Resources/Star.webp, which pages load through Boot.js's assetUrl.
 // A stylesheet can also carry a small image inside it, so it paints with the page's first frame instead of a
 // moment later: url("data:image/webp;base64,...") /* inline: /Resources/Background.webp */. The data is
 // rewritten from the named file, so the two always match.
@@ -32,7 +32,7 @@ const CHECK = process.argv.includes("--check");
 const TEXT_FILES = /\.(html|css|js|mjs|json|svg|txt|xml|webmanifest)$/i;
 const STAMPED_LINK = /(["'(])(\/[^"'()?#\r\n]+?)\?v=([A-Za-z0-9._-]*)/g;
 const BOOT = "Javascript/Boot.js";
-const LOADED_BY_BOOT = /^(Javascript\/[^/]+\.js|Resources\/Sprites\/[^/]+\.(webp|png|svg)|Resources\/Star\.webp)$/;
+const LOADED_BY_BOOT = /^(Javascript\/[^/]+\.js|Resources\/Sprites\/[^/]+\.(webp|png|svg)|Resources\/Sounds\/[^/]+\.mp3|Resources\/Star\.webp)$/;
 
 // The site's files (paths from the root, with /): what's staged when checking, what's on disk otherwise
 function siteFiles() {

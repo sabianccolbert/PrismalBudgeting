@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.21.2026.A";
+  const SITE_VERSION = "10.21.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,24 +26,38 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "fe4d1539d3",
-    "/Javascript/Budget Search.js": "57d178915c",
-    "/Javascript/Budget UI.js": "e0e7bf2f05",
-    "/Javascript/Calendar Page.js": "aa0da2aef6",
+    "/Javascript/Budget Pages.js": "fb14b90be6",
+    "/Javascript/Budget Search.js": "1dfe4e44ff",
+    "/Javascript/Budget UI.js": "d2f9526b2b",
+    "/Javascript/Calendar Page.js": "4d93c26383",
     "/Javascript/Dates.js": "9f645c4b1f",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "8334275548",
+    "/Javascript/Layout.js": "322015e58b",
     "/Javascript/Login.js": "5621c1f33e",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "235eed11be",
-    "/Javascript/Quick Entry.js": "380b76f435",
+    "/Javascript/Process Budget.js": "09292ba0f2",
+    "/Javascript/Quick Entry.js": "0f2d6781c2",
     "/Javascript/Session.js": "6961a399bf",
-    "/Javascript/Settings Page.js": "7c90c63967",
-    "/Javascript/Spreadsheets Page.js": "9570679fa3",
-    "/Javascript/Spreadsheets.js": "b4b0b3b517",
+    "/Javascript/Settings Page.js": "74b22d45cf",
+    "/Javascript/Sounds.js": "a4d1a0d98e",
+    "/Javascript/Spreadsheets Page.js": "d212bf4b40",
+    "/Javascript/Spreadsheets.js": "c49a687361",
     "/Javascript/Sprites.js": "5b494b26db",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
+    "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
+    "/Resources/Sounds/Ambient2.mp3": "aab38039a1",
+    "/Resources/Sounds/Ambient3.mp3": "4b81f3efe0",
+    "/Resources/Sounds/Ambient4.mp3": "d45ab25404",
+    "/Resources/Sounds/Ambient5.mp3": "6c45b4defc",
+    "/Resources/Sounds/Ding.mp3": "8784ee2a6b",
+    "/Resources/Sounds/Shatter.mp3": "27051e78fe",
+    "/Resources/Sounds/Soft1.mp3": "6e0c25ed91",
+    "/Resources/Sounds/Soft2.mp3": "8d8289f61e",
+    "/Resources/Sounds/Transition.mp3": "4b7e0e51c3",
+    "/Resources/Sounds/Twinkle1.mp3": "5f9b9a22de",
+    "/Resources/Sounds/Twinkle2.mp3": "23912ae518",
+    "/Resources/Sounds/Twinkle3.mp3": "053548a0e8",
     "/Resources/Sprites/Costs.webp": "6c239b521e",
     "/Resources/Sprites/Gains.webp": "a5e3b75e17",
     "/Resources/Sprites/Hidden.webp": "cb92741fc5",
@@ -211,11 +225,13 @@
    * =============================== */
   // Starfield Setup goes first, so the stars start right away (Boot.js has already started its worker, see
   // above), and it has to come before Keyboard and Layout, which use window.STARFIELD. Then Sprites, so the
-  // emoji's images (the entry types, and In Bank, Gains, and Costs) are in before the page slides in.
+  // emoji's images (the entry types, and In Bank, Gains, and Costs) are in before the page slides in. Sounds plays
+  // the site's sound effects and music.
   const GLOBAL_SCRIPTS = [
     "/Javascript/Starfield Setup.js",
     "/Javascript/Sprites.js",
     "/Javascript/Layout.js",
+    "/Javascript/Sounds.js",
     "/Javascript/Keyboard Starfield.js",
     "/Javascript/Analytics.js"
   ];

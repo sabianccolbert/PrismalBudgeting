@@ -190,6 +190,11 @@ const Spreadsheets = (() => {
     return /[dy]/i.test(plain) || (/m/i.test(plain) && !/[hs]/i.test(plain));
   }
 
+  // Excel number formats that show a percent (a cell's number then is its percent / 100): the built-in 0% and 0.00%, and
+  // any with a % outside quotes
+  const BUILT_IN_PERCENTS = new Set([9, 10]);
+  const isPercentFormat = (code) => /%/.test(String(code || "").replace(/"[^"]*"/g, "").replace(/\\./g, ""));
+
   // A date's serial number (days since 1899-12-30, or 1904-01-01 in a workbook that counts from 1904) as
   // local midnight; the time of day is left out
   function serialDate(serial, from1904 = false) {
@@ -220,16 +225,20 @@ const Spreadsheets = (() => {
     const stringsPath = stringsRel ? resolvePath(base, stringsRel.target) : `${base}sharedStrings.xml`;
     const strings = zip.has(stringsPath) ? elements(parseXml(await zip.text(stringsPath)), "si").map(runText) : [];
 
-    // Which cell styles show a date
+    // Which cell styles show a date, and which a percent
     const dateStyles = new Set();
+    const percentStyles = new Set();
     const stylesRel = relOfType("styles");
     const stylesPath = stylesRel ? resolvePath(base, stylesRel.target) : `${base}styles.xml`;
     if (zip.has(stylesPath)) {
       const styles = parseXml(await zip.text(stylesPath));
-      const customDates = new Set(elements(styles, "numFmt").filter(format => isDateFormat(format.getAttribute("formatCode"))).map(format => Number(format.getAttribute("numFmtId"))));
+      const customFormats = (test) => new Set(elements(styles, "numFmt").filter(format => test(format.getAttribute("formatCode"))).map(format => Number(format.getAttribute("numFmtId"))));
+      const customDates = customFormats(isDateFormat);
+      const customPercents = customFormats(isPercentFormat);
       childElements(elements(styles, "cellXfs")[0], "xf").forEach((xf, index) => {
         const id = Number(xf.getAttribute("numFmtId") || 0);
         if (BUILT_IN_DATES.has(id) || customDates.has(id)) dateStyles.add(index);
+        else if (BUILT_IN_PERCENTS.has(id) || customPercents.has(id)) percentStyles.add(index);
       });
     }
 
@@ -250,7 +259,7 @@ const Spreadsheets = (() => {
         for (const c of childElements(row, "c")) {
           const address = cellAddress(c.getAttribute("r"));
           colNumber = address ? address.col : colNumber + 1;
-          const cell = xlsxCell(c, strings, dateStyles, from1904);
+          const cell = xlsxCell(c, strings, dateStyles, from1904, percentStyles);
           if (cell) setCell(tab, rowNumber, colNumber, cell);
         }
       }
@@ -259,7 +268,7 @@ const Spreadsheets = (() => {
   }
 
   // One <c> of an .xlsx sheet -> a cell (see readWorkbook), or null when it's empty
-  function xlsxCell(c, strings, dateStyles, from1904) {
+  function xlsxCell(c, strings, dateStyles, from1904, percentStyles = new Set()) {
     const type = c.getAttribute("t") || "n";
     if (type === "inlineStr") {
       const text = runText(childElements(c, "is")[0]);
@@ -284,6 +293,7 @@ const Spreadsheets = (() => {
       const date = serialDate(number, from1904);
       if (date) return { t: "d", v: date };
     }
+    if (percentStyles.has(Number(c.getAttribute("s") || 0))) return { t: "n", v: number, percent: true };
     return { t: "n", v: number };
   }
 
@@ -338,7 +348,8 @@ const Spreadsheets = (() => {
     const type = cell.getAttributeNS(OFFICE, "value-type");
     if (type === "float" || type === "currency" || type === "percentage") {
       const number = Number(cell.getAttributeNS(OFFICE, "value"));
-      return Number.isFinite(number) ? { t: "n", v: number } : null;
+      if (!Number.isFinite(number)) return null;
+      return type === "percentage" ? { t: "n", v: number, percent: true } : { t: "n", v: number };
     }
     if (type === "date") {
       const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(cell.getAttributeNS(OFFICE, "date-value") || "");
@@ -531,6 +542,18 @@ const Spreadsheets = (() => {
     return Number.isFinite(number) ? (negative ? -Math.abs(number) : number) : NaN;
   }
 
+  // An amount cell that's a percent (a % entry's, see PERCENT_MARK in Process Budget.js) -> its percent ("3%", or a
+  // number shown as one, is 3), or null when it isn't one
+  function cellPercent(cell) {
+    if (!cell) return null;
+    if (cell.t === "n") return cell.percent ? Math.round(cell.v * 10000) / 100 : null;
+    if (cell.t !== "s") return null;
+    const text = String(cell.v).replace(/\s+/g, "");
+    if (!/%\)?$/.test(text)) return null;
+    const number = cellAmount({ t: "s", v: text.replace("%", "") });
+    return Number.isFinite(number) ? number : null;
+  }
+
   // A refraction type cell -> "❗️" | "✖️" | "⭕️"; "" when it's empty (Regular), null when it isn't one
   function cellType(cell) {
     const text = cellText(cell).toLowerCase().replace(/\uFE0F/g, "");
@@ -586,9 +609,12 @@ const Spreadsheets = (() => {
     const typedAccount = !isLinked(fields.account) ? String(fields.account?.value || "").trim() : "";
     const typedTitle = !isLinked(fields.title) ? String(fields.title?.value || "").replace(/\s+/g, " ").trim() : "";
     const typedAmount = !isLinked(fields.amount) ? Number(fields.amount?.value) : NaN;
+    // (A typed amount can be a percent of the Other Account's balance instead: a % entry, see PERCENT_MARK)
+    const typedPercent = !isLinked(fields.amount) && fields.amount?.percent === true;
     const sign = isLinked(fields.amount) ? fields.amount.sign : "written";
     if (!isLinked(fields.amount) && !Number.isFinite(typedAmount)) return stop("Type the amount, or tap ➕ next to Amount to pick its cells.");
-    if (!isLinked(fields.amount) && Math.abs(typedAmount) > MAX_AMOUNT) return stop(AMOUNT_TOO_BIG);
+    if (!isLinked(fields.amount) && Math.abs(typedAmount) > (typedPercent ? MAX_PERCENT : MAX_AMOUNT)) return stop(typedPercent ? `A percent can be up to ${MAX_PERCENT}%.` : AMOUNT_TOO_BIG);
+    if (typedPercent && !typedAccount && !isLinked(fields.account)) return stop(PERCENT_NEEDS_ACCOUNT);
     if (typedAccount && !accounts.has(cleanString(typedAccount))) return stop(`The Other Account "${typedAccount}" isn't one of yours anymore. Pick another, or add it on the Other Accounts page.`);
     if (!isLinked(fields.title) && !typedTitle && !typedAccount) return stop("Type a title, or tap ➕ next to Title to pick its cells.");
 
@@ -612,19 +638,26 @@ const Spreadsheets = (() => {
       }
 
       let amount = typedAmount;
+      let percent = typedPercent ? typedAmount : null;
       if (read.amount) {
         const amountCell = valueAt("amount", i);
-        amount = cellAmount(amountCell.cell);
+        percent = cellPercent(amountCell.cell);
+        amount = percent ?? cellAmount(amountCell.cell);
         if (!Number.isFinite(amount)) {
           problem(amountCell.cell ? `${amountCell.ref} ("${cellText(amountCell.cell)}") isn't an amount. Make it a number, like 25.00.` : `${amountCell.ref} has no amount. Fill it in, or clear its date.`);
           continue;
         }
-        if (Math.abs(amount) > MAX_AMOUNT) {
+        if (percent === null && Math.abs(amount) > MAX_AMOUNT) {
           problem(`${amountCell.ref} ("${cellText(amountCell.cell)}") is more than $1,000,000,000, the most an entry can be.`);
+          continue;
+        }
+        if (percent !== null && Math.abs(amount) > MAX_PERCENT) {
+          problem(`${amountCell.ref} ("${cellText(amountCell.cell)}") is more than ${MAX_PERCENT}%, the most a percent can be.`);
           continue;
         }
         if (sign === "costs") amount = -Math.abs(amount);
         else if (sign === "gains") amount = Math.abs(amount);
+        if (percent !== null) percent = amount;
       }
 
       let type = typedType;
@@ -666,9 +699,21 @@ const Spreadsheets = (() => {
         }
       }
 
+      if (percent !== null && !account) {
+        problem(`${read.amount ? valueAt("amount", i).ref : dateCell.ref}'s amount is a percent, which needs an Other Account (it's a percent of the account's balance). Name one, or make it an amount.`);
+        continue;
+      }
+
       if (date < keepFrom || date > keepTo) continue;
       const ownTitle = capitalize(splitAccount(title.replace(/\s+/g, " ").trim()).title).slice(0, MAX_TITLE);
-      entries.push([formatToMMDDYYYY(date), type, Math.round(amount * 100) / 100, withAccount(ownTitle, account)]);
+      const fullTitle = withAccount(ownTitle, account);
+      // (A % entry's amount is about what it comes to; each day it lands works out its own)
+      if (percent !== null && percent !== 0) {
+        const sprite = decoratedSprite(type, { percent });
+        entries.push([formatToMMDDYYYY(date), sprite, percentAmount(percent, date < today ? today : date, sprite, fullTitle) ?? 0, fullTitle]);
+      } else {
+        entries.push([formatToMMDDYYYY(date), type, Math.round(amount * 100) / 100, fullTitle]);
+      }
     }
 
     entries.sort((a, b) => createSafeMidnight(a[0], true) - createSafeMidnight(b[0], true));
