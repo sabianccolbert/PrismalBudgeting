@@ -312,6 +312,7 @@
   /* (Floating windows' glass, --HOVER_GRADIENT and --FLOAT_SHADOW, is in stylesheet.css: the date picker uses it too) */
   --NEGATIVE_TEXT: #ff6b7a;
   --POSITIVE_TEXT: #5ee39a;              /* Positive entries */
+  --PLACEHOLDER_TEXT: #ffd447;           /* Placeholder entries, whatever their amount */
   --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
 }
 
@@ -656,6 +657,19 @@
   width: 100%;
   max-width: 0; /* It takes the room the other columns leave, and no more */
   white-space: normal;
+}
+
+/* Where the dates break onto two lines (so a row is two lines tall anyway), a long title uses its second line before
+   it's cut short */
+@media (max-width: 699px) {
+  .recurringTable .clipText:not(.isOpen) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 .recurringTable td.dateCell,
@@ -1133,6 +1147,11 @@ input.dateInput.isPickTarget {
   margin: 0;
   font-size: 1em;
   color: var(--BASE_COLOR);
+}
+
+/* The Placeholder switch: its word in a placeholder's yellow */
+.placeholderField .checkboxField span {
+  color: var(--PLACEHOLDER_TEXT);
 }
 
 /* Title lists (tracker aliases, the search bar): a title box, its buttons, and × on each line. Every part can shrink to
@@ -2264,12 +2283,12 @@ input.dateInput.isPickTarget {
   transition: box-shadow var(--SLOW_SHADOW);
 }
 
-/* The colors are only a thin ring: its middle is solid and glows like Quick Entry (a blue-violet radial gradient from
-   its center, over Quick Entry's blue-to-violet, with a bright edge), under the + */
+/* The colors are a thin ring, a few pixels wide: its middle is solid and glows like Quick Entry (a blue-violet radial
+   gradient from its center, over Quick Entry's blue-to-violet, with a bright edge), under the + */
 .newEntryPrism::before {
   content: "";
   position: absolute;
-  inset: 5%;
+  inset: 9%;
   border-radius: 50%;
   background: var(--GLOW_FILL), linear-gradient(90deg, rgb(30, 47, 139), rgb(80, 36, 145));
   box-shadow: 0 0 0 1px var(--GLOW_EDGE), 0 0 8px rgba(96, 112, 255, 0.55), inset 0 0 12px rgba(120, 140, 255, 0.35);
@@ -3298,16 +3317,23 @@ a.budgetButton:hover {
   width: min(100%, 15em);
 }
 
-/* Help: the Help button at the bottom of a page opens the page's help, floating over a dimmed page. The
-   word in a small pill (its padding follows the panels' text size, the word a little bigger on big screens). */
+/* Help: the Help button at the bottom of a page, just under the footer's line (Layout.js moves it there), opens the
+   page's help, floating over a dimmed page. The word in a small pill (its padding follows the panels' text size, the
+   word a little bigger on big screens). */
 .helpButton {
-  display: inline-flex;
+  display: flex;
+  width: fit-content;
   align-items: center;
   justify-content: center;
-  margin: 5vmin 0 0;
+  margin: 0 auto 0.5vmin;
   padding: calc(var(--UI_TEXT) * 0.35) calc(var(--UI_TEXT) * 1.1);
   font-size: max(12px, 2.4vmin);
   line-height: 1.1;
+}
+
+/* (A footer with the Help button keeps it close under its line) */
+footer.hasHelp > hr {
+  margin-bottom: max(8px, 1.5vmin);
 }
 
 .budgetCard.helpView {
@@ -3720,4 +3746,21 @@ html:not(.frontPage) .frontSignIn,
   .frontPage #transitionContainer {
     padding-top: calc(2vh + 64px);
   }
+}
+
+/* A placeholder (Process Budget.js) is yellow, a cost or a gain, wherever it shows: on a day, in Upcoming, Search, the
+   Recurring Entries table, an account's entries, Quick Entry's prisms and waiting entries, and a spreadsheet's count and
+   preview. It comes last, and is as specific as each place's own colors, so it wins over them. */
+.isPlaceholder,
+.isPlaceholder .positive,
+.isPlaceholder .negative,
+.lineEntry.isPlaceholder,
+.dataTable td.isPlaceholder,
+.dataTable td.amountCell.isPlaceholder,
+.recurringTable tr.isPlaceholder td,
+.recurringTable tr.isPlaceholder td.amountCell,
+.waitingItem.isPlaceholder .waitingTitle,
+.waitingItem.isPlaceholder .waitingAmount,
+.sheetPreviewList.isPlaceholder li {
+  color: var(--PLACEHOLDER_TEXT);
 }

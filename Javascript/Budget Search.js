@@ -244,7 +244,10 @@ function renderSearchResults({ results, from, to, searchingFor }) {
     if (result.amount > 0) amountCell.classList.add("positive");
     if (result.amount < 0) amountCell.classList.add("negative");
     tr.appendChild(amountCell);
-    tr.appendChild(BudgetUI.element("td", "", `${result.sprite} ${result.title}`));
+    const entryCell = BudgetUI.element("td", "", `${withoutPlaceholder(result.sprite)} ${result.title}`);
+    tr.appendChild(entryCell);
+    // (A placeholder's amount and entry are yellow)
+    if (isPlaceholder(result.sprite)) [amountCell, entryCell].forEach(td => td.classList.add("isPlaceholder"));
     BudgetUI.noTranslate(tr); // Dates, amounts, and entries show as they are
     return checkbox;
   });

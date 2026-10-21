@@ -90,7 +90,9 @@ function renderRecurringPage(view) {
     rows,
     extraClass: "recurringTable",
     renderEntry(tr, row) {
-      tr.appendChild(cell(row[5], "typeCell"));
+      // (A placeholder's row is yellow, its type without the ⏳ it's stored with)
+      if (isPlaceholder(row[5])) tr.classList.add("isPlaceholder");
+      tr.appendChild(cell(withoutPlaceholder(row[5]), "typeCell"));
       tr.appendChild(noTranslate(clippedCell(row[0], "titleCell")));
       tr.appendChild(noTranslate(cell(row[1], "amountCell")));
       tr.appendChild(noTranslate(dateCell(row[2])));
@@ -264,13 +266,18 @@ function clippedCell(text, className) {
   const box = BudgetUI.element("div", "clipText", text ?? "");
   box.addEventListener("click", (event) => {
     const open = box.classList.contains("isOpen");
-    if (editMode || (!open && box.scrollWidth <= box.clientWidth + 1)) return;
+    if (editMode || (!open && !textCutShort(box))) return;
     event.stopPropagation();
     box.classList.toggle("isOpen", !open);
     markClipped(box.closest("table"));
   });
   td.appendChild(box);
   return td;
+}
+
+// Is a cut-short cell's text cut short? (on its one line, or, where it gets two, Recurring Entries' titles, after its second)
+function textCutShort(box) {
+  return box.scrollWidth > box.clientWidth + 1 || box.scrollHeight > box.clientHeight + 1;
 }
 
 // A stored date in a cell, as people read it, which can break onto two lines after its day and month ("10/05/" over
@@ -293,23 +300,24 @@ function markClipped(table) {
       box.classList.toggle("isClipped", !box.classList.contains("isOpen") && box.scrollHeight > box.clientHeight + 1);
     }
     for (const box of table.querySelectorAll(".clipText")) {
-      box.classList.toggle("isClipped", !box.classList.contains("isOpen") && box.scrollWidth > box.clientWidth + 1);
+      box.classList.toggle("isClipped", !box.classList.contains("isOpen") && textCutShort(box));
     }
   });
 }
 
 // Other Accounts: [0] column titles, then [name, balance, "default" | "", starting amount] (see Other Accounts
 // in Process Budget.js). Balances are each account's starting amount plus its entries (Hidden and Transfer entries
-// with it picked): today, and on the calendar's last day. Savings can't be deleted.
+// with it picked): today, and in 6 months (AHEAD_MONTHS, see budgetAhead). Savings can't be deleted.
 function renderAccountsPage(view) {
   renderToolbar("accounts", (origin) => openAccountPanel(origin, null), { newLabel: "New Account", newInEditMode: true });
   view.replaceChildren();
   const summaries = new Map(accountSummaries().map(summary => [summary.index, summary]));
-  view.appendChild(accountsTotal([...summaries.values()]));
+  const ahead = budgetAhead([...summaries.values()]);
+  view.appendChild(accountsTotal([...summaries.values()], ahead));
 
   const tableEl = buildRowTable({
     tableName: "accounts",
-    columns: ["Account", "Balance", `By ${showDay(gridEndDate)}`],
+    columns: ["Account", "Balance", AHEAD_LABEL],
     rows: indexedRows(accountsData.list, 1),
     extraClass: "accountsTable",
     sections: false,
@@ -319,21 +327,24 @@ function renderAccountsPage(view) {
       const summary = summaries.get(index);
       tr.appendChild(noTranslate(cell(row[0], "titleCell")));
       tr.appendChild(noTranslate(cell(formatMoney(summary ? summary.today : 0), "amountCell")));
-      tr.appendChild(noTranslate(cell(formatMoney(summary ? summary.calendarEnd : 0), "amountCell")));
+      tr.appendChild(noTranslate(cell(formatMoney(ahead.accounts.get(index) ?? 0), "amountCell")));
     },
     onEntryClick: (index, origin) => openAccountPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
-  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", "Balances come from each account's Hidden and Transfer entries (and its interest, when it has some). Tap an account to see them, rename it, or set its interest."));
+  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", `Balances come from each account's Hidden and Transfer entries (and its interest, when it has some). ${AHEAD_LABEL} counts the ones still to come: on the calendar, in Upcoming, and from your recurring entries and connected spreadsheets. Tap an account to see them, rename it, or set its interest.`));
 }
 
-// Over the accounts: everything together, In Bank (the budget's own account) and every Other Account, today and on the
-// calendar's last day, and In Bank on its own
-function accountsTotal(summaries) {
+// The figures six months ahead (AHEAD_MONTHS)
+const AHEAD_LABEL = `In ${AHEAD_MONTHS} Months`;
+
+// Over the accounts: everything together, In Bank (the budget's own account) and every Other Account, today and in 6
+// months (ahead: budgetAhead), and In Bank on its own
+function accountsTotal(summaries, ahead) {
   const todaySpot = calendarSpot(today);
   const inBankToday = (todaySpot && readInBank(calendarData[todaySpot.r][todaySpot.c])) ?? 0;
-  const inBankEnd = readInBank(calendarData[3][6]) ?? 0;
   const sum = (key) => summaries.reduce((total, summary) => total + summary[key], 0);
+  const aheadTotal = [...ahead.accounts.values()].reduce((total, balance) => total + balance, 0);
   const box = BudgetUI.element("div", "accountsTotal");
   const figure = (label, amount, main = false) => {
     const part = BudgetUI.element("div", main ? "totalFigure main" : "totalFigure");
@@ -344,7 +355,7 @@ function accountsTotal(summaries) {
   };
   box.append(
     figure("Total today, with In Bank", inBankToday + sum("today"), true),
-    figure(`Total by ${showDay(gridEndDate)}`, inBankEnd + sum("calendarEnd")),
+    figure(`Total in ${AHEAD_MONTHS} Months`, ahead.inBank + aheadTotal),
     figure("In Bank today", inBankToday)
   );
   return box;
@@ -1022,11 +1033,20 @@ function openRecurringPanel(origin, index) {
         onChange: (key) => account.setVisible(BudgetUI.isAccountType(key))
       });
       account.setVisible(BudgetUI.isAccountType(refraction.value()));
+      // Every day it lands on gets a placeholder (offered while it can still land: no End Date, or one from today on)
+      const placeholder = BudgetUI.placeholderField({
+        checked: !!existing && isPlaceholder(existing[5]),
+        hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes."
+      });
+      const showPlaceholder = () => placeholder.setDate(end.value() ?? null);
+      end.input.addEventListener("input", showPlaceholder);
+      end.input.addEventListener("change", showPlaceholder);
+      showPlaceholder();
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteEntry }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Entry", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(title.el, amount.el, frequency.el, start.el, end.el, refraction.el, account.el, BudgetUI.buttonRow(buttons));
+      form.append(title.el, amount.el, frequency.el, start.el, end.el, refraction.el, account.el, placeholder.el, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -1041,6 +1061,8 @@ function openRecurringPanel(origin, index) {
         if (!fields.frequency) return panel.setError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
         fields.sprite = BudgetUI.RECURRING_SPRITES[refraction.value()];
         fields.endDate = fields.endDate || "None";
+        // (Left as it was when the switch isn't there: an End Date before today)
+        if (!placeholder.el.hidden) fields.placeholder = placeholder.value();
         BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
       });
 
@@ -1194,6 +1216,7 @@ function accountEntriesField(summary) {
   const list = BudgetUI.element("ul", "accountEntries");
   for (const entry of [...upcoming, ...latest]) {
     const item = BudgetUI.element("li", entry.date > today ? "accountEntry upcomingChange" : "accountEntry");
+    if (isPlaceholder(entry.sprite)) item.classList.add("isPlaceholder");
     item.appendChild(noTranslate(BudgetUI.element("span", "accountEntryDate", showDate(entry.date))));
     const amount = noTranslate(BudgetUI.element("span", "accountEntryAmount", (entry.change > 0 ? "+" : "") + formatMoney(entry.change)));
     if (entry.change > 0) amount.classList.add("positive");

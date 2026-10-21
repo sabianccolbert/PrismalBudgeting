@@ -540,6 +540,24 @@ const BudgetUI = (() => {
     return { el: wrapper, input, value: () => input.checked };
   }
 
+  // The Placeholder switch: a placeholder stands in for an entry that's expected (like an estimate). It counts like any
+  // entry and shows in yellow, and the daily update deletes it once its day has passed (see PLACEHOLDER_MARK in Process
+  // Budget.js), so it's only offered for a day from today on: setDate(date) hides it for a day before today (date: a
+  // Date, or null for today). value(): on and shown.
+  const PLACEHOLDER_HINT = "A stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes.";
+  function placeholderField({ checked = false, hint = PLACEHOLDER_HINT } = {}) {
+    const toggle = checkboxField({ label: "Placeholder", checked });
+    const el = element("div", "panelField placeholderField");
+    el.append(toggle.el, element("span", "panelHint", hint));
+    return {
+      el,
+      input: toggle.input,
+      setDate(date) { el.hidden = date instanceof Date && !isNaN(date.getTime()) && date < today; },
+      set(on) { toggle.input.checked = !!on; },
+      value: () => !el.hidden && toggle.input.checked
+    };
+  }
+
   // A list of titles, one per line, each with its own buttons (like All / Costs / Gains) and an ×.
   // The tracker's aliases and the search bar use it. A comma starts the next line (so a pasted list
   // splits up), and Enter adds a line. Only the buttons pick what a line finds: a title is kept as it's
@@ -734,14 +752,15 @@ const BudgetUI = (() => {
     return { el: group, value: () => current, set };
   }
 
-  // The New Entry form's fields: title, amount (cost or gain), date, optional refraction type, and for
-  // Hidden or Transfer, the Other Account it moves money into or out of (accounts: their names).
-  // The calendar's New Entry panel and the Quick Entry page share it, so they always match.
-  // read(): { entry: { title, amount, date, sprite } } when it's filled in right, otherwise { error }. The title
-  //   carries the Other Account picked: "Title → Account" (or just the account's name when no title is typed).
+  // The New Entry form's fields: title, amount (cost or gain), date, optional refraction type, for
+  // Hidden or Transfer, the Other Account it moves money into or out of (accounts: their names), and Placeholder (for a
+  // day from today on). The calendar's New Entry panel and the Quick Entry page share it, so they always match.
+  // read(): { entry: { title, amount, date, sprite, placeholder } } when it's filled in right, otherwise { error }. The
+  //   title carries the Other Account picked: "Title → Account" (or just the account's name when no title is typed).
   // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
-  //   unreadable), sprite ("" for Auto), account ("" for none), date (null when blank, undefined when it isn't a day) }
-  // fill({ title, amount, sprite, account }): puts these in, leaving the fields they don't have as they are
+  //   unreadable), sprite ("" for Auto), account ("" for none), date (null when blank, undefined when it isn't a day),
+  //   placeholder }
+  // fill({ title, amount, sprite, account, placeholder }): puts these in, leaving the fields they don't have as they are
   //   (the Quick Entry page's prisms). dateEl: the date field, for a form that doesn't need one.
   // setAccounts(accounts): new balances for the Other Account list (the Quick Entry page's, after an Undo or Redo)
   function newEntryFields({ date = today, accounts = [] } = {}) {
@@ -750,13 +769,18 @@ const BudgetUI = (() => {
     const dateInput = dateField({ label: "Date", date });
     const account = accountField({ accounts, amount, type: () => refraction.value() });
     const refraction = refractionField({ onChange: (key) => account.setVisible(isAccountType(key)) });
+    const placeholder = placeholderField();
+    const showPlaceholder = () => placeholder.setDate(dateInput.value() ?? date);
+    dateInput.input.addEventListener("input", showPlaceholder);
+    dateInput.input.addEventListener("change", showPlaceholder);
+    showPlaceholder();
     return {
-      els: [title.el, amount.el, dateInput.el, refraction.el, account.el],
+      els: [title.el, amount.el, dateInput.el, refraction.el, account.el, placeholder.el],
       dateEl: dateInput.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value(), account: account.value(), date: dateInput.value() }),
+      values: () => ({ title: title.value(), amount: amount.value(), sprite: refraction.value(), account: account.value(), date: dateInput.value(), placeholder: placeholder.value() }),
       setAccounts: account.setAccounts,
-      fill({ title: newTitle = "", amount: newAmount = null, sprite = "", account: newAccount = "" } = {}) {
+      fill({ title: newTitle = "", amount: newAmount = null, sprite = "", account: newAccount = "", placeholder: newPlaceholder = false } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
           amount.input.value = Math.round(newAmount * 100) !== 0 ? Math.abs(newAmount).toFixed(2) : "";
@@ -764,6 +788,7 @@ const BudgetUI = (() => {
         }
         if (sprite) refraction.set(sprite);
         if (newAccount) account.pick(newAccount);
+        if (newPlaceholder) placeholder.set(true);
         title.input.dispatchEvent(new Event("input", { bubbles: true }));
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
       },
@@ -775,20 +800,23 @@ const BudgetUI = (() => {
         if (Math.abs(entry.amount) > MAX_AMOUNT) return { error: AMOUNT_TOO_BIG };
         if (entry.date === undefined) return { error: `That date isn't a real day. Use ${datePattern()}.` };
         entry.date = entry.date || date;
+        entry.placeholder = placeholder.value() && entry.date >= today;
         return { entry };
       }
     };
   }
 
   // An entry's options (an entry tapped on a zoomed day on Home or History, or in Upcoming): line is the entry as its day
-  // shows it ("❗️ -$4.50 Coffee") on date. Set to or Add to it, its refraction type and Other Account, Move to another
-  // day, or Delete. Changing its type or account takes it off as it is and puts it on as the new one, adding into an entry
-  // already on that day with the same title and type (changeEntryKind). inHistory: a day in History, where the same
-  // changes keep the balances (In Bank, and the Other Accounts'; see changeHistoryEntry) and it only moves to another day
-  // in History. The panel shows the whole entry, however long its title.
+  // stores it ("❗️ -$4.50 Coffee") on date. Set to or Add to it, its refraction type and Other Account, Move to another
+  // day, whether it's a placeholder (for a day from today on), or Delete. Changing its type or account takes it off as it
+  // is and puts it on as the new one, adding into an entry already on that day with the same title and type
+  // (changeEntryKind). inHistory: a day in History, where the same changes keep the balances (In Bank, and the Other
+  // Accounts'; see changeHistoryEntry) and it only moves to another day in History. The panel shows the whole entry,
+  // however long its title.
   function openEntryOptions(origin, line, date, { lineIndex = 1, inHistory = false } = {}) {
     const parts = getParts(line);
     const refraction = getSpecialType(parts[0]);
+    const wasPlaceholder = isPlaceholder(parts[0]);
     const currentAmount = parseAmount(parts[1]);
     const title = parts.slice(2).join(" ");
     const changeEntry = inHistory ? changeHistoryEntry : changeCalendarEntry;
@@ -832,8 +860,18 @@ const BudgetUI = (() => {
         const accountPicker = accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "" });
         accountPicker.setVisible(isAccountType(refraction));
         const startAccount = accountPicker.value();
+        // A placeholder (only for a day from today on, so never in History): it follows Move to's day
+        const placeholder = placeholderField({ checked: wasPlaceholder });
+        const showPlaceholder = () => {
+          const move = moveTo.value();
+          placeholder.setDate(move instanceof Date ? move : date);
+          if (inHistory) placeholder.el.hidden = true;
+        };
+        moveTo.input.addEventListener("input", showPlaceholder);
+        moveTo.input.addEventListener("change", showPlaceholder);
+        showPlaceholder();
 
-        form.append(display, ...[accountNote, historyNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, buttonRow([
+        form.append(display, ...[accountNote, historyNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, buttonRow([
           { label: "Save", kind: "primary", type: "submit" },
           { label: "Delete", kind: "danger", onClick: deleteEntry },
           { label: "Cancel", onClick: () => panel.close() }
@@ -846,6 +884,8 @@ const BudgetUI = (() => {
           if (Number.isNaN(newAmount)) return panel.setError("Enter an amount, like 12.50.");
           if (Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
           if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+          // (Left as it is when the switch isn't there: a day before today never has one)
+          const newPlaceholder = placeholder.el.hidden ? undefined : placeholder.value();
 
           const newSprite = type.value();
           const newAccount = accountPicker.value();
@@ -855,19 +895,20 @@ const BudgetUI = (() => {
             const newTitle = withAccount(ownTitle, newAccount);
             // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
             if (!newTitle) return panel.setError("This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
-            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total };
+            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, placeholder: newPlaceholder };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
             return submit(panel, () => changeKind(kind));
           }
 
-          const change = { title, sprite: refraction, date, action: "set", amount: "" };
+          const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder };
           const amountChanged = mode === "set" ? newAmount !== currentAmount : newAmount !== 0;
           if (amountChanged) {
             change.action = mode === "set" ? "set" : (newAmount > 0 ? "add" : "subtract");
             change.amount = mode === "set" ? String(newAmount) : String(Math.abs(newAmount));
           }
           if (move && move.getTime() !== date.getTime()) change.moveDate = move;
-          if (!amountChanged && !change.moveDate) return panel.close(); // Nothing changed
+          const placeholderChanged = newPlaceholder !== undefined && newPlaceholder !== wasPlaceholder;
+          if (!amountChanged && !change.moveDate && !placeholderChanged) return panel.close(); // Nothing changed
 
           submit(panel, () => changeEntry(change));
         });
@@ -964,7 +1005,8 @@ const BudgetUI = (() => {
   // =====================================================================
 
   // One line of a day cell: the date (as people read it: the caller passes it shown), a system line (In
-  // Bank, Costs, Gains), or an entry. Entries with a positive amount show green.
+  // Bank, Costs, Gains), or an entry. Entries with a positive amount show green, and placeholders yellow (without
+  // their ⏳, which is only how they're stored).
   // A browser translating the page leaves entries, amounts, and dates as they are (they're the person's
   // own words and numbers); only the budget's own words, like In Bank, get translated.
   function renderEntryLine(line, lineIndex) {
@@ -983,9 +1025,10 @@ const BudgetUI = (() => {
       if (day) el.appendChild(noTranslate(element("span", "", showStoredDate(day[2]))));
       return el;
     }
-    const el = noTranslate(element("div", "lineEntry", line));
+    const el = noTranslate(element("div", "lineEntry", shownLine(line)));
     el.dataset.line = lineIndex;
     if (amount > 0) el.classList.add("positive");
+    if (isPlaceholder(parts[0])) el.classList.add("isPlaceholder");
     return el;
   }
 
@@ -1062,6 +1105,7 @@ const BudgetUI = (() => {
     dateField,
     selectField,
     checkboxField,
+    placeholderField,
     frequencyField,
     accountField,
     isAccountType,

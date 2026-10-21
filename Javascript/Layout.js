@@ -12,6 +12,7 @@
  *     - Starfield freeze/save hooks
  *     - The screen layer (floating windows stay on the visible screen)
  *     - Slide timing (read from the CSS)
+ *     - Which way pages slide
  *     - Navigation type detection
  *     - Referrer analysis for back button behavior (menu vs homepage vs internal)
  *
@@ -26,7 +27,8 @@
  *     - Repair state after bfcache restores
  *
  *  5) TRANSITION NAVIGATION (SLIDE-OUT THEN LEAVE)
- *     - Animate out (a tab's glow slides to the tab that was tapped)
+ *     - Animate out, the way slideWay picks (a tab's glow slides to the tab that was tapped)
+ *     - Load the next page meanwhile (prefetch)
  *     - Freeze+save near the end
  *     - Navigate on transitionend (with timeout fallback)
  *
@@ -260,6 +262,54 @@ function firstSlidingPart() {
   return document.querySelector("#transitionContainer > main > :not(.pageTop), #transitionContainer .pageTop > :not(.pageTabs)");
 }
 
+// How far into its time a slide out has the page out of sight: with the CSS's ease-in-out, it has gone 95% of the way
+// by then, past the screen's edge (it slides 110% of the screen)
+const OUT_OF_SIGHT = 0.85;
+
+// The classes for each way (stylesheet.css section 10): html's while a page slides in (Boot.js adds them), and the
+// container's while it slides out (down and out needs none)
+const SLIDE_IN_CLASSES = ["tabSlide", "fromRight", "fromLeft", "fromTop"];
+const SLIDE_OUT_CLASSES = { left: "toLeft", right: "toRight", up: "toTop" };
+
+/* GROUP: Which way pages slide */
+// Pages slide as if they sat side by side: the Menu and its pages to the right of the budget (going there slides left,
+// coming back slides right), Quick Entry and the Privacy Policy to its left (going there slides right, leaving slides
+// left), and Settings above it all (it slides down into view, and back up to leave). Signing in slides left and
+// signing out slides right, as if the login page sat to the left of the budget (and to the right of the front page,
+// so Sign In there slides left too). Between the budget's four pages, only what's under their tabs slides. The page
+// that opens slides in the same way the last one slid out (Boot.js reads the note transitionTo leaves).
+const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "logs"];
+const SIDE_PAGES = ["quick", "privacy"];
+const BUDGET_TABS = ["home", "recurring", "history", "accounts"];
+
+// The way from page FROM to page TO: "left", "right", "up", "down", "tab", or null (anything else: the page slides
+// down and out, and the next one up into view)
+function slideWay(FROM, TO) {
+  const SIGNED_IN = !!readStored("prismal_jwt");
+  if (!FROM || !TO || FROM === TO) return null;
+  if (TO === "settings") return "down";
+  if (FROM === "settings") return "up";
+  if (SIDE_PAGES.includes(TO)) return "right";
+  if (SIDE_PAGES.includes(FROM)) return "left";
+  if (FROM === "login") return SIGNED_IN ? "left" : TO === "home" ? "right" : null;
+  if (TO === "login") return FROM === "home" && !SIGNED_IN ? "left" : null;
+  if (MENU_PAGES.includes(TO) && (FROM === "menu" || !MENU_PAGES.includes(FROM))) return "left";
+  if (MENU_PAGES.includes(FROM)) return "right";
+  if (BUDGET_TABS.includes(FROM) && BUDGET_TABS.includes(TO) && SIGNED_IN) return "tab";
+  return null;
+}
+
+// Which of the site's pages an address is (Boot.js pageKeyOf), or null for another site's
+function pageOf(ADDRESS) {
+  try {
+    const TARGET = new URL(ADDRESS, location.href);
+    if (TARGET.origin !== location.origin || typeof window.pageKeyOf !== "function") return null;
+    return window.pageKeyOf(TARGET.pathname);
+  } catch {
+    return null;
+  }
+}
+
 /* GROUP: Navigation type detection */
 // Detect whether this page was restored via back/forward (often bfcache).
 // We use this to repair state when a user returns without a full reload.
@@ -378,7 +428,7 @@ window.addEventListener("scroll", () => {
 function settlePage() {
   if (PAGE_SETTLED) return;
   PAGE_SETTLED = true;
-  document.documentElement.classList.remove("tabSlide");
+  document.documentElement.classList.remove(...SLIDE_IN_CLASSES);
   if (!location.hash || isReturningPage()) return;
   let SPOT = null;
   try { SPOT = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch {}
@@ -473,9 +523,12 @@ window.addEventListener("pageshow", (EVENT) => {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
 
-  // Back to a signed-in page after signing out (it came back from the back/forward cache): go to login.
-  // Back to the front page after signing in: the budget.
+  // Back to a signed-in page after signing out (it came back from the back/forward cache): go to login (which slides
+  // in like any sign-out, and nothing slides this page out on the way). Back to the front page after signing in: the
+  // budget.
   if (!readStored("prismal_jwt") && !window.PUBLIC_PAGE) {
+    IS_TRANSITION_ACTIVE = true;
+    leaveNote("login", "right");
     window.location.replace("/login.html");
     return;
   }
@@ -491,9 +544,15 @@ window.addEventListener("pageshow", (EVENT) => {
 
   if (!isBackForwardNavigation(EVENT)) return;
 
-  CONTAINER.classList.remove("slide-out", "tab-slide-out");
+  // The page slides back in the way it left. Its slide out was still easing to a stop when it was left (section 5), so
+  // that's stopped where it was headed first, or the page would jump back instead. One that slid up or down stays
+  // clipped to the screen until it's back (section 6 takes the clip off), so what's above or below doesn't run past.
+  if (CONTAINER.getAnimations) CONTAINER.getAnimations().forEach(ANIMATION => ANIMATION.cancel());
+  void getComputedStyle(CONTAINER).transform; // (where it went is where its slide back starts)
+  CONTAINER.classList.remove("slide-out", "tab-slide-out", ...Object.values(SLIDE_OUT_CLASSES));
   CONTAINER.classList.add("ready");
-  document.documentElement.classList.remove("tabSlide");
+  document.documentElement.classList.remove(...SLIDE_IN_CLASSES);
+  setTimeout(() => { if (!IS_TRANSITION_ACTIVE) CONTAINER.style.clipPath = ""; }, getSlideDurationSeconds() * 1000 + 200);
   // A tab's glow that was sliding over when the page was left goes back where it belongs
   document.querySelectorAll(".tabGlow").forEach(GLOW => GLOW.remove());
   document.querySelectorAll(".pageTabs.isGliding").forEach(TABS => TABS.classList.remove("isGliding"));
@@ -513,41 +572,46 @@ window.addEventListener("pageshow", (EVENT) => {
  *====================================================================*/
 
 /* GROUP: Transition navigation entry point */
-// Animate slide-out, then navigate after the animation duration.
-// URL may be a real href or the special keyword "back". TAB: the tab of the budget's four pages that was followed (or
-// null), so only the page under the header and the tabs slides out (and the next page knows to do the same), while
-// the glow on the tab that's showing slides over to it.
-function transitionTo(URL, useReplace = false, TAB = null) {
+// Animate slide-out, then navigate once the page is out of sight.
+// ADDRESS may be a real href or the special keyword "back". WAY: which way the page slides (slideWay works it out when
+// it's left out). Between the budget's four pages ("tab"), only the page under the header and the tabs slides out,
+// while the glow on the tab that's showing slides over to the next page's tab. The next page slides in the same way:
+// this tab's session storage keeps a note for it (Boot.js).
+function transitionTo(ADDRESS, useReplace = false, WAY) {
   if (IS_TRANSITION_ACTIVE) return;
-  if (!URL) return;
-  let TAB_SLIDE = !!TAB;
+  if (!ADDRESS) return;
 
   /* GROUP: "back" keyword support */
-  if (URL === "back") {
-    URL = readStored("homepageBackUrl") || "/";
+  if (ADDRESS === "back") {
+    ADDRESS = readStored("homepageBackUrl") || "/";
   }
+
+  /* GROUP: Which way, and the note for the next page */
+  const TO = pageOf(ADDRESS);
+  if (WAY === undefined) WAY = slideWay(window.PAGE, TO);
+  const CONTAINER = getTransitionContainer();
+  const TAB = WAY === "tab" ? tabFor(TO) : null;
+  if (WAY === "tab" && !(TAB && firstSlidingPart())) WAY = null;
+  const MOVING = WAY === "tab" ? firstSlidingPart() : CONTAINER;
+  // Leaving another way while this page is still sliding in by its tab: the whole page slides out after all
+  if (WAY !== "tab") document.documentElement.classList.remove("tabSlide");
+  const DURATION_MS = getSlideDurationSeconds(WAY === "tab") * 1000;
+  if (TO) leaveNote(TO, WAY);
 
   /* GROUP: Floating windows close before the page slides out */
   closeFloatingWindows();
 
+  // (A page that slid out stays marked as leaving until it's gone: it opens the next page before its slide has quite
+  // ended, and that end mustn't give it back its scrolling. Brought back by Back or Forward, section 4 unmarks it.)
   const LEAVE = () => {
-    IS_TRANSITION_ACTIVE = false; // safety unlock (in case navigation is blocked)
-    if (useReplace) window.location.replace(URL);
-    else window.location.href = URL;
+    if (useReplace) window.location.replace(ADDRESS);
+    else window.location.href = ADDRESS;
   };
 
-  const CONTAINER = getTransitionContainer();
-  const MOVING = TAB_SLIDE ? firstSlidingPart() : CONTAINER;
-  if (TAB_SLIDE && !MOVING) TAB_SLIDE = false;
-  // Leaving another way while this page is still sliding in by its tab: the whole page slides out after all
-  if (!TAB_SLIDE) document.documentElement.classList.remove("tabSlide");
-  const DURATION_MS = getSlideDurationSeconds(TAB_SLIDE) * 1000;
-  if (TAB_SLIDE) {
-    try { sessionStorage.setItem("prismal_tab_slide", "1"); } catch {}
-  }
-
-  /* GROUP: Nothing to animate (no container, or reduced motion) */
-  if (!CONTAINER || DURATION_MS === 0) {
+  /* GROUP: Leaving without a slide */
+  // Nothing to animate (no container, or reduced motion), a page that hasn't slid in yet (it's still out of sight), or
+  // changes that haven't been saved yet: the browser asks before the page is left, and staying keeps the page as it is
+  if (!CONTAINER || DURATION_MS === 0 || !CONTAINER.classList.contains("ready") || hasChangesToSave()) {
     freezeAndSaveStarfield();
     LEAVE();
     return;
@@ -555,26 +619,40 @@ function transitionTo(URL, useReplace = false, TAB = null) {
 
   clearPendingTransitionTimers();
   IS_TRANSITION_ACTIVE = true;
+  if (TO) prefetchPage(ADDRESS, TO);
 
   /* GROUP: Slide distance computation (supports different scroll owners) */
   const CONTAINER_SCROLL = CONTAINER.scrollTop || 0;
   const DOC_SCROLL = document.documentElement.scrollTop || document.body.scrollTop || 0;
-
   const ACTIVE_SCROLL = Math.max(DOC_SCROLL, CONTAINER_SCROLL);
-  const SLIDE_DISTANCE_PX = (window.innerHeight * 1.1) + ACTIVE_SCROLL;
+  const SIDEWAYS = WAY === "left" || WAY === "right";
 
-  document.documentElement.style.setProperty("--SLIDE_DISTANCE", `${SLIDE_DISTANCE_PX}px`);
-
-  // The header and the tabs stay: scrolled down, they glide back to the top while the page slides out, so they're
-  // right where the next page's are
-  if (TAB_SLIDE && DOC_SCROLL > 0) window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  if (WAY === "tab") {
+    // The page under the tabs, from where it's scrolled to below the screen. The header and the tabs stay: scrolled
+    // down, they glide back to the top while the page slides out, so they're right where the next page's are.
+    document.documentElement.style.setProperty("--SLIDE_DISTANCE", `${(window.innerHeight * 1.1) + ACTIVE_SCROLL}px`);
+    if (DOC_SCROLL > 0) window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  } else {
+    // The whole page, just past the screen's edge. Sliding up or down, only the part on the screen slides (what's
+    // above or below it would otherwise run past on its way out).
+    document.documentElement.style.setProperty("--SLIDE_DISTANCE", `${(SIDEWAYS ? window.innerWidth : window.innerHeight) * 1.1}px`);
+    if (!SIDEWAYS) clipToScreen(CONTAINER, ACTIVE_SCROLL);
+  }
   disableDocumentScroll();
 
   /* GROUP: Start slide-out */
-  CONTAINER.classList.add(TAB_SLIDE ? "tab-slide-out" : "slide-out");
-  if (TAB_SLIDE) glideTabGlow(TAB, DURATION_MS);
+  if (WAY === "tab") {
+    CONTAINER.classList.add("tab-slide-out");
+    glideTabGlow(TAB, DURATION_MS);
+  } else {
+    CONTAINER.classList.add("slide-out");
+    if (SLIDE_OUT_CLASSES[WAY]) CONTAINER.classList.add(SLIDE_OUT_CLASSES[WAY]);
+  }
 
-  /* GROUP: Navigate when the sliding part's own transform transition ends */
+  /* GROUP: Navigate once the sliding part is out of sight */
+  // The slide eases into its end, and by OUT_OF_SIGHT of its time the page is already past the screen's edge, so the
+  // next page opens then instead of after that last unseen stretch (a shorter pause between the two slides). Where the
+  // slide's progress can't be read, its end does it (or the timer after it).
   const onDone = (EVENT) => {
     // Only accept that part's transform finishing,
     // not random child transitions bubbling up.
@@ -586,6 +664,13 @@ function transitionTo(URL, useReplace = false, TAB = null) {
   };
 
   CONTAINER.addEventListener("transitionend", onDone);
+  const SLIDE = MOVING.getAnimations ? MOVING.getAnimations().find(ANIMATION => ANIMATION.transitionProperty === "transform") : null;
+  const watchSlide = () => {
+    if (!IS_TRANSITION_ACTIVE) return;
+    if (SLIDE.currentTime >= DURATION_MS * OUT_OF_SIGHT) onDone();
+    else requestAnimationFrame(watchSlide);
+  };
+  if (SLIDE) requestAnimationFrame(watchSlide);
 
   // Safety net fallback (in case transitionend never fires)
   NAVIGATE_AFTER_SLIDE_TIMEOUT_ID = setTimeout(() => onDone(), DURATION_MS + 150);
@@ -593,8 +678,44 @@ function transitionTo(URL, useReplace = false, TAB = null) {
   // Freeze/save shortly before leaving (keeps canvas state stable)
   SAVE_BEFORE_LEAVE_TIMEOUT_ID = setTimeout(
     freezeAndSaveStarfield,
-    Math.max(0, DURATION_MS - 50)
+    Math.max(0, DURATION_MS * (SLIDE ? OUT_OF_SIGHT : 1) - 50)
   );
+}
+
+// The note for the next page (page TO), so it slides in the way this one slides out (Boot.js reads it)
+function leaveNote(TO, WAY) {
+  try { sessionStorage.setItem("prismal_slide", JSON.stringify({ page: TO, way: WAY, at: Date.now() })); } catch {}
+}
+
+// This page's tab for page TO (one of the budget's four pages), or null
+function tabFor(TO) {
+  return [...document.querySelectorAll(".pageTabs a.pageTab")].find(TAB => pageOf(TAB.getAttribute("href")) === TO) || null;
+}
+
+// The page is clipped to the part of it on the screen (in its own pixels, so the clip moves with it)
+function clipToScreen(CONTAINER, SCROLL) {
+  const TOP = Math.max(0, SCROLL - CONTAINER.offsetTop);
+  const BOTTOM = Math.max(0, CONTAINER.offsetTop + CONTAINER.offsetHeight - SCROLL - window.innerHeight);
+  CONTAINER.style.clipPath = `inset(${TOP}px 0 ${BOTTOM}px 0)`;
+}
+
+// Changes the server doesn't have yet (Process Budget.js): the browser asks about them before the page is left
+function hasChangesToSave() {
+  return typeof hasUnsavedChanges === "function" && typeof workspaceLoaded !== "undefined" && workspaceLoaded && hasUnsavedChanges();
+}
+
+/* GROUP: The next page loads while this one slides out */
+// The next page, Boot.js (every page's first script, which browsers check for a newer copy each time), and the page's
+// other scripts are fetched as soon as the slide starts, so they're here by the time it ends and the next page slides
+// in sooner. (A browser that doesn't prefetch loads them when the page opens, as always.)
+function prefetchPage(ADDRESS, TO) {
+  const ADDRESSES = [ADDRESS, "/Javascript/Boot.js", ...(typeof window.pageScripts === "function" ? window.pageScripts(TO) : [])];
+  ADDRESSES.forEach((HREF) => {
+    const LINK = document.createElement("link");
+    LINK.rel = "prefetch";
+    LINK.href = HREF;
+    document.head.appendChild(LINK);
+  });
 }
 
 /* GROUP: The tab's glow slides to the tab that was tapped */
@@ -697,9 +818,9 @@ document.addEventListener("click", (EVENT) => {
   if (TARGET.origin !== location.origin || !/^https?:$/.test(TARGET.protocol)) return;
   if (TARGET.pathname === location.pathname && TARGET.search === location.search && TARGET.hash) return;
 
-  // Everything else: we own navigation timing (a tab of the budget's four pages slides only the page under the tabs)
+  // Everything else: we own navigation timing (and which way the page slides, see slideWay)
   EVENT.preventDefault();
-  transitionTo(TARGET.href, false, LINK.closest(".pageTabs") ? LINK : null);
+  transitionTo(TARGET.href);
 });
 
 /* GROUP: Signing out */
@@ -753,15 +874,15 @@ function endServerSession() {
 
 // Logout. A change that hasn't reached the server yet (offline) would be lost, so that asks first. Once
 // it's decided, nothing more is saved and leaving doesn't ask again. The login page then waits for a sign-in
-// instead of trying this device's passkey by itself, so another account can sign in.
+// instead of trying this device's passkey by itself, so another account can sign in. Signing out, of any kind,
+// slides right.
 function signOut() {
-  const HAS_UNSAVED = typeof hasUnsavedChanges === "function" && typeof workspaceLoaded !== "undefined" && workspaceLoaded && hasUnsavedChanges();
-  if (HAS_UNSAVED && !window.confirm("Some of your changes haven't been saved yet (they'll save once you're back online). Sign out anyway and lose them?")) return;
+  if (hasChangesToSave() && !window.confirm("Some of your changes haven't been saved yet (they'll save once you're back online). Sign out anyway and lose them?")) return;
   if (typeof workspaceLoaded !== "undefined") workspaceLoaded = false;
   endServerSession();
   clearSignedInData();
   try { sessionStorage.setItem("prismal_signed_out", "logout"); } catch {}
-  transitionTo("/login.html", true);
+  transitionTo("/login.html", true, "right");
 }
 
 /* GROUP: Missing images */
@@ -959,9 +1080,11 @@ onDOMReady(() => {
   });
   const CONTAINER = getTransitionContainer();
   if (CONTAINER) {
-    // The slide-in finished: the document scrolls again
+    // The slide-in finished: the document scrolls again (and a page back from the back/forward cache shows whole)
     CONTAINER.addEventListener("transitionend", (EVENT) => {
-      if (EVENT.target === CONTAINER && !IS_TRANSITION_ACTIVE) enableDocumentScroll();
+      if (EVENT.target !== CONTAINER || IS_TRANSITION_ACTIVE) return;
+      CONTAINER.style.clipPath = "";
+      enableDocumentScroll();
     });
   }
 });
@@ -975,7 +1098,8 @@ onDOMReady(() => {
  *====================================================================*/
 
 // The footer every page shares: the trademark note, the contact address (it can break onto a new line before the @,
-// <wbr>, without a hidden character ending up in a copied address), and the Privacy Policy and How It Works links
+// <wbr>, without a hidden character ending up in a copied address), and the Privacy Policy and How It Works links. A
+// page's Help button moves into it, just under its line.
 function injectGlobalFooter() {
   const CONTAINER = getTransitionContainer();
   if (!CONTAINER) return;
@@ -1002,5 +1126,11 @@ function injectGlobalFooter() {
         </a>
   `;
 
+  // The page's Help button goes just under the footer's line
+  const HELP_BUTTON = CONTAINER.querySelector(".helpButton");
+  if (HELP_BUTTON) {
+    FOOTER.querySelector("hr").after(HELP_BUTTON);
+    FOOTER.classList.add("hasHelp");
+  }
   CONTAINER.appendChild(FOOTER);
 }

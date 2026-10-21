@@ -139,7 +139,7 @@ async function loadWorkspace() {
   if (!token) {
     console.error("No active session found. Redirecting to login...");
     if (typeof window.transitionTo === 'function') {
-      window.transitionTo("/login.html", true);
+      window.transitionTo("/login.html", true, "right");
     } else {
       window.location.replace("/login.html");
     }
@@ -332,6 +332,10 @@ async function performDailyUpdate() {
   let todayTime = today.getTime();
   let missedFromTime = lastDailyUpdate.getTime();
   let lastInBank = null;
+  // Once a placeholder is taken off a day the budget had already worked out, that day and every one after it work out
+  // their In Bank again (without it)
+  let rechain = false;
+  let placeholdersRemoved = 0;
   // Days from a month after the budget was last used only get Upcoming entries and In Bank
   let lightFromTime = fullCatchUpEnd(lastActiveDay || lastDailyUpdate).getTime();
   let sheetDays = sheetEntriesByDay(lastDailyUpdate, new Date(Math.min(yesterday.getTime(), lightFromTime - 1)));
@@ -364,6 +368,15 @@ async function performDailyUpdate() {
         }
       }
 
+      // A placeholder whose day has passed is deleted: it only stood in for an entry, so none is ever left on a day
+      // that passed (or in History)
+      let kept = dropPlaceholders(cell.text);
+      if (kept.dropped > 0) {
+        cell.text = kept.text;
+        placeholdersRemoved += kept.dropped;
+        if (!cell.isNew) rechain = true;
+      }
+
       // Every missed day: turn recurring and spreadsheet entries into temps (they stay as they were that day)
       if (isMissed) {
         let lines = cell.text.split("\n");
@@ -380,8 +393,8 @@ async function performDailyUpdate() {
         cell.text = lines.join("\n");
       }
 
-      // Keep the balance chain going: saved cells already have In Bank, new ones need it
-      if (cell.isNew) {
+      // Keep the balance chain going: saved cells already have In Bank (until a placeholder came off one), new ones need it
+      if (cell.isNew || rechain) {
         if (lastInBank === null) lastInBank = readLatestHistoryInBank();
         let math = applyCellBudgetMath(cell.text, lastInBank);
         cell.text = math.text;
@@ -419,8 +432,15 @@ async function performDailyUpdate() {
     lastDailyUpdate = today;
   }
 
-  formEntryRow[3] = "Uniques Created: " + uniquesCreated;
+  formEntryRow[3] = "Uniques Created: " + uniquesCreated + (placeholdersRemoved > 0 ? ", Placeholders Removed: " + placeholdersRemoved : "");
   formEntryRow[5] = "Weeks Scrolled: " + weeksScrolled;
+}
+
+// A day's lines without its placeholders (its day has passed): { text, dropped (how many) }
+function dropPlaceholders(cellText) {
+  const lines = String(cellText).split("\n");
+  const kept = lines.filter((line, l) => l === 0 || !isPlaceholder(getParts(line)[0]));
+  return { text: kept.join("\n"), dropped: lines.length - kept.length };
 }
 
 // Find the Sunday that the saved calendar's first cell belongs to
@@ -494,10 +514,10 @@ function writeRecurringToCell(cellText, cellDate, recurringRows) {
         hasTemp = true;
         break;
       }
-      // A unique with the same special type absorbs the recurring amount
+      // A unique with the same special type absorbs the recurring amount (a placeholder only if both are)
       hasUnique = true;
       let newAmt = row.amt + parseAmount(parts[1]);
-      let newSprite = parts[0] + "✔️";
+      let newSprite = placeholderSprite(withoutPlaceholder(parts[0]) + "✔️", isPlaceholder(parts[0]) && isPlaceholder(row.sprite));
       cellLines[l] = newSprite + " " + formatMoney(newAmt) + " " + row.title;
       cellText = cellLines.join("\n");
       break;
@@ -637,7 +657,7 @@ let changeLogStart = 0;
 
 /* ---------- Actions the page UI calls (each resolves to { ok, saved, notFound, message, ... }) ---------- */
 
-// New calendar entry. entry: { title, sprite, amount (signed number), date }. Can be undone.
+// New calendar entry. entry: { title, sprite, amount (signed number), date, placeholder }. Can be undone.
 function addCalendarEntry(entry) {
   return runBudgetAction("", () => {
     const added = unique({
@@ -645,9 +665,12 @@ function addCalendarEntry(entry) {
       sprite: entry.sprite,
       action: entry.amount > 0 ? "add" : "subtract",
       amount: String(Math.abs(entry.amount)),
-      date: entry.date
+      date: entry.date,
+      placeholder: entry.placeholder === true,
+      adding: true
     });
-    return { purchase: { title: entry.title, amount: entry.amount, date: createSafeMidnight(entry.date || today), type: added.entryType } };
+    // (A placeholder isn't a purchase yet, so Dave's refund tip leaves it be)
+    return entry.placeholder === true ? {} : { purchase: { title: entry.title, amount: entry.amount, date: createSafeMidnight(entry.date || today), type: added.entryType } };
   }, { label: `added ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
@@ -658,9 +681,9 @@ function changeCalendarEntry(change) {
 }
 
 // A calendar entry's refraction type or Other Account changed (and maybe its amount and day too). change: { title,
-// sprite, date (the entry as it is), newTitle ("Payday → HSA"), newSprite, amount (the new signed amount), moveDate }.
-// It comes off its day the way Delete takes it off (one that landed by itself leaves a $0.00 temp), then goes on
-// as the new one, adding into an entry already there with that title and type (a day has one of each). Can be
+// sprite, date (the entry as it is), newTitle ("Payday → HSA"), newSprite, amount (the new signed amount), moveDate,
+// placeholder }. It comes off its day the way Delete takes it off (one that landed by itself leaves a $0.00 temp), then
+// goes on as the new one, adding into an entry already there with that title and type (a day has one of each). Can be
 // undone in one step.
 function changeEntryKind(change) {
   return runBudgetAction("", () => entryKindChange(change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
@@ -672,7 +695,7 @@ function entryKindChange(change) {
   if (!Number.isFinite(amount) || amount === 0) throw new BudgetInputError("Enter an amount, like 12.50. To take the entry off, tap Delete.");
   unique({ title: change.title, sprite: change.sprite, date: change.date, action: "delete" });
   if (notFound) return {};
-  return unique({ title: change.newTitle, sprite: change.newSprite, date: change.moveDate || change.date, action: amount > 0 ? "add" : "subtract", amount: String(Math.abs(amount)) });
+  return unique({ title: change.newTitle, sprite: change.newSprite, date: change.moveDate || change.date, action: amount > 0 ? "add" : "subtract", amount: String(Math.abs(amount)), placeholder: change.placeholder, adding: true });
 }
 
 // "changed Payday on 10/05 to Payday → HSA (Transfer)", for Undo and Redo
@@ -755,6 +778,9 @@ function describeEntryChange(change) {
   if (action === "set" && amountChanged) return `set ${title} on ${day(change.date)} to ${formatMoney(amount)}`;
   if (action === "add") return `added ${formatMoney(amount)} to ${title} on ${day(change.date)}`;
   if (action === "subtract") return `took ${formatMoney(amount)} off ${title} on ${day(change.date)}`;
+  // (Only its Placeholder switch changed)
+  if (change.placeholder === true) return `made ${title} on ${day(change.date)} a placeholder`;
+  if (change.placeholder === false) return `made ${title} on ${day(change.date)} no longer a placeholder`;
   return `changed ${title} on ${day(change.date)}`;
 }
 
@@ -837,15 +863,20 @@ const QUICK_ENTRY_TYPES = { auto: "", regular: "❗️", hidden: "✖️", trans
 // Queued entry ids to send with the next save of the table each one landed in
 let quickEntryAcks = { calendar: [], history: [], future: [] };
 
-// queue: [{ id, entry: { title, type, amount, date: "YYYY-MM-DD" } }] from the API, oldest first
+// queue: [{ id, entry: { title, type, amount, date: "YYYY-MM-DD", placeholder } }] from the API, oldest first
 async function applyQuickEntries(queue) {
   if (!Array.isArray(queue) || queue.length === 0) return;
   let added = 0;
   const failed = [];
+  const passed = []; // Placeholders whose day passed before the budget opened: they go, like one on the calendar would
   for (const quick of queue) {
     // Each can be undone on the calendar, like a New Entry
     const entry = quick && quick.entry;
     const date = entry ? createSafeMidnight(entry.date, true) : null;
+    if (entry && entry.placeholder === true && date && date < today) {
+      passed.push(quick);
+      continue;
+    }
     const undo = entry && date && !isNaN(date.getTime())
       ? { label: `quick entry ${capitalize(String(entry.title || "").trim())} (${formatMoney(entry.amount)}) on ${showDay(date)}`, dates: [date] }
       : null;
@@ -853,13 +884,15 @@ async function applyQuickEntries(queue) {
     if (result.ok) added++;
     else failed.push({ quick, message: result.message });
   }
-  // The toast below says why, so entries that can't be added stop coming back
-  if (failed.length > 0) await budgetApi("/api/quick/dismiss", { ids: failed.map(({ quick }) => quick.id) });
+  // The toast below says why, so entries that can't be added (or that passed) stop coming back
+  const dropped = [...failed.map(({ quick }) => quick), ...passed];
+  if (dropped.length > 0) await budgetApi("/api/quick/dismiss", { ids: dropped.map(quick => quick.id) });
 
   if (typeof BudgetUI === "undefined") return;
   const plural = (count) => `${count} quick ${count === 1 ? "entry" : "entries"}`;
   const messages = [];
   if (added > 0) messages.push(`Added ${plural(added)} from your home screen icon.`);
+  if (passed.length > 0) messages.push(`Left out ${passed.length === 1 ? "a placeholder" : passed.length + " placeholders"} from your home screen icon: ${passed.length === 1 ? "its day has" : "their days have"} passed.`);
   if (failed.length > 0) {
     const first = failed[0];
     messages.push(`Couldn't add ${failed.length === 1 ? "the quick entry" : plural(failed.length) + ", like"} "${first.quick?.entry?.title ?? "Untitled"}": ${first.message}`);
@@ -881,10 +914,13 @@ function quickEntry(quick) {
     sprite: Object.prototype.hasOwnProperty.call(QUICK_ENTRY_TYPES, entry.type) ? QUICK_ENTRY_TYPES[entry.type] : "",
     action: entry.amount > 0 ? "add" : "subtract",
     amount: String(Math.abs(entry.amount)),
-    date
+    date,
+    placeholder: entry.placeholder === true,
+    adding: true
   });
   formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
-  return { quickEntry: { id: quick.id, table }, purchase: { title: entry.title, amount: entry.amount, date, type: added.entryType } };
+  const purchase = entry.placeholder === true ? null : { title: entry.title, amount: entry.amount, date, type: added.entryType };
+  return { quickEntry: { id: quick.id, table }, purchase };
 }
 
 // Does History have a cell for this day? (an entry for an older day would have nowhere to go)
@@ -1088,7 +1124,10 @@ function refreshBudgetData() {
 // entry: { title, sprite: "" (match/inherit) | "❗️" | "✖️" | "⭕️",
 //          action: "subtract" | "add" | "set" | "delete",
 //          amount: string ("" with "set" keeps the current amount),
-//          date: Date, moveDate: Date (optional, moves the entry there) }
+//          date: Date, moveDate: Date (optional, moves the entry there),
+//          placeholder: true | false (optional: whether it's a placeholder; left out, it stays as it was),
+//          adding: true for a new entry (New Entry, Quick Entry), which a placeholder only joins as one if the entry
+//          already there is one too }
 function unique(entry) {
   // 1. Variables
   let rawTitle = String(entry.title || "").replace(/\s+/g, ' ').trim();
@@ -1164,6 +1203,12 @@ function unique(entry) {
     isOriginalVirginRecurring = false;
     isMismatchedVirgin = true;
   }
+  // Whether it's a placeholder: as the change says (a form's Placeholder switch), or as it was. A new entry added into
+  // one already there is a placeholder only if both are (entry.adding), and nothing on a day before today is one.
+  let wasPlaceholder = isExisting ? isPlaceholder(outData.oldSprite)
+    : (isOriginalVirginRecurring || isMismatchedVirgin) && isPlaceholder(source.sprite);
+  let placeholder = entry.placeholder === undefined ? wasPlaceholder : !!entry.placeholder;
+  if (entry.adding && (isExisting || isOriginalVirginRecurring || isMismatchedVirgin)) placeholder = placeholder && wasPlaceholder;
   // 3. Extract from Target Date (Only if moving)
   let moveIsExisting = false;
   let moveOutData = {
@@ -1191,18 +1236,19 @@ function unique(entry) {
     finalAmt = isExisting ? outData.oldAmt : baseAmtOriginal;
   }
 
-  // 5. Inject $0 Blockers (Unless is going into history tab)
+  // 5. Inject $0 Blockers (Unless is going into history tab). A placeholder's blocker is one too, so it goes with
+  // its day.
   if (dateObj.getTime() >= gridStartDate.getTime()) {
     if (isOriginalVirginRecurring || isMismatchedVirgin) {
       if (dateObj.getTime() !== dateMove.getTime() || finalAmt !== baseAmtOriginal || action === "delete") {
         let blockerSprite = getSpecialType(source.sprite) + source.mark;
-        injectOrDefer("set", dateObj, 0, title, blockerSprite);
+        injectOrDefer("set", dateObj, 0, title, blockerSprite, {}, isPlaceholder(source.sprite));
       }
     } else if (hasOriginalCheckmark && source && (dateObj.getTime() !== dateMove.getTime() || action === "delete")) {
       // Only inject the blocker if the entry wasn't ALREADY a $0 blocker.
       if (outData.oldAmt !== 0) {
         let blockerSprite = getSpecialType(outData.oldSprite) + originalMark;
-        injectOrDefer("set", dateObj, 0, title, blockerSprite);
+        injectOrDefer("set", dateObj, 0, title, blockerSprite, {}, isPlaceholder(outData.oldSprite));
       }
     }
   }
@@ -1234,6 +1280,8 @@ function unique(entry) {
         if (mergeValid && targetIncomingSpecial === destSpecial) {
           moveAmt += destAmt;
           moveSprite = targetIncomingSpecial + (destMark || (isOriginalVirginRecurring ? virginMark : "") || entryMark(moveSprite));
+          // (Two entries become one there: a placeholder only if both were)
+          placeholder = placeholder && isPlaceholder(moveIsExisting ? moveOutData.oldSprite : moveBaseSprite);
         } else if (isOriginalVirginRecurring) {
           moveSprite = targetIncomingSpecial + virginMark;
         }
@@ -1243,7 +1291,8 @@ function unique(entry) {
         }
       }
       // 7. Inject combined result back into target date
-      injectOrDefer("set", dateMove, moveAmt, title, moveSprite);
+      injectOrDefer("set", dateMove, moveAmt, title, moveSprite, {}, placeholder);
+      if (placeholder && dateMove >= today) formEntryRow[3] += " (Placeholder)";
       let gridStartMs = gridStartDate.getTime();
       if ((isExisting || moveIsExisting || !notFound) && (dateObj.getTime() < gridStartMs || dateMove.getTime() < gridStartMs)) {
         historyEdited = true;
@@ -1265,11 +1314,14 @@ function unique(entry) {
 
 // Put an entry on a day (calendar, History, or Future Dates, depending on the date), combining it
 // with a same-title entry of the same refraction type. "delete" removes the match and reports
-// what was there through outData. Returns true when nothing matched.
-function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outData = {}) {
+// what was there through outData. Returns true when nothing matched. placeholder: whether what's written is a
+// placeholder (left out: as the entry there was, or as sprite says); never on a day before today.
+function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outData = {}, placeholder = undefined) {
   let notFound = true;
   let targetMMDD = formatToMMDD(dateObj);
   let cleanNewTitle = cleanString(String(title));
+  // The sprite written for an entry that was there as oldSprite (or "" for a new one)
+  const marked = (newSprite, oldSprite) => placeholderSprite(newSprite, (placeholder ?? isPlaceholder(oldSprite || sprite)) && dateObj >= today);
 
   // Take the line with this title (and type) off the day's lines, and say what it held and what goes back
   function mergeMatchingLine(lines, currentAmt, currentTitle, currentSprite) {
@@ -1348,7 +1400,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
             outData.oldSprite = mergeResult.oldSprite;
           }
           if (!mergeResult.shouldDelete) {
-            calendarData[r][c] = lines.join("\n") + `\n${mergeResult.sprite} ${formatMoney(mergeResult.amt)} ${capitalize(mergeResult.title)}`;
+            calendarData[r][c] = lines.join("\n") + `\n${marked(mergeResult.sprite, mergeResult.oldSprite)} ${formatMoney(mergeResult.amt)} ${capitalize(mergeResult.title)}`;
             notFound = false;
           } else {
             calendarData[r][c] = lines.join("\n");
@@ -1381,7 +1433,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
           outData.oldSprite = mergeResult.oldSprite;
         }
         if (!mergeResult.shouldDelete) {
-          historyData[r][c] = lines.join("\n") + `\n${mergeResult.sprite} ${formatMoney(mergeResult.amt)} ${capitalize(mergeResult.title)}`;
+          historyData[r][c] = lines.join("\n") + `\n${marked(mergeResult.sprite, mergeResult.oldSprite)} ${formatMoney(mergeResult.amt)} ${capitalize(mergeResult.title)}`;
           notFound = false;
         } else {
           historyData[r][c] = lines.join("\n");
@@ -1438,7 +1490,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
         capitalize(title),
         formatMoney(newAmt),
         formatToMMDDYYYY(dateObj),
-        sprite === "" ? "❗️" : sprite
+        marked(sprite === "" ? "❗️" : sprite, matchedFutureSprite)
       ]);
     }
   }
@@ -1533,11 +1585,12 @@ function readFrequency(text) {
 
 // Create a recurring entry (refused when one with its title, Other Account, and refraction type already exists).
 // fields: { title, sprite: "✔️" | "✔️✖️" | "✔️⭕️", amount: number, frequency: "Every 2 Weeks" (blank = every
-//           month), startDate: Date | null (today), endDate: Date | "None" | null }
+//           month), startDate: Date | null (today), endDate: Date | "None" | null, placeholder: every day it lands on
+//           gets a placeholder }
 function recurring(fields) {
   let title = capitalize(String(fields.title || "").replace(/\s+/g, ' ').trim());
   if (!title) throw new BudgetInputError("Give the recurring entry a title.");
-  let sprite = String(fields.sprite || "").trim() || "✔️";
+  let sprite = placeholderSprite(String(fields.sprite || "").trim() || "✔️", fields.placeholder === true);
   refuseRecurringTwin(title, sprite);
   let frequency = readFrequency(fields.frequency || "Every Month");
   let hasAmount = typeof fields.amount === "number" && !isNaN(fields.amount);
@@ -1549,7 +1602,7 @@ function recurring(fields) {
   recurringData.push([title, amount, formatToMMDDYYYY(startDate), frequency, endDate, sprite]);
 
   formEntryRow[2] = "✔️ Create Recurring";
-  formEntryRow[3] = sprite + " " + title;
+  formEntryRow[3] = withoutPlaceholder(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
   formEntryRow[4] = frequency + ": " + showDate(startDate);
   formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
   formEntryRow[6] = "Amount: " + amount;
@@ -1568,6 +1621,7 @@ function editRecurringRow(index, fields) {
   let hasAmount = typeof fields.amount === "number" && !isNaN(fields.amount);
   if (hasAmount && Math.abs(fields.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
   let sprite = String(fields.sprite || "").trim() || String(row[5] || "").trim() || "✔️";
+  sprite = placeholderSprite(sprite, fields.placeholder === undefined ? isPlaceholder(row[5]) : fields.placeholder === true);
   let oldTitle = String(row[0]).trim();
   let oldSpecial = getSpecialType(String(row[5] || ""));
   let newSpecial = getSpecialType(sprite);
@@ -1590,7 +1644,7 @@ function editRecurringRow(index, fields) {
   row[5] = sprite;
 
   formEntryRow[2] = "✔️ Change Recurring";
-  formEntryRow[3] = sprite + " " + title;
+  formEntryRow[3] = withoutPlaceholder(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
   formEntryRow[4] = frequency + ": " + showStoredDate(row[2]);
   formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
   formEntryRow[6] = "New Amount: " + row[1];
@@ -1612,7 +1666,8 @@ function resolveEndDate(endDate, current) {
 // entry would land on those days again under its new name, next to the old temp (counted twice), and on days
 // it was deleted from. Days that already passed keep the name they had.
 function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
-  const isOldTemp = (sprite, title) => String(sprite ?? "").trim() === oldSpecial + "✔️" && cleanString(title) === oldClean;
+  // (A placeholder temp stays one)
+  const isOldTemp = (sprite, title) => withoutPlaceholder(String(sprite ?? "").trim()) === oldSpecial + "✔️" && cleanString(title) === oldClean;
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] < today) continue;
@@ -1621,7 +1676,7 @@ function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
       for (let l = 1; l < lines.length; l++) {
         let parts = getParts(lines[l]);
         if (parts.length < 3 || !isOldTemp(parts[0], parts.slice(2).join(" "))) continue;
-        lines[l] = `${newSpecial}✔️ ${parts[1]} ${newTitle}`;
+        lines[l] = `${placeholderSprite(newSpecial + "✔️", isPlaceholder(parts[0]))} ${parts[1]} ${newTitle}`;
         moved = true;
       }
       if (moved) calendarData[r][c] = lines.join("\n");
@@ -1633,7 +1688,7 @@ function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
     let date = createSafeMidnight(row[2], true);
     if (isNaN(date.getTime()) || date < today || !isOldTemp(row[3], row[0])) continue;
     row[0] = newTitle;
-    row[3] = newSpecial + "✔️";
+    row[3] = placeholderSprite(newSpecial + "✔️", isPlaceholder(row[3]));
     movedUpcoming = true;
   }
   if (movedUpcoming) combineSameUpcoming();
@@ -1882,11 +1937,10 @@ function isTransferEntry(sprite) {
   return getSpecialType(String(sprite || "")) === "⭕️";
 }
 
-// Each account's balance today and on the calendar's last day, with the entries that changed it (and
-// the ones on the calendar that will), newest first, and its interest (through interestUntil):
-// [{ index, name, isDefault, start, interest ({ rate, since } or null), entriesToday (its entries through today, added
-// up), today, calendarEnd, entries: [{ date, change, sprite, title (its own, "" without one) }], interestCredits:
-// [{ date, change }] oldest first }]
+// Each account's balance today, with the entries that changed it (and the ones on the calendar that will), newest
+// first, and its interest (through interestUntil): [{ index, name, isDefault, start, interest ({ rate, since } or null),
+// entriesToday (its entries through today, added up), today, entries: [{ date, change, sprite, title (its own, "" without
+// one) }], interestCredits: [{ date, change }] oldest first }]
 function accountSummaries(interestUntil = gridEndDate) {
   let accounts = accountTitleMap();
   let summaries = new Map(accountRows().map(account => [account.index, {
@@ -1897,7 +1951,6 @@ function accountSummaries(interestUntil = gridEndDate) {
     interest: accountInterest(account.row),
     entriesToday: 0,
     today: 0,
-    calendarEnd: 0,
     entries: [],
     interestCredits: []
   }]));
@@ -1927,9 +1980,38 @@ function accountSummaries(interestUntil = gridEndDate) {
     if (summary.interest) summary.interestCredits = interestCredits(summary.start, summary.entries, summary.interest, interestUntil);
     summary.entriesToday = round(addUp(summary.entries, today));
     summary.today = round(summary.start + summary.entriesToday + addUp(summary.interestCredits, today));
-    summary.calendarEnd = round(summary.start + addUp(summary.entries, gridEndDate) + addUp(summary.interestCredits, gridEndDate));
     return summary;
   });
+}
+
+// How far ahead Other Accounts looks ("In 6 Months")
+const AHEAD_MONTHS = 6;
+
+// The budget AHEAD_MONTHS from today: In Bank that day, and each Other Account's balance (its interest too), with the
+// days after the calendar filled in the way the daily update will fill them (Upcoming entries, then recurring and
+// connected spreadsheets' entries; see dayAfterCalendar). summaries: accountSummaries(). { inBank, accounts: Map(account
+// row index -> balance) }
+function budgetAhead(summaries) {
+  const until = addMonths(today, AHEAD_MONTHS);
+  const accounts = accountTitleMap();
+  const coming = new Map(summaries.map(summary => [summary.index, []]));
+  let inBank = readInBank(calendarData[3][6]) ?? 0;
+  const recurringRows = getParsedRecurringRows();
+  const futureByDate = groupFutureRowsByDate();
+  const sheetDays = sheetEntriesByDay(nextFourStart, until);
+  for (let day = nextFourStart; day <= until; day = addDays(day, 1)) {
+    const text = dayAfterCalendar(day, recurringRows, futureByDate, sheetDays);
+    inBank = Math.round((inBank + dayMath(text.split("\n")).bankChange) * 100) / 100;
+    for (const { account, change } of accountLineChanges(text, accounts)) coming.get(account.index)?.push({ date: day, change });
+  }
+  const balances = new Map();
+  for (const summary of summaries) {
+    const entries = [...summary.entries, ...(coming.get(summary.index) || [])];
+    const credits = summary.interest ? interestCredits(summary.start, entries, summary.interest, until) : [];
+    const total = [...entries, ...credits].reduce((sum, item) => (item.date <= until ? sum + item.change : sum), 0);
+    balances.set(summary.index, Math.round((summary.start + total) * 100) / 100);
+  }
+  return { inBank, accounts: balances };
 }
 
 // An account's starting amount (its row's [3]; blank is $0.00)
@@ -2133,7 +2215,8 @@ function renameAccountEntries(oldClean, newName) {
 // A day has at most one entry per title and refraction type (so a title shows up at most three times:
 // Regular, Hidden, and Transfer). A new entry combines with the one that's there (see injectOrDefer);
 // this combines any that slipped in another way, like an account rename or older data. Amounts add
-// together, and the checkmark stays if either had one (like writeRecurring combining into a unique).
+// together, the checkmark stays if either had one (like writeRecurring combining into a unique), and it's a
+// placeholder only if both were.
 function combineSameEntries(lines) {
   let kept = [lines[0]];
   let byKey = new Map();
@@ -2151,21 +2234,24 @@ function combineSameEntries(lines) {
     }
     let at = byKey.get(key);
     let first = getParts(kept[at]);
-    kept[at] = `${combineSprites(first[0], parts[0])} ${formatMoney(parseAmount(first[1]) + parseAmount(parts[1]))} ${first.slice(2).join(" ")}`;
+    let sprite = placeholderSprite(combineSprites(first[0], parts[0]), isPlaceholder(first[0]) && isPlaceholder(parts[0]));
+    kept[at] = `${sprite} ${formatMoney(parseAmount(first[1]) + parseAmount(parts[1]))} ${first.slice(2).join(" ")}`;
   }
   return kept;
 }
 
-// The same for Upcoming: entries on one day with the same title and type become one, their amounts added
+// The same for Upcoming: entries on one day with the same title and type become one, their amounts added (a
+// placeholder only if both were)
 function combineSameUpcoming() {
   let kept = [futureData[0]];
   let byKey = new Map();
   for (let f = 1; f < futureData.length; f++) {
     let row = futureData[f];
-    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + String(row[3]).trim();
+    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + withoutPlaceholder(String(row[3]).trim());
     let same = cleanString(row[0]) ? byKey.get(key) : undefined;
     if (same) {
       same[1] = formatMoney(parseAmount(same[1]) + parseAmount(row[1]));
+      if (!isPlaceholder(row[3])) same[3] = withoutPlaceholder(same[3]);
       continue;
     }
     byKey.set(key, row);
@@ -2224,7 +2310,8 @@ function normalizeSheetConnection(item) {
       .filter(entry => Math.abs(entry[2]) <= MAX_AMOUNT), // Spreadsheets.js never reads a bigger one
     problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
     tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
-    access: item.access === "shared" ? "shared" : "public"
+    access: item.access === "shared" ? "shared" : "public",
+    ...(item.placeholder === true ? { placeholder: true } : {}) // Its entries are placeholders
   };
 }
 
@@ -2233,8 +2320,8 @@ function sheetConnectionById(id) {
   return (sheetsData?.list || []).find(connection => connection.id === id) || null;
 }
 
-// New (id null) or changed connection. config: { name, link, fields }; read: { entries, problems, tabs, access },
-// what reading it just now found (Spreadsheets.js readConnection)
+// New (id null) or changed connection. config: { name, link, fields, placeholder (its entries are placeholders) };
+// read: { entries, problems, tabs, access }, what reading it just now found (Spreadsheets.js readConnection)
 function sheetConnection(config, read, id) {
   const list = sheetsData.list;
   const name = String(config.name || "").replace(/\s+/g, " ").trim();
@@ -2254,13 +2341,14 @@ function sheetConnection(config, read, id) {
     entries: read.entries,
     problems: read.problems,
     tabs: read.tabs,
-    access: read.access
+    access: read.access,
+    placeholder: config.placeholder === undefined ? !!old?.placeholder : config.placeholder === true
   });
   if (old) list[index] = connection;
   else list.push(connection);
 
   formEntryRow[2] = old ? "➕ Change Spreadsheet" : "➕ Connect Spreadsheet";
-  formEntryRow[3] = "Spreadsheet: " + name;
+  formEntryRow[3] = "Spreadsheet: " + name + (connection.placeholder ? " (Placeholders)" : "");
   formEntryRow[4] = "Entries: " + connection.entries.length;
   formEntryRow[5] = "Problems: " + connection.problems.length;
   return { sheetId: connection.id };
@@ -2312,9 +2400,10 @@ function newSheetId() {
 }
 
 // The spreadsheets' entries from day from through day to, by day: Map(day's time -> Map(clean title|type ->
-// { title, clean, special, amount })). Entries with the same title and type on a day are one (amounts added).
-// Only spreadsheets that are on, without the entries a recurring entry keeps off (see above), unless
-// everything is asked for (includeOff: what can still land, for releaseSheetTemps).
+// { title, clean, special, amount, placeholder })). Entries with the same title and type on a day are one (amounts
+// added; a placeholder only if every one is, see the connection's placeholder). Only spreadsheets that are on, without
+// the entries a recurring entry keeps off (see above), unless everything is asked for (includeOff: what can still land,
+// for releaseSheetTemps).
 function sheetEntriesByDay(from, to, includeOff = false) {
   const days = new Map();
   if (!sheetsData || to < from) return days;
@@ -2322,6 +2411,7 @@ function sheetEntriesByDay(from, to, includeOff = false) {
   const toTime = to.getTime();
   for (const connection of sheetsData.list) {
     if (!connection.on && !includeOff) continue;
+    const placeholder = connection.placeholder === true;
     for (const { date, time, title, clean, special, amount } of parsedSheetEntries(connection)) {
       if (time < fromTime || time > toTime) continue;
       if (!includeOff && recurringHits(title, date, special) !== false) continue;
@@ -2329,8 +2419,12 @@ function sheetEntriesByDay(from, to, includeOff = false) {
       const day = days.get(time);
       const key = clean + "|" + special;
       const same = day.get(key);
-      if (same) same.amount = Math.round((same.amount + amount) * 100) / 100;
-      else day.set(key, { title, clean, special, amount });
+      if (same) {
+        same.amount = Math.round((same.amount + amount) * 100) / 100;
+        same.placeholder = same.placeholder && placeholder;
+      } else {
+        day.set(key, { title, clean, special, amount, placeholder });
+      }
     }
   }
   return days;
@@ -2354,14 +2448,15 @@ function parsedSheetEntries(connection) {
 }
 
 // The spreadsheets' entries that land on date (one per title and type), for unique(): the one with this
-// title (and type, when it's given) as { amount, sprite: "➕❗️", mark: "➕" }, or null. From today on only.
+// title (and type, when it's given) as { amount, sprite: "➕❗️" (with ⏳ for a placeholder), mark: "➕" }, or null. From
+// today on only.
 function sheetHit(title, date, special = null) {
   if (date < today) return null;
   const day = sheetEntriesByDay(date, date).get(date.getTime());
   if (!day) return null;
   const clean = cleanString(title);
   for (const entry of day.values()) {
-    if (entry.clean === clean && (!special || entry.special === special)) return { amount: entry.amount, sprite: SHEET_MARK + entry.special, mark: SHEET_MARK };
+    if (entry.clean === clean && (!special || entry.special === special)) return { amount: entry.amount, sprite: placeholderSprite(SHEET_MARK + entry.special, entry.placeholder), mark: SHEET_MARK };
   }
   return null;
 }
@@ -2389,7 +2484,8 @@ function writeSheetEntries() {
 }
 
 // One day's spreadsheet entries (a Map from sheetEntriesByDay) written into its cell: a temp with its title
-// and type (or a recurring entry's) keeps one off, and a unique entry takes in its amount
+// and type (or a recurring entry's) keeps one off, and a unique entry takes in its amount (it's a placeholder then only
+// if both are)
 function writeSheetsToCell(cellText, day) {
   if (!day || day.size === 0) return cellText;
   const lines = String(cellText).split("\n");
@@ -2400,12 +2496,12 @@ function writeSheetsToCell(cellText, day) {
       return !read.system && read.clean === entry.clean && getSpecialType(read.sprite) === entry.special;
     });
     if (at === -1) {
-      lines.push(`${SHEET_MARK}${entry.special} ${formatMoney(entry.amount)} ${entry.title}`);
+      lines.push(`${placeholderSprite(SHEET_MARK + entry.special, entry.placeholder)} ${formatMoney(entry.amount)} ${entry.title}`);
       continue;
     }
     const line = readLine(lines[at]);
     if (entryMark(line.sprite)) continue;
-    lines[at] = `${entry.special}${SHEET_MARK} ${formatMoney(line.amount + entry.amount)} ${line.title}`;
+    lines[at] = `${placeholderSprite(entry.special + SHEET_MARK, entry.placeholder && isPlaceholder(line.sprite))} ${formatMoney(line.amount + entry.amount)} ${line.title}`;
   }
   return lines.join("\n");
 }
@@ -2419,9 +2515,10 @@ function releaseSheetTemps() {
   for (const connection of sheetsData?.list || []) {
     for (const entry of parsedSheetEntries(connection)) known.add(entry.clean + "|" + entry.special);
   }
+  // (A placeholder stays one)
   const isReleased = (sprite, title) => {
     const special = getSpecialType(sprite);
-    return String(sprite).trim() === special + SHEET_MARK && !known.has(cleanString(title) + "|" + special);
+    return withoutPlaceholder(String(sprite).trim()) === special + SHEET_MARK && !known.has(cleanString(title) + "|" + special);
   };
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
@@ -2432,7 +2529,7 @@ function releaseSheetTemps() {
         const parts = getParts(lines[l]);
         if (parts.length < 3 || !isReleased(parts[0], parts.slice(2).join(" "))) continue;
         if (parseAmount(parts[1]) === 0) lines.splice(l, 1);
-        else lines[l] = [getSpecialType(parts[0]), ...parts.slice(1)].join(" ");
+        else lines[l] = [placeholderSprite(getSpecialType(parts[0]), isPlaceholder(parts[0])), ...parts.slice(1)].join(" ");
         changed = true;
       }
       if (changed) calendarData[r][c] = lines.join("\n");
@@ -2443,7 +2540,7 @@ function releaseSheetTemps() {
     const date = createSafeMidnight(row[2], true);
     if (isNaN(date.getTime()) || date < today || !isReleased(row[3], row[0])) continue;
     if (parseAmount(row[1]) === 0) futureData.splice(f, 1);
-    else row[3] = getSpecialType(String(row[3]));
+    else row[3] = placeholderSprite(getSpecialType(String(row[3])), isPlaceholder(row[3]));
   }
 }
 
@@ -2882,9 +2979,9 @@ function writeRecurring() {
             hasTemp = true;
             break;
           }
-          // A unique entry takes in its amount
+          // A unique entry takes in its amount (a placeholder only if both are)
           hasUnique = true;
-          cellLines[l] = `${line.sprite}✔️ ${formatMoney(amt + line.amount)} ${title}`;
+          cellLines[l] = `${placeholderSprite(withoutPlaceholder(line.sprite) + "✔️", isPlaceholder(line.sprite) && isPlaceholder(sprite))} ${formatMoney(amt + line.amount)} ${title}`;
           calendarData[r][c] = cellLines.join("\n");
           break;
         }
@@ -2944,13 +3041,13 @@ function releaseEndedTemps() {
       for (let l = lines.length - 1; l >= 1; l--) {
         let parts = getParts(lines[l]);
         let special = getSpecialType(parts[0]);
-        if (parts[0] !== special + "✔️") continue; // Only temps
+        if (withoutPlaceholder(parts[0]) !== special + "✔️") continue; // Only temps (a placeholder stays one)
         let from = releaseFrom(extractTitle(lines[l]), special);
         if (from === null || gridDates[r][c].getTime() < from) continue;
         if (parseAmount(parts[1]) === 0) {
           lines.splice(l, 1);
         } else {
-          parts[0] = special;
+          parts[0] = placeholderSprite(special, isPlaceholder(parts[0]));
           lines[l] = parts.join(" ");
         }
         changed = true;
@@ -2963,12 +3060,12 @@ function releaseEndedTemps() {
     let row = futureData[f];
     let sprite = String(row[3] ?? "").trim();
     let special = getSpecialType(sprite);
-    if (sprite !== special + "✔️") continue;
+    if (withoutPlaceholder(sprite) !== special + "✔️") continue;
     let from = releaseFrom(cleanString(row[0]), special);
     let date = createSafeMidnight(row[2], true);
     if (from === null || isNaN(date.getTime()) || date.getTime() < from) continue;
     if (parseAmount(row[1]) === 0) futureData.splice(f, 1);
-    else row[3] = special;
+    else row[3] = placeholderSprite(special, isPlaceholder(sprite));
   }
 }
 
@@ -3009,21 +3106,23 @@ function organizeCellEntries() {
         let currentLine = oldLines[l];
         // Guard against blank/whitespace lines
         if (!currentLine.trim()) continue;
-        if (currentLine.startsWith("❗️ ")) cellArray.oneTimes.push(currentLine + "\n");
-        else if (currentLine.startsWith("❗️✔️ ")) cellArray.temps.push(currentLine + "\n");
-        else if (currentLine.startsWith("❗️➕ ")) cellArray.sheetTemps.push(currentLine + "\n");
-        else if (currentLine.startsWith("✖️✔️ ")) cellArray.hidTemps.push(currentLine + "\n");
-        else if (currentLine.startsWith("✖️➕ ")) cellArray.hidSheetTemps.push(currentLine + "\n");
-        else if (currentLine.startsWith("✖️ ")) cellArray.hiddens.push(currentLine + "\n");
-        else if (currentLine.startsWith("✔️✖️ ")) cellArray.hidRecs.push(currentLine + "\n");
-        else if (currentLine.startsWith("⭕️✔️ ")) cellArray.transferTemps.push(currentLine + "\n");
-        else if (currentLine.startsWith("⭕️➕ ")) cellArray.transferSheetTemps.push(currentLine + "\n");
-        else if (currentLine.startsWith("⭕️ ")) cellArray.transfers.push(currentLine + "\n");
-        else if (currentLine.startsWith("✔️⭕️ ")) cellArray.transferRecs.push(currentLine + "\n");
-        else if (currentLine.startsWith("✔️ ")) cellArray.recs.push(currentLine + "\n");
-        else if (currentLine.startsWith("➕✖️ ")) cellArray.hidSheets.push(currentLine + "\n");
-        else if (currentLine.startsWith("➕⭕️ ")) cellArray.transferSheets.push(currentLine + "\n");
-        else if (currentLine.startsWith("➕❗️ ")) cellArray.sheets.push(currentLine + "\n");
+        // (Sorted with its kind, a placeholder or not)
+        let kindLine = shownLine(currentLine);
+        if (kindLine.startsWith("❗️ ")) cellArray.oneTimes.push(currentLine + "\n");
+        else if (kindLine.startsWith("❗️✔️ ")) cellArray.temps.push(currentLine + "\n");
+        else if (kindLine.startsWith("❗️➕ ")) cellArray.sheetTemps.push(currentLine + "\n");
+        else if (kindLine.startsWith("✖️✔️ ")) cellArray.hidTemps.push(currentLine + "\n");
+        else if (kindLine.startsWith("✖️➕ ")) cellArray.hidSheetTemps.push(currentLine + "\n");
+        else if (kindLine.startsWith("✖️ ")) cellArray.hiddens.push(currentLine + "\n");
+        else if (kindLine.startsWith("✔️✖️ ")) cellArray.hidRecs.push(currentLine + "\n");
+        else if (kindLine.startsWith("⭕️✔️ ")) cellArray.transferTemps.push(currentLine + "\n");
+        else if (kindLine.startsWith("⭕️➕ ")) cellArray.transferSheetTemps.push(currentLine + "\n");
+        else if (kindLine.startsWith("⭕️ ")) cellArray.transfers.push(currentLine + "\n");
+        else if (kindLine.startsWith("✔️⭕️ ")) cellArray.transferRecs.push(currentLine + "\n");
+        else if (kindLine.startsWith("✔️ ")) cellArray.recs.push(currentLine + "\n");
+        else if (kindLine.startsWith("➕✖️ ")) cellArray.hidSheets.push(currentLine + "\n");
+        else if (kindLine.startsWith("➕⭕️ ")) cellArray.transferSheets.push(currentLine + "\n");
+        else if (kindLine.startsWith("➕❗️ ")) cellArray.sheets.push(currentLine + "\n");
         else cellArray.uncategorized.push(currentLine + "\n");
       }
       // Sort and append each category sequentially
@@ -4085,7 +4184,7 @@ async function budgetApi(endpoint, payload) {
 
 // The session ended on the server (Sign Out Everywhere, a new password on another device, or it ran
 // out), so this page signs out too instead of trying to save again and again. Nothing more is saved
-// (the server would refuse it), and the login page says why.
+// (the server would refuse it), and the login page says why. It slides right, like any sign-out.
 let signingOut = false;
 function signedOutElsewhere() {
   if (signingOut || window.PAGE === "quick") return;
@@ -4094,7 +4193,8 @@ function signedOutElsewhere() {
   if (typeof clearSignedInData === "function") clearSignedInData();
   else ["prismal_jwt", "prismal_username", "prismal_last_activity"].forEach(key => { try { localStorage.removeItem(key); } catch (e) {} });
   try { sessionStorage.setItem("prismal_signed_out", "expired"); } catch (e) {}
-  window.location.replace("/login.html");
+  if (typeof window.transitionTo === "function") window.transitionTo("/login.html", true, "right");
+  else window.location.replace("/login.html");
 }
 
 //#endregion
@@ -4399,6 +4499,34 @@ function entryMark(sprite) {
   return "";
 }
 
+// A placeholder stands in for an entry that's expected (like an estimate). It counts like any other entry, and the
+// daily update deletes it once its day has passed (see dropPlaceholders), so none are ever left on a day that passed
+// (History never has one). It's kept as ⏳ at the end of the entry's sprite ("❗️⏳", "✔️⭕️⏳", "⭕️✔️⏳"), after its type
+// and mark, which nothing reading those notices. Days show it in yellow (Budget UI.js renderEntryLine). When two
+// entries become one (the same title and type on a day), it's a placeholder only if both were, so real money is never
+// deleted with it.
+const PLACEHOLDER_MARK = "⏳";
+function isPlaceholder(sprite) {
+  return String(sprite ?? "").includes(PLACEHOLDER_MARK);
+}
+
+// A sprite without its placeholder mark
+function withoutPlaceholder(sprite) {
+  return String(sprite ?? "").split(PLACEHOLDER_MARK).join("");
+}
+
+// A sprite as a placeholder (placeholder true) or not
+function placeholderSprite(sprite, placeholder) {
+  return withoutPlaceholder(sprite) + (placeholder ? PLACEHOLDER_MARK : "");
+}
+
+// An entry line as people see it (and logs keep it): without the placeholder mark ("❗️⏳ -$40.00 Gas" -> "❗️ -$40.00 Gas")
+function shownLine(line) {
+  const text = String(line ?? "");
+  const sprite = getParts(text)[0] || "";
+  return isPlaceholder(sprite) ? text.replace(sprite, withoutPlaceholder(sprite)) : text;
+}
+
 // Returns the Recurring tab index of the entry with this title + special type that hits on date, or false
 function recurringHits(title, date, targetSpecial) {
   const cleanTargetTitle = cleanString(title);
@@ -4616,9 +4744,13 @@ const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY -
 const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
 const getCenter = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
 
-// A swipe on a zoomed day: at least this far sideways, and mostly sideways
+// A swipe on a zoomed day: at least this far sideways, and mostly sideways. Once the finger has gone DAY_DRAG_START_PX,
+// a phone's zoomed day follows it (only a little way, when there's no day that way to slide to).
 const DAY_SWIPE_PX = 50;
-let daySwipe = null; // { x, y, atLeft, atRight } for the finger on a zoomed day
+const DAY_DRAG_START_PX = 12;
+const DAY_DRAG_STRETCH = 0.3;
+const DAY_SETTLE_MS = 220;
+let daySwipe = null; // { cell, x, y, atLeft, atRight, dragging, base, offset } for the finger on a zoomed day
 
 const wiredTables = new WeakSet();
 
@@ -4652,7 +4784,7 @@ function wireElasticTable(table) {
   }, { passive: false });
 
   table.addEventListener('touchmove', (e) => {
-    if (!isTransforming || e.touches.length !== 2) return;
+    if (followDaySwipe(e) || !isTransforming || e.touches.length !== 2) return;
     e.preventDefault();
     const t1 = e.touches[0];
     const t2 = e.touches[1];
@@ -4667,6 +4799,7 @@ function wireElasticTable(table) {
     finishDaySwipe(e);
   });
   table.addEventListener('touchcancel', (e) => {
+    if (daySwipe?.dragging) settleDraggedDay(daySwipe);
     daySwipe = null;
     endTransform(e);
   });
@@ -4689,6 +4822,7 @@ function endTransform(e) {
 // One finger down on the zoomed day: where, and whether its entries are already scrolled all the way to either side
 // (until they are, a sideways swipe scrolls them instead of moving to another day)
 function noteDaySwipe(e) {
+  if (daySwipe?.dragging) settleDraggedDay(daySwipe);
   daySwipe = null;
   const cell = e.touches.length === 1 ? e.target.closest('td') : null;
   if (!cell || cell !== activeEditCell || cell.classList.contains('isZoomClosing')) return;
@@ -4696,19 +4830,67 @@ function noteDaySwipe(e) {
   const touch = e.touches[0];
   // (A phone's zoomed day doesn't scroll sideways: its long lines end in "..." instead)
   const most = content && getComputedStyle(content).overflowX !== 'hidden' ? content.scrollWidth - content.clientWidth : 0;
-  daySwipe = { x: touch.clientX, y: touch.clientY, atLeft: !content || content.scrollLeft <= 1, atRight: !content || content.scrollLeft >= most - 1 };
+  daySwipe = { cell, x: touch.clientX, y: touch.clientY, atLeft: !content || content.scrollLeft <= 1, atRight: !content || content.scrollLeft >= most - 1, dragging: false, base: '', offset: 0 };
 }
 
-// The finger lifted: a swipe left goes to the next day, and a swipe right to the day before
+// The finger moving on a phone's zoomed day: once it has gone DAY_DRAG_START_PX, mostly sideways (and the day's lines
+// can't scroll that way), the day moves with it, so it's clear a slide to the next day (or the one before) is coming.
+// With no day that way, it only gives a little. Says whether the move was a swipe's.
+function followDaySwipe(e) {
+  const swipe = daySwipe;
+  if (!swipe || e.touches.length !== 1) return false;
+  const dx = e.touches[0].clientX - swipe.x;
+  const dy = e.touches[0].clientY - swipe.y;
+  if (!swipe.dragging) {
+    // Sideways so far: the move stays the day's (it isn't a scroll)
+    if (Math.hypot(dx, dy) < DAY_DRAG_START_PX) {
+      if (Math.abs(dx) > Math.abs(dy) && e.cancelable) e.preventDefault();
+      return true;
+    }
+    const sideways = Math.abs(dx) >= Math.abs(dy) * 1.5 && (dx < 0 ? swipe.atRight : swipe.atLeft);
+    if (!sideways) {
+      daySwipe = null; // A scroll, not a swipe
+      return false;
+    }
+    // (A computer's doubled day, and less motion: no following, the slide just happens when the finger lifts)
+    if (swipe.cell !== activeEditCell || !swipe.cell.classList.contains('is-fullZoom') || reducedMotion()) return false;
+    swipe.dragging = true;
+    swipe.base = swipe.cell.style.transform;
+  }
+  if (e.cancelable) e.preventDefault();
+  const moved = dx - Math.sign(dx) * DAY_DRAG_START_PX;
+  swipe.offset = nextZoomableDay(swipe.cell, dx < 0 ? 1 : -1) ? moved : moved * DAY_DRAG_STRETCH;
+  swipe.cell.style.transform = `translateX(${swipe.offset}px) ${swipe.base}`;
+  return true;
+}
+
+// A day that followed the finger, but isn't sliding over, goes back to its place
+function settleDraggedDay(swipe) {
+  const cell = swipe.cell;
+  cell.style.transform = swipe.base;
+  if (cell !== activeEditCell || !cell.animate || !swipe.offset) return;
+  cell.animate(
+    [{ transform: `translateX(${swipe.offset}px) ${swipe.base}` }, { transform: swipe.base }],
+    { duration: DAY_SETTLE_MS, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }
+  );
+}
+
+// The finger lifted: a swipe left goes to the next day, and a swipe right to the day before. One that only went a
+// little way (or came back) leaves the day where it is.
 function finishDaySwipe(e) {
   const swipe = daySwipe;
   daySwipe = null;
   if (!swipe || e.touches.length > 0 || !e.changedTouches[0]) return;
   const dx = e.changedTouches[0].clientX - swipe.x;
   const dy = e.changedTouches[0].clientY - swipe.y;
-  if (Math.abs(dx) < DAY_SWIPE_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-  if (dx < 0 ? !swipe.atRight : !swipe.atLeft) return;
-  slideToDay(dx < 0 ? 1 : -1);
+  const step = dx < 0 ? 1 : -1;
+  const slides = Math.abs(dx) >= DAY_SWIPE_PX && Math.abs(dx) >= Math.abs(dy) * 1.5 && (dx < 0 ? swipe.atRight : swipe.atLeft);
+  if (!swipe.dragging) {
+    if (slides) slideToDay(step);
+    return;
+  }
+  if (slides && swipe.cell === activeEditCell && nextZoomableDay(swipe.cell, step)) slideToDay(step, swipe.offset);
+  else settleDraggedDay(swipe);
 }
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
@@ -4858,33 +5040,43 @@ function dayTime(td) {
   return row && row[td.dataset.col] ? row[td.dataset.col].getTime() : null;
 }
 
-// The zoomed day moves to the next day (step 1) or the day before (-1) on its table. On a phone the zoomed day slides
-// off the screen as the next one slides on, each at its own size; on a computer the next one just zooms in.
-function slideToDay(step) {
-  const from = activeEditCell;
+// The day on from's table that's step days from it (1: the next day, -1: the day before), counting the days that have
+// something on them, or null
+function nextZoomableDay(from, step) {
   const table = from && from.closest('table');
-  if (!table) return;
+  if (!table) return null;
   const days = [...table.querySelectorAll('td')]
     .filter(td => dayTime(td) !== null && td.querySelector('.cell-content')?.childElementCount)
     .sort((a, b) => dayTime(a) - dayTime(b));
-  const to = days[days.indexOf(from) + step];
+  const at = days.indexOf(from);
+  return at === -1 ? null : days[at + step] || null;
+}
+
+// The zoomed day moves to the next day (step 1) or the day before (-1) on its table. On a phone the zoomed day slides
+// off the screen as the next one slides on, each at its own size; on a computer the next one just zooms in. dragged:
+// how far a finger had already moved it sideways (followDaySwipe), where both start from.
+function slideToDay(step, dragged = 0) {
+  const from = activeEditCell;
+  const to = nextZoomableDay(from, step);
   if (!to) return;
   if (!from.classList.contains('is-fullZoom') || !from.animate || reducedMotion()) {
     zoomDay(to, false);
     return;
   }
-  const width = document.documentElement.clientWidth || window.innerWidth;
-  const leaving = from.style.transform;
+  const leaving = from.style.transform.replace(/^translateX\([^)]*\)\s*/, ''); // (Without a finger's drag)
   activeEditCell = null; // So zoomDay leaves it zoomed while it slides away
   zoomDay(to, false);
   const arriving = to.style.transform;
+  // The screen's width, in the page's pixels (fewer on a page that's pinch-zoomed in)
+  const width = (document.documentElement.clientWidth || window.innerWidth) / (to.zoomPinch || 1);
   to.animate(
-    [{ transform: `translateX(${step * width}px) ${arriving}` }, { transform: arriving }],
+    [{ transform: `translateX(${step * width + dragged}px) ${arriving}` }, { transform: arriving }],
     { duration: DAY_SLIDE_MS, easing: ZOOM_EASING }
   );
   from.classList.add('isZoomClosing'); // Its entries don't open while it goes (Calendar Page.js)
+  from.style.transform = leaving;
   from.zoomClose = from.animate(
-    [{ transform: leaving }, { transform: `translateX(${-step * width}px) ${leaving}` }],
+    [{ transform: `translateX(${dragged}px) ${leaving}` }, { transform: `translateX(${-step * width}px) ${leaving}` }],
     { duration: DAY_SLIDE_MS, easing: ZOOM_EASING, fill: 'forwards' }
   );
   from.zoomClose.onfinish = () => unzoomCell(from);
@@ -4953,8 +5145,10 @@ function keepDoubledDayOnScreen(cell, place) {
 // ZOOM_HEIGHT_SHARE of the screen (more lines scroll), and centered. Its content is as big as the screen, from the
 // screen's top left corner, and draws the day itself (budgetStyle.css) at --dayX, --dayY, --dayW by --dayH; a line that
 // would run off the screen ends in "..." instead. Measured at its own size (which nothing draws in between), then moved
-// there. animate: it grows out of the day (opening); without, it just moves (when the screen resizes, or the day's
-// entries change), keeping its scroll.
+// there. On a page that's still pinch-zoomed in (a browser that didn't zoom it back out, see unzoomPage), it's laid out
+// the same, then moved onto the part of the page on the screen and scaled down by the page's zoom (zoomPinch), so it
+// looks just the same. animate: it grows out of the day (opening); without, it just moves (when the screen resizes, or
+// the day's entries change), keeping its scroll.
 function fitZoomedDay(animate = false) {
   const cell = activeEditCell;
   if (!cell || !cell.classList.contains('is-fullZoom')) return;
@@ -4966,8 +5160,11 @@ function fitZoomedDay(animate = false) {
   cell.style.setProperty('--zoomText', '1');
   const box = cell.getBoundingClientRect();
   const textSize = parseFloat(getComputedStyle(content).fontSize) || 1;
-  const viewWidth = document.documentElement.clientWidth || window.innerWidth;
-  const viewHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const view = window.visualViewport;
+  const pinch = pageZoomedIn() ? view.scale : 1;
+  cell.zoomPinch = pinch;
+  const viewWidth = pinch > 1 ? view.width * pinch : (document.documentElement.clientWidth || window.innerWidth);
+  const viewHeight = view ? view.height * pinch : window.innerHeight;
   const width = Math.min(viewWidth * ZOOM_WIDTH_SHARE, ZOOM_MAX_WIDTH);
   const scale = width / box.width;
   const textScale = Math.min(Math.max(textSize * scale * ZOOM_TEXT_SHARE, ZOOM_TEXT_MIN), ZOOM_TEXT_MAX) / textSize;
@@ -4983,7 +5180,9 @@ function fitZoomedDay(animate = false) {
     cell.style.setProperty(name, `${pixels}px`);
   }
   cell.style.transformOrigin = '0 0';
-  const moved = `translate(${-box.left}px, ${-box.top}px)`;
+  const moved = pinch > 1
+    ? `translate(${view.offsetLeft - box.left}px, ${view.offsetTop - box.top}px) scale(${1 / pinch})`
+    : `translate(${-box.left}px, ${-box.top}px)`;
   cell.style.transform = moved;
   content.scrollLeft = animate ? 0 : scrolled.left;
   content.scrollTop = animate ? 0 : scrolled.top;
@@ -5008,13 +5207,21 @@ const refitZoomedDay = () => {
 };
 window.addEventListener('scroll', () => { if (activeEditCell) refitZoomedDay(); }, { passive: true });
 window.addEventListener('resize', () => { if (activeEditCell) refitZoomedDay(); });
+// (Two fingers zooming or moving the page while it's pinch-zoomed in, or zooming it in: the day follows the screen)
+const followPinchedScreen = () => {
+  if (activeEditCell?.classList.contains('is-fullZoom') && ((activeEditCell.zoomPinch || 1) > 1 || pageZoomedIn())) refitZoomedDay();
+};
+window.visualViewport?.addEventListener('resize', followPinchedScreen);
+window.visualViewport?.addEventListener('scroll', followPinchedScreen);
 // A day tapped while the page was still sliding in was measured on the move
 document.getElementById('transitionContainer')?.addEventListener('transitionend', (e) => {
   if (activeEditCell && e.target === e.currentTarget) refitZoomedDay();
 });
 document.addEventListener('budget:updated', () => { if (activeEditCell) refitZoomedDay(); }); // After the page redraws it
 
-// A tap on a table: its day zooms in, and a zoomed day's v closes it
+// A tap on a table: its day zooms in, and a zoomed day's v closes it. On a page that's pinch-zoomed in, the page zooms
+// back out first, where the browser lets a page do that (unzoomPage); where it doesn't, the zoomed day is laid out on the
+// part of the page on the screen instead (fitZoomedDay), so it never lands off the screen.
 function zoomTappedDay(e) {
   if (e.target.closest('.cell-action-btn')) {
     closeZoomedDay();
@@ -5024,10 +5231,59 @@ function zoomTappedDay(e) {
 
   const cell = e.target.closest('td');
   if (!cell || activeEditCell === cell || !cell.querySelector('.cell-content')?.childElementCount) return;
-  zoomDay(cell);
   // The tap that zooms a day (or zooms one back while it shrinks) doesn't also open the entry or In Bank under it
   // (Calendar Page.js listens on the same table)
   e.stopImmediatePropagation();
+  if (pageUnzooming) return;
+  if (!pageZoomedIn()) {
+    zoomDay(cell);
+    return;
+  }
+  pageUnzooming = true;
+  unzoomPage().then(() => {
+    pageUnzooming = false;
+    if (cell.isConnected && activeEditCell !== cell) zoomDay(cell);
+  });
+}
+
+// Is the page pinch-zoomed in?
+const pageZoomedIn = () => (window.visualViewport?.scale ?? 1) > 1.01;
+let pageUnzooming = false;
+
+// The page zooms back out to its normal size: for a moment its viewport can't be zoomed past its normal size, which some
+// browsers (like Chrome on Android) take as zooming it back out, and then it can be zoomed again. Resolves once it's back,
+// or when it hasn't started zooming out after UNZOOM_START_MS (a browser that leaves it, like Safari or a computer's), or
+// after UNZOOM_MAX_MS at most.
+const UNZOOM_START_MS = 200;
+const UNZOOM_MAX_MS = 700;
+function unzoomPage() {
+  const view = window.visualViewport;
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!view || !meta || !pageZoomedIn()) return Promise.resolve();
+  const content = meta.getAttribute('content') || '';
+  const started = performance.now();
+  return new Promise((resolve) => {
+    let timer = 0;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      view.removeEventListener('resize', check);
+      meta.setAttribute('content', content);
+      // (Then a frame for the page to lay itself out at its new size)
+      requestAnimationFrame(() => resolve());
+    };
+    // It's zooming out: wait for the rest
+    const check = () => {
+      if (!pageZoomedIn()) return finish();
+      clearTimeout(timer);
+      timer = setTimeout(finish, Math.max(0, started + UNZOOM_MAX_MS - performance.now()));
+    };
+    view.addEventListener('resize', check);
+    meta.setAttribute('content', `${content}, maximum-scale=1`);
+    timer = setTimeout(finish, UNZOOM_START_MS);
+  });
 }
 
 wireElasticTable(document.querySelector('.elastic-table')); // Home's calendar (History wires its own)
@@ -5040,14 +5296,15 @@ document.addEventListener('click', (e) => {
 });
 
 // A tap on a phone's zoomed day that lands beside the day itself: its content is as big as the screen, but only
-// the day, its lines, and its v keep it open
+// the day, its lines, and its v keep it open. (Where it's scaled down onto a pinch-zoomed page, the tap is scaled up.)
 function missesZoomedDay(e) {
   const cell = activeEditCell;
   const content = cell.querySelector('.cell-content');
   if (!cell.classList.contains('is-fullZoom') || e.target !== content || !cell.zoomBox) return false;
   const area = content.getBoundingClientRect();
-  const x = e.clientX - area.left + content.scrollLeft - cell.zoomBox.x;
-  const y = e.clientY - area.top + content.scrollTop - cell.zoomBox.y;
+  const pinch = cell.zoomPinch || 1;
+  const x = (e.clientX - area.left) * pinch + content.scrollLeft - cell.zoomBox.x;
+  const y = (e.clientY - area.top) * pinch + content.scrollTop - cell.zoomBox.y;
   return x < 0 || y < 0 || x > cell.zoomBox.width || y > cell.zoomBox.height;
 }
 
@@ -5245,8 +5502,10 @@ function dayEntries(date) {
   return futureData.slice(1).filter(row => isUpcomingOn(row, date)).map(row => `${String(row[3]).trim()} ${String(row[1]).trim()} ${String(row[0]).trim()}`);
 }
 
-// Put these entry lines on the day in place of its own ones (the rest is rebuilt by refreshBudgetData)
+// Put these entry lines on the day in place of its own ones (the rest is rebuilt by refreshBudgetData). A placeholder
+// doesn't come back on a day that passed: the daily update deleted it with its day.
 function setDayEntries(date, lines) {
+  if (date < today) lines = lines.filter(line => !isPlaceholder(getParts(line)[0]));
   if (date >= gridStartDate && date <= gridEndDate) {
     const spot = calendarSpot(date);
     const cell = String(calendarData[spot.r][spot.c] ?? "").split("\n");

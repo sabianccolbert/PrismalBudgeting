@@ -355,8 +355,9 @@ function renderInfoRow() {
     button.type = "button";
     const line = `${upcoming.sprite} ${formatMoney(upcoming.amount)} ${upcoming.title}`;
     button.appendChild(BudgetUI.element("span", "upcomingDate", showDate(upcoming.date)));
-    const entry = BudgetUI.element("span", "upcomingEntry", line);
+    const entry = BudgetUI.element("span", "upcomingEntry", shownLine(line));
     if (upcoming.amount > 0) entry.classList.add("positive");
+    if (isPlaceholder(upcoming.sprite)) entry.classList.add("isPlaceholder");
     button.appendChild(entry);
     button.addEventListener("click", () => BudgetUI.openEntryOptions(button, line, upcoming.date));
     item.appendChild(button);
@@ -461,7 +462,7 @@ function openNewEntryPanel(origin) {
         findMatch();
         if (match && mode === "set") {
           const sprite = entry.sprite || getSpecialType(match.sprite);
-          return BudgetUI.submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", amount: String(entry.amount) }));
+          return BudgetUI.submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", amount: String(entry.amount), placeholder: entry.placeholder }));
         }
         BudgetUI.submit(panel, () => addCalendarEntry(entry));
       });

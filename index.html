@@ -4,9 +4,9 @@
 <html lang="en" class="noJs frontPage">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=a8df1a14c7">
+    <link rel="stylesheet" href="/stylesheet.css?v=632588708d">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=6bf2d92b45">
+    <link rel="stylesheet" href="/budgetStyle.css?v=96a5e0dad5">
     <title>Prismal Budget - See Your Bank Balance Four Weeks Ahead</title>
     <meta name="description" content="Prismal Budget is a calendar budget that shows what will be in your bank account at the end of every day for the next four weeks. It fills in your paychecks and bills, and points out low days before they happen.">
     <link rel="canonical" href="https://prismalbudget.org/">
@@ -55,7 +55,7 @@
             <img class="navIcon" src="/Resources/Icons/Settings.webp?v=edc4359acb" alt="">
             <span>Settings</span>
           </a>
-          <a class="navButton" href="/menu">
+          <a class="navButton" href="/menu/">
             <img class="navIcon" src="/Resources/Icons/Menu.webp?v=d60f1cd0ff" alt="">
             <span>Menu</span>
           </a>
@@ -307,9 +307,10 @@
           <h4>Viewing The Calendar</h4>
           <ul>
             <li><strong>Tap a day</strong> to zoom in on it, over a dimmed page that holds still while it's zoomed. On a phone, every day grows to the same size, nearly the screen's width and as tall as its entries need, sharp and easy to read; on a computer, it doubles in size. Tap its <strong>v</strong> (in its top right corner), or anywhere outside it, to zoom back out.</li>
-            <li><strong>Swipe a zoomed day</strong> left or right to slide over to the next day or the day before (on a computer, press the → and ← keys).</li>
+            <li><strong>Swipe a zoomed day</strong> left or right to slide over to the next day or the day before (on a computer, press the → and ← keys). On a phone, the day moves with your finger; let go after only a little, or slide it back, and it stays.</li>
+            <li>If you've zoomed the whole page in, tapping a day zooms the page back out first (or, where your browser keeps the page zoomed, zooms the day in on what's on your screen), so the day fits on the screen.</li>
             <li><strong>Entries stay on one line.</strong> A long one is cut short with "..." at the day's edge (on a computer, a zoomed day lets them run past its edge, over the dimmed page). To read the whole title, tap the entry: its options show it all. On a phone, a zoomed day with more entries than fit on the screen scrolls with a finger.</li>
-            <li><strong>On a zoomed day, tap an entry</strong> to change its amount, refraction type, or Other Account, move it to another day, or delete it. Changing its type or account adds it into an entry with that title and type already on the day.</li>
+            <li><strong>On a zoomed day, tap an entry</strong> to change its amount, refraction type, or Other Account, move it to another day, turn its Placeholder switch on or off, or delete it. Changing its type or account adds it into an entry with that title and type already on the day.</li>
             <li><strong>On a zoomed day, tap In Bank</strong> and type what your bank says for that day (tap Negative if it's below zero). The difference goes on it as a ⭕️ Transfer titled Catchup (with no Other Account), so it fixes In Bank without counting as a cost or gain, and the days after it follow.</li>
             <li><strong>Search</strong> finds entries by title: any title with what you type in it, or with Exact on, only that title. The little ? just left of All says what All, Costs, Gains, and Tracker find. It can keep to one refraction type or one Other Account. With no To date, it looks a month ahead too (recurring and connected spreadsheets' entries included), and what's after today shows first, apart from the rest.</li>
             <li><strong>Pinch or stretch with two fingers</strong> on one day to zoom just that day out or in (it turns and moves with your fingers too). Let go, and it settles back. Two fingers across different days zoom the whole page, like anywhere else.</li>
@@ -335,6 +336,7 @@
             <li>If a recurring entry's End Date moves before a day you changed (or you delete the recurring entry), that day's temporary entry from today on becomes a plain unique entry, like ❗️, since there's nothing left for it to hold back. A $0.00 one just goes away.</li>
             <li><strong>Spreadsheet entries</strong> (➕❗️, ➕✖️, ➕⭕️) start with a yellow plus. They come from spreadsheets you connect on the Spreadsheets page in the menu (once your email is verified), land on today and every day after, and follow the spreadsheet when it changes. They work just like recurring entries: change one for its day and it becomes ❗️➕ (the plus second), which keeps your change, and once a day passes its spreadsheet entries stay as they were. The Spreadsheets page's Help has more.</li>
             <li>A day has one entry per title, refraction type, and Other Account. So when New Entry's title, type, account, and day match an entry already there (a recurring or spreadsheet entry landing there too), it shows that entry and asks whether to <strong>add to it</strong> or <strong>set it to</strong> the new amount. Changing a recurring or spreadsheet entry that way makes it a temporary entry for that day, like ❗️✔️.</li>
+            <li><strong>Placeholders</strong> (in yellow) stand in for entries you expect but don't know yet, like an estimate for groceries. Turn on <strong>Placeholder</strong> in New Entry, or in an entry's options, for a day from today on (recurring entries, Quick Entry prisms, and connected spreadsheets have the switch too). A placeholder counts like any entry until its day passes; then it's deleted the next time your budget opens, and In Bank follows without it. When a placeholder and a real entry with the same title and type become one on a day, it's a real entry, so real money is never deleted with a placeholder.</li>
           </ul>
 
           <h4>Refraction Types</h4>
