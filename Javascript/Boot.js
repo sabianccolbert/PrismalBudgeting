@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.20.2026.B";
+  const SITE_VERSION = "10.21.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,21 +26,21 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "fe8f3588ef",
-    "/Javascript/Budget Search.js": "52f4685c43",
-    "/Javascript/Budget UI.js": "4139447039",
-    "/Javascript/Calendar Page.js": "db8a832ff9",
+    "/Javascript/Budget Pages.js": "fe4d1539d3",
+    "/Javascript/Budget Search.js": "57d178915c",
+    "/Javascript/Budget UI.js": "e0e7bf2f05",
+    "/Javascript/Calendar Page.js": "aa0da2aef6",
     "/Javascript/Dates.js": "9f645c4b1f",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "6dfb9a06d0",
-    "/Javascript/Login.js": "9e6e1a34a1",
+    "/Javascript/Layout.js": "8334275548",
+    "/Javascript/Login.js": "5621c1f33e",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "158ec3a22b",
-    "/Javascript/Quick Entry.js": "45ef9cd0ae",
-    "/Javascript/Session.js": "4967552407",
-    "/Javascript/Settings Page.js": "38b25426e5",
-    "/Javascript/Spreadsheets Page.js": "2d9bb4bb47",
+    "/Javascript/Process Budget.js": "235eed11be",
+    "/Javascript/Quick Entry.js": "380b76f435",
+    "/Javascript/Session.js": "6961a399bf",
+    "/Javascript/Settings Page.js": "7c90c63967",
+    "/Javascript/Spreadsheets Page.js": "9570679fa3",
     "/Javascript/Spreadsheets.js": "b4b0b3b517",
     "/Javascript/Sprites.js": "5b494b26db",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
@@ -65,11 +65,9 @@
   /* ===============================
    *  1) PAGE DETECTION
    * =============================== */
-  function getPageKey(){
-    // GitHub Pages shows 404.html at whatever address was asked for, so that page says what it is
-    if (document.documentElement.dataset.page === "notfound") return "notfound";
-
-    let p = location.pathname.toLowerCase();
+  // Which page an address is (Layout.js asks too, for the page a link goes to)
+  function pageKeyOf(pathname){
+    let p = pathname.toLowerCase();
 
     if (p.endsWith("/")) p = p.slice(0, -1);
     if (p.endsWith(".html")) p = p.slice(0, -5);
@@ -95,8 +93,10 @@
 
     return "generic";
   }
+  window.pageKeyOf = pageKeyOf;
 
-  window.PAGE = getPageKey();
+  // GitHub Pages shows 404.html at whatever address was asked for, so that page says what it is
+  window.PAGE = document.documentElement.dataset.page === "notfound" ? "notfound" : pageKeyOf(location.pathname);
 
   // Pages that work without logging in (Quick Entry uses the key in its link instead; How It Works and
   // the Not Found page are for anyone, search engines included)
@@ -189,15 +189,22 @@
    * =============================== */
   document.documentElement.classList.add(PAGE === "home" ? "homeJs" : "otherJs");
 
-  // Coming from one of the budget's four pages by its tab (Layout.js leaves a note for this tab), the header and the
-  // tabs are already in place, and only the rest of the page slides in (Layout.js takes html.tabSlide off after)
+  // Which way this page slides in. A link or button of the site's that opened it left a note for this tab (Layout.js
+  // slideWay): the page slides in the way the last one slid out, from the right, the left, or the top, or (between the
+  // budget's four pages, by a tab) the header and the tabs are already in place and only the rest of the page slides
+  // in. Layout.js takes the class off once it's in. Anything else (Back, Forward, a reload, or a link from somewhere
+  // else) slides it up into view.
+  const SLIDE_CLASSES = { left: "fromRight", right: "fromLeft", down: "fromTop", tab: "tabSlide" };
   const TAB_PAGES = ["home", "recurring", "history", "accounts"];
-  let fromTab = false;
+  let slide = null;
   try {
-    fromTab = sessionStorage.getItem("prismal_tab_slide") === "1";
-    sessionStorage.removeItem("prismal_tab_slide");
+    slide = JSON.parse(sessionStorage.getItem("prismal_slide") || "null");
+    sessionStorage.removeItem("prismal_slide");
   } catch (e) {}
-  if (fromTab && TAB_PAGES.includes(PAGE) && !FRONT_PAGE) document.documentElement.classList.add("tabSlide");
+  let navigationType = "navigate";
+  try { navigationType = performance.getEntriesByType("navigation")[0].type; } catch (e) {}
+  const slideClass = slide && slide.page === PAGE && navigationType === "navigate" && Math.abs(Date.now() - slide.at) < 30000 && SLIDE_CLASSES[slide.way];
+  if (slideClass && (slideClass !== "tabSlide" || (TAB_PAGES.includes(PAGE) && !FRONT_PAGE))) document.documentElement.classList.add(slideClass);
 
   /* ===============================
    *  6) Append page scripts at END
@@ -232,37 +239,52 @@
     document.body.appendChild(s);
   }
 
-  // The scripts this page needs: the shared ones, sign-in, then the budget and the page's own
-  function loadPageScripts(){
+  // The scripts a page needs, in order: the shared ones, sign-in, then the budget and the page's own
+  function scriptsFor(page, signedIn){
+    const frontPage = page === "home" && !signedIn;
+    const isPublic = frontPage || PUBLIC_PAGES.includes(page);
     // Quick Entry's link carries its key, so that page never loads analytics
-    GLOBAL_SCRIPTS.filter(src => PAGE !== "quick" || !src.endsWith("/Analytics.js")).forEach(appendScript);
+    const scripts = GLOBAL_SCRIPTS.filter(src => page !== "quick" || !src.endsWith("/Analytics.js"));
 
     // Passkeys (Face ID, Touch ID, Windows Hello): signing in on the login page, managing them in Settings
-    if (PAGE === "login" || PAGE === "settings") {
-      appendScript("/Javascript/Passkeys.js");
+    if (page === "login" || page === "settings") {
+      scripts.push("/Javascript/Passkeys.js");
     }
-    if (PAGE === "login") {
-      appendScript("/Javascript/Dates.js"); // The birth date's box and its calendar
-      appendScript("/Javascript/Login.js");
+    if (page === "login") {
+      scripts.push("/Javascript/Dates.js"); // The birth date's box and its calendar
+      scripts.push("/Javascript/Login.js");
     }
-    else if (!IS_PUBLIC) {
-      appendScript("/Javascript/Session.js"); // Sends signed-out visitors to login, so public pages skip it
+    else if (!isPublic) {
+      scripts.push("/Javascript/Session.js"); // Sends signed-out visitors to login, so public pages skip it
     }
-    if (PAGE === "notfound") {
-      appendScript("/Javascript/Debug.js");
+    if (page === "notfound") {
+      scripts.push("/Javascript/Debug.js");
     }
     // Every page that shows budget data loads + saves it through Process Budget,
     // then draws itself: the calendar page, settings, or the menu data pages (the front page shows none)
-    if (BUDGET_PAGES.includes(PAGE) && !FRONT_PAGE) {
-      appendScript("/Javascript/Dates.js"); // Days stored, shown, typed, and picked (Process Budget.js uses it)
-      appendScript("/Javascript/Process Budget.js");
-      appendScript("/Javascript/Budget UI.js");
+    if (BUDGET_PAGES.includes(page) && !frontPage) {
+      scripts.push("/Javascript/Dates.js"); // Days stored, shown, typed, and picked (Process Budget.js uses it)
+      scripts.push("/Javascript/Process Budget.js");
+      scripts.push("/Javascript/Budget UI.js");
       // Connected spreadsheets' reading (Quick Entry never reads them)
-      if (PAGE !== "quick") appendScript("/Javascript/Spreadsheets.js");
+      if (page !== "quick") scripts.push("/Javascript/Spreadsheets.js");
       // Search (Home's and History's): before the page script, which opens it
-      if (PAGE === "home" || PAGE === "history") appendScript("/Javascript/Budget Search.js");
-      appendScript(PAGE_SCRIPTS[PAGE] || "/Javascript/Budget Pages.js");
+      if (page === "home" || page === "history") scripts.push("/Javascript/Budget Search.js");
+      scripts.push(PAGE_SCRIPTS[page] || "/Javascript/Budget Pages.js");
     }
+    return scripts;
+  }
+
+  // Another page's scripts, at their fingerprinted addresses: Layout.js loads them early, while this page slides out
+  window.pageScripts = function pageScripts(page){
+    let signedIn = false;
+    try { signedIn = !!storage.getItem("prismal_jwt"); } catch (e) {}
+    return scriptsFor(page, signedIn).map(window.assetUrl);
+  };
+
+  // This page's scripts
+  function loadPageScripts(){
+    scriptsFor(PAGE, isLoggedIn).forEach(appendScript);
   }
 
   /* ===============================

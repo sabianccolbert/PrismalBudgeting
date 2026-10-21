@@ -451,9 +451,14 @@ let turnstileWidget = null;  // The check's ID once it's on the page
 let turnstileLoading = null; // Cloudflare's script while it loads
 let turnstileAnswer = '';    // The latest passed check's answer ('' when there isn't one)
 
-// Load Cloudflare's script (once) and put the check on the page
+// Load Cloudflare's script (once) and put the check on the page. Opened as Create Account, the page loads first: the
+// page slides in once everything on it has loaded (Layout.js), and the check's script and frame would hold that up.
 function startTurnstile() {
   if (turnstileWidget !== null || turnstileLoading) return;
+  if (document.readyState !== 'complete') {
+    window.addEventListener('load', startTurnstile, { once: true });
+    return;
+  }
   // The check's frame asks which site it's on, and this page otherwise sends no address at all (see login.html). A
   // code from an emailed link has left the address bar by now, so only the site's own address goes.
   document.querySelector('meta[name="referrer"]')?.setAttribute('content', 'strict-origin');

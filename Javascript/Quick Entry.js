@@ -68,7 +68,7 @@ document.getElementById("copyQuickLink")?.addEventListener("click", async () => 
 async function checkQuickKey() {
   // Without a key there's nothing this page can do: sign in instead (Home's Quick Entry button makes one)
   if (!quickKey) {
-    window.location.replace("/login.html");
+    transitionTo("/login.html", true);
     return;
   }
   const result = await quickApi("/api/quick/check", { key: quickKey, today: quickToday() });
@@ -152,9 +152,10 @@ async function addQuickEntry(panel, fields) {
   openQuickEntryForm(); // A fresh form for the next one
 }
 
-// The form's entry as the API keeps it: { title (with its Other Account), type, amount, date: "YYYY-MM-DD" }
+// The form's entry as the API keeps it: { title (with its Other Account), type, amount, date: "YYYY-MM-DD", and
+// placeholder: true for a placeholder }
 function toQueued(entry) {
-  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount: entry.amount, date: formatToYMD(entry.date) };
+  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount: entry.amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}) };
 }
 
 // A home screen icon's page often stays open in the background for days. Looked at again on a later day, New
@@ -179,7 +180,7 @@ function keyStopped() {
   try {
     if (!localStorage.getItem("prismal_jwt")) sessionStorage.setItem("prismal_signed_out", "quickKey");
   } catch (e) {}
-  window.location.replace("/login.html");
+  transitionTo("/login.html", true);
 }
 
 //#endregion
@@ -231,10 +232,10 @@ function renderPrisms() {
   edit.classList.toggle("primary", editingPrisms);
 }
 
-// A prism's button: tapping it fills in New Entry
+// A prism's button: tapping it fills in New Entry (a placeholder's is yellow)
 function prismButton(prism) {
   const item = BudgetUI.element("li", "prismItem");
-  const button = BudgetUI.noTranslate(BudgetUI.element("button", "budgetButton prismButton", prismLabel(prism)));
+  const button = BudgetUI.noTranslate(BudgetUI.element("button", `budgetButton prismButton${prism.placeholder ? " isPlaceholder" : ""}`, prismLabel(prism)));
   button.type = "button";
   button.addEventListener("click", () => applyPrism(prism));
   item.appendChild(button);
@@ -254,18 +255,20 @@ function prismEditRow(prism, index) {
   remove.type = "button";
   remove.setAttribute("aria-label", `Delete ${label}`);
   remove.addEventListener("click", () => deletePrism(index));
-  item.append(handle, BudgetUI.noTranslate(BudgetUI.element("span", "prismLabel", label)), remove);
+  item.append(handle, BudgetUI.noTranslate(BudgetUI.element("span", `prismLabel${prism.placeholder ? " isPlaceholder" : ""}`, label)), remove);
   return item;
 }
 
 // "❗️ Coffee -$4.50", "Rent", "⭕️ Payday → Savings", or just "⭕️ Transfer". inWords: "Coffee -$4.50 (Regular)"
-// instead, for a dialog, which can't show the type's image (only the device's own emoji)
+// instead, for a dialog, which can't show the type's image (only the device's own emoji); a placeholder's then ends in
+// "(Placeholder)" (its button is yellow)
 function prismLabel(prism, inWords = false) {
   const sprite = prism.type ? QUICK_ENTRY_TYPES[prism.type] : "";
   const type = sprite ? REFRACTION_NAMES.get(sprite) : "";
   const parts = [inWords ? "" : sprite, withAccount(prism.title, prism.account), prism.amount === null ? "" : formatMoney(prism.amount)].filter(Boolean);
   if (!prism.title && !prism.account && prism.amount === null) parts.push(type);
   else if (inWords && type) parts.push(`(${type})`);
+  if (inWords && prism.placeholder) parts.push("(Placeholder)");
   return parts.join(" ");
 }
 
@@ -274,7 +277,7 @@ function prismLabel(prism, inWords = false) {
 function applyPrism(prism) {
   if (!quickForm || quickForm.mode === "prism") openQuickEntryForm("entry");
   const { fields } = quickForm;
-  fields.fill({ title: prism.title, amount: prism.amount, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "" });
+  fields.fill({ title: prism.title, amount: prism.amount, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "", placeholder: !!prism.placeholder });
   // An account renamed or deleted since the prism was saved isn't in the list, so it says to pick one
   if (prism.account && !quickAccounts.some(account => cleanString(account.name) === cleanString(prism.account))) {
     BudgetUI.showToast(`${prism.account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
@@ -296,14 +299,15 @@ function highlightForm() {
   setTimeout(() => panel.classList.remove("prismFlash"), 1200);
 }
 
-// Save Prism: whatever's filled in or picked (Auto counts as nothing picked), and at least one thing
+// Save Prism: whatever's filled in or picked (Auto counts as nothing picked), and at least one thing (Placeholder alone
+// doesn't count: it goes with what the prism fills in)
 async function savePrismFromForm(panel, fields) {
-  const { title, amount, sprite, account } = fields.values();
+  const { title, amount, sprite, account, placeholder } = fields.values();
   if (title.includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
   if (Number.isNaN(amount)) return panel.setError("Enter an amount, like 12.50, or leave it blank.");
   if (amount !== null && Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
   // The title and the Other Account are kept apart, so the title is never the account's name unless it was typed
-  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null };
+  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null, ...(placeholder ? { placeholder: true } : {}) };
   if (!prism.title && prism.amount === null && !prism.type && !prism.account) {
     return panel.setError("Fill in or pick at least one thing for this prism: a title, an amount, a type, or an account.");
   }
@@ -451,9 +455,9 @@ function setQuickUndoBusy(busy) {
   document.getElementById("quickRedoButton").disabled = busy || !quickRedo.length;
 }
 
-// "Coffee, -$4.50 on 10/05/2026" (the day in this device's date format)
+// "Coffee, -$4.50 on 10/05/2026" (the day in this device's date format), and "(a placeholder)" for one
 function describeQueued(entry) {
-  return `${capitalize(entry.title)}, ${formatMoney(entry.amount)} on ${showDate(createSafeMidnight(entry.date, true))}`;
+  return `${capitalize(entry.title)}, ${formatMoney(entry.amount)} on ${showDate(createSafeMidnight(entry.date, true))}${entry.placeholder ? " (a placeholder)" : ""}`;
 }
 
 //#endregion
@@ -504,9 +508,10 @@ function renderWaiting() {
   renderQuickUndo();
 }
 
-// One waiting entry: its type and title over its amount and day, with Change and × (or, once the budget has it, a note)
+// One waiting entry: its type and title over its amount and day, with Change and × (or, once the budget has it, a note).
+// A placeholder's words are yellow.
 function waitingRow(item) {
-  const row = BudgetUI.element("li", "waitingItem");
+  const row = BudgetUI.element("li", `waitingItem${item.placeholder ? " isPlaceholder" : ""}`);
   const sprite = QUICK_ENTRY_TYPES[item.type] || "";
   const day = createSafeMidnight(item.date, true);
   const amount = BudgetUI.element("span", `waitingAmount${item.amount < 0 ? " negative" : item.amount > 0 ? " positive" : ""}`, formatMoney(item.amount));
@@ -536,7 +541,7 @@ function waitingRow(item) {
 function changeWaiting(item) {
   if (quickForm && quickForm.mode === "entry") stashedEntry = quickForm.fields.values();
   const { title, account } = splitAccount(item.title);
-  openQuickEntryForm("change", { title, amount: item.amount, sprite: QUICK_ENTRY_TYPES[item.type] || "", account }, item);
+  openQuickEntryForm("change", { title, amount: item.amount, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, placeholder: !!item.placeholder }, item);
   // An account renamed or deleted since isn't in the list, so it says to pick one
   if (account && !quickAccounts.some(known => cleanString(known.name) === cleanString(account))) {
     BudgetUI.showToast(`${account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);

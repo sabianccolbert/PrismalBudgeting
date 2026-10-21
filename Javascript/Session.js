@@ -16,7 +16,7 @@ function verifySession() {
 
   // If not logged in, send to login page
   if (!token) {
-    window.location.replace('/login.html');
+    toLoginPage();
     return false;
   }
 
@@ -30,10 +30,16 @@ function verifySession() {
     else ['prismal_jwt', 'prismal_username', 'prismal_last_activity'].forEach(key => localStorage.removeItem(key));
     try { sessionStorage.setItem('prismal_signed_out', 'idle'); } catch (e) {} // The login page says why
 
-    window.location.replace('/login.html'); // Redirect to login
+    toLoginPage();
     return false;
   }
   return true;
+}
+
+// Off to the login page, sliding right like any sign-out (Layout.js)
+function toLoginPage() {
+  if (typeof transitionTo === 'function') transitionTo('/login.html', true, 'right');
+  else window.location.replace('/login.html');
 }
 
 // 2. A tap, key, scroll, or mouse move counts as activity. Checked and saved at most every 5 seconds

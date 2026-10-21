@@ -78,9 +78,10 @@ function sheetItem(connection) {
 
   const open = settingsButton("", "sheetButton", (event) => openSheetPanel(connection.id, event.currentTarget));
   const { landing: upcoming, keptOff } = sheetLanding(connection.entries);
+  const count = `${upcoming} ${connection.placeholder ? (upcoming === 1 ? "placeholder" : "placeholders") : (upcoming === 1 ? "entry" : "entries")} from today on`;
   open.append(
     BudgetUI.noTranslate(BudgetUI.element("span", "sheetName", `➕ ${connection.name}`)),
-    BudgetUI.element("span", "sheetCount", connection.on ? `${upcoming} ${upcoming === 1 ? "entry" : "entries"} from today on` : "Off")
+    BudgetUI.element("span", `sheetCount${connection.placeholder && connection.on ? " isPlaceholder" : ""}`, connection.on ? count : "Off")
   );
   open.setAttribute("aria-label", `Change ${connection.name}`);
 
@@ -213,10 +214,17 @@ function openSheetPanel(id, origin) {
       rows.account = sheetFieldRow("account", account, "An Other Account's name (an empty cell is none), or pick one for all of them. For Hidden and Transfer entries.");
       BudgetUI.addFieldHelp(rows.type.el, "What the refraction types do", refractionTypesHelp());
 
+      // Its entries can all be placeholders (they land from today on, so it's always offered)
+      const placeholder = BudgetUI.placeholderField({
+        checked: !!existing?.placeholder,
+        hint: "Every entry it adds is a placeholder: a stand-in for an entry you expect, like an estimate. They count like any entry and show in yellow, and each is deleted once its day passes."
+      });
+      placeholder.input.addEventListener("change", () => updatePreview());
+
       const preview = BudgetUI.element("div", "sheetPreview");
       preview.setAttribute("aria-live", "polite");
 
-      section.append(name.el, ...SHEET_FIELD_KEYS.map(key => rows[key].el), preview);
+      section.append(name.el, ...SHEET_FIELD_KEYS.map(key => rows[key].el), placeholder.el, preview);
       form.append(link.el, openedNote, section, buttons);
 
       [titleInput, amount.input].forEach(input => input.addEventListener("input", updatePreview));
@@ -324,7 +332,7 @@ function openSheetPanel(id, origin) {
           : `Entries: ${upcoming.length} from today on${upcoming.length > SHEET_PREVIEW_LINES ? `, starting with` : ""}`);
         preview.append(heading);
         if (upcoming.length > 0) {
-          const list = BudgetUI.noTranslate(BudgetUI.element("ul", "sheetPreviewList"));
+          const list = BudgetUI.noTranslate(BudgetUI.element("ul", `sheetPreviewList${placeholder.value() ? " isPlaceholder" : ""}`));
           for (const [dateText, special, entryAmount, title] of upcoming.slice(0, SHEET_PREVIEW_LINES)) {
             const line = BudgetUI.element("li", entryAmount > 0 ? "positive" : "");
             line.append(BudgetUI.element("span", "sheetPreviewDate", showDay(createSafeMidnight(dateText, true))), ` ➕${special} ${formatMoney(entryAmount)} ${title}`);
@@ -385,7 +393,7 @@ function openSheetPanel(id, origin) {
         const read = Spreadsheets.readConnection(fields, draft.workbook);
         if (read.entries.length === 0 && read.problems.length > 0) return panel.setError("Fix what's under Needs a look first: nothing can be added from it yet.");
         BudgetUI.submit(panel, () => saveSheetConnection(
-          { name: name.value(), link: draft.openedLink, fields },
+          { name: name.value(), link: draft.openedLink, fields, placeholder: placeholder.value() },
           { entries: read.entries, problems: read.problems, tabs: read.tabs, access: draft.access },
           existing ? existing.id : null
         )).then(result => {

@@ -605,8 +605,9 @@ async function deleteAccount(event) {
   if (pushSubscription) await pushSubscription.unsubscribe().catch(() => {});
   if (passkeyInfo) Passkeys.syncList(passkeyInfo.userHandle, []);
   Passkeys.forgetLast();
+  workspaceLoaded = false; // Nothing more to save (and leaving doesn't ask about it)
   clearSignedInData(true);
-  window.location.replace("/login.html?deleted=1");
+  transitionTo("/login.html?deleted=1", true, "right");
 }
 
 // The API's message, or a fallback (401: signed out, like after a password reset on another device)
@@ -831,9 +832,10 @@ async function signOutEverywhere(event) {
     BudgetUI.showToast(accountError(result, "Couldn't sign out everywhere. Please try again."), true);
     return;
   }
+  workspaceLoaded = false; // Nothing more to save (and leaving doesn't ask about it)
   clearSignedInData();
   try { sessionStorage.setItem("prismal_signed_out", "everywhere"); } catch (e) {} // The login page says so
-  window.location.replace("/login.html");
+  transitionTo("/login.html", true, "right");
 }
 
 //#endregion
