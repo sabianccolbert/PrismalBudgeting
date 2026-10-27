@@ -22,7 +22,7 @@
     ambient: ["Ambient1", "Ambient2", "Ambient3", "Ambient4", "Ambient5"]
   };
   // How loud each kind plays (the files are all made at about the same loudness)
-  const VOLUMES = { twinkle: 0.16, ding: 0.24, shatter: 0.2, transition: 0.2, soft: 0.08, ambient: 0.06 };
+  const VOLUMES = { twinkle: 0.16, ding: 0.24, shatter: 0.2, transition: 0.2, soft: 0.08, ambient: 0.018 };
   const MASTER_VOLUME = 0.8;
   // Music, on the signed-in pages: a quiet bed of far-off twinkles, one every AMBIENT_BED_MIN_S to AMBIENT_BED_MAX_S
   // seconds (each about 2.6 seconds long, so they run together), at AMBIENT_BED_SHARE of the music's volume, lower and

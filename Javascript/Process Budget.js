@@ -1,6 +1,6 @@
 // Process Budget: the budget itself, for every page that shows one. Loading it from the API and saving what
 // changed, the daily update that brings it up to today, every change (calendar entries, recurring entries, the
-// tracker, Other Accounts, connected spreadsheets, Quick Entry), the budget math, Jeremy's message on Home and his page's
+// tracker, Other Accounts, connected spreadsheets, Quick Entry), the budget math, Bob's message on Home and his page's
 // settings, Search, Undo and Redo, and the helpers the pages share (dates, amounts, titles). Pages draw from it and redraw
 // on its "budget:updated" event.
 
@@ -19,6 +19,7 @@ let calculatorData = null;
 let accountsData = null; // Other Accounts: { version, list: [[...]], equity: {...} } (see normalizeApiAccounts)
 let logsData = null;     // Change Logs (the spreadsheet's "Form Entries" tab), newest first
 let sheetsData = null;   // Connected spreadsheets: { version, list: [connection] } (see CONNECTED SPREADSHEETS)
+let notesData = null;    // Entries' notes: { version, entries, recurring } (see ENTRY NOTES)
 
 // Data Sizes
 // The calendar is always exactly 4x7. Every other table keeps all of its stored rows
@@ -64,6 +65,7 @@ let calculatorEdited = false;
 let accountsEdited = false;
 let logsEdited = false;
 let sheetsEdited = false;
+let notesEdited = false;
 
 // Dates Data
 // Days are calendar days in the device's time zone (stored as MM/DD/YYYY text, never as a moment in time),
@@ -85,7 +87,7 @@ function setBudgetDay(day) {
   nextFourStart = addDays(gridEndDate, 1);
 }
 
-// JEREMY (his message on Home, see commenceJeremy)
+// BOB (his message on Home, see commenceBob)
 let visibleUncommons = 0;
 let visibleNegatives = 0;
 let nextFourNegative = false;
@@ -98,7 +100,7 @@ const affirmationPresets = ["I am capable of quiet focus.", "My mind is filled w
 // Home Page (computed every time the budget refreshes, so they're never stored)
 let lowestInBank = 0;     // "Lowest in bank after today"
 let upcomingEntries = []; // Future Dates entries past the calendar: [{ date, sprite, amount, title }]
-let jeremyMessage = "";   // Jeremy's message
+let bobMessage = "";      // Bob's message
 
 // Others
 let formEntryRow = ["", "", "", "", "", "", ""]; // Change Logs row being built: [time, duration, action, 4 details]
@@ -193,7 +195,7 @@ async function loadWorkspace() {
     lastActiveDay = latestActiveDay(lastDailyUpdate, data.quick_entries);
 
     // Catch up any missed days, then rebuild everything computed from the entries
-    // (recurring entries, math, Jeremy's message, tracker). Only tables that changed get saved.
+    // (recurring entries, math, Bob's message, tracker). Only tables that changed get saved.
     const loadSnapshot = snapshotTables();
     try {
       beginChangeLog("🕛 Daily Update", requestedAt);
@@ -266,6 +268,7 @@ function readLoadedTables(data) {
   accountsData   = normalizeApiAccounts(storedAccounts);
   logsData       = normalizeApiTable(parseDB(data.logs, "logs"), TABLE_SHAPES.logs);
   sheetsData     = normalizeApiSheets(parseDB(data.sheets, "sheets"));
+  notesData      = normalizeApiNotes(parseDB(data.notes, "notes"));
   return storedAccounts;
 }
 
@@ -642,7 +645,7 @@ mirrors the old onFormSubmit flow:
   1. strip recurring entries (and In Bank, Gains/Costs, next-28 lines) out of the calendar
   2. apply the change (calendar entry, recurring entry, tracker row, search, ...)
   3. re-add Future Dates and recurring entries, and remove expired recurring entries
-  4. sort each day's entries, then redo the budget math, Jeremy's message, and the tracker
+  4. sort each day's entries, then redo the budget math, Bob's message, and the tracker
   5. log it to Change Logs, save, and tell the page to re-render ("budget:updated")
 Changes run one at a time (the spreadsheet used a script lock). A change that fails part
 way is rolled back, so half-finished data is never saved.
@@ -652,6 +655,8 @@ entries with the account picked, see OTHER ACCOUNTS below.
 
 // Change Logs rows kept. Each table is saved as a single database row (2 MB max), so this is capped.
 const MAX_LOG_ROWS = 1000;
+// The most one table can hold when it's saved (the API refuses more)
+const MAX_TABLE_BYTES = 1900000;
 
 // Tracker rows that updateTrackerTab fills in itself (their titles and aliases aren't user-edited, and they
 // can't be deleted)
@@ -678,6 +683,7 @@ const BUDGET_TABLES = {
   calculator: { get: () => calculatorData, set: (v) => { calculatorData = v; }, markEdited: () => { calculatorEdited = true; }, edited: () => calculatorEdited, saved: () => { calculatorEdited = false; } },
   accounts:   { get: () => accountsData,   set: (v) => { accountsData = v; },   markEdited: () => { accountsEdited = true; },   edited: () => accountsEdited,   saved: () => { accountsEdited = false; } },
   sheets:     { get: () => sheetsData,     set: (v) => { sheetsData = v; },     markEdited: () => { sheetsEdited = true; },     edited: () => sheetsEdited,     saved: () => { sheetsEdited = false; } },
+  notes:      { get: () => notesData,      set: (v) => { notesData = v; },      markEdited: () => { notesEdited = true; },      edited: () => notesEdited,      saved: () => { notesEdited = false; } },
   logs:       { get: () => logsData,       set: (v) => { logsData = v; },       markEdited: () => { logsEdited = true; },       edited: () => logsEdited,       saved: () => { logsEdited = false; } }
 };
 
@@ -691,12 +697,13 @@ let changeLogStart = 0;
 
 // New calendar entry. entry: { title, sprite, amount (signed number), percent (signed, for a % amount instead; see
 // PERCENT_MARK), date, placeholder, purpose (what its title's money is for: Needs, Wants, or Future, see ENTRY PURPOSES;
-// left out, it stays as it is) }. Can be undone.
+// left out, it stays as it is), note (see ENTRY NOTES: added to the entry's, when it goes into one already there) }. Can
+// be undone.
 function addCalendarEntry(entry) {
   const hasPercent = typeof entry.percent === "number";
   const signed = hasPercent ? entry.percent : entry.amount;
   return runBudgetAction("", () => {
-    unique({
+    const landed = unique({
       title: entry.title,
       sprite: entry.sprite,
       action: signed > 0 ? "add" : "subtract",
@@ -707,21 +714,25 @@ function addCalendarEntry(entry) {
       adding: true
     });
     noteEntryPurpose(entry.title, entry.purpose);
+    addEntryNote(entry.date || today, entry.title, landed.entryType, entry.note);
     return {};
   }, { label: `added ${capitalize(String(entry.title || "").trim())} (${hasPercent ? showPercent(entry.percent) : formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
 // Change, move, or delete a calendar entry (or one in Upcoming; History's go through changeHistoryEntry). change: { title,
 // sprite, date, action, amount, moveDate, renameTo (a new title of its own, see renameEntry), purpose (its title's, see
-// addCalendarEntry) }. Can be undone.
+// addCalendarEntry), note (its own, see ENTRY NOTES; left out, it keeps the one it has) }. Can be undone.
 function changeCalendarEntry(change) {
-  return runBudgetAction("", () => keepEntryPurpose(entryChange(change), change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+  return runBudgetAction("", () => keepEntryDetails(entryChange(change), change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
-// After a change to an entry, its title's purpose as the form says (change.purpose; see ENTRY PURPOSES), on the title it
-// has now, unless it was deleted or couldn't be found
-function keepEntryPurpose(result, change) {
-  if (change.purpose !== undefined && String(change.action || "").toLowerCase() !== "delete" && !notFound) noteEntryPurpose(changedTitle(change), change.purpose);
+// After a change to an entry: its title's purpose as the form says (change.purpose; see ENTRY PURPOSES), on the title it
+// has now, and its note, which goes where it went (see followEntryNote). Nothing, when it couldn't be found.
+function keepEntryDetails(result, change) {
+  if (notFound) return result;
+  const deleted = String(change.action || "").toLowerCase() === "delete";
+  if (change.purpose !== undefined && !deleted) noteEntryPurpose(changedTitle(change), change.purpose);
+  followEntryNote(change, deleted);
   return result;
 }
 
@@ -813,7 +824,7 @@ function landsByItself(title, sprite, date) {
 // itself leaves a $0.00 temp), then goes on as the new one, adding into an entry already there with that title and type
 // (a day has one of each). Can be undone in one step.
 function changeEntryKind(change) {
-  return runBudgetAction("", () => keepEntryPurpose(entryKindChange(change), change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+  return runBudgetAction("", () => keepEntryDetails(entryKindChange(change), change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
 // changeEntryKind's change itself: off as it was, then on as the new one (a new title of its own too, where it can have
@@ -860,7 +871,7 @@ function changeHistoryEntry(change) {
       throw new BudgetInputError(`An entry in History can only move to another day in History (${showDate(oldestHistoryDay() || gridStartDate)} through ${showDate(addDays(gridStartDate, -1))}).`);
     }
     const balances = accountBalancesToday();
-    const result = keepEntryPurpose((isKind ? entryKindChange(change) : entryChange(change)) || {}, change);
+    const result = keepEntryDetails((isKind ? entryKindChange(change) : entryChange(change)) || {}, change);
     return { ...result, afterRefresh: () => keepAccountBalances(balances) };
   }, { label, dates, keepBalances: true });
 }
@@ -933,11 +944,14 @@ function describeEntryChange(change) {
 }
 
 // New or changed recurring entry (index = the row that was clicked, null from the New Entry panel). fields.purpose: its
-// title's (see addCalendarEntry).
+// title's (see addCalendarEntry). fields.note: the recurring entry's own note (see ENTRY NOTES; left out, it keeps the
+// one it has).
 function saveRecurringEntry(fields, index = null) {
   return runBudgetAction("", () => {
+    const before = index === null ? null : [...(recurringData[index] || [])];
     const result = index === null ? recurring(fields) : editRecurringRow(index, fields);
     noteEntryPurpose(fields.title, fields.purpose);
+    followRecurringNote(before, fields);
     return result;
   });
 }
@@ -1151,7 +1165,7 @@ function quickEntry(quick) {
   // (A % entry is worked out again here; on a day that passed before the budget opened, it's the amount the Quick Entry
   // page worked out)
   const hasPercent = typeof entry.percent === "number" && date >= today;
-  unique({
+  const landed = unique({
     title: entry.title,
     sprite: Object.prototype.hasOwnProperty.call(QUICK_ENTRY_TYPES, entry.type) ? QUICK_ENTRY_TYPES[entry.type] : "",
     action: (hasPercent ? entry.percent : entry.amount) > 0 ? "add" : "subtract",
@@ -1163,6 +1177,7 @@ function quickEntry(quick) {
   });
   formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
   noteEntryPurpose(entry.title, entry.purpose, true); // (Picked on the Quick Entry page, or left out to stay as it is)
+  addEntryNote(date, entry.title, landed.entryType, entry.note, true);
   return { quickEntry: { id: quick.id, table } };
 }
 
@@ -1353,9 +1368,10 @@ function refreshBudgetData() {
   organizeCellEntries();
   resolvePercentEntries();
   writeBudgetMath();
-  commenceJeremy();
+  commenceBob();
   updateTrackerTab();
   updateAccountBalances();
+  dropStrayNotes();
 }
 
 /* ---------- Calendar entries (the old "Unique Entry" form) ---------- */
@@ -1570,7 +1586,7 @@ function unique(entry) {
   formEntryRow[2] = formEntryType;
   let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : percent !== null ? `${showPercent(percent)} (${formatMoney(Math.abs(amt))})` : formatMoney(rawAmtString);
   formEntryRow[6] = capitalize(rawAction) + ": " + formEntrySuffix;
-  return {};
+  return { entryType: targetIncomingSpecial }; // The refraction type it landed as (Auto picks one), for its note
 }
 
 // Put an entry on a day (calendar, History, or Future Dates, depending on the date), combining it
@@ -1909,9 +1925,11 @@ function editRecurringRow(index, fields) {
   let endDate = resolveEndDate(fields.endDate ?? "None", row[4]);
   let frequency = readFrequency(String(fields.frequency || "").trim() || row[3]);
 
-  // A new title, Other Account, or type takes the days that were changed for this entry along (moveRecurringTemps)
+  // A new title, Other Account, or type takes the days that were changed for this entry along (moveRecurringTemps), and
+  // the notes on its days from today on
   if (renamed && recurringTwin(oldTitle, oldSpecial, index) === -1) {
     moveRecurringTemps(cleanString(oldTitle), oldSpecial, title, newSpecial);
+    moveDayNotes(oldTitle, oldSpecial, title, newSpecial, today);
   }
 
   row[1] = formatMoney(recurringAmount(percent, hasAmount ? fields.amount : parseAmount(row[1]), startDate, sprite, title));
@@ -2574,10 +2592,11 @@ function renameAccountEntries(oldClean, newName) {
     row[4] = normalizeAliases(aliases.map(alias => ({ title: alias.clean === oldClean ? newName : alias.title, count: alias.count })));
   }
 
-  // Goals for it
+  // Goals for it, and the notes on its entries
   for (const goal of accountsData.goals || []) {
     if (goal.kind === "account" && cleanString(goal.account) === oldClean) goal.account = newName;
   }
+  renameAccountNotes(oldClean, newName);
 
   // Connected spreadsheets: one set up with this account typed in (for every entry) follows it, so the next read
   // still finds the account. The entries each one read last move with it too. (One whose cells name the account
@@ -2644,12 +2663,12 @@ function combineSameUpcoming() {
   futureData = kept;
 }
 
-/* ---------- Goals (Jeremy's Goals card) ---------- */
+/* ---------- Goals (Bob's Goals card) ---------- */
 // A goal is an amount for an Other Account, In Bank, or the Total (In Bank and every Other Account together, like Other
 // Accounts' Total today) to reach, by a day if it has one, with a title of its own if it has one. A credit card's can be
 // to climb from below $0 to $0 (paid off) or more. A % goal is that percent of what it's for on the day it's set, and
-// stays that amount (its percent is kept to show it). Jeremy's page lists them with how far along each one is, and works
-// out what reaching each one takes (Jeremy Page.js). They're kept with the Other Accounts (accountsData.goals): [{ title
+// stays that amount (its percent is kept to show it). Bob's page lists them with how far along each one is, and works
+// out what reaching each one takes (Bob Page.js). They're kept with the Other Accounts (accountsData.goals): [{ title
 // ("" for none), kind: "inBank" | "total" | "account" ("none": one set before goals needed what they're for, kept until
 // it's changed), account (the account's name, for "account"), amount, percent (null for a plain amount), date (the day to
 // reach it by, "" for none), made (the day it was set), start (what it was for held then, so how far along it is counts
@@ -2778,15 +2797,15 @@ function removeGoal(index) {
   return {};
 }
 
-/* ---------- Jeremy's page (menu/jeremy.html, drawn by Jeremy Page.js) ---------- */
-// Jeremy's page is a column of cards. Data and Accounts always show; each of the rest has its own on/off switch, and
+/* ---------- Bob's page (menu/bob.html, drawn by Bob Page.js) ---------- */
+// Bob's page is a column of cards. Data and Accounts always show; each of the rest has its own on/off switch, and
 // starts off (a budget that had goals before the page did starts with Goals on, so they don't go missing). Which ones
 // are on is kept with the budget, so every device, and anyone sharing the budget, sees the same page:
-// accountsData.jeremy = { cards: [the ids of the cards that are on], purposes: (see ENTRY PURPOSES) }. It's left out
+// accountsData.bob = { cards: [the ids of the cards that are on], purposes: (see ENTRY PURPOSES) }. It's left out
 // until something's been set, so loading a budget alone never counts as a change.
 
 // Each switchable card's id and its name (for Change Logs; the page has its own words)
-const JEREMY_CARDS = new Map([
+const BOB_CARDS = new Map([
   ["goals", "Goals"],
   ["purposes", "Needs, Wants, And Future"],
   ["payday", "Payday"],
@@ -2798,9 +2817,9 @@ const JEREMY_CARDS = new Map([
 ]);
 
 // The stored settings, checked: { cards, purposes }, or null with nothing stored (and no goals)
-function normalizeJeremy(stored, hasGoals) {
+function normalizeBob(stored, hasGoals) {
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return hasGoals ? { cards: ["goals"], purposes: {} } : null;
-  const cards = Array.isArray(stored.cards) ? [...JEREMY_CARDS.keys()].filter(id => stored.cards.includes(id)) : [];
+  const cards = Array.isArray(stored.cards) ? [...BOB_CARDS.keys()].filter(id => stored.cards.includes(id)) : [];
   const purposes = {};
   const kept = stored.purposes && typeof stored.purposes === "object" && !Array.isArray(stored.purposes) ? stored.purposes : {};
   for (const [key, purpose] of Object.entries(kept).slice(0, MAX_PURPOSES)) {
@@ -2811,32 +2830,32 @@ function normalizeJeremy(stored, hasGoals) {
 }
 
 // The settings to change, made when there are none yet
-function jeremySettings() {
-  if (!accountsData.jeremy) accountsData.jeremy = { cards: [], purposes: {} };
-  return accountsData.jeremy;
+function bobSettings() {
+  if (!accountsData.bob) accountsData.bob = { cards: [], purposes: {} };
+  return accountsData.bob;
 }
 
 // Is this card on? (Data and Accounts, which have no switch, always are)
-function jeremyCardOn(id) {
-  if (!JEREMY_CARDS.has(id)) return true;
-  return !!accountsData?.jeremy?.cards?.includes(id);
+function bobCardOn(id) {
+  if (!BOB_CARDS.has(id)) return true;
+  return !!accountsData?.bob?.cards?.includes(id);
 }
 
 // A card's switch
-function turnJeremyCard(id, on) {
-  return runBudgetAction("💡 Jeremy's Cards", () => {
-    if (!JEREMY_CARDS.has(id)) throw new BudgetInputError("That card couldn't be found. Please reload the page.");
-    const jeremy = jeremySettings();
-    jeremy.cards = [...JEREMY_CARDS.keys()].filter(card => (card === id ? on : jeremy.cards.includes(card)));
-    formEntryRow[3] = `${JEREMY_CARDS.get(id)}: ${on ? "On" : "Off"}`;
+function turnBobCard(id, on) {
+  return runBudgetAction("💡 Bob's Cards", () => {
+    if (!BOB_CARDS.has(id)) throw new BudgetInputError("That card couldn't be found. Please reload the page.");
+    const bob = bobSettings();
+    bob.cards = [...BOB_CARDS.keys()].filter(card => (card === id ? on : bob.cards.includes(card)));
+    formEntryRow[3] = `${BOB_CARDS.get(id)}: ${on ? "On" : "Off"}`;
     return {};
   });
 }
 
-/* ---------- Entry purposes (Jeremy's Needs, Wants, And Future card) ---------- */
+/* ---------- Entry purposes (Bob's Needs, Wants, And Future card) ---------- */
 // What an entry's money is for: Needs (rent, groceries, bills), Wants (eating out, fun), or Future (savings, paying down
 // debt), or none. It's kept for each title (as the tracker compares them, titleKey: "Groceries → Cash" is Groceries), so
-// every entry with a title shares it, on every day: accountsData.jeremy.purposes: { title -> "needs" | "wants" |
+// every entry with a title shares it, on every day: accountsData.bob.purposes: { title -> "needs" | "wants" |
 // "future" } (a title with none isn't kept). Once that card is on, every form that makes or changes an entry asks for it
 // at the bottom, and the card's pie chart adds up what each one cost.
 
@@ -2847,7 +2866,7 @@ const MAX_PURPOSES = 2000;
 // A title's purpose: "needs", "wants", "future", or "none"
 function purposeOf(title) {
   const key = titleKey(String(title ?? ""));
-  const purposes = accountsData?.jeremy?.purposes;
+  const purposes = accountsData?.bob?.purposes;
   if (!key || !purposes || !Object.prototype.hasOwnProperty.call(purposes, key)) return "none";
   return ENTRY_PURPOSES.includes(purposes[key]) ? purposes[key] : "none";
 }
@@ -2859,16 +2878,16 @@ function noteEntryPurpose(title, purpose, skipWhenFull = false) {
   if (purpose !== "none" && !ENTRY_PURPOSES.includes(purpose)) return;
   const key = titleKey(String(title ?? ""));
   if (!key || purposeOf(title) === purpose) return;
-  const jeremy = jeremySettings();
+  const bob = bobSettings();
   if (purpose === "none") {
-    delete jeremy.purposes[key];
+    delete bob.purposes[key];
   } else {
-    const isNew = !Object.prototype.hasOwnProperty.call(jeremy.purposes, key);
-    if (isNew && Object.keys(jeremy.purposes).length >= MAX_PURPOSES) {
+    const isNew = !Object.prototype.hasOwnProperty.call(bob.purposes, key);
+    if (isNew && Object.keys(bob.purposes).length >= MAX_PURPOSES) {
       if (skipWhenFull) return;
       throw new BudgetInputError(`Up to ${MAX_PURPOSES} titles can have Needs, Wants, or Future. Set some you don't use anymore to None first.`);
     }
-    jeremy.purposes[key] = purpose;
+    bob.purposes[key] = purpose;
   }
   formEntryRow[3] = `${formEntryRow[3]} (${PURPOSE_NAMES.get(purpose)})`.trim();
 }
@@ -2878,6 +2897,675 @@ function saveEntryPurpose(title, purpose) {
   return runBudgetAction("🏷️ Entry Purpose", () => {
     formEntryRow[3] = capitalize(String(title || "").trim());
     noteEntryPurpose(title, purpose);
+    return {};
+  });
+}
+
+/* ---------- Entry notes ---------- */
+// Any entry can have a note, as long as it needs to be: an entry's own on its day (a recurring entry's or a connected
+// spreadsheet's too, once it lands there), and a recurring entry's own (on its Recurring Entries form). They're kept in a
+// table of their own, so long notes never fill up the rest of the budget: notesData = { version: 1, entries: {
+// "YYYY-MM-DD|title as compared|type": note }, recurring: { "title as compared|type": note } } (type: regular, hidden, or
+// transfer; the title as compared keeps its Other Account, since a day has one entry per title, account, and type). A
+// note goes wherever its entry goes (another day, title, type, or account; into an entry already there, the two notes are
+// put together), and it goes when its entry does (deleted, or a placeholder whose day passed, see dropStrayNotes). Undo
+// and Redo put a day's notes back with its entries. Every entry form has its note at the bottom (BudgetUI.noteField).
+
+const NOTE_TYPES = { "❗️": "regular", "✖️": "hidden", "⭕️": "transfer" };
+const MAX_NOTES_BYTES = 1800000;     // Every note together (a little under MAX_TABLE_BYTES)
+const MAX_UNDO_NOTE_CHARS = 100000;  // A change's notes kept for Undo in this tab (more than that, Undo leaves them be)
+const NOTES_FULL = "Your notes are full (about 1.8 MB of them together). Make some shorter, or delete some, first.";
+
+// No notes yet
+function emptyNotes() {
+  return { version: 1, entries: {}, recurring: {} };
+}
+
+// The stored notes, checked (none stored is none)
+function normalizeApiNotes(stored) {
+  const notes = emptyNotes();
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return notes;
+  for (const part of ["entries", "recurring"]) {
+    const kept = stored[part] && typeof stored[part] === "object" && !Array.isArray(stored[part]) ? stored[part] : {};
+    for (const [key, text] of Object.entries(kept)) {
+      // (A "__proto__" key would replace the object's prototype instead of adding a note)
+      if (key !== "__proto__" && key.includes("|") && typeof text === "string" && text.trim()) notes[part][key] = text;
+    }
+  }
+  return notes;
+}
+
+// The key of an entry's note on its day, and a recurring entry's own
+function entryNoteKey(date, title, sprite) {
+  return `${formatToYMD(createSafeMidnight(date))}|${cleanString(title)}|${NOTE_TYPES[getSpecialType(sprite)]}`;
+}
+
+function recurringNoteKey(title, sprite) {
+  return `${cleanString(title)}|${NOTE_TYPES[getSpecialType(sprite)]}`;
+}
+
+// A note ("" for none). part: "entries" or "recurring"
+function noteText(part, key) {
+  const notes = notesData?.[part];
+  return notes && Object.prototype.hasOwnProperty.call(notes, key) ? notes[key] : "";
+}
+
+// An entry's note on its day, and a recurring entry's own (for their forms)
+function entryNote(date, title, sprite) {
+  return noteText("entries", entryNoteKey(date, title, sprite));
+}
+
+function recurringNote(title, sprite) {
+  return noteText("recurring", recurringNoteKey(title, sprite));
+}
+
+// Does an entry line have a note on its day? (it's underlined wherever it shows)
+function lineHasNote(date, line) {
+  const read = readLine(line);
+  return !read.blank && !read.system && read.title !== "" && entryNote(date, read.title, read.sprite) !== "";
+}
+
+// Within a change: a note, or none for a blank one
+function putNote(part, key, text) {
+  const note = String(text ?? "");
+  if (note.trim()) notesData[part][key] = note;
+  else delete notesData[part][key];
+}
+
+// Two notes as one (an entry that went into another), the first one first
+function joinNotes(first, second) {
+  if (!String(first).trim()) return second;
+  if (!String(second).trim() || first === second) return first;
+  return `${first}\n\n${second}`;
+}
+
+// Change Logs say when a change added, changed, or took off a note (never what it says)
+function logNoteChange(before, after) {
+  const was = String(before ?? "").trim() !== "";
+  const now = String(after ?? "").trim() !== "";
+  const words = !was && now ? "Note Added" : was && !now ? "Note Removed" : was && before !== after ? "Note Changed" : "";
+  if (words) formEntryRow[3] = `${formEntryRow[3]} (${words})`.trim();
+}
+
+// Within a change: are the notes still small enough to keep? (they're refused, or with skipWhenFull, the caller leaves
+// its note out)
+function notesFit() {
+  return new TextEncoder().encode(JSON.stringify(notesData)).length <= MAX_NOTES_BYTES;
+}
+
+// Within a change: a new entry's note (note: from its form), on the entry it landed as (sprite: its type), added after
+// the note of one already there that it went into. skipWhenFull: a quick entry, which still joins the budget without it
+// when the notes are full.
+function addEntryNote(date, title, sprite, note, skipWhenFull = false) {
+  if (!notesData || typeof note !== "string" || !note.trim()) return;
+  const key = entryNoteKey(date, title, sprite);
+  const before = noteText("entries", key);
+  putNote("entries", key, joinNotes(before, note));
+  if (!notesFit()) {
+    putNote("entries", key, before);
+    if (skipWhenFull) return;
+    throw new BudgetInputError(NOTES_FULL);
+  }
+  logNoteChange(before, noteText("entries", key));
+}
+
+// Within a change to an entry: its note goes where it went (another day, title, type, or Other Account), after the note
+// of an entry it went into, and the form's note (change.note) takes its place; it goes when the entry is deleted
+function followEntryNote(change, deleted) {
+  if (!notesData) return;
+  const from = entryNoteKey(change.date, change.title, change.sprite);
+  const old = noteText("entries", from);
+  if (deleted) return putNote("entries", from, "");
+  const to = entryNoteKey(change.moveDate || change.date, changedTitle(change), change.newSprite ?? change.sprite);
+  const own = change.note !== undefined ? String(change.note) : old;
+  const there = to === from ? "" : noteText("entries", to);
+  if (to !== from) putNote("entries", from, "");
+  putNote("entries", to, joinNotes(there, own));
+  if (!notesFit()) throw new BudgetInputError(NOTES_FULL);
+  logNoteChange(old, own);
+}
+
+// Within a change to a recurring entry: its own note, on its title, account, and type as they are now (before: its row
+// before the change, null for a new one), with the form's (fields.note) in its place
+function followRecurringNote(before, fields) {
+  if (!notesData) return;
+  const to = recurringNoteKey(fields.title, fields.sprite);
+  const from = before ? recurringNoteKey(before[0], before[5]) : to;
+  const old = noteText("recurring", from);
+  const own = fields.note !== undefined ? String(fields.note) : old;
+  if (to !== from) putNote("recurring", from, "");
+  putNote("recurring", to, joinNotes(to === from ? "" : noteText("recurring", to), own));
+  if (!notesFit()) throw new BudgetInputError(NOTES_FULL);
+  logNoteChange(old, own);
+}
+
+// Within a recurring entry's new title, Other Account, or type (after moveRecurringTemps): the notes on its days from
+// `from` on go with it. A day that still has an entry of its own with the old title and type (one the recurring entry
+// didn't land on) keeps that entry's note.
+function moveDayNotes(oldTitle, oldSprite, newTitle, newSprite, from) {
+  if (!notesData) return;
+  const oldPart = `|${cleanString(oldTitle)}|${NOTE_TYPES[getSpecialType(oldSprite)]}`;
+  const first = formatToYMD(from);
+  const own = new Set();
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      for (const line of ownEntryLines(calendarData[r][c])) own.add(entryNoteKey(gridDates[r][c], readLine(line).title, readLine(line).sprite));
+    }
+  }
+  for (const row of futureData.slice(1)) {
+    const date = createSafeMidnight(row[2], true);
+    if (String(row[0] ?? "").trim() && !isNaN(date.getTime())) own.add(entryNoteKey(date, row[0], row[3]));
+  }
+  for (const key of Object.keys(notesData.entries)) {
+    if (key.slice(10) !== oldPart || key.slice(0, 10) < first || own.has(key)) continue;
+    const day = key.slice(0, 10);
+    const to = `${day}|${cleanString(newTitle)}|${NOTE_TYPES[getSpecialType(newSprite)]}`;
+    const note = noteText("entries", key);
+    putNote("entries", key, "");
+    putNote("entries", to, joinNotes(noteText("entries", to), note));
+  }
+}
+
+// Within an account's rename (renameAccountEntries): the notes on its entries and recurring entries follow its new name
+function renameAccountNotes(oldClean, newName) {
+  if (!notesData) return;
+  const ending = ` ${ACCOUNT_ARROW} ${oldClean}`;
+  const renamed = (title) => {
+    if (title === `${ACCOUNT_ARROW} ${oldClean}`) return `${ACCOUNT_ARROW} ${cleanString(newName)}`;
+    return title.endsWith(ending) ? `${title.slice(0, -ending.length)} ${ACCOUNT_ARROW} ${cleanString(newName)}` : null;
+  };
+  for (const part of ["entries", "recurring"]) {
+    for (const key of Object.keys(notesData[part])) {
+      // (An entry's key starts with its day, YYYY-MM-DD|; the type is after the last |)
+      const start = part === "entries" ? 11 : 0;
+      const end = key.lastIndexOf("|");
+      const title = renamed(key.slice(start, end));
+      if (title === null) continue;
+      const to = `${key.slice(0, start)}${title}${key.slice(end)}`;
+      const note = noteText(part, key);
+      putNote(part, key, "");
+      putNote(part, to, joinNotes(noteText(part, to), note));
+    }
+  }
+}
+
+// Notes whose entry is gone go too: on History's and the calendar's days (a day after the calendar can have a note for
+// an entry that lands there later, like a recurring entry's), and a recurring entry's own once no recurring entry has
+// its title, account, and type
+function dropStrayNotes() {
+  if (!notesData) return;
+  const entryKeys = Object.keys(notesData.entries);
+  const recurringKeys = Object.keys(notesData.recurring);
+  const lastDay = formatToYMD(gridEndDate);
+  if (entryKeys.some(key => key.slice(0, 10) <= lastDay)) {
+    const there = new Set();
+    const addDay = (date, cellText) => {
+      for (const text of String(cellText ?? "").split("\n").slice(1)) {
+        const line = readLine(text);
+        if (!line.blank && !line.system && line.title) there.add(entryNoteKey(date, line.title, line.sprite));
+      }
+    };
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 7; c++) addDay(gridDates[r][c], calendarData[r][c]);
+    }
+    for (let r = 1; r < historyData.length; r++) {
+      for (let c = 0; c < 7; c++) {
+        const text = String(historyData[r][c] ?? "");
+        const date = createSafeMidnight(text.split("\n")[0].trim(), true);
+        if (!isNaN(date.getTime())) addDay(date, text);
+      }
+    }
+    for (const key of entryKeys) if (key.slice(0, 10) <= lastDay && !there.has(key)) delete notesData.entries[key];
+  }
+  if (recurringKeys.length > 0) {
+    const rows = new Set(recurringData.slice(2).filter(row => !["", "-"].includes(String(row[0] ?? "").trim())).map(row => recurringNoteKey(row[0], row[5])));
+    for (const key of recurringKeys) if (!rows.has(key)) delete notesData.recurring[key];
+  }
+}
+
+// A day's notes, for Undo and Redo (see captureEntryDays): { key: note }
+function dayNotes(date) {
+  const notes = {};
+  const prefix = `${formatToYMD(date)}|`;
+  for (const [key, text] of Object.entries(notesData?.entries || {})) if (key.startsWith(prefix)) notes[key] = text;
+  return notes;
+}
+
+// What a change did to a day's notes, to put back or do again: { before, after }, each { key: note ("" for none) } for
+// just the notes it changed (so Undo never touches one changed since), or null when it changed none, or when they're
+// longer than this tab keeps for Undo (MAX_UNDO_NOTE_CHARS: then Undo leaves the notes as they are)
+function notesChange(before = {}, after = {}) {
+  const change = { before: {}, after: {} };
+  let size = 0;
+  let any = false;
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const was = Object.prototype.hasOwnProperty.call(before, key) ? before[key] : "";
+    const now = Object.prototype.hasOwnProperty.call(after, key) ? after[key] : "";
+    if (was === now) continue;
+    change.before[key] = was;
+    change.after[key] = now;
+    size += was.length + now.length;
+    any = true;
+  }
+  return any && size <= MAX_UNDO_NOTE_CHARS ? change : null;
+}
+
+// Within Undo or Redo: notes as a step had them ({ key: note }, see notesChange)
+function putStepNotes(notes) {
+  for (const [key, text] of Object.entries(notes || {})) putNote("entries", key, text);
+}
+
+// Only a title's purpose or an entry's note changed (an entry's options, with nothing else changed): extras { purpose,
+// note }, each left out to keep it as it is. A note's change can be undone.
+function saveEntryExtras(date, title, sprite, { purpose, note } = {}) {
+  const day = createSafeMidnight(date);
+  const name = capitalize(String(title || "").trim());
+  const undo = note !== undefined ? { label: `changed the note on ${name} on ${showDay(day)}`, dates: [day] } : null;
+  return runBudgetAction(note !== undefined ? "📝 Entry Note" : "🏷️ Entry Purpose", () => {
+    formEntryRow[3] = name;
+    formEntryRow[4] = "On: " + showDate(day);
+    if (purpose !== undefined) noteEntryPurpose(title, purpose);
+    if (note !== undefined) {
+      const key = entryNoteKey(day, title, sprite);
+      const before = noteText("entries", key);
+      putNote("entries", key, note);
+      if (!notesFit()) throw new BudgetInputError(NOTES_FULL);
+      logNoteChange(before, note);
+    }
+    return {};
+  }, undo);
+}
+
+/* ---------- Backups (Settings' Upload A Backup) ---------- */
+// A file Download My Data saved (the API's export: { about, account, budget: { lastDailyUpdate, calendar,
+// recurringEntries, upcoming, history, otherAccounts, tracker, paycheckCalculator, changeLogs, connectedSpreadsheets,
+// notes }, ... }) brings a budget back, one part at a time (BACKUP_PARTS), each the way the person picked:
+//   "current":  where the backup and the budget both have something (an entry with the same title and type on the same
+//               day, a recurring entry with the same title, account, and type, an account with the same name, ...), the
+//               budget's stays; everything else in the backup is added
+//   "uploaded": the same, but where they clash, the backup's takes the budget's place
+//   "remove":   the budget's part is removed, and the backup's takes its place
+// A part the backup doesn't have stays as it is. Days go by their dates, wherever the backup kept them (its calendar's
+// first weeks can be History by now, and its Upcoming entries on the calendar). On a day that has passed, an entry that
+// had landed by itself (from a recurring entry or a connected spreadsheet) stays as it was, like the daily update keeps
+// it, and from today on the recurring entries and spreadsheets land theirs again. History's days keep an In Bank of their
+// own, from the side that wins (on a day with neither, the day before's). readBackup reads a file, backupPlans says what
+// each part would get (for the Upload A Backup window), and uploadBackup puts them in.
+
+const BACKUP_MAX_BYTES = 25 * 1024 * 1024; // The biggest file read (every part of a budget, with room to spare)
+const BACKUP_CHOICES = ["current", "uploaded", "remove"];
+// The tables a backup can fill, by the names its window gives them (Change Logs keep only their newest rows anyway)
+const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Other Accounts", tracker: "Tracker", sheets: "Connected Spreadsheets", calculator: "Paycheck Calculator", notes: "Notes" };
+
+// A Download My Data file's text, read and checked: { from: { username, downloaded (a Date, or null) }, days: Map(day's
+// time -> { lines, inBank }) from its History and calendar, upcoming (rows), recurring (rows), accounts (like
+// accountsData), tracker (rows, aliases as stored), sheets, calculator (rows), notes, logs (rows) }. A part the file
+// doesn't have is null. A file that isn't one is refused (a BudgetInputError).
+function readBackup(text) {
+  let file = null;
+  try { file = JSON.parse(text); } catch (e) {}
+  const budget = file && typeof file === "object" && !Array.isArray(file) ? file.budget : null;
+  if (!budget || typeof budget !== "object" || Array.isArray(budget)) {
+    throw new BudgetInputError("That file isn't one Download My Data saved. Pick the .json file it downloaded.");
+  }
+  const has = (name) => budget[name] !== null && budget[name] !== undefined;
+  const downloadedAt = String(file.about ?? "").match(/downloaded (\d{4}-\d{2}-\d{2}T[\d:.]+Z)/);
+  const downloaded = downloadedAt ? new Date(downloadedAt[1]) : null;
+  const tracker = has("tracker") ? normalizeApiTable(budget.tracker, TABLE_SHAPES.tracker) : null;
+  if (tracker) trackerAliasesFromWords(tracker);
+  return {
+    from: { username: String(file.account?.username ?? "").slice(0, 100), downloaded: downloaded && !isNaN(downloaded.getTime()) ? downloaded : null },
+    days: has("history") || has("calendar") ? backupDays(budget, downloaded) : null,
+    upcoming: has("upcoming") ? normalizeApiTable(budget.upcoming, TABLE_SHAPES.future).slice(1) : null,
+    recurring: has("recurringEntries") ? normalizeApiTable(budget.recurringEntries, TABLE_SHAPES.recurring).slice(2) : null,
+    accounts: has("otherAccounts") ? normalizeApiAccounts(budget.otherAccounts) : null,
+    tracker: tracker ? tracker.slice(1) : null,
+    sheets: has("connectedSpreadsheets") ? normalizeApiSheets(budget.connectedSpreadsheets).list : null,
+    calculator: has("paycheckCalculator") ? normalizeApiTable(budget.paycheckCalculator, TABLE_SHAPES.calculator) : null,
+    notes: has("notes") ? normalizeApiNotes(budget.notes) : null,
+    logs: has("changeLogs") ? normalizeApiTable(budget.changeLogs, TABLE_SHAPES.logs).slice(1) : null
+  };
+}
+
+// A backup's tracker aliases back the way they're stored: Download My Data writes them in words ("rent (costs), paycheck
+// (gains), atm"; see the API's aliasesInWords)
+function trackerAliasesFromWords(tracker) {
+  for (let i = 1; i < tracker.length; i++) {
+    if (String(tracker[i][0]).trim() === "-" || TRACKER_AUTO_ROWS.includes(cleanString(tracker[i][0]))) continue;
+    const aliases = String(tracker[i][4] ?? "").split(",").map(word => {
+      const counted = word.trim().match(/^(.*\S)\s+\((costs|gains)\)$/);
+      return counted ? { title: counted[1], count: counted[2] } : { title: word.trim(), count: "all" };
+    });
+    tracker[i][4] = normalizeAliases(aliases);
+  }
+}
+
+// A backup's days, from its History and its calendar: Map(day's time -> { lines (its entries), inBank (or null) })
+function backupDays(budget, downloaded) {
+  const days = new Map();
+  const add = (date, text) => {
+    if (isNaN(date.getTime())) return;
+    const lines = String(text ?? "").split("\n").slice(1).map(line => line.trim())
+      .filter(line => line && getParts(line).length >= 3 && !systemEmojis.includes(getParts(line)[0]));
+    days.set(date.getTime(), { lines, inBank: readInBank(text) });
+  };
+  const history = normalizeApiTable(budget.history, TABLE_SHAPES.history);
+  for (let r = 1; r < history.length; r++) {
+    for (let c = 0; c < 7; c++) {
+      const text = String(history[r][c] ?? "");
+      if (text.trim()) add(createSafeMidnight(text.split("\n")[0].trim(), true), text);
+    }
+  }
+  const calendar = normalizeApiGrid(budget.calendar, calendarRows, calendarCols);
+  const start = backupGridStart(calendar, createSafeMidnight(budget.lastDailyUpdate || "", true), downloaded);
+  if (start) {
+    for (let r = 0; r < calendarRows; r++) {
+      for (let c = 0; c < calendarCols; c++) if (String(calendar[r][c]).trim()) add(addDays(start, r * 7 + c), calendar[r][c]);
+    }
+  }
+  return days;
+}
+
+// The Sunday a backup's calendar starts on: its first day's MM/DD, in the year that lands nearest the week it was last
+// brought up to date (or downloaded), like findSavedGridStart. null when it can't say.
+function backupGridStart(calendar, lastUpdate, downloaded) {
+  const reference = !isNaN(lastUpdate.getTime()) ? lastUpdate : downloaded ? createSafeMidnight(downloaded) : null;
+  if (!reference) return null;
+  const fallback = addDays(reference, -reference.getDay());
+  const match = String(calendar[0][0] ?? "").split("\n")[0].trim().match(/^(\d{1,2})\/(\d{1,2})/);
+  if (!match) return fallback;
+  let best = null;
+  for (let year = fallback.getFullYear() - 1; year <= fallback.getFullYear() + 1; year++) {
+    const candidate = new Date(year, Number(match[1]) - 1, Number(match[2]));
+    if (candidate.getMonth() !== Number(match[1]) - 1 || candidate.getDay() !== 0) continue;
+    if (!best || Math.abs(candidate - fallback) < Math.abs(best - fallback)) best = candidate;
+  }
+  return best || fallback;
+}
+
+// A backup's entry line as this budget would keep it on its day now (see BACKUPS), or null to leave it out: on a day
+// that passed, one that had landed by itself is kept as it was (a temp, like ❗️✔️), a % entry as what it came to, and a
+// placeholder not at all; from today on, one that had landed by itself is left to land again
+function backupLineNow(line, date) {
+  const parts = getParts(line);
+  if (parts.length < 3 || systemEmojis.includes(parts[0])) return null;
+  const landed = !!entryMark(parts[0]) && !isOwnEntryLine(line);
+  if (date >= today) return landed ? null : parts.join(" ");
+  if (isPlaceholder(parts[0])) return null;
+  if (entryMark(parts[0])) parts[0] = getSpecialType(parts[0]) + entryMark(parts[0]);
+  else if (percentOf(parts[0]) !== null) parts[0] = percentSprite(parts[0], null);
+  return parts.join(" ");
+}
+
+// Two lists as one, the way the person picked (see BACKUPS). Each list is [key, item] pairs, in order (a key twice in
+// one list: the first counts). same(a, b): two items with one key are alike. { items, clashes (keys in both whose items
+// aren't alike) }. choice null only counts.
+function mergeKeyed(current, uploaded, choice, same = (a, b) => JSON.stringify(a) === JSON.stringify(b)) {
+  const firsts = (list) => {
+    const seen = new Set();
+    return list.filter(([key]) => !seen.has(key) && seen.add(key));
+  };
+  const mine = firsts(current);
+  const theirs = firsts(uploaded);
+  const theirsByKey = new Map(theirs);
+  const clashes = mine.filter(([key, item]) => theirsByKey.has(key) && !same(item, theirsByKey.get(key))).length;
+  if (choice === "remove") return { items: theirs.map(([, item]) => item), clashes };
+  const [first, second] = choice === "uploaded" ? [theirs, mine] : [mine, theirs];
+  const taken = new Set(first.map(([key]) => key));
+  return { items: [...first, ...second.filter(([key]) => !taken.has(key))].map(([, item]) => item), clashes };
+}
+
+// An entry line's key on its day (a day has one entry per title, Other Account, and type)
+function dayLineKey(line) {
+  const read = readLine(line);
+  return `${read.clean}|${getSpecialType(read.sprite)}`;
+}
+
+// What each part of the budget would get from a backup: [{ id, name, noun (what it counts), current, uploaded (how many
+// each has), clashes, apply(choice) }], only the parts the backup has. Worked out from the budget as it is now, so a
+// change runs them (uploadBackup).
+function backupPlans(backup) {
+  const plans = [];
+  const plan = (id, name, noun, current, uploaded, clashes, apply) => plans.push({ id, name, noun, current, uploaded, clashes, apply });
+  const keyed = (list, keyOf) => list.map(item => [keyOf(item), item]);
+  const rowKey = (row, titleAt, typeAt) => (String(row[0] ?? "").trim() === "-" ? `-|${cleanString(row[1])}` : `${cleanString(row[titleAt])}|${typeAt === null ? "" : getSpecialType(row[typeAt])}`);
+  const usedRow = (row) => String(row[0] ?? "").trim() !== "";
+
+  // The days: the backup's (and its Upcoming entries up to the calendar's last day), as this budget keeps them now
+  if (backup.days || backup.upcoming) {
+    const pool = new Map();
+    for (const [time, day] of backup.days || []) {
+      const date = new Date(time);
+      pool.set(time, { lines: day.lines.map(line => backupLineNow(line, date)).filter(Boolean), inBank: day.inBank });
+    }
+    for (const row of backup.upcoming || []) {
+      const date = createSafeMidnight(row[2], true);
+      if (!usedRow(row) || isNaN(date.getTime()) || date > gridEndDate) continue;
+      const line = backupLineNow(`${String(row[3]).trim()} ${formatMoney(parseAmount(row[1]))} ${String(row[0]).trim()}`, date);
+      if (!line) continue;
+      if (!pool.has(date.getTime())) pool.set(date.getTime(), { lines: [], inBank: null });
+      pool.get(date.getTime()).lines.push(line);
+    }
+    historyPlan(plan, pool);
+    calendarPlan(plan, pool);
+  }
+
+  if (backup.upcoming) {
+    const upcomingKey = (row) => `${createSafeMidnight(row[2], true).getTime()}|${cleanString(row[0])}|${getSpecialType(row[3])}`;
+    const mine = futureData.slice(1).filter(usedRow);
+    const theirs = backup.upcoming.filter(row => usedRow(row) && createSafeMidnight(row[2], true) > gridEndDate);
+    const count = (choice) => mergeKeyed(keyed(mine, upcomingKey), keyed(theirs, upcomingKey), choice);
+    plan("upcoming", "Upcoming", "entries", mine.length, theirs.length, count(null).clashes, (choice) => {
+      const rows = count(choice).items.sort((a, b) => createSafeMidnight(a[2], true) - createSafeMidnight(b[2], true));
+      futureData = [futureData[0], ...rows];
+    });
+  }
+
+  if (backup.recurring) {
+    const mine = recurringData.slice(2).filter(usedRow);
+    const theirs = backup.recurring.filter(usedRow);
+    const count = (choice) => mergeKeyed(keyed(mine, row => rowKey(row, 0, 5)), keyed(theirs, row => rowKey(row, 0, 5)), choice);
+    plan("recurring", "Recurring Entries", "recurring entries", mine.filter(row => row[0] !== "-").length, theirs.filter(row => row[0] !== "-").length, count(null).clashes, (choice) => {
+      recurringData = [recurringData[0], recurringData[1], ...count(choice).items];
+    });
+  }
+
+  if (backup.accounts) {
+    // (Savings and Cash go by what they are, whatever they're named)
+    const accountKey = (row) => (isMandatoryAccount(row) ? `mark|${String(row[2]).trim()}` : `name|${cleanString(row[0])}`);
+    const mine = accountsData.list.slice(1).filter(usedRow);
+    const theirs = backup.accounts.list.slice(1).filter(usedRow);
+    const count = (choice) => mergeKeyed(keyed(mine, accountKey), keyed(theirs, accountKey), choice, (a, b) => JSON.stringify(a.slice(2)) === JSON.stringify(b.slice(2)) && cleanString(a[0]) === cleanString(b[0]));
+    plan("accounts", "Other Accounts", "accounts", mine.length, theirs.length, count(null).clashes, (choice) => {
+      const names = new Set();
+      const rows = count(choice).items.filter(row => !names.has(cleanString(row[0])) && names.add(cleanString(row[0])));
+      accountsData.list = [accountsData.list[0], ...rows];
+      // (Every budget still has its Savings and Cash)
+      accountsData.list = normalizeApiAccounts({ version: ACCOUNTS_VERSION, list: accountsData.list }).list;
+    });
+
+    const goalKey = (goal) => `${cleanString(goal.title)}|${goal.kind}|${cleanString(goal.account)}`;
+    const mineGoals = accountsData.goals || [];
+    const theirGoals = backup.accounts.goals || [];
+    if (theirGoals.length > 0) {
+      const countGoals = (choice) => mergeKeyed(keyed(mineGoals, goalKey), keyed(theirGoals, goalKey), choice);
+      plan("goals", "Goals", "goals", mineGoals.length, theirGoals.length, countGoals(null).clashes, (choice) => {
+        const goals = countGoals(choice).items.slice(0, MAX_GOALS);
+        if (goals.length > 0) accountsData.goals = goals;
+        else delete accountsData.goals;
+      });
+    }
+
+    const theirBob = backup.accounts.bob;
+    if (theirBob) {
+      const mineBob = accountsData.bob || { cards: [], purposes: {} };
+      const mine = Object.entries(mineBob.purposes);
+      const theirs = Object.entries(theirBob.purposes);
+      const countPurposes = (choice) => mergeKeyed(keyed(mine, ([key]) => key), keyed(theirs, ([key]) => key), choice);
+      // (Which of his cards are on goes with the side that wins)
+      plan("bob", "Bob's Page", "titles with Needs, Wants, or Future", mine.length, theirs.length, countPurposes(null).clashes, (choice) => {
+        const purposes = {};
+        for (const [key, purpose] of countPurposes(choice).items.slice(0, MAX_PURPOSES)) purposes[key] = purpose;
+        accountsData.bob = { cards: [...(choice === "current" && accountsData.bob ? mineBob.cards : theirBob.cards)], purposes };
+      });
+    }
+  }
+
+  if (backup.tracker) {
+    const mine = trackerData.slice(1).filter(usedRow);
+    const theirs = backup.tracker.filter(usedRow);
+    const count = (choice) => mergeKeyed(keyed(mine, row => rowKey(row, 0, null)), keyed(theirs, row => rowKey(row, 0, null)), choice);
+    plan("tracker", "Tracker", "rows", mine.filter(row => row[0] !== "-").length, theirs.filter(row => row[0] !== "-").length, count(null).clashes, (choice) => {
+      trackerData = [trackerData[0], ...count(choice).items];
+    });
+  }
+
+  if (backup.sheets && backup.sheets.length > 0) {
+    const mine = sheetsData.list;
+    const count = (choice) => mergeKeyed(keyed(mine, sheet => sheet.id), keyed(backup.sheets, sheet => sheet.id), choice);
+    plan("sheets", "Connected Spreadsheets", "spreadsheets", mine.length, backup.sheets.length, count(null).clashes, (choice) => {
+      sheetsData.list = count(choice).items.slice(0, MAX_SHEETS);
+    });
+  }
+
+  if (backup.calculator && backup.calculator.some(row => row.some(cell => String(cell).trim()))) {
+    const filled = calculatorData.some(row => row.some(cell => String(cell).trim()));
+    const clash = filled && JSON.stringify(calculatorData) !== JSON.stringify(backup.calculator) ? 1 : 0;
+    plan("calculator", "Paycheck Calculator", "paycheck calculator", filled ? 1 : 0, 1, clash, (choice) => {
+      if (choice !== "current" || !filled) calculatorData = JSON.parse(JSON.stringify(backup.calculator));
+    });
+  }
+
+  if (backup.notes && (Object.keys(backup.notes.entries).length > 0 || Object.keys(backup.notes.recurring).length > 0)) {
+    const parts = ["entries", "recurring"];
+    const list = (notes) => parts.flatMap(part => Object.entries(notes[part]).map(([key, text]) => [`${part}|${key}`, [part, key, text]]));
+    const count = (choice) => mergeKeyed(list(notesData), list(backup.notes), choice, (a, b) => a[2] === b[2]);
+    const total = (notes) => parts.reduce((sum, part) => sum + Object.keys(notes[part]).length, 0);
+    plan("notes", "Notes", "notes", total(notesData), total(backup.notes), count(null).clashes, (choice) => {
+      const notes = emptyNotes();
+      for (const [part, key, text] of count(choice).items) notes[part][key] = text;
+      notesData = notes;
+      if (!notesFit()) throw new BudgetInputError(NOTES_FULL);
+    });
+  }
+
+  if (backup.logs && backup.logs.some(usedRow)) {
+    const mine = logsData.slice(1).filter(usedRow);
+    const theirs = backup.logs.filter(usedRow);
+    const count = (choice) => mergeKeyed(keyed(mine, row => JSON.stringify(row)), keyed(theirs, row => JSON.stringify(row)), choice);
+    // (Two rows alike are one row, so they never clash; kept together, the budget's newer rows stay on top)
+    plan("logs", "Change Logs", "rows", mine.length, theirs.length, 0, (choice) => {
+      logsData = [logsData[0], ...count(choice === "remove" ? "remove" : "current").items.slice(0, MAX_LOG_ROWS)];
+    });
+  }
+  return plans;
+}
+
+// History's part of a backup (see backupPlans): its days before the calendar's first, each with its entries and its In
+// Bank, rebuilt as whole weeks (Sunday through Saturday, newest first) from the first day either side has, or for
+// "remove", the backup's first
+function historyPlan(plan, pool) {
+  const mine = new Map();
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 0; c < 7; c++) {
+      const text = String(historyData[r][c] ?? "");
+      const date = createSafeMidnight(text.split("\n")[0].trim(), true);
+      if (isNaN(date.getTime())) continue;
+      const lines = text.split("\n").slice(1).map(line => line.trim()).filter(line => line && !systemEmojis.includes(getParts(line)[0]));
+      mine.set(date.getTime(), { lines, inBank: readInBank(text) });
+    }
+  }
+  const theirs = new Map([...pool].filter(([time]) => time < gridStartDate.getTime()));
+  if (theirs.size === 0) return;
+  const entries = (days) => [...days.values()].reduce((sum, day) => sum + day.lines.length, 0);
+  const daysMerged = (choice) => {
+    let clashes = 0;
+    const merged = new Map();
+    for (const time of new Set([...(choice === "remove" ? [] : mine.keys()), ...theirs.keys()])) {
+      const a = choice === "remove" ? null : mine.get(time);
+      const b = theirs.get(time);
+      const lines = mergeKeyed(keyed(a?.lines), keyed(b?.lines), choice);
+      clashes += lines.clashes;
+      const inBank = choice === "current" ? (a?.inBank ?? b?.inBank ?? null) : (b?.inBank ?? a?.inBank ?? null);
+      merged.set(time, { lines: lines.items, inBank });
+    }
+    return { merged, clashes };
+  };
+  const keyed = (lines) => (lines || []).map(line => [dayLineKey(line), line]);
+  const countClashes = () => {
+    let clashes = 0;
+    for (const [time, day] of theirs) if (mine.has(time)) clashes += mergeKeyed(keyed(mine.get(time).lines), keyed(day.lines), null).clashes;
+    return clashes;
+  };
+  plan("history", "History", "entries", entries(mine), entries(theirs), countClashes(), (choice) => {
+    const { merged } = daysMerged(choice);
+    const times = [...merged.keys()];
+    if (times.length === 0) {
+      historyData = [historyData[0]];
+      return;
+    }
+    const firstDay = new Date(Math.min(...times));
+    const start = addDays(firstDay, -firstDay.getDay());
+    const known = [...merged.entries()].sort((a, b) => a[0] - b[0]).find(([, day]) => day.inBank !== null);
+    let inBank = known ? known[1].inBank : 0;
+    const cells = [];
+    for (let day = start; day < gridStartDate; day = addDays(day, 1)) {
+      const found = merged.get(day.getTime());
+      if (found && found.inBank !== null) inBank = found.inBank;
+      cells.push([formatToMMDDYYYY(day), `${inBank < 0 ? "⛔️" : "✅"} ${formatMoney(inBank)} In Bank`, ...(found ? found.lines : [])].join("\n"));
+    }
+    const weeks = [];
+    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    historyData = [historyData[0], ...weeks.reverse()];
+    historyEdited = true;
+  });
+}
+
+// The calendar's part of a backup (see backupPlans): its days on the calendar now, with each one's own entries (the rest
+// land again, and the budget works out In Bank again)
+function calendarPlan(plan, pool) {
+  const mine = new Map();
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) mine.set(gridDates[r][c].getTime(), ownEntryLines(calendarData[r][c]));
+  }
+  const theirs = new Map([...pool].filter(([time]) => mine.has(time)).map(([time, day]) => [time, day.lines]));
+  if (![...theirs.values()].some(lines => lines.length > 0)) return;
+  const keyed = (lines) => (lines || []).map(line => [dayLineKey(line), line]);
+  const count = [...mine].reduce((sum, [time, lines]) => sum + mergeKeyed(keyed(lines), keyed(theirs.get(time)), null).clashes, 0);
+  const lines = (days) => [...days.values()].reduce((sum, list) => sum + list.length, 0);
+  plan("calendar", "Home's Calendar", "entries", lines(mine), lines(theirs), count, (choice) => {
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 7; c++) {
+        const time = gridDates[r][c].getTime();
+        const merged = mergeKeyed(keyed(mine.get(time)), keyed(theirs.get(time)), choice).items;
+        calendarData[r][c] = [formatToMMDD(gridDates[r][c]), ...merged].join("\n");
+      }
+    }
+  });
+}
+
+// Upload A Backup: every part the backup has, the way the person picked for each (choices: { part id: "current" |
+// "uploaded" | "remove" }; one left out stays as it is). One change: logged, and saved, but it can't be undone (Download
+// My Data first keeps a copy). A part too big to save is refused, and nothing changes.
+function uploadBackup(backup, choices) {
+  return runBudgetAction("📥 Upload Backup", () => {
+    const picked = { current: [], uploaded: [], remove: [] };
+    for (const part of backupPlans(backup)) {
+      const choice = choices[part.id];
+      if (!BACKUP_CHOICES.includes(choice)) continue;
+      part.apply(choice);
+      picked[choice].push(part.name);
+    }
+    for (const [name, words] of Object.entries(BACKUP_TABLE_NAMES)) {
+      if (new TextEncoder().encode(JSON.stringify(BUDGET_TABLES[name].get())).length > MAX_TABLE_BYTES) {
+        throw new BudgetInputError(`That would make your ${words} too big to save. For it, pick Remove Current Data (the backup's alone) instead.`);
+      }
+    }
+    const from = backup.from;
+    formEntryRow[3] = `From: ${[from.username, from.downloaded ? showDate(createSafeMidnight(from.downloaded)) : ""].filter(Boolean).join(", ") || "A Backup"}`;
+    formEntryRow[4] = picked.current.length > 0 ? `Kept Yours: ${picked.current.join(", ")}` : "";
+    formEntryRow[5] = picked.uploaded.length > 0 ? `Took The Backup's: ${picked.uploaded.join(", ")}` : "";
+    formEntryRow[6] = picked.remove.length > 0 ? `Replaced: ${picked.remove.join(", ")}` : "";
     return {};
   });
 }
@@ -2894,7 +3582,7 @@ function saveEntryPurpose(title, purpose) {
 //   - Changing one for its day (or deleting it) makes a temp, like ❗️➕, that keeps the spreadsheet's entry
 //     off that day; a unique entry with its title and type takes in its amount (it becomes a temp)
 //   - Once a day passes its entries stay as they were (they turn into temps, see performDailyUpdate)
-//   - The next 28 days after the calendar, Lowest, Search, reminders, and Jeremy count them too
+//   - The next 28 days after the calendar, Lowest, Search, reminders, and Bob count them too
 // A day has one entry per title and type, so an entry with the title and type of a recurring entry that lands
 // the same day is left out (the Spreadsheets page says so). A spreadsheet that's off keeps its entries (it's read again
 // when it's turned back on) and its temps; deleting one turns its temps from today on into unique entries.
@@ -3198,7 +3886,7 @@ function sheetLanding(entries) {
   return result;
 }
 
-// The spreadsheets' costs that are "uncommon" for Jeremy's Big Bills card, like a recurring entry that lands every
+// The spreadsheets' costs that are "uncommon" for Bob's Big Bills card, like a recurring entry that lands every
 // 3 months or less often: no entry with its title and type comes 90 days before or after it. Keys:
 // "day's time|clean title|type".
 function uncommonSheetKeys() {
@@ -3927,10 +4615,10 @@ function getPredictionData(lastInBank) {
   return [nextLowest, finalInBank, lowest];
 }
 
-// Jeremy's message on Home, worked out with every change (so it's quick, in plain words): a greeting, what needs
+// Bob's message on Home, worked out with every change (so it's quick, in plain words): a greeting, what needs
 // attention (days below $0 on the calendar, going below $0 in the 28 days after it, uncommon recurring entries on it, and
-// Upcoming entries), and today's affirmation. Everything else he has to say waits for his page (Jeremy Page.js).
-function commenceJeremy() {
+// Upcoming entries), and today's affirmation. Everything else he has to say waits for his page (Bob Page.js).
+function commenceBob() {
   let message = "Oops, looks like I couldn't read the budget! Sorry about that...";
   try {
     let janFirst = createSafeMidnight(new Date(today.getFullYear(), 0, 1));
@@ -4015,10 +4703,10 @@ function commenceJeremy() {
     written += affirmationPresets[affirmationIndex(today)];
     message = written;
   } catch (error) {
-    console.error("Jeremy's message couldn't be worked out:", error);
+    console.error("Bob's message couldn't be worked out:", error);
     hadError = true;
   }
-  jeremyMessage = message;
+  bobMessage = message;
 }
 
 // Which affirmation a day gets: the same one on the same date every year, the leap year one on February 29, and
@@ -4551,7 +5239,7 @@ function normalizeApiTable(rawData, shape) {
   return rows;
 }
 
-// Rebuild the Other Accounts store: { version: 3, list, equity, coming, inBank, goals, jeremy }
+// Rebuild the Other Accounts store: { version: 3, list, equity, coming, inBank, goals, bob }
 //   list: [0] column titles, then [name, balance today, "default" | "cash" | "", starting amount, interest rate, interest
 //         since, max] (see Other Accounts in BUDGET LOGIC). Savings and Cash (MANDATORY_ACCOUNTS) are added if they're
 //         missing. Balances come only from entries, so a version 2 store's typed-in balance in [1] isn't kept.
@@ -4560,7 +5248,7 @@ function normalizeApiTable(rawData, shape) {
 //   coming: each account's changes after today, for the Quick Entry page (accountChangesAhead fills it in again;
 //           it's kept as stored until then, so loading the budget alone doesn't count as a change)
 //   inBank: In Bank from today on, for the Quick Entry page (inBankAhead; kept as stored until then too)
-//   goals: Jeremy's Goals card (see Goals in BUDGET LOGIC), and jeremy: his page's settings (see normalizeJeremy)
+//   goals: Bob's Goals card (see Goals in BUDGET LOGIC), and bob: his page's settings (see normalizeBob)
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
   if (typeof parsed === 'string') {
@@ -4603,8 +5291,8 @@ function normalizeApiAccounts(rawData) {
   if (isCurrent && Array.isArray(parsed.inBank)) accounts.inBank = parsed.inBank.filter(isDay);
   const goals = isCurrent ? normalizeGoals(parsed.goals) : [];
   if (goals.length > 0) accounts.goals = goals; // (Goals, see goalEntry)
-  const jeremy = isCurrent ? normalizeJeremy(parsed.jeremy, goals.length > 0) : null;
-  if (jeremy) accounts.jeremy = jeremy; // (Jeremy's page, see normalizeJeremy)
+  const bob = isCurrent ? normalizeBob(parsed.bob, goals.length > 0) : null;
+  if (bob) accounts.bob = bob; // (Bob's page, see normalizeBob)
   return accounts;
 }
 
@@ -5153,7 +5841,7 @@ function timesPerMonth(frequency) {
 }
 
 // "Uncommon" recurring entries land every 3 months or less often (like the spreadsheet's 3 Month,
-// 6 Month, and Yearly): Jeremy points them out, and they get a reminder
+// 6 Month, and Yearly): Bob points them out, and they get a reminder
 function isUncommonFrequency(frequency) {
   if (frequency.unit === "months") return frequency.count >= 3;
   if (frequency.unit === "weeks") return frequency.count >= 13;
@@ -5460,11 +6148,11 @@ const ZOOM_CLOSE_MS = 320;
 const DAY_SLIDE_MS = 340;
 const ZOOM_EASING = 'cubic-bezier(0.33, 0, 0.2, 1)';
 
-// A zoomed day's round buttons in its top right corner, for Home's days and History's: + (New Entry on that day) and v
+// A zoomed day's round buttons in its top right corner, for Home's days and History's: + (New Entry on that day) and ×
 // (close)
 function zoomDayButtons() {
   const buttons = document.createDocumentFragment();
-  for (const [kind, text, label] of [['cellAdd', '+', 'New entry on this day'], ['cellClose', 'v', 'Close day']]) {
+  for (const [kind, text, label] of [['cellAdd', '+', 'New entry on this day'], ['cellClose', '×', 'Close day']]) {
     const button = document.createElement('button');
     button.className = `cell-action-btn ${kind}`;
     button.type = 'button';
@@ -5931,9 +6619,19 @@ function readUndoHistory() {
   return { undo: [], redo: [] };
 }
 
-// Save them for this tab (best effort)
+// Save them for this tab (best effort: when the tab's storage is full, like after a few changes to long notes, the
+// oldest steps are let go until the rest fit)
 function writeUndoHistory(history) {
-  try { sessionStorage.setItem(undoStorageKey(), JSON.stringify(history)); } catch (e) {}
+  for (;;) {
+    try {
+      sessionStorage.setItem(undoStorageKey(), JSON.stringify(history));
+      return;
+    } catch (e) {
+      if (history.undo.length > 0) history.undo.shift();
+      else if (history.redo.length > 0) history.redo.shift();
+      else return;
+    }
+  }
 }
 
 // What Undo and Redo would do now: { undo, redo }, each a label like "added Coffee (-$4.50) on 10/05", or null
@@ -5967,7 +6665,10 @@ function stepThroughHistory(direction) {
   }
   // (A change made in History keeps the accounts' balances, undone or redone too)
   const balances = step.keepBalances ? accountBalancesToday() : null;
-  for (const day of step.days) setDayEntries(createSafeMidnight(day.date), day[to]);
+  for (const day of step.days) {
+    setDayEntries(createSafeMidnight(day.date), day[to]);
+    if (day.notes) putStepNotes(day.notes[to]);
+  }
   if (step.equity) accountsData.equity = JSON.parse(step.equity[to]);
   formEntryRow[3] = step.label;
   formEntryRow[4] = "Days: " + step.days.map(day => showStoredDate(day.date)).join(", ");
@@ -5999,25 +6700,29 @@ function dropHistoryStep(direction) {
   writeUndoHistory(history);
 }
 
-// Before and after a change: each day's own entries. A step keeps only the days that changed.
+// Before and after a change: each day's own entries, and their notes. A step keeps only the days that changed.
 function captureEntryDays(dates) {
   const days = [];
   for (const date of dates) {
     const day = createSafeMidnight(date);
     if (isNaN(day.getTime())) continue;
     const key = formatToMMDDYYYY(day);
-    if (!days.some(known => known.date === key)) days.push({ date: key, lines: dayEntries(day) });
+    if (!days.some(known => known.date === key)) days.push({ date: key, lines: dayEntries(day), notes: dayNotes(day) });
   }
   return { days, equity: JSON.stringify(accountsData?.equity ?? null) };
 }
 
-// A change's step: the days whose entries it changed, before and after (null when there's nothing to put back).
-// keepBalances: it was made in History, so undoing or redoing it keeps the accounts' balances (changeHistoryEntry).
+// A change's step: the days whose entries (or notes, see notesChange) it changed, before and after (null when there's
+// nothing to put back). keepBalances: it was made in History, so undoing or redoing it keeps the accounts' balances
+// (changeHistoryEntry).
 function makeUndoStep(label, before, keepBalances = false) {
   const after = captureEntryDays(before.days.map(day => createSafeMidnight(day.date)));
   const days = before.days
-    .map((day, i) => ({ date: day.date, before: day.lines, after: after.days[i].lines }))
-    .filter(day => JSON.stringify(day.before) !== JSON.stringify(day.after));
+    .map((day, i) => {
+      const notes = notesChange(day.notes, after.days[i].notes);
+      return { date: day.date, before: day.lines, after: after.days[i].lines, ...(notes ? { notes } : {}) };
+    })
+    .filter(day => JSON.stringify(day.before) !== JSON.stringify(day.after) || day.notes);
   // A day that isn't in the budget (before History starts) can't be put back
   if (days.some(day => day.before === null || day.after === null)) return null;
   const equity = before.equity !== after.equity ? { before: before.equity, after: after.equity } : null;

@@ -2,22 +2,22 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=8742e1f961">
+    <link rel="stylesheet" href="/stylesheet.css?v=96ddaa69eb">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=8e4789e8e9">
-    <title>Prismal Budget - Jeremy</title>
+    <link rel="stylesheet" href="/budgetStyle.css?v=d5b3872db7">
+    <title>Prismal Budget - Bob</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Prismal Jeremy" />
+    <meta name="apple-mobile-web-app-title" content="Prismal Bob" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Budget - Jeremy">
+    <meta property="og:title" content="Prismal Budget - Bob">
     <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
@@ -41,7 +41,7 @@
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <div class="brandText stacked">
-            <h1>Jeremy</h1>
+            <h1>Bob</h1>
             <h2 translate="no">Prismal Budget</h2>
           </div>
         </div>
@@ -62,34 +62,34 @@
       </header>
       <main>
         <div id="panelSlot"></div>
-        <!-- PROGRAMMING NOTE: the very top card (the one with Jeremy's picture) gives a breakdown of the highlights from
+        <!-- PROGRAMMING NOTE: the very top card (the one with Bob's picture) gives a breakdown of the highlights from
              every card on this page that's on, and every card has a help button (a "?" in a circle) to the right of its
              title, with a short, clear note on what the card is for. A new card needs both (see the note at the top of
-             Javascript/Jeremy Page.js, which draws the cards). -->
-        <section id="jeremyTop" class="budgetCard jeremyTop" aria-labelledby="jeremyTopTitle" hidden>
-          <!-- Jeremy's picture: Resources/Jeremy.webp, 384x384 (made from the full-size Resources/Jeremy.jpg) -->
-          <img class="jeremyImage" src="/Resources/Jeremy.webp?v=63c7f6554d" alt="Jeremy">
-          <div class="jeremyTopText"></div>
+             Javascript/Bob Page.js, which draws the cards). -->
+        <section id="bobTop" class="budgetCard bobTop" aria-labelledby="bobTopTitle" hidden>
+          <!-- Bob's picture: Resources/Bob.webp, 384x384 (made from the full-size Resources/Bob.jpg) -->
+          <img class="bobImage" src="/Resources/Bob.webp?v=63c7f6554d" alt="Bob">
+          <div class="bobTopText"></div>
         </section>
         <p id="dataStatus" class="dataStatus">Loading...</p>
-        <div id="dataView" class="jeremyCards"></div>
+        <div id="dataView" class="bobCards"></div>
 
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
-          <h3 id="helpTitle">Jeremy Help</h3>
-          <p>Jeremy looks over your budget for you. His card on Home keeps to the basics (days below $0, uncommon recurring entries, Upcoming entries, and the day's affirmation), and tapping it opens this page, where he works out the rest. It's also in the Menu.</p>
+          <h3 id="helpTitle">Bob Help</h3>
+          <p>Bob looks over your budget for you. His card on Home keeps to the basics (days below $0, uncommon recurring entries, Upcoming entries, and the day's affirmation), and tapping it opens this page, where he works out the rest. It's also in the Menu.</p>
 
           <h4>The Cards</h4>
           <ul>
-            <li><strong>Jeremy's Highlights</strong>, at the top, has a line from each card that's on. A line that needs a look is red-orange.</li>
+            <li><strong>Bob's Highlights</strong>, at the top, has a line from each card that's on. A line that needs a look is red-orange.</li>
             <li><strong>Data</strong> and <strong>Accounts</strong> are always on. Every other card has a switch at its right, and starts off. Turning one on or off is saved with your budget, so every device you use (and anyone you share it with) sees the same cards.</li>
             <li>The little <strong>?</strong> after each card's title says what the card is for.</li>
             <li>Tapping a row with a ›, a button, or a slice of the pie chart opens what's behind it in a window over the page.</li>
           </ul>
 
           <h4>Data</h4>
-          <p>What Jeremy works everything out from: when your History starts, In Bank today and the lowest it gets, your recurring entries each month, your paydays (a payday is a Regular gain from a recurring entry or a connected spreadsheet), what you spent besides recurring bills in the last 7 days and in a usual week, what usually goes out between paychecks, your Catchup entries, big bills ahead, and your purchases in the last 30 days. Payday and Spending Pace need 4 months of History.</p>
+          <p>What Bob works everything out from: when your History starts, In Bank today and the lowest it gets, your recurring entries each month, your paydays (a payday is a Regular gain from a recurring entry or a connected spreadsheet), what you spent besides recurring bills in the last 7 days and in a usual week, what usually goes out between paychecks, your Catchup entries, big bills ahead, and your purchases in the last 30 days. Payday and Spending Pace need 4 months of History.</p>
 
           <h4>Accounts</h4>
           <p>In Bank, each Other Account, and the Total, with what each holds now and what your budget says it will hold on the day in the box at the top of the third column (counting recurring entries, connected spreadsheets' entries, Upcoming, and interest). Pick any day from tomorrow to 10 years ahead; this device remembers it, and starts on 6 months ahead. When an account has interest, an Interest column shows what it gets (or, below $0, pays) from today through that day.</p>
@@ -97,7 +97,7 @@
           <h4>Goals</h4>
           <ul>
             <li>Tap <strong>New Goal</strong> to set one: what it's for (In Bank, the Total, or an Other Account), its amount (or a % of what that holds today, which stays that amount), and if you like, a title and a day to reach it by. A credit card's goal can be $0.00, for paid off.</li>
-            <li>Each goal shows what it's for now, how far along it is, and what Jeremy says: <strong>On track</strong> when your budget gets it there by itself; otherwise how much to set aside from each payday until its day (or, for In Bank and the Total, how much less to spend), counting a credit card's interest as it shrinks.</li>
+            <li>Each goal shows what it's for now, how far along it is, and what Bob says: <strong>On track</strong> when your budget gets it there by itself; otherwise how much to set aside from each payday until its day (or, for In Bank and the Total, how much less to spend), counting a credit card's interest as it shrinks.</li>
             <li><strong>In danger</strong> means it's at risk: setting that much aside would take In Bank below $0, it's more than usually goes out between paychecks, no paycheck lands before its day, or its day passed. A goal with no day says when your budget gets it there, or what reaching it in a year would take.</li>
             <li>Tap a goal to change or delete it.</li>
           </ul>
@@ -110,10 +110,10 @@
             <li>What has no purpose yet shows under the chart: tap it to give those titles one right there.</li>
           </ul>
 
-          <h4>Jeremy's Tips</h4>
+          <h4>Bob's Tips</h4>
           <ul>
             <li><strong>Payday:</strong> about how much usually goes out between paychecks besides your recurring bills, from your last 4 months, and on a payday, a heads-up to spend carefully.</li>
-            <li><strong>Spending Pace:</strong> the last 7 days' spending besides recurring bills, next to a usual week. When it's $50 and 25% over, Jeremy says so.</li>
+            <li><strong>Spending Pace:</strong> the last 7 days' spending besides recurring bills, next to a usual week. When it's $50 and 25% over, Bob says so.</li>
             <li><strong>Big Bills:</strong> bills of $200 or more in the next 60 days that don't come every month (like a yearly bill, or a one-time cost added for a later day), and how much to set aside from each paycheck until the next one. Never a bill that comes every month or more often, like rent.</li>
             <li><strong>Weekly Check:</strong> on Sundays, a reminder to compare In Bank with your bank, add what's missing, or tap that day's In Bank on Home and type what your bank says for a Catchup entry.</li>
             <li><strong>Catchup Entries:</strong> your Catchup entries from the last 30 days added up. At $100 or more, purchases are slipping by, so try adding each one as it happens.</li>

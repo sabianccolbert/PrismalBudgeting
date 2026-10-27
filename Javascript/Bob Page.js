@@ -1,16 +1,16 @@
-// Jeremy Page: Jeremy's own page (Menu > Jeremy, or tap his card on Home). His message on Home stays quick and in plain
+// Bob Page: Bob's own page (Menu > Bob, or tap his card on Home). His message on Home stays quick and in plain
 // words; everything heavier he works out waits for this page, and only runs while it's open.
 //
 // PROGRAMMING NOTE, for every change to this page:
-//   - The very top card, the one with Jeremy's picture, gives a breakdown of the highlights from every card on the page
+//   - The very top card, the one with Bob's picture, gives a breakdown of the highlights from every card on the page
 //     that's on. Each card's render returns its highlight (see CARDS), and a new card needs one too.
 //   - Every card has a help button (a "?" in a circle) to the right of its title, with a short, clear note on what the
 //     card is for (its help, see CARDS). A new card needs one too.
 //   - Data and Accounts always run. Every other card has an on/off switch, starts off, and works nothing out while it's
-//     off. Which are on is kept with the budget (Jeremy's page in Process Budget.js), so every device shows the same.
+//     off. Which are on is kept with the budget (Bob's page in Process Budget.js), so every device shows the same.
 //   - Anything that shows from a tap (a table, a list) opens in a floating window (BudgetUI.openPanel), not in the page.
 //
-// The cards, top to bottom: Jeremy's highlights; Data (what every card below works from); Accounts (each account now and
+// The cards, top to bottom: Bob's highlights; Data (what every card below works from); Accounts (each account now and
 // on a day picked, interest too); Goals; Needs, Wants, And Future (a pie chart of what each purpose cost); then one for
 // each of his tips: Payday, Spending Pace, Big Bills, Weekly Check, Catchup Entries, and Refunds.
 
@@ -32,16 +32,16 @@ const REFUNDS_SHOWN = 5;
 const AHEAD_YEARS = 10;         // Accounts and Goals look up to this far ahead
 const PURPOSE_DAYS = 30;        // Needs, Wants, And Future starts on this many days, through today...
 const PURPOSE_AHEAD_DAYS = 730; // ...and looks up to two years ahead, like Search
-const ACCOUNTS_DAY_KEY = "prismal_jeremy_accounts_day"; // The day this device picked for Accounts (Layout.js keeps it)
+const ACCOUNTS_DAY_KEY = "prismal_bob_accounts_day"; // The day this device picked for Accounts (Layout.js keeps it)
 
-// Each card under the highlights: its id (its switch's, see JEREMY_CARDS in Process Budget.js), title, help (what its "?"
+// Each card under the highlights: its id (its switch's, see BOB_CARDS in Process Budget.js), title, help (what its "?"
 // shows), setup(card) (what it keeps while the page is open, like its date boxes: returned to go above what it shows), and
 // render(card, shared) (draws it, and returns its highlight: { text, warn } or null)
 const CARDS = [
   {
     id: "data",
     title: "Data",
-    help: "What Jeremy works everything out from: your History, paydays, spending, and bills ahead. The cards below use these numbers. Tap a row with › to see what's behind it.",
+    help: "What Bob works everything out from: your History, paydays, spending, and bills ahead. The cards below use these numbers. Tap a row with › to see what's behind it.",
     render: renderDataCard
   },
   {
@@ -54,7 +54,7 @@ const CARDS = [
   {
     id: "goals",
     title: "Goals",
-    help: "Amounts for In Bank, the Total, or an Other Account to reach, by a day if you like. Jeremy works out what to set aside from each payday to get there, and warns you when one is in danger. A credit card's can be $0.00: paid off.",
+    help: "Amounts for In Bank, the Total, or an Other Account to reach, by a day if you like. Bob works out what to set aside from each payday to get there, and warns you when one is in danger. A credit card's can be $0.00: paid off.",
     setup: setupGoalsCard,
     render: renderGoalsCard
   },
@@ -74,7 +74,7 @@ const CARDS = [
   {
     id: "pace",
     title: "Spending Pace",
-    help: `The last 7 days' spending besides recurring bills, next to a usual week from the ${HISTORY_MONTHS} months before (it needs ${HISTORY_MONTHS} months of History). Jeremy speaks up at $${PACE_OVER} and ${Math.round((PACE_RATIO - 1) * 100)}% over.`,
+    help: `The last 7 days' spending besides recurring bills, next to a usual week from the ${HISTORY_MONTHS} months before (it needs ${HISTORY_MONTHS} months of History). Bob speaks up at $${PACE_OVER} and ${Math.round((PACE_RATIO - 1) * 100)}% over.`,
     render: renderPaceCard
   },
   {
@@ -98,7 +98,7 @@ const CARDS = [
   {
     id: "refund",
     title: "Refunds",
-    help: `When Lowest in bank after today goes below $0, Jeremy looks for purchases from the last ${REFUND_DAYS} days (or still to come before that day) that a refund, or skipping one, would cover it with.`,
+    help: `When Lowest in bank after today goes below $0, Bob looks for purchases from the last ${REFUND_DAYS} days (or still to come before that day) that a refund, or skipping one, would cover it with.`,
     render: renderRefundCard
   }
 ];
@@ -133,10 +133,10 @@ document.addEventListener("budget:updated", () => {
 // The cards, made once: their titles, help, switches, and boxes stay while the page is open (so a box being typed in or a
 // switch just tapped stays put), and what they show is drawn again with every change
 function buildPage() {
-  const top = document.getElementById("jeremyTop");
-  const { head, help } = cardHead("Jeremy's Highlights", TOP_HELP, "jeremyTop");
-  highlightList = BudgetUI.element("ul", "jeremyHighlights");
-  top.querySelector(".jeremyTopText").append(head, help, highlightList);
+  const top = document.getElementById("bobTop");
+  const { head, help } = cardHead("Bob's Highlights", TOP_HELP, "bobTop");
+  highlightList = BudgetUI.element("ul", "bobHighlights");
+  top.querySelector(".bobTopText").append(head, help, highlightList);
   top.hidden = false;
   pageCards = CARDS.map(buildCard);
   document.getElementById("dataView").replaceChildren(...pageCards.map(card => card.el));
@@ -144,12 +144,12 @@ function buildPage() {
 
 // One card: its title and help, its switch (when it has one), and what it shows
 function buildCard(def) {
-  const el = BudgetUI.element("section", "budgetCard jeremySection");
+  const el = BudgetUI.element("section", "budgetCard bobSection");
   el.id = `${def.id}Card`;
   const { head, help, title } = cardHead(def.title, def.help, def.id);
   el.setAttribute("aria-labelledby", title.id);
   const card = { def, el, toggle: null, state: null, body: BudgetUI.element("div", "sectionBody"), results: BudgetUI.element("div", "sectionResults"), highlight: null };
-  if (JEREMY_CARDS.has(def.id)) {
+  if (BOB_CARDS.has(def.id)) {
     const label = BudgetUI.element("label", "sectionSwitch");
     const toggle = BudgetUI.element("input", "pillSwitch");
     toggle.type = "checkbox";
@@ -198,7 +198,7 @@ function renderPage() {
 
 // Draw one card, keeping its highlight for the top card
 function drawCard(card, shared = sharedFigures()) {
-  const on = jeremyCardOn(card.def.id);
+  const on = bobCardOn(card.def.id);
   showSwitch(card, on);
   card.el.classList.toggle("isOff", !on);
   card.body.hidden = !on;
@@ -210,8 +210,8 @@ function drawCard(card, shared = sharedFigures()) {
   try {
     card.highlight = card.def.render(card, shared) || null;
   } catch (error) {
-    console.error(`Jeremy's ${card.def.title} card couldn't be worked out:`, error);
-    card.results.replaceChildren(BudgetUI.element("p", "panelHint", "Jeremy couldn't work this card out. Please refresh to try again."));
+    console.error(`Bob's ${card.def.title} card couldn't be worked out:`, error);
+    card.results.replaceChildren(BudgetUI.element("p", "panelHint", "Bob couldn't work this card out. Please refresh to try again."));
   }
 }
 
@@ -229,9 +229,9 @@ async function switchCard(card, on) {
   switching = true;
   for (const other of pageCards) if (other.toggle) other.toggle.disabled = true;
   card.state.textContent = on ? "On" : "Off";
-  const result = await turnJeremyCard(card.def.id, on);
+  const result = await turnBobCard(card.def.id, on);
   switching = false;
-  for (const other of pageCards) showSwitch(other, jeremyCardOn(other.def.id));
+  for (const other of pageCards) showSwitch(other, bobCardOn(other.def.id));
   if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
   else BudgetUI.warnIfUnsaved(result);
 }
@@ -241,13 +241,13 @@ function renderHighlights() {
   const items = [];
   for (const card of pageCards) {
     if (!card.highlight) continue;
-    const item = BudgetUI.element("li", card.highlight.warn ? "jeremyHighlight isWarning" : "jeremyHighlight");
+    const item = BudgetUI.element("li", card.highlight.warn ? "bobHighlight isWarning" : "bobHighlight");
     item.append(BudgetUI.element("strong", "", `${card.def.title}: `), card.highlight.text);
     items.push(item);
   }
-  const off = pageCards.filter(card => card.toggle && !jeremyCardOn(card.def.id)).length;
+  const off = pageCards.filter(card => card.toggle && !bobCardOn(card.def.id)).length;
   if (off > 0) {
-    items.push(BudgetUI.element("li", "jeremyHighlight isQuiet", off === 1
+    items.push(BudgetUI.element("li", "bobHighlight isQuiet", off === 1
       ? "One more card is off. Turn it on below to see what it has to say here."
       : `${off} more cards are off. Turn any of them on below to see what they have to say here.`));
   }
@@ -295,7 +295,7 @@ function renderDataCard(card, shared) {
   const spent = purchases.reduce((total, purchase) => total - purchase.amount, 0);
   const dayCount = (date) => getDayDifference(date, today);
 
-  const list = BudgetUI.element("ul", "jeremyData");
+  const list = BudgetUI.element("ul", "bobData");
   list.append(
     dataRow("History", oldest ? `From ${showDate(oldest)}` : "None yet",
       oldest ? (spending.enough ? `${HISTORY_MONTHS} months or more: enough for every card` : `Payday and Spending Pace need ${HISTORY_MONTHS} months of it`) : "Each week moves into History as it passes"),
@@ -322,19 +322,19 @@ function renderDataCard(card, shared) {
 // One of Data's rows: what it is (and a note under it), and its figure. One with more behind it (open: opens it, given
 // the row) is a button with a ›.
 function dataRow(label, value, note = "", { amount = null, open = null } = {}) {
-  const item = BudgetUI.element("li", "jeremyDataItem");
-  const row = BudgetUI.element(open ? "button" : "div", "jeremyDataRow");
+  const item = BudgetUI.element("li", "bobDataItem");
+  const row = BudgetUI.element(open ? "button" : "div", "bobDataRow");
   if (open) {
     row.type = "button";
     row.addEventListener("click", () => open(row));
   }
-  const text = BudgetUI.element("span", "jeremyDataText");
-  text.append(BudgetUI.element("span", "jeremyDataLabel", label));
-  if (note) text.append(BudgetUI.element("span", "jeremyDataNote", note));
-  const figure = BudgetUI.noTranslate(BudgetUI.element("span", "jeremyDataValue", value));
+  const text = BudgetUI.element("span", "bobDataText");
+  text.append(BudgetUI.element("span", "bobDataLabel", label));
+  if (note) text.append(BudgetUI.element("span", "bobDataNote", note));
+  const figure = BudgetUI.noTranslate(BudgetUI.element("span", "bobDataValue", value));
   if (amount !== null && amount < 0) figure.classList.add("negative");
   row.append(text, figure);
-  if (open) row.append(BudgetUI.element("span", "jeremyDataMore", "›"));
+  if (open) row.append(BudgetUI.element("span", "bobDataMore", "›"));
   item.append(row);
   return item;
 }
@@ -627,7 +627,7 @@ function openTableWindow(origin, { title, intro = "", columns, rows, empty = "No
 
 // A table in a box that scrolls up and down (see openTableWindow)
 function tableBox(columns, rows) {
-  const table = BudgetUI.element("table", "dataTable jeremyTable");
+  const table = BudgetUI.element("table", "dataTable bobTable");
   const head = table.createTHead().insertRow();
   for (const column of columns) head.appendChild(BudgetUI.element("th", "", column));
   const body = table.createTBody();
@@ -639,7 +639,7 @@ function tableBox(columns, rows) {
       tr.appendChild(BudgetUI.noTranslate(td));
     }
   }
-  const box = BudgetUI.element("div", "jeremyScroll");
+  const box = BudgetUI.element("div", "bobScroll");
   box.append(BudgetUI.spanHeaderBar(table));
   return box;
 }
@@ -724,7 +724,7 @@ function openWeeksWindow(origin, spending) {
 // account has interest).
 
 function setupAccountsCard(card) {
-  const table = BudgetUI.element("table", "dataTable jeremyAccounts");
+  const table = BudgetUI.element("table", "dataTable bobAccounts");
   const head = table.createTHead().insertRow();
   const input = BudgetUI.element("input", "dateInput");
   input.type = "text";
@@ -739,7 +739,7 @@ function setupAccountsCard(card) {
   dayHead.append(dayRow);
   head.append(BudgetUI.element("th", "", "Account"), BudgetUI.element("th", "", "Now"), dayHead, BudgetUI.element("th", "interestHead", "Interest"));
   table.createTBody();
-  const note = BudgetUI.element("p", "panelHint jeremyAccountsNote");
+  const note = BudgetUI.element("p", "panelHint bobAccountsNote");
   input.addEventListener("change", () => {
     const day = parseTypedDate(input.value);
     if (isNaN(day.getTime()) || day <= today || day > aheadLimit()) {
@@ -751,9 +751,9 @@ function setupAccountsCard(card) {
     renderPage();
   });
   card.accounts = { table, input, note };
-  const box = BudgetUI.element("div", "jeremyAccountsBox");
+  const box = BudgetUI.element("div", "bobAccountsBox");
   box.append(BudgetUI.spanHeaderBar(table));
-  const wrap = BudgetUI.element("div", "jeremyAccountsWrap");
+  const wrap = BudgetUI.element("div", "bobAccountsWrap");
   wrap.append(box, note);
   return wrap;
 }
@@ -827,7 +827,7 @@ function aheadLimit() {
 // day (or as far as they look, for one without a day)
 function furthestDay() {
   let furthest = readAccountsDay();
-  if (jeremyCardOn("goals")) {
+  if (bobCardOn("goals")) {
     for (const goal of accountsData?.goals || []) {
       const balance = goal.kind === "none" ? null : goalBalance(goal);
       if (balance === null || balance >= goal.amount) continue;
@@ -844,7 +844,7 @@ function furthestDay() {
 // =====================================================================
 // #region GOALS (see Goals in Process Budget.js)
 // =====================================================================
-// Each goal with how far along it is (tap one to change or delete it), and what Jeremy says reaching it takes: with a
+// Each goal with how far along it is (tap one to change or delete it), and what Bob says reaching it takes: with a
 // day, what to set aside from each payday until then beyond what the budget already gets there (a credit card's interest
 // counted as it shrinks), and that it's in danger when doing so would take In Bank below $0, when it's more than usually
 // goes out between paychecks, or when no paycheck lands before its day; without one, when the budget gets it there, or
@@ -859,7 +859,7 @@ function setupGoalsCard() {
   return box;
 }
 
-// Each goal with what Jeremy says about it, and the highlight: how many are reached, on track, short, or in danger
+// Each goal with what Bob says about it, and the highlight: how many are reached, on track, short, or in danger
 function renderGoalsCard(card, shared) {
   const goals = accountsData?.goals || [];
   if (goals.length === 0) {
@@ -875,16 +875,16 @@ function renderGoalsCard(card, shared) {
   const danger = goals.filter((goal, index) => plans[index].tone === "danger");
   const parts = [[count("reached"), "reached"], [count("onTrack"), "on track"], [count("short"), "needing more set aside"], [danger.length, "in danger"]]
     .filter(([number]) => number > 0).map(([number, words]) => `${number} ${words}`);
-  if (parts.length === 0) return { text: "Tap each goal to pick what it's for, and Jeremy works out how to get there.", warn: false };
+  if (parts.length === 0) return { text: "Tap each goal to pick what it's for, and Bob works out how to get there.", warn: false };
   const named = danger.length > 0 ? ` (${danger.map(goalName).join(", ")})` : "";
   return { text: `${goals.length} ${goals.length === 1 ? "goal" : "goals"}: ${parts.join(", ")}${named}.`, warn: danger.length > 0 };
 }
 
-// What Jeremy says about a goal: { tone: "reached" | "onTrack" | "short" | "danger" | "" , status (the word at its right),
+// What Bob says about a goal: { tone: "reached" | "onTrack" | "short" | "danger" | "" , status (the word at its right),
 // note, balance (what it's for holds now, or null) }
 function goalPlan(goal, shared) {
   const balance = goal.kind === "none" ? null : goalBalance(goal);
-  if (goal.kind === "none") return { tone: "", status: "", balance, note: "Tap it to pick what it's for, and Jeremy works out how to get there." };
+  if (goal.kind === "none") return { tone: "", status: "", balance, note: "Tap it to pick what it's for, and Bob works out how to get there." };
   if (balance === null) return { tone: "", status: "", balance, note: `${goal.account} isn't one of your Other Accounts anymore. Tap it to pick another.` };
   if (balance >= goal.amount) return { tone: "reached", status: "Reached", balance, note: `${goalTarget(goal)} has ${formatMoney(balance)}: it's there.` };
 
@@ -1001,7 +1001,7 @@ function goalDanger(goal, per, paydays, until, projection, shared) {
 }
 
 // A goal: its name and status, what it's for and its amount ("Savings: $1200.00 of $2000.00 by 06/01/2027"), how far
-// along it is (a bar), and what Jeremy says. Tapping it opens it to change or delete.
+// along it is (a bar), and what Bob says. Tapping it opens it to change or delete.
 function goalRow(goal, index, plan) {
   const date = goal.date ? createSafeMidnight(goal.date, true) : null;
   const target = goalTarget(goal);
@@ -1051,7 +1051,7 @@ function openGoalPanel(origin, index = null) {
     size: "small",
     title: existing ? "Change Goal" : "New Goal",
     build(form, panel) {
-      const intro = BudgetUI.element("p", "panelHint", "An amount for In Bank, the Total, or an Other Account to reach, like $2000.00 in Savings, or a credit card at $0.00 (a blank amount). Jeremy works out what reaching it takes.");
+      const intro = BudgetUI.element("p", "panelHint", "An amount for In Bank, the Total, or an Other Account to reach, like $2000.00 in Savings, or a credit card at $0.00 (a blank amount). Bob works out what reaching it takes.");
       const title = BudgetUI.textField({ label: "Title", value: existing ? existing.title : "", placeholder: "Vacation, emergency fund...", optional: true, maxLength: MAX_TITLE });
       const amount = BudgetUI.amountField({ label: "Amount", amount: existing ? existing.amount : null, percent: existing ? existing.percent : null, signs: BudgetUI.BALANCE_SIGNS });
       const accounts = otherAccounts();
@@ -1067,7 +1067,7 @@ function openGoalPanel(origin, index = null) {
       target.el.classList.add("accountChoices");
       const targetField = BudgetUI.field("For", target.el, { hint: "A % goal is that percent of it today, and stays that amount." });
       amount.setPercentAllowed(true);
-      const date = BudgetUI.dateField({ label: "By", date: existing && existing.date ? createSafeMidnight(existing.date, true) : null, optional: true, hint: "Leave it blank for no day: Jeremy says when your budget gets there." });
+      const date = BudgetUI.dateField({ label: "By", date: existing && existing.date ? createSafeMidnight(existing.date, true) : null, optional: true, hint: "Leave it blank for no day: Bob says when your budget gets there." });
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: removeIt }, { label: "Cancel", onClick: () => panel.close() }]
@@ -1343,7 +1343,7 @@ function setPurposeRange({ from, to }) {
     drawCard(card);
     renderHighlights();
   }
-  document.dispatchEvent(new CustomEvent("jeremy:purposes"));
+  document.dispatchEvent(new CustomEvent("bob:purposes"));
 }
 
 // A purpose's window: the days (From and To), what it came to and its share, and each title in it, biggest first, with
@@ -1358,12 +1358,12 @@ function openPurposeWindow(origin, key) {
       const dates = purposeDateBoxes();
       const summary = BudgetUI.element("p", "panelText");
       const list = BudgetUI.element("ul", "purposeTitles");
-      const box = BudgetUI.element("div", "jeremyScroll purposeTitlesBox");
+      const box = BudgetUI.element("div", "bobScroll purposeTitlesBox");
       box.append(list);
       // (Drawn again when the days or the budget change while it's open)
       const follow = () => {
         if (panel.panel.isConnected && !panel.panel.classList.contains("isClosing")) return draw();
-        document.removeEventListener("jeremy:purposes", follow);
+        document.removeEventListener("bob:purposes", follow);
         document.removeEventListener("budget:updated", follow);
       };
       const draw = () => {
@@ -1382,7 +1382,7 @@ function openPurposeWindow(origin, key) {
         }));
         box.hidden = slice.titles.length === 0;
       };
-      document.addEventListener("jeremy:purposes", follow);
+      document.addEventListener("bob:purposes", follow);
       document.addEventListener("budget:updated", follow);
       form.addEventListener("submit", (event) => event.preventDefault()); // (Enter in a date box: nothing to send)
       form.append(dates.el, summary, box, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
@@ -1401,7 +1401,7 @@ function openUnsortedWindow(origin) {
     build(form, panel) {
       const summary = BudgetUI.element("p", "panelText");
       const list = BudgetUI.element("ul", "purposeTitles");
-      const box = BudgetUI.element("div", "jeremyScroll purposeTitlesBox");
+      const box = BudgetUI.element("div", "bobScroll purposeTitlesBox");
       box.append(list);
       let busy = false;
       // (Drawn again when the budget changes while it's open)
@@ -1456,7 +1456,7 @@ function openUnsortedWindow(origin) {
 
 // A tip card's words (and a button for what's behind them, when there's more)
 function showTip(card, text, more = null) {
-  const parts = [BudgetUI.element("p", "jeremyTip", text)];
+  const parts = [BudgetUI.element("p", "bobTip", text)];
   if (more) {
     const button = BudgetUI.element("button", "budgetButton tipMore", `${more.label} ›`);
     button.type = "button";
@@ -1478,14 +1478,14 @@ function renderPaydayCard(card, shared) {
   let text;
   let warn = false;
   if (payday.average === null) {
-    text = `Jeremy needs ${HISTORY_MONTHS} months of History for this. ${historyStartNote()}`;
+    text = `Bob needs ${HISTORY_MONTHS} months of History for this. ${historyStartNote()}`;
   } else if (payday.isPayday && Math.round(payday.average) > 0) {
     text = `Hey, you just got paid! Keep in mind, besides your recurring bills, you tend to spend about ${formatMoney(Math.round(payday.average))} in the next ${payday.span} days, so be careful what you spend it on!`;
     warn = true;
   } else if (payday.next) {
     text = `Your next payday is ${showDay(payday.next)}. From one payday to the next (${payday.span} days), you tend to spend about ${formatMoney(Math.round(payday.average))} besides your recurring bills.`;
   } else {
-    text = `No paycheck lands in the next ${PAYDAY_LOOK} days. Jeremy counts a Regular gain from a recurring entry or a connected spreadsheet as a paycheck.`;
+    text = `No paycheck lands in the next ${PAYDAY_LOOK} days. Bob counts a Regular gain from a recurring entry or a connected spreadsheet as a paycheck.`;
   }
   showTip(card, text, { label: "See paydays", open: (origin) => openPaydaysWindow(origin, shared.spending(), payday) });
   return { text, warn };
@@ -1496,7 +1496,7 @@ function renderPaceCard(card, shared) {
   const pace = paceFigures(shared.spending());
   let text;
   if (!pace) {
-    text = `Jeremy needs ${HISTORY_MONTHS} months of History for this. ${historyStartNote()}`;
+    text = `Bob needs ${HISTORY_MONTHS} months of History for this. ${historyStartNote()}`;
   } else if (pace.flagged) {
     text = `Heads up: you've spent about ${formatMoney(Math.round(pace.thisWeek))} in the last 7 days besides your recurring bills, about ${formatMoney(Math.round(pace.over))} more than usual for a week. Taking it easy for a few days keeps your budget on track!`;
   } else {
@@ -1572,9 +1572,9 @@ function renderRefundCard(card, shared) {
   else highlight += ` There are no purchases from the last ${REFUND_DAYS} days to look at.`;
   let text = covers.length > 0 || picks.length === 0 ? highlight : question;
   if (listed.length > 0) text += covers.length > 0 ? " These would help too:" : " These purchases would help:";
-  const parts = [BudgetUI.element("p", "jeremyTip", text)];
+  const parts = [BudgetUI.element("p", "bobTip", text)];
   if (listed.length > 0) {
-    const list = BudgetUI.element("ul", "jeremyList");
+    const list = BudgetUI.element("ul", "bobList");
     for (const purchase of listed) list.append(BudgetUI.noTranslate(BudgetUI.element("li", "", describe(purchase))));
     parts.push(list);
   }
