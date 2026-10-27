@@ -1,4 +1,4 @@
-// Calendar Page: the home page. "Lowest in bank after today", Jeremy's message (his card opens his page),
+// Calendar Page: the home page. "Lowest in bank after today", Bob's message (his card opens his page),
 // Upcoming, the calendar's day cells, and the new-entry / entry-options panels.
 // Zooming a day is handled in Process Budget.js (LAYOUT FUNCTIONS); tapping an entry inside a
 // zoomed day opens its options here.
@@ -9,8 +9,8 @@
 
 window.workspaceReady.then((loaded) => {
   if (!loaded) {
-    const jeremy = document.getElementById("jeremyMessage");
-    if (jeremy) jeremy.textContent = "Couldn't load your budget data. Please refresh to try again.";
+    const bob = document.getElementById("bobMessage");
+    if (bob) bob.textContent = "Couldn't load your budget data. Please refresh to try again.";
     // The calendar's first day says "Loading..." until the budget is there
     const firstDay = document.querySelector(".elastic-table .cell-content");
     if (firstDay) firstDay.textContent = "Couldn't load your budget";
@@ -89,7 +89,7 @@ function quickWaitingRow(quick) {
   const details = BudgetUI.element("span", "waitingDetails");
   details.append(amount, ` on ${isNaN(day.getTime()) ? entry.date : showDate(day)}${entry.placeholder ? " (a placeholder)" : ""}`);
   const text = BudgetUI.noTranslate(BudgetUI.element("span", "waitingText"));
-  text.append(BudgetUI.element("span", "waitingTitle", `${sprite ? sprite + " " : ""}${capitalize(String(entry.title || ""))}`), details);
+  text.append(BudgetUI.element("span", `waitingTitle${String(entry.note ?? "").trim() ? " hasNote" : ""}`, `${sprite ? sprite + " " : ""}${capitalize(String(entry.title || ""))}`), details);
   const add = BudgetUI.element("button", "budgetButton primary waitingAdd", "Add");
   add.type = "button";
   add.setAttribute("aria-label", `Add ${describeQuickEntry(entry)}`);
@@ -329,10 +329,10 @@ function renderCalendar() {
     String(calendarData[r][c] ?? "").split("\n").forEach((line, l) => {
       if (isLastDay && afterCalendarLine(line)) return; // In the Lowest card instead
       // The first line is the day, shown in this device's date format
-      if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(gridDates[r][c]) : line, l));
+      if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(gridDates[r][c]) : line, l, gridDates[r][c]));
     });
 
-    // Its round + (New Entry on that day) and v (close) show once it's zoomed (handled in Process Budget.js)
+    // Its round + (New Entry on that day) and × (close) show once it's zoomed (handled in Process Budget.js)
     content.replaceChildren(fragment, zoomDayButtons());
 
     td.dataset.row = r;
@@ -413,7 +413,7 @@ function openInBankOptions(lineEl, r, c) {
 //#endregion
 
 // =====================================================================
-// #region INFO ROW (lowest in bank, Jeremy, upcoming)
+// #region INFO ROW (lowest in bank, Bob, upcoming)
 // =====================================================================
 
 function renderInfoRow() {
@@ -424,8 +424,8 @@ function renderInfoRow() {
   }
   renderAfterCalendar();
 
-  const jeremy = document.getElementById("jeremyMessage");
-  if (jeremy) jeremy.textContent = jeremyMessage;
+  const bob = document.getElementById("bobMessage");
+  if (bob) bob.textContent = bobMessage;
 
   const list = document.getElementById("upcomingList");
   if (!list) return;
@@ -443,6 +443,7 @@ function renderInfoRow() {
     button.appendChild(BudgetUI.element("span", "upcomingDate", showDate(upcoming.date)));
     const entry = BudgetUI.element("span", `upcomingEntry ${BudgetUI.amountClass(upcoming.amount)}`, shownLine(line));
     if (isPlaceholder(upcoming.sprite)) entry.classList.add("isPlaceholder");
+    if (lineHasNote(upcoming.date, line)) entry.classList.add("hasNote");
     button.appendChild(entry);
     button.addEventListener("click", () => BudgetUI.openEntryOptions(button, line, upcoming.date));
     item.appendChild(button);

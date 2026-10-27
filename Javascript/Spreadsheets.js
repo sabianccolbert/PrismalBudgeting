@@ -571,7 +571,7 @@ const Spreadsheets = (() => {
   // =====================================================================
 
   const LABELS = { date: "Date", title: "Title", amount: "Amount", type: "Refraction Type", account: "Other Account" };
-  const KEEP_DAYS_BEFORE = 100; // Entries kept from before today (Jeremy's Big Bills card looks for ones like them)
+  const KEEP_DAYS_BEFORE = 100; // Entries kept from before today (Bob's Big Bills card looks for ones like them)
   const KEEP_DAYS_AFTER = 800;
   const MAX_ENTRIES = 3000;
   const MAX_DETAILED_PROBLEMS = 6;

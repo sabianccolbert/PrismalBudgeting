@@ -21,7 +21,8 @@ const QUICK_TYPE_NAMES = Object.fromEntries(Object.entries(QUICK_ENTRY_TYPES).ma
 let quickUsername = null;
 let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance }] (see showQuickAccounts)
 let quickPrisms = [];   // The account's prisms, in order: [{ title, amount, type }] (see PRISMS)
-let quickPurposes = false; // The form asks Needs, Wants, Or Future (Jeremy's card for it is on; the API's check says)
+let quickPurposes = false; // The form asks Needs, Wants, Or Future (Bob's card for it is on; the API's check says)
+const QUICK_NOTE_MAX = 20000; // The longest note an entry from here can have (the API keeps the same limit)
 let quickQueued = [];   // The entries this icon added that are still waiting: [{ id, title, type, amount, date, joining }]
 let quickForm = null;   // The form on the page: { panel, fields, mode: "entry" (New Entry) | "prism" (New Prism) |
                         // "change" (Change Entry, a waiting one), changing (that entry) }
@@ -107,7 +108,7 @@ function openQuickEntryForm(mode = "entry", fill = null, changing = null) {
     build(form, panel) {
       const day = changingEntry ? createSafeMidnight(changing.date, true) : quickFormDay;
       // (Needs, Wants, Or Future starts with nothing picked: the page can't see which one a title has)
-      const fields = BudgetUI.newEntryFields({ date: day, accounts: quickAccounts, purposes: quickPurposes, purposeLookup: null });
+      const fields = BudgetUI.newEntryFields({ date: day, accounts: quickAccounts, purposes: quickPurposes, purposeLookup: null, noteMax: QUICK_NOTE_MAX });
       if (makingPrism) {
         form.append(BudgetUI.element("p", "panelHint prismDraftHint", "Fill in or pick only what this prism should keep: a title, an amount, a type, or an account. Then tap Save Prism."));
         panel.panel.classList.add("prismDraft");
@@ -121,8 +122,9 @@ function openQuickEntryForm(mode = "entry", fill = null, changing = null) {
         : changingEntry
           ? [{ label: "Save Changes", kind: "primary", type: "submit" }, { label: "Cancel", onClick: backToNewEntry }]
           : [{ label: "Add Entry", kind: "primary", type: "submit" }];
-      // A prism never keeps a date (or a title's Needs, Wants, Or Future), so New Prism has neither
+      // A prism never keeps a date, a title's Needs, Wants, Or Future, or a note, so New Prism has none of them
       form.append(...fields.els.filter(el => !makingPrism || (el !== fields.dateEl && el !== fields.purposeEl)), BudgetUI.buttonRow(buttons));
+      if (!makingPrism) form.append(fields.noteEl);
       if (fill) fields.fill(fill);
       quickForm = { panel, fields, mode: changingEntry ? "change" : makingPrism ? "prism" : "entry", changing: changingEntry ? changing : null };
 
@@ -160,13 +162,14 @@ async function addQuickEntry(panel, fields) {
 
 // The form's entry as the API keeps it: { title (with its Other Account), type, amount, date: "YYYY-MM-DD", and
 // placeholder: true for a placeholder, percent for a % amount (see PERCENT_MARK in Process Budget.js), whose amount is
-// what it comes to with the account's balance today; the budget works it out again for its day, and purpose: its title's
-// Needs, Wants, Or Future, when one was picked (see ENTRY PURPOSES), which the budget gives the title as it's added }
+// what it comes to with the account's balance today; the budget works it out again for its day, purpose: its title's
+// Needs, Wants, Or Future, when one was picked (see ENTRY PURPOSES), which the budget gives the title as it's added, and
+// note: its note, when it has one (see ENTRY NOTES) }
 function toQueued(entry) {
   const hasPercent = typeof entry.percent === "number";
   const account = quickAccounts.find(known => cleanString(known.name) === cleanString(splitAccount(entry.title).account));
   const amount = hasPercent ? percentValue(entry.percent, account?.balance ?? 0) : entry.amount;
-  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}), ...(hasPercent ? { percent: entry.percent } : {}), ...(entry.purpose ? { purpose: entry.purpose } : {}) };
+  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}), ...(hasPercent ? { percent: entry.percent } : {}), ...(entry.purpose ? { purpose: entry.purpose } : {}), ...(entry.note && entry.note.trim() ? { note: entry.note } : {}) };
 }
 
 // A home screen icon's page often stays open in the background for days. Looked at again on a later day, New
@@ -536,7 +539,7 @@ function waitingRow(item) {
   const details = BudgetUI.element("span", "waitingDetails");
   details.append(amount, ` on ${isNaN(day.getTime()) ? item.date : showDate(day)}`);
   const text = BudgetUI.noTranslate(BudgetUI.element("span", "waitingText"));
-  text.append(BudgetUI.element("span", "waitingTitle", `${sprite ? sprite + " " : ""}${capitalize(item.title)}`), details);
+  text.append(BudgetUI.element("span", `waitingTitle${String(item.note ?? "").trim() ? " hasNote" : ""}`, `${sprite ? sprite + " " : ""}${capitalize(item.title)}`), details);
   row.append(text);
   if (item.joining) {
     row.classList.add("isJoining");
@@ -559,7 +562,7 @@ function waitingRow(item) {
 function changeWaiting(item) {
   if (quickForm && quickForm.mode === "entry") stashedEntry = quickForm.fields.values();
   const { title, account } = splitAccount(item.title);
-  openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, placeholder: !!item.placeholder, purpose: item.purpose }, item);
+  openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, placeholder: !!item.placeholder, purpose: item.purpose, note: typeof item.note === "string" ? item.note : "" }, item);
   // An account renamed or deleted since isn't in the list, so it says to pick one
   if (account && !quickAccounts.some(known => cleanString(known.name) === cleanString(account))) {
     BudgetUI.showToast(`${account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);

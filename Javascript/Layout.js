@@ -57,6 +57,7 @@ var S = window.STARFIELD; // Local pointer to global STARFIELD (may be null on s
 // We store handles so we can cancel them safely on pagehide/pageshow.
 let SAVE_BEFORE_LEAVE_TIMEOUT_ID = null;     // setTimeout handle: freeze/save shortly before navigation
 let NAVIGATE_AFTER_SLIDE_TIMEOUT_ID = null;  // setTimeout handle: fallback navigation if transitionend fails
+let STILL_HERE = null;                       // { timer, onVisibility } while a page that slid out waits to be gone
 
 /* GROUP: Timer hygiene */
 // Cancel any pending transition timers and reset handles.
@@ -67,6 +68,7 @@ function clearPendingTransitionTimers() {
 
   SAVE_BEFORE_LEAVE_TIMEOUT_ID = null;
   NAVIGATE_AFTER_SLIDE_TIMEOUT_ID = null;
+  stopWaitingToBeGone();
 }
 
 /* GROUP: Starfield freeze + save */
@@ -286,8 +288,11 @@ document.addEventListener("visibilitychange", () => {
 // sheet over it is shorter), or opened again on that page, it goes back to Quick Entry. Only in an app opened from the
 // home screen (in a browser's tab, a page stays where it was left), and never from the login page, where a passkey's or a
 // password's sheet can come and go while signing in.
+// Brought back from another page, Quick Entry's Back goes to it (QUICK_RETURN_KEY, see showQuickBack); opened fresh from
+// the icon, it has none.
 const QUICK_APP_KEY = "prismal_quick_app";
 const APP_LEFT_KEY = "prismal_app_left";
+const QUICK_RETURN_KEY = "prismal_quick_return";
 const APP_AWAY_MS = 3000;
 const RUNNING_AS_APP = window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const readSession = (KEY) => { try { return sessionStorage.getItem(KEY); } catch { return null; } };
@@ -304,8 +309,20 @@ function backToQuickEntry() {
   writeSession(APP_LEFT_KEY, null);
   const QUICK = readSession(QUICK_APP_KEY);
   if (!QUICK || !LEFT || Date.now() - LEFT < APP_AWAY_MS || window.PAGE === "quick" || window.PAGE === "login" || hasChangesToSave()) return;
+  writeSession(QUICK_RETURN_KEY, location.pathname + location.search + location.hash);
   if (typeof window.transitionTo === "function") window.transitionTo(QUICK, true);
   else location.replace(QUICK);
+}
+
+// Quick Entry's Back, once the app went back to it from another page: it goes to that page (signing in again first, like
+// any page, if that time has passed). It's read once, so Quick Entry opened again later starts without it.
+function showQuickBack() {
+  const BACK = document.getElementById("quickBack");
+  const RETURN = readSession(QUICK_RETURN_KEY);
+  writeSession(QUICK_RETURN_KEY, null);
+  if (!BACK || !RETURN || !RETURN.startsWith("/") || RETURN.startsWith("//")) return;
+  BACK.href = RETURN;
+  BACK.hidden = false;
 }
 
 if (RUNNING_AS_APP) {
@@ -313,6 +330,7 @@ if (RUNNING_AS_APP) {
     // (Its key is all it needs: quick.html?key=...)
     const KEY = new URLSearchParams(location.search).get("key");
     if (KEY) writeSession(QUICK_APP_KEY, `/quick.html?key=${encodeURIComponent(KEY)}`);
+    onDOMReady(showQuickBack);
   } else if (readSession(QUICK_APP_KEY)) {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") writeSession(APP_LEFT_KEY, String(Date.now()));
@@ -363,7 +381,7 @@ const SLIDE_OUT_CLASSES = { left: "toLeft", right: "toRight", up: "toTop" };
 // signing out slides right, as if the login page sat to the left of the budget (and to the right of the front page,
 // so Sign In there slides left too). Between the budget's four pages, only what's under their tabs slides. The page
 // that opens slides in the same way the last one slid out (Boot.js reads the note transitionTo leaves).
-const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "logs", "jeremy"];
+const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "logs", "bob"];
 const SIDE_PAGES = ["quick", "privacy"];
 const BUDGET_TABS = ["home", "recurring", "history", "accounts"];
 
@@ -628,10 +646,18 @@ window.addEventListener("pageshow", (EVENT) => {
   if (S && typeof S.setFrozen === "function") S.setFrozen(false);
 
   if (!isBackForwardNavigation(EVENT)) return;
+  bringPageBack();
+  CONTAINER.scrollTop = 0;
+});
 
-  // The page slides back in the way it left. Its slide out was still easing to a stop when it was left (section 5), so
-  // that's stopped where it was headed first, or the page would jump back instead. One that slid up or down stays
-  // clipped to the screen until it's back (section 6 takes the clip off), so what's above or below doesn't run past.
+// A page that slid out shows again: Back or Forward brought it back, or it was still here after it was left (section 5).
+// It slides back in the way it left. Its slide out was still easing to a stop when it was left, so that's stopped where
+// it was headed first, or the page would jump back instead. One that slid up or down stays clipped to the screen until
+// it's back (section 6 takes the clip off), so what's above or below doesn't run past.
+function bringPageBack() {
+  const CONTAINER = getTransitionContainer();
+  if (!CONTAINER) return;
+  stopWaitingToBeGone();
   if (CONTAINER.getAnimations) CONTAINER.getAnimations().forEach(ANIMATION => ANIMATION.cancel());
   void getComputedStyle(CONTAINER).transform; // (where it went is where its slide back starts)
   CONTAINER.classList.remove("slide-out", "tab-slide-out", ...Object.values(SLIDE_OUT_CLASSES));
@@ -642,11 +668,12 @@ window.addEventListener("pageshow", (EVENT) => {
   document.querySelectorAll(".tabGlow").forEach(GLOW => GLOW.remove());
   document.querySelectorAll(".pageTabs.isGliding").forEach(TABS => TABS.classList.remove("isGliding"));
   document.querySelectorAll(".isGlideTarget").forEach(TAB => TAB.classList.remove("isGlideTarget"));
+  try { sessionStorage.removeItem("prismal_slide"); } catch {} // (The note for the page it was going to)
   IS_TRANSITION_ACTIVE = false;
   enableDocumentScroll();
-
-  CONTAINER.scrollTop = 0;
-});
+  S = window.STARFIELD;
+  if (S && typeof S.setFrozen === "function") S.setFrozen(false);
+}
 
 /* #endregion 4) BACK/FORWARD CACHE (PAGESHOW) */
 
@@ -694,9 +721,11 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
   };
 
   /* GROUP: Leaving without a slide */
-  // Nothing to animate (no container, or reduced motion), a page that hasn't slid in yet (it's still out of sight), or
-  // changes that haven't been saved yet: the browser asks before the page is left, and staying keeps the page as it is
-  if (!CONTAINER || DURATION_MS === 0 || !CONTAINER.classList.contains("ready") || hasChangesToSave()) {
+  // Nothing to animate (no container, or reduced motion), a page that hasn't slid in yet (it's still out of sight),
+  // changes that haven't been saved yet (the browser asks before the page is left, and staying keeps the page as it is),
+  // or Quick Entry in its icon's app: there the link is followed during the tap itself, since a phone can open a page of
+  // the site outside the app, or hold back a link followed a moment after the tap, and the page would be left slid out
+  if (!CONTAINER || DURATION_MS === 0 || !CONTAINER.classList.contains("ready") || hasChangesToSave() || (RUNNING_AS_APP && window.PAGE === "quick")) {
     freezeAndSaveStarfield();
     LEAVE();
     return;
@@ -747,6 +776,7 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
     CONTAINER.removeEventListener("transitionend", onDone);
     clearPendingTransitionTimers();
     LEAVE();
+    waitToBeGone();
   };
 
   CONTAINER.addEventListener("transitionend", onDone);
@@ -766,6 +796,39 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
     freezeAndSaveStarfield,
     Math.max(0, DURATION_MS * (SLIDE ? OUT_OF_SIGHT : 1) - 50)
   );
+}
+
+// How long a page that was left can stay on the screen before it shows again (longer than a next page takes to open,
+// even on a slow connection)
+const STILL_HERE_MS = 5000;
+
+// A page that slid out and was left, but is still here: the link opened outside this page (a phone's app can open the
+// site's other pages in a window of their own, which comes back here once it's closed) or was held back. It comes back
+// into view instead of leaving just the starfield: when it's back on the screen after being hidden, or if it's still on
+// the screen STILL_HERE_MS after it was left.
+function waitToBeGone() {
+  stopWaitingToBeGone();
+  let WAS_HIDDEN = document.visibilityState === "hidden";
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") WAS_HIDDEN = true;
+    else if (WAS_HIDDEN) bringPageBack();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+  STILL_HERE = {
+    onVisibility,
+    timer: setTimeout(() => {
+      if (document.visibilityState === "visible") bringPageBack();
+      else WAS_HIDDEN = true;
+    }, STILL_HERE_MS)
+  };
+}
+
+// The page is gone (or back): nothing more to wait for
+function stopWaitingToBeGone() {
+  if (!STILL_HERE) return;
+  clearTimeout(STILL_HERE.timer);
+  document.removeEventListener("visibilitychange", STILL_HERE.onVisibility);
+  STILL_HERE = null;
 }
 
 // The note for the next page (page TO), so it slides in the way this one slides out (Boot.js reads it)
@@ -914,9 +977,9 @@ document.addEventListener("click", (EVENT) => {
 // this tab's Undo history, but keeps the device's own choices: whether analytics is off here, its date format,
 // whether music and sound effects are off (Sounds.js), the kind of phone picked for the Steps for lists, the passkey
 // it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Entry icons it made or used
-// (their entries are added when the budget opens here, see holdQuickEntries), and the day picked for Jeremy's Accounts
-// card (Jeremy Page.js).
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_jeremy_accounts_day"];
+// (their entries are added when the budget opens here, see holdQuickEntries), and the day picked for Bob's Accounts
+// card (Bob Page.js).
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));

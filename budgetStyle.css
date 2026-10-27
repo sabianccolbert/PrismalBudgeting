@@ -244,23 +244,23 @@
   transform-origin: right center;
 }
 
-/* A zoomed day's round buttons in its top right corner: v (close) in the corner, and + (New Entry on that day) to its
+/* A zoomed day's round buttons in its top right corner: × (close) in the corner, and + (New Entry on that day) to its
    left, each a glass circle like the site's other buttons. Their sizes are divided by the day's zoom, so on screen
-   they're the same however far the day is zoomed: --V_SPOT across, with a --V_SIZE mark, --V_INSET from the corner and
-   from each other. */
+   they're the same however far the day is zoomed: --DAY_BUTTON_SPOT across, with a --DAY_BUTTON_SIZE mark,
+   --DAY_BUTTON_INSET from the corner and from each other. */
 :root {
-  --V_SPOT: 30px;
-  --V_SIZE: 17px;
-  --V_INSET: 4px;
+  --DAY_BUTTON_SPOT: 30px;
+  --DAY_BUTTON_SIZE: 17px;
+  --DAY_BUTTON_INSET: 4px;
 }
 
 .cell-action-btn {
   position: absolute;
-  top: calc(var(--V_INSET) / var(--zoom, 1));
-  right: calc(var(--V_INSET) / var(--zoom, 1));
+  top: calc(var(--DAY_BUTTON_INSET) / var(--zoom, 1));
+  right: calc(var(--DAY_BUTTON_INSET) / var(--zoom, 1));
   box-sizing: border-box;
-  width: calc(var(--V_SPOT) / var(--zoom, 1));
-  height: calc(var(--V_SPOT) / var(--zoom, 1));
+  width: calc(var(--DAY_BUTTON_SPOT) / var(--zoom, 1));
+  height: calc(var(--DAY_BUTTON_SPOT) / var(--zoom, 1));
   margin: 0 !important;
   padding: 0 !important;
   pointer-events: auto;
@@ -273,7 +273,7 @@
   align-items: center;
   justify-content: center;
   color: var(--TEXT_BRIGHT);
-  font-size: calc(var(--V_SIZE) / var(--zoom, 1));
+  font-size: calc(var(--DAY_BUTTON_SIZE) / var(--zoom, 1));
   line-height: 1;
   font-family: sans-serif;
   text-shadow: none;
@@ -286,7 +286,7 @@
 }
 
 .cell-action-btn.cellAdd {
-  right: calc((2 * var(--V_INSET) + var(--V_SPOT)) / var(--zoom, 1));
+  right: calc((2 * var(--DAY_BUTTON_INSET) + var(--DAY_BUTTON_SPOT)) / var(--zoom, 1));
 }
 
 .cell-action-btn:hover,
@@ -304,17 +304,17 @@
 
 /* A phone's zoomed day isn't scaled, so its buttons are just their size, in the top right corner of the day it draws */
 .elastic-table td.is-fullZoom .cell-action-btn {
-  top: calc(var(--dayY, 0px) + var(--V_INSET));
-  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - var(--V_SPOT) - var(--V_INSET));
+  top: calc(var(--dayY, 0px) + var(--DAY_BUTTON_INSET));
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - var(--DAY_BUTTON_SPOT) - var(--DAY_BUTTON_INSET));
   right: auto;
-  width: var(--V_SPOT);
-  height: var(--V_SPOT);
+  width: var(--DAY_BUTTON_SPOT);
+  height: var(--DAY_BUTTON_SPOT);
   border-width: 1.5px;
-  font-size: var(--V_SIZE);
+  font-size: var(--DAY_BUTTON_SIZE);
 }
 
 .elastic-table td.is-fullZoom .cell-action-btn.cellAdd {
-  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * var(--V_SPOT) - 2 * var(--V_INSET));
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * var(--DAY_BUTTON_SPOT) - 2 * var(--DAY_BUTTON_INSET));
 }
 
 /*========================================*
@@ -774,6 +774,14 @@
 .upcomingEntry.isZero,
 .accountEntryLine.isZero {
   color: var(--ZERO_TEXT);
+}
+
+/* An entry with a note is underlined wherever it shows: on a day, in Upcoming, Search, an account's entries, Quick
+   Entry's waiting entries, and a recurring entry's title when it has a note of its own (the note is in its options).
+   The line stays close under the text: lines that cut off with "..." would cut off one further down. */
+.hasNote {
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
 }
 
 /* Calendar days: today glows (a blue-violet radial gradient from its center, a bright edge, and a glow around it),
@@ -1999,16 +2007,16 @@ body.datePicking .elastic-table td {
 }
 
 /*========================================*
- *  HOME: LOWEST IN BANK, JEREMY, AND UPCOMING
+ *  HOME: LOWEST IN BANK, BOB, AND UPCOMING
  *========================================*/
 
-/* Lowest across the top; Jeremy and Upcoming side by side under it (one column on phones) */
+/* Lowest across the top; Bob and Upcoming side by side under it (one column on phones) */
 .infoRow {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   grid-template-areas:
     "lowest lowest"
-    "jeremy upcoming";
+    "bob upcoming";
   gap: clamp(8px, 1.6vw, 18px);
   width: var(--PAGE_WIDTH);
   margin: 0 auto clamp(10px, 2.2vmin, 22px);
@@ -2106,9 +2114,9 @@ body.datePicking .elastic-table td {
   }
 }
 
-/* Jeremy's card: his picture and message, and the whole card opens his page (it lights up like the Menu's links) */
-.infoCard.jeremyCard {
-  grid-area: jeremy;
+/* Bob's card: his picture and message, and the whole card opens his page (it lights up like the Menu's links) */
+.infoCard.bobCard {
+  grid-area: bob;
   display: flex;
   align-items: flex-start;
   gap: 0.9em;
@@ -2120,8 +2128,8 @@ body.datePicking .elastic-table td {
   transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER);
 }
 
-.infoCard.jeremyCard:hover,
-.infoCard.jeremyCard:focus-visible {
+.infoCard.bobCard:hover,
+.infoCard.bobCard:focus-visible {
   transform: scale(1.02);
   text-shadow: none;
   outline: none;
@@ -2134,8 +2142,8 @@ body.datePicking .elastic-table td {
   grid-area: upcoming;
 }
 
-/* Jeremy's picture, in a circle (it shows his name if it can't load), on Home and at the top of his page */
-.jeremyImage {
+/* Bob's picture, in a circle (it shows his name if it can't load), on Home and at the top of his page */
+.bobImage {
   flex-shrink: 0;
   width: 12vmin;
   height: 12vmin;
@@ -2151,7 +2159,7 @@ body.datePicking .elastic-table td {
   overflow: hidden;
 }
 
-.jeremyText {
+.bobText {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -2159,25 +2167,25 @@ body.datePicking .elastic-table td {
   min-width: 0;
 }
 
-.jeremyMessage {
+.bobMessage {
   font-size: 1em;
   line-height: 1.4;
 }
 
-/* "More from Jeremy ›": the card opens his page */
-.jeremyMore {
+/* "More from Bob ›": the card opens his page */
+.bobMore {
   align-self: flex-end;
   font-size: 0.85em;
   color: var(--TEXT_DIM);
 }
 
-.infoCard.jeremyCard:hover .jeremyMore,
-.infoCard.jeremyCard:focus-visible .jeremyMore {
+.infoCard.bobCard:hover .bobMore,
+.infoCard.bobCard:focus-visible .bobMore {
   color: var(--TEXT_BRIGHT);
 }
 
-/* Goals, on Jeremy's page (Jeremy Page.js renderGoalsCard): each one a button that opens it, with a thin bar for how
-   far along it is and what Jeremy says reaching it takes */
+/* Goals, on Bob's page (Bob Page.js renderGoalsCard): each one a button that opens it, with a thin bar for how
+   far along it is and what Bob says reaching it takes */
 .goalList {
   margin: 0.7em 0 0;
   padding: 0;
@@ -2258,7 +2266,7 @@ body.datePicking .elastic-table td {
   background: linear-gradient(90deg, #2fd88a, #7dffb0);
 }
 
-/* What Jeremy says about it; one in danger gets the red-orange edge */
+/* What Bob says about it; one in danger gets the red-orange edge */
 .goalPlan {
   font-size: 0.88em;
   line-height: 1.4;
@@ -2494,7 +2502,7 @@ body.datePicking .elastic-table td {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "lowest"
-      "jeremy"
+      "bob"
       "upcoming";
   }
 }
@@ -2922,51 +2930,14 @@ html.watchView .quickBalanceAmount {
   margin: 0 auto;
 }
 
-/* An account's entries, in its panel */
+/* An account's entries, in its panel: a box that scrolls up and down within it */
 .accountEntries {
-  max-height: 15em;
+  max-height: min(18em, 45vh);
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
-}
-
-.accountEntry {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2em 0.9em;
-  padding: 0.25em 0;
-  border-bottom: 1px solid var(--PANEL_LINE);
-  font-variant-numeric: tabular-nums;
-}
-
-.accountEntryDate {
-  opacity: 0.75;
-}
-
-.accountEntryAmount {
-  min-width: 6.5em;
-}
-
-.accountEntryType {
-  opacity: 0.85;
-}
-
-.accountEntry.upcomingChange {
-  font-style: italic;
-  opacity: 0.85;
-}
-
-/* Other Accounts: each account's Entries button, at the end of its row (Budget Pages.js) */
-.accountsTable td.entriesCell {
-  width: 1%;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.accountsTable .entriesButton {
-  padding: 0.3em 0.8em;
-  font-size: 0.85em;
 }
 
 /* A balance with its max ("$500.00/$2000.00") can put the max under the balance, each staying whole, and a long account
@@ -2984,19 +2955,9 @@ html.watchView .quickBalanceAmount {
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 400px) {
-  .accountsTable .entriesButton {
-    padding: 0.3em 0.55em;
-  }
-}
-
-/* An account's Entries (its floating list): every entry for it, newest first, each a button that opens its options. Its
-   day, then the entry (red for a cost, green for a gain, darker grey for $0.00, yellow for a placeholder), then what the
-   account got, at the right. The list scrolls in the panel. */
-.accountEntryList {
-  max-height: none;
-}
-
+/* An account's entries (in its panel): every entry for it, newest first, each a button that opens its options. Its day,
+   then the entry (red for a cost, green for a gain, darker grey for $0.00, yellow for a placeholder), then what the
+   account got, at the right. A month's interest is laid out the same, but doesn't open. */
 .accountEntryItem {
   border-bottom: 1px solid var(--PANEL_LINE);
 }
@@ -3020,8 +2981,12 @@ html.watchView .quickBalanceAmount {
   cursor: pointer;
 }
 
-.accountEntryItem .accountEntryButton:hover,
-.accountEntryItem .accountEntryButton:focus-visible {
+.accountEntryItem.isInterest .accountEntryButton {
+  cursor: default;
+}
+
+.accountEntryItem button.accountEntryButton:hover,
+.accountEntryItem button.accountEntryButton:focus-visible {
   transform: none;
   outline: none;
   background: rgba(255, 255, 255, 0.08);
@@ -3747,7 +3712,7 @@ footer.hasHelp > hr {
 }
 
 /*========================================*
- *  JEREMY'S PAGE (menu/jeremy.html, Jeremy Page.js)
+ *  BOB'S PAGE (menu/bob.html, Bob Page.js)
  *========================================*
  *  A column of glass cards: his highlights (with his picture) at the top, then each card with its title, a ? after it,
  *  and its switch at the right. A card that's off is only its title row, dimmed.
@@ -3761,49 +3726,49 @@ footer.hasHelp > hr {
   --PURPOSE_FUTURE: #199e70;
 }
 
-.budgetCard.jeremyTop {
+.budgetCard.bobTop {
   display: flex;
   align-items: flex-start;
   gap: 1em;
 }
 
-.jeremyTop .jeremyImage {
+.bobTop .bobImage {
   width: 16vmin;
   height: 16vmin;
   min-width: 64px;
   min-height: 64px;
 }
 
-.jeremyTopText {
+.bobTopText {
   flex: 1 1 auto;
   min-width: 0;
 }
 
 /* One line from each card that's on; a line that needs a look has the red-orange edge, and the note about the cards
    that are off is quieter */
-.jeremyHighlights {
+.bobHighlights {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.jeremyHighlight {
+.bobHighlight {
   margin: 0.45em 0 0;
   padding: 0.1em 0 0.1em 0.7em;
   line-height: 1.4;
   border-left: 2px solid var(--PANEL_BORDER);
 }
 
-.jeremyHighlight strong {
+.bobHighlight strong {
   font-weight: normal;
   color: var(--TEXT_BRIGHT);
 }
 
-.jeremyHighlight.isWarning {
+.bobHighlight.isWarning {
   border-left-color: #ff6a1a;
 }
 
-.jeremyHighlight.isQuiet {
+.bobHighlight.isQuiet {
   color: var(--TEXT_DIM);
   border-left-color: transparent;
 }
@@ -3859,21 +3824,21 @@ footer.hasHelp > hr {
   margin-top: 0.8em;
 }
 
-.budgetCard.jeremySection.isOff {
+.budgetCard.bobSection.isOff {
   background: var(--PANEL_DARK);
   box-shadow: none;
 }
 
-.jeremySection.isOff .sectionTitle {
+.bobSection.isOff .sectionTitle {
   color: var(--BASE_COLOR);
   text-shadow: none;
 }
 
-.jeremySection .panelButtons.sectionButtons {
+.bobSection .panelButtons.sectionButtons {
   margin: 0 0 0.7em;
 }
 
-.jeremyTip {
+.bobTip {
   line-height: 1.45;
 }
 
@@ -3884,7 +3849,7 @@ footer.hasHelp > hr {
   font-size: 0.9em;
 }
 
-.jeremyList {
+.bobList {
   margin: 0.2em 0 0;
   padding-left: 1.2em;
   line-height: 1.45;
@@ -3892,17 +3857,17 @@ footer.hasHelp > hr {
 
 /* Data: a row each, what it is (with a note under it) at the left and its figure at the right; a row with more behind it
    is a button with a › */
-.jeremyData {
+.bobData {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.jeremyDataItem + .jeremyDataItem {
+.bobDataItem + .bobDataItem {
   border-top: 1px solid var(--PANEL_LINE);
 }
 
-.jeremyDataRow {
+.bobDataRow {
   display: flex;
   align-items: center;
   gap: 0.8em;
@@ -3918,19 +3883,19 @@ footer.hasHelp > hr {
   border-radius: 8px;
 }
 
-button.jeremyDataRow {
+button.bobDataRow {
   cursor: pointer;
 }
 
-button.jeremyDataRow:hover,
-button.jeremyDataRow:focus-visible {
+button.bobDataRow:hover,
+button.bobDataRow:focus-visible {
   transform: none;
   outline: none;
   background: rgba(104, 124, 255, 0.14);
   box-shadow: inset 0 0 0 1px var(--PANEL_BORDER);
 }
 
-.jeremyDataText {
+.bobDataText {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -3938,16 +3903,16 @@ button.jeremyDataRow:focus-visible {
   min-width: 0;
 }
 
-.jeremyDataLabel {
+.bobDataLabel {
   color: var(--TEXT_BRIGHT);
 }
 
-.jeremyDataNote {
+.bobDataNote {
   font-size: 0.85em;
   color: var(--TEXT_DIM);
 }
 
-.jeremyDataValue {
+.bobDataValue {
   flex-shrink: 0;
   max-width: 45%;
   text-align: right;
@@ -3955,11 +3920,11 @@ button.jeremyDataRow:focus-visible {
   color: var(--TEXT_BRIGHT);
 }
 
-.jeremyDataValue.negative {
+.bobDataValue.negative {
   color: var(--NEGATIVE_TEXT);
 }
 
-.jeremyDataMore {
+.bobDataMore {
   flex-shrink: 0;
   font-size: 1.2em;
   color: var(--TEXT_DIM);
@@ -3967,7 +3932,7 @@ button.jeremyDataRow:focus-visible {
 
 /* Accounts: the table, with the day's box at the top of its third column; the Total row stands out, and the Interest
    column only shows when an account has interest */
-.jeremyAccountsBox {
+.bobAccountsBox {
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
@@ -3975,26 +3940,26 @@ button.jeremyDataRow:focus-visible {
   scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
 }
 
-.dataTable.jeremyAccounts {
+.dataTable.bobAccounts {
   font-size: 1em;
 }
 
-.jeremyAccounts th {
+.bobAccounts th {
   font-size: 1em;
 }
 
-.jeremyAccounts th.dayHead {
+.bobAccounts th.dayHead {
   min-width: 9.5em;
   padding: 0.5vmin 1vmin;
 }
 
-.jeremyAccounts .dayHead .dateRow {
+.bobAccounts .dayHead .dateRow {
   justify-content: center;
   gap: 0.3em;
 }
 
 /* Just wide enough for its date */
-.jeremyAccounts .dayHead .dateRow input.dateInput {
+.bobAccounts .dayHead .dateRow input.dateInput {
   flex: none;
   width: 6.6em;
   padding: 0.3em 0.25em;
@@ -4002,38 +3967,38 @@ button.jeremyDataRow:focus-visible {
   text-align: center;
 }
 
-.jeremyAccounts.noInterest .interestHead,
-.jeremyAccounts.noInterest .interestCell {
+.bobAccounts.noInterest .interestHead,
+.bobAccounts.noInterest .interestCell {
   display: none;
 }
 
-.jeremyAccounts .accountMax,
-.jeremyAccounts .interestRate {
+.bobAccounts .accountMax,
+.bobAccounts .interestRate {
   display: block;
   font-size: 0.8em;
   color: var(--TEXT_DIM);
 }
 
-.jeremyAccounts tr.totalRow td {
+.bobAccounts tr.totalRow td {
   color: var(--TEXT_BRIGHT);
   background: rgba(40, 42, 110, 0.55);
 }
 
-.jeremyAccounts tr.totalRow td.negative {
+.bobAccounts tr.totalRow td.negative {
   color: var(--NEGATIVE_TEXT);
 }
 
-.jeremyAccountsNote {
+.bobAccountsNote {
   margin: 0.5em 0 0;
 }
 
-.jeremyAccountsNote.isError {
+.bobAccountsNote.isError {
   color: var(--NEGATIVE_TEXT);
   opacity: 1;
 }
 
 /* A window's table or list, in a box that scrolls up and down within it (the window stays on the screen) */
-.jeremyScroll {
+.bobScroll {
   max-height: min(55vh, 420px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -4041,16 +4006,16 @@ button.jeremyDataRow:focus-visible {
   scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
 }
 
-.dataTable.jeremyTable {
+.dataTable.bobTable {
   font-size: 0.95em;
 }
 
-.jeremyTable td,
-.jeremyTable th {
+.bobTable td,
+.bobTable th {
   white-space: normal;
 }
 
-.jeremyTable td.amountCell {
+.bobTable td.amountCell {
   white-space: nowrap;
 }
 
@@ -4266,34 +4231,91 @@ button.jeremyDataRow:focus-visible {
   flex-wrap: wrap;
 }
 
+/* An entry's note (BudgetUI.noteField): the last thing in its form, under its buttons, with its button over the note so
+   the button stays put as it opens and closes. A long note scrolls in its box, which can be pulled taller. */
+.noteField {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55em;
+  margin-top: 0.9em;
+}
+
+.budgetButton.noteToggle {
+  padding: 0.35em 1em;
+  font-size: 0.9em;
+}
+
+.budgetPanel textarea.noteBox {
+  min-height: 7em;
+  max-height: 60vh;
+  line-height: 1.45;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Settings' Upload A Backup window (Settings Page.js): what each choice does, then each part of the budget the backup
+   has, in a box of its own with its three choices */
+.backupHelp {
+  margin: 0.2em 0 0.9em;
+  padding-left: 1.2em;
+  line-height: 1.45;
+}
+
+.backupParts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  margin: 0.5em 0 0.9em;
+}
+
+.backupPart {
+  padding: 0.6em 0.75em;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.backupPartName {
+  margin: 0 0 0.2em;
+  font-size: 1em;
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+}
+
+.backupPart .panelHint {
+  margin: 0 0 0.45em;
+}
+
 @media (max-width: 560px) {
-  .budgetCard.jeremyTop {
+  .budgetCard.bobTop {
     flex-direction: column;
     align-items: center;
   }
 
-  .jeremyDataValue {
+  .bobDataValue {
     max-width: 55%;
   }
 
   /* Accounts packs closer on a phone, so all four columns fit */
-  .dataTable.jeremyAccounts {
+  .dataTable.bobAccounts {
     font-size: 0.86em;
     border-spacing: 2px;
   }
 
-  .jeremyAccounts th,
-  .jeremyAccounts td {
+  .bobAccounts th,
+  .bobAccounts td {
     padding-left: 0.35em;
     padding-right: 0.35em;
   }
 
-  .jeremyAccounts th.dayHead {
+  .bobAccounts th.dayHead {
     min-width: 0;
     padding: 0.3em 0.2em;
   }
 
-  .jeremyAccounts td.titleCell {
+  .bobAccounts td.titleCell {
     white-space: normal;
     overflow-wrap: anywhere;
   }
@@ -4301,11 +4323,11 @@ button.jeremyDataRow:focus-visible {
 
 /* The narrowest phones: smaller still, with the day's calendar button under its box */
 @media (max-width: 380px) {
-  .dataTable.jeremyAccounts {
+  .dataTable.bobAccounts {
     font-size: 0.8em;
   }
 
-  .jeremyAccounts .dayHead .dateRow {
+  .bobAccounts .dayHead .dateRow {
     flex-wrap: wrap;
   }
 }

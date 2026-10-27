@@ -275,13 +275,14 @@ function renderSearchResults({ results, from, to, searchingFor }) {
     const percent = percentOf(result.sprite);
     const entryCell = BudgetUI.element("td", "searchEntry", `${baseSprite(result.sprite)} ${result.title}${percent !== null ? ` (${showPercent(percent)})` : ""}`);
     tr.appendChild(entryCell);
-    // (A placeholder's amount and entry are yellow)
+    const line = `${result.sprite} ${formatMoney(result.amount)} ${result.title}`;
+    // (A placeholder's amount and entry are yellow, and an entry with a note is underlined)
     if (isPlaceholder(result.sprite)) [amountCell, entryCell].forEach(td => td.classList.add("isPlaceholder"));
+    if (lineHasNote(result.date, line)) entryCell.classList.add("hasNote");
     BudgetUI.noTranslate(tr); // Dates, amounts, and entries show as they are
     tr.classList.add("clickable");
     tr.addEventListener("click", (event) => {
       if (event.target.closest("input, td:first-child")) return; // (Its checkbox)
-      const line = `${result.sprite} ${formatMoney(result.amount)} ${result.title}`;
       BudgetUI.openEntryOptions(entryCell, line, result.date, { inHistory: result.date < gridStartDate });
     });
     return checkbox;

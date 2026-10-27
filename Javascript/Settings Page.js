@@ -424,6 +424,8 @@ function wireAccount() {
   document.getElementById("passkeyForm").addEventListener("submit", addPasskey);
   document.getElementById("signOutEverywhereButton").addEventListener("click", signOutEverywhere);
   document.getElementById("downloadDataButton").addEventListener("click", downloadMyData);
+  document.getElementById("uploadBackupButton").addEventListener("click", () => document.getElementById("uploadBackupFile").click());
+  document.getElementById("uploadBackupFile").addEventListener("change", readBackupFile);
   document.getElementById("deleteForm").addEventListener("submit", deleteAccount);
 }
 
@@ -871,7 +873,7 @@ async function signOutEverywhere(event) {
 
 // Everything stored for the account, saved as a JSON file
 async function downloadMyData(event) {
-  const button = event.currentTarget;
+  const button = event?.currentTarget || document.getElementById("downloadDataButton");
   button.disabled = true;
   const result = await budgetApi("/api/account/export");
   button.disabled = false;
@@ -887,6 +889,107 @@ async function downloadMyData(event) {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 10000);
   BudgetUI.showToast("Your data is downloading.");
+}
+
+// Upload A Backup: the file picked is read on this device (see BACKUPS in Process Budget.js), then its window asks what
+// happens, part by part
+async function readBackupFile(event) {
+  const input = event.currentTarget;
+  const file = input.files && input.files[0];
+  input.value = ""; // (Picking the same file again reads it again)
+  if (!file) return;
+  if (!workspaceLoaded) return BudgetUI.showToast("Your budget is still loading. Try again in a moment.", true);
+  if (file.size > BACKUP_MAX_BYTES) return BudgetUI.showToast("That file is too big to be one Download My Data saved.", true);
+  let backup;
+  try {
+    backup = readBackup(await file.text());
+  } catch (error) {
+    if (!(error instanceof BudgetInputError)) console.error("Couldn't read the backup:", error);
+    return BudgetUI.showToast(error instanceof BudgetInputError ? error.message : "That file couldn't be read.", true);
+  }
+  openBackupPanel(document.getElementById("uploadBackupButton"), backup);
+}
+
+// What each choice does, for Upload A Backup's window
+const BACKUP_CHOICE_WORDS = [
+  { key: "current", label: "Prefer Current Data", help: "keeps yours where the two clash, and adds the rest from the backup" },
+  { key: "uploaded", label: "Prefer Uploaded Data", help: "the same, but the backup's wins where they clash" },
+  { key: "remove", label: "Remove Current Data", help: "puts the backup's in place of yours" }
+];
+
+// Upload A Backup's window: whose backup it is, then each part of the budget it has (what the backup and the budget each
+// have, and how many clash), each with its three choices (Set All picks one for every part). A part the budget has none
+// of yet just takes the backup's. Undo can't take an upload back, so it offers Download My Data first.
+function openBackupPanel(origin, backup) {
+  const plans = backupPlans(backup);
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "Upload A Backup",
+    build(form, panel) {
+      const { username, downloaded } = backup.from;
+      const when = downloaded ? ` from ${showDate(createSafeMidnight(downloaded))}` : "";
+      form.append(BudgetUI.element("p", "panelText", `This is ${username ? `${username}'s` : "a"} Download My Data file${when}.`));
+      if (plans.length === 0) {
+        form.append(BudgetUI.element("p", "panelText", "It has nothing to bring back."), BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+        return;
+      }
+      const help = BudgetUI.element("ul", "backupHelp");
+      for (const choice of BACKUP_CHOICE_WORDS) {
+        const item = BudgetUI.element("li");
+        item.append(BudgetUI.element("strong", "", choice.label), ` ${choice.help}.`);
+        help.append(item);
+      }
+      form.append(BudgetUI.element("p", "panelText", "For each part of your budget it has, pick what happens where the backup and your budget both have something:"), help);
+
+      const choices = {};
+      const pickers = [];
+      const setAll = BudgetUI.segmented(BACKUP_CHOICE_WORDS, "", (key) => {
+        for (const picker of pickers) {
+          picker.set(key);
+          choices[picker.id] = key;
+        }
+      });
+      setAll.el.classList.add("backupChoices");
+      form.append(BudgetUI.field("Set All", setAll.el));
+
+      const list = BudgetUI.element("div", "backupParts");
+      for (const part of plans) {
+        const box = BudgetUI.element("div", "backupPart");
+        const clash = part.clashes > 0 ? `, and ${part.clashes} ${part.clashes === 1 ? "clashes" : "clash"}` : "";
+        box.append(BudgetUI.element("h4", "backupPartName", part.name), BudgetUI.element("p", "panelHint", `The backup has ${part.uploaded} ${part.noun}; your budget has ${part.current}${clash}.`));
+        if (part.current === 0) {
+          choices[part.id] = "uploaded";
+          box.append(BudgetUI.element("p", "panelHint", "Your budget has none yet, so the backup's are added."));
+        } else {
+          const picker = BudgetUI.segmented(BACKUP_CHOICE_WORDS, "", (key) => { choices[part.id] = key; });
+          picker.el.classList.add("backupChoices");
+          picker.el.setAttribute("aria-label", part.name);
+          pickers.push({ id: part.id, set: picker.set });
+          box.append(picker.el);
+        }
+        list.append(box);
+      }
+      form.append(list);
+
+      const keep = BudgetUI.element("p", "panelHint", "Undo can't take an upload back. To keep a copy of your budget as it is now, download your data first.");
+      form.append(keep, BudgetUI.buttonRow([
+        { label: "Upload Backup", kind: "primary", type: "submit" },
+        { label: "Download My Data", onClick: () => downloadMyData() },
+        { label: "Cancel", onClick: () => panel.close() }
+      ]));
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const missing = plans.filter(part => !choices[part.id]).map(part => part.name);
+        if (missing.length > 0) return panel.setError(`Pick what happens for ${missing.join(", ")}.`);
+        const removed = plans.filter(part => choices[part.id] === "remove" && part.current > 0).map(part => part.name);
+        if (removed.length > 0 && !window.confirm(`Remove your current ${removed.join(", ")}, and put the backup's in their place?`)) return;
+        const result = await BudgetUI.submit(panel, () => uploadBackup(backup, choices));
+        if (result.ok) BudgetUI.showToast("Your backup is in your budget now.");
+      });
+    }
+  });
 }
 
 // Google Analytics loads only when this device hasn't turned it off and the browser doesn't ask sites

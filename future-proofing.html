@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<!-- Site notes for keeping prismalbudget.org running: how it's hosted and set up (GitHub Pages, Cloudflare, DNS, email, the
+     API), how a release goes out, and what to check when something goes wrong. Only reached by its address: nothing links
+     to it, it isn't in the sitemap, and search engines are asked to leave it out. It loads no scripts, so it opens even
+     when the rest of the site has trouble. It's in the public repo too, so it never holds passwords, keys, or tokens, or
+     how the site guards against attacks (those are only in the private API repo's notes). Update it with any change to
+     these settings. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="color-scheme" content="dark">
+    <title>Prismal Budget - Site Notes</title>
+    <link rel="stylesheet" href="/stylesheet.css?v=96ddaa69eb">
+    <link rel="stylesheet" href="/budgetStyle.css?v=d5b3872db7">
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+  </head>
+  <body>
+    <div id="transitionContainer">
+      <header>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <div class="brandText stacked">
+            <h1>Site Notes</h1>
+            <h2>For keeping prismalbudget.org running</h2>
+          </div>
+        </div>
+        <nav class="navButtons" aria-label="Pages">
+          <a class="navButton" href="/">
+            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
+            <span>Home</span>
+          </a>
+        </nav>
+      </header>
+      <main>
+        <article class="guide">
+
+          <section id="about" aria-labelledby="aboutTitle">
+            <h2 id="aboutTitle">What This Page Is</h2>
+            <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Budget Works</a>.</p>
+            <p>Last checked: October 27, 2026 (site version 10.27.2026.B).</p>
+          </section>
+
+          <section id="map" aria-labelledby="mapTitle">
+            <h2 id="mapTitle">1. Where Everything Lives</h2>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>Part</th><th>Where</th></tr></thead>
+                <tbody>
+                  <tr><td>Website</td><td>GitHub Pages, from the <code>main</code> branch of the GitHub repo <code>sabianccolbert/PrismalBudgeting</code> (work happens on <code>Testing</code>, then merges in). The repo's <code>CNAME</code> file holds the custom domain, <code>prismalbudget.org</code>. GitHub Pages publishes every file except folders starting with <code>_</code> (like <code>_tools</code>).</td></tr>
+                  <tr><td>Domain, DNS, and the network in front of the site</td><td>Cloudflare: the zone <code>prismalbudget.org</code> (Free plan; its name servers are <code>nancy.ns.cloudflare.com</code> and <code>santino.ns.cloudflare.com</code>). The site's records are proxied (orange cloud), so the addresses the world sees are Cloudflare's, and Cloudflare's rules (section 4) apply to every page.</td></tr>
+                  <tr><td>API</td><td>A Cloudflare Worker, <code>prismal-budget-api</code>, at <code>https://prismal-budget-api.prismalbudget.workers.dev</code> (on workers.dev, its own address, so section 4's caching and header rules don't apply to it). Its code is in the private repo <code>sabianccolbert/prismal-budget-api</code> (branch <code>testing</code>). Every budget is in its Cloudflare D1 database, <code>prismal-budget-db</code> (the Worker's binding <code>prismal_budget_db</code>). A schedule runs it every 5 minutes (daily reminders, and the Privacy Policy update emails).</td></tr>
+                  <tr><td>Email in</td><td>Google Workspace: <code>admin@prismalbudget.org</code>.</td></tr>
+                  <tr><td>Email out (verification links, password resets, notices, policy updates)</td><td>Resend, sending as <code>admin@prismalbudget.org</code>.</td></tr>
+                  <tr><td>Analytics</td><td>Google Analytics 4 (<code>Javascript/Analytics.js</code>) and Cloudflare Web Analytics (Cloudflare adds its own small script to pages).</td></tr>
+                  <tr><td>The person check on Create Account</td><td>Cloudflare Turnstile: its site key is in <code>Javascript/Login.js</code>, and its other half is one of the Worker's secrets.</td></tr>
+                  <tr><td>Spreadsheets shared with admin@prismalbudget.org</td><td>Read through Google Drive with the admin@ Google account's access, which the Worker holds as secrets.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="release" aria-labelledby="releaseTitle">
+            <h2 id="releaseTitle">2. Sending Out A Release</h2>
+            <ol>
+              <li>Work on the <code>Testing</code> branch.</li>
+              <li>Change the version everywhere it's written: <code>SITE_VERSION</code> in <code>Javascript/Boot.js</code> (today's date and the next letter, like 10.27.2026.A, then .B), How It Works' "Last updated" line and its <code>dateModified</code>, and <code>sitemap.xml</code>'s <code>lastmod</code> for the public pages that changed.</li>
+              <li>Only when the Privacy Policy &amp; Terms of Use change: its <code>policy-version</code> and <code>policy-changes</code> tags and both Effective Date lines, set to the day it goes live. A new <code>policy-version</code> emails every account with a verified email, once it's live.</li>
+              <li>Run <code>node _tools/stamp.mjs</code>, which writes every file's fingerprint (section 3). The repo's pre-commit hook (turned on with <code>git config core.hooksPath _tools/hooks</code>) refuses a commit whose fingerprints are out of date.</li>
+              <li>When the API changed (or the site calls something new on it), it goes first: in the API's folder, <code>npx wrangler secret list</code> (every secret still set), the tests (<code>npx vitest run</code>), then <code>npx wrangler deploy</code>. Running it from the wrong folder deploys nothing new.</li>
+              <li>Commit on <code>Testing</code>, merge it into <code>main</code> (<code>git merge --no-ff Testing</code>), and push both. GitHub Pages publishes within a minute.</li>
+              <li>Check that the live <code>/Javascript/Boot.js</code> says the new <code>SITE_VERSION</code> (pages show it at the bottom corner too).</li>
+            </ol>
+          </section>
+
+          <section id="caching" aria-labelledby="cachingTitle">
+            <h2 id="cachingTitle">3. Caching (Why Updates Show Up At Once)</h2>
+            <ul>
+              <li>Every page, and <code>Javascript/Boot.js</code>, are sent with <code>Cache-Control: no-cache</code> and aren't kept at Cloudflare's edge, so browsers ask for a new copy each time (it's quick when nothing changed).</li>
+              <li>Every other file (scripts, stylesheets, images, fonts, sounds) is loaded at an address ending in <code>?v=</code> and its fingerprint: the first 10 hex digits of the SHA-256 of its contents (line endings don't count). Those addresses are kept for 30 days, at Cloudflare's edge and in browsers. A changed file gets a new address, so an old copy is never used.</li>
+              <li>Pages list their files' fingerprints in their links, and <code>Boot.js</code> lists the scripts' (<code>FILE_VERSIONS</code>). <code>_tools/stamp.mjs</code> writes them all.</li>
+              <li>A change that doesn't show up: check the live <code>Boot.js</code>'s version, then whether the file's fingerprint was stamped before the commit. Purging Cloudflare's cache (Caching, Configuration, Purge Everything) is always safe.</li>
+            </ul>
+          </section>
+
+          <section id="cloudflare" aria-labelledby="cloudflareTitle">
+            <h2 id="cloudflareTitle">4. Cloudflare's Settings</h2>
+            <ul>
+              <li><strong>DNS:</strong> <code>prismalbudget.org</code> and <code>www</code> point at GitHub Pages, proxied (GitHub's custom domain help lists its addresses). <code>www</code> and plain <code>http://</code> are sent on to <code>https://prismalbudget.org</code> by GitHub (the 301 comes from GitHub, so Cloudflare's Always Use HTTPS stays off).</li>
+              <li><strong>Configuration Rule "GitHub DNS renewal":</strong> for the path <code>/.well-known/acme-challenge/</code>, SSL is off, so GitHub Pages can renew its HTTPS certificate for the custom domain. Without it, the certificate stops renewing, and GitHub's Pages settings show a certificate problem.</li>
+              <li><strong>Cache Rules:</strong> addresses with <code>?v=</code> are cached 30 days (edge and browser); pages (paths ending in <code>.html</code> or in nothing) and <code>/Javascript/Boot.js</code> aren't stored at the edge.</li>
+              <li><strong>Transform Rules (response headers):</strong> <code>Cache-Control: no-cache</code> for pages and <code>Boot.js</code>, and "Security Headers" (section 5).</li>
+              <li><strong>Minimum TLS version:</strong> 1.2.</li>
+              <li><strong>Before turning on a Cloudflare feature that adds its own script to pages</strong> (some security and bot features do), check the private API repo's notes: a script the Content-Security-Policy (section 5) doesn't allow is refused, and pages can break.</li>
+              <li><strong>On:</strong> Email Address Obfuscation, which rewrites email addresses in pages as they're sent. A page with an address in it (How It Works, the Privacy Policy, Settings, Spreadsheets) never matches its file byte for byte, and that's expected.</li>
+              <li><strong>Web Analytics:</strong> Cloudflare adds its script (<code>static.cloudflareinsights.com</code>) to pages sent to browsers (not to tools like curl).</li>
+              <li><strong>API tokens</strong> made for scripts expire. When a script says it isn't allowed, make a new one in Cloudflare (My Profile, API Tokens) with only what that script needs.</li>
+            </ul>
+          </section>
+
+          <section id="headers" aria-labelledby="headersTitle">
+            <h2 id="headersTitle">5. Headers Every Response Has</h2>
+            <p>Anyone can see these (they come with every page), so they're written out in full. The Content-Security-Policy is Cloudflare's "Security Headers" Transform Rule.</p>
+            <pre><code>Content-Security-Policy: default-src 'self'; script-src 'self' https://*.googletagmanager.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://www.google.com https://prismal-budget-api.prismalbudget.workers.dev/; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; style-src 'self'; font-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Cross-Origin-Opener-Policy: same-origin
+Permissions-Policy: geolocation=(), camera=(), microphone=(), usb=(), bluetooth=()
+X-XSS-Protection: 0</code></pre>
+            <ul>
+              <li>What each host in the policy is for: <code>googletagmanager.com</code> loads Google Analytics, and its hits go to <code>google-analytics.com</code>, <code>analytics.google.com</code>, and <code>www.google.com</code>; <code>static.cloudflareinsights.com</code> is Cloudflare Web Analytics; <code>challenges.cloudflare.com</code> is Turnstile (a script and a frame); the workers.dev address is the API.</li>
+              <li>What the site needs from it: <code>img-src data:</code> (<code>stylesheet.css</code> carries the background image inside it, so it shows with the first frame), <code>worker-src 'self'</code> (the starfield runs in a worker), <code>connect-src 'self'</code> (<code>Boot.js</code> fetches the star image early), and <code>style-src 'self'</code> (so every style has to be in a stylesheet: no <code>style</code> attributes or <code>&lt;style&gt;</code> tags).</li>
+              <li>Adding an outside service: add its address to the matching part of the policy first, or browsers refuse it. The console says "Refused to load ... because it violates the following Content Security Policy directive".</li>
+              <li><code>Strict-Transport-Security</code> with <code>includeSubDomains</code> and <code>preload</code>: browsers only use HTTPS for the domain and every subdomain, for two years. Any new subdomain needs HTTPS working from the start.</li>
+            </ul>
+          </section>
+
+          <section id="dns" aria-labelledby="dnsTitle">
+            <h2 id="dnsTitle">6. DNS Records</h2>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>Name</th><th>Type</th><th>For</th></tr></thead>
+                <tbody>
+                  <tr><td><code>prismalbudget.org</code>, <code>www</code></td><td>A, AAAA (proxied)</td><td>The website, on GitHub Pages</td></tr>
+                  <tr><td><code>prismalbudget.org</code></td><td>MX</td><td>Google Workspace's mail servers (<code>aspmx.l.google.com</code> first, then <code>alt1</code> to <code>alt4</code>)</td></tr>
+                  <tr><td><code>prismalbudget.org</code></td><td>TXT</td><td>SPF, <code>v=spf1 include:_spf.google.com ~all</code> (Google Workspace sends as the domain), and two <code>google-site-verification</code> records (Google proving the domain is ours)</td></tr>
+                  <tr><td><code>_dmarc</code></td><td>TXT</td><td><code>v=DMARC1; p=reject; sp=reject; adkim=s; aspf=r; rua=mailto:admin@prismalbudget.org</code>: mail claiming to be from the domain that fails its checks is refused, and the daily reports go to admin@</td></tr>
+                  <tr><td><code>google._domainkey</code></td><td>TXT</td><td>Google Workspace's DKIM key (signs mail sent from Gmail)</td></tr>
+                  <tr><td><code>resend._domainkey</code></td><td>TXT</td><td>Resend's DKIM key (signs the site's account emails)</td></tr>
+                  <tr><td><code>send</code></td><td>MX, TXT</td><td>Resend's sending address (bounces come back there, with its own SPF)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>With <code>p=reject</code>, a missing or changed DKIM record means mail is refused outright instead of landing in spam, so check these first when emails stop arriving.</p>
+          </section>
+
+          <section id="api" aria-labelledby="apiTitle">
+            <h2 id="apiTitle">7. The API</h2>
+            <ul>
+              <li><strong>Deploying:</strong> <code>npx wrangler deploy</code> from the API's folder (the saved wrangler sign-in is enough). <code>npx wrangler deployments list</code> shows each version, and <code>npx wrangler rollback</code> goes back to the one before. <code>npx wrangler tail</code> shows its logs as they happen.</li>
+              <li><strong>Secrets:</strong> set with <code>npx wrangler secret put</code> and its name; <code>npx wrangler secret list</code> shows which are set. Which ones there are, and what each one is for, is in the private API repo's notes. Without them, sign-in, emails, spreadsheets, reminders, or Create Account's person check stop working, each with a message saying so.</li>
+              <li><strong>The database:</strong> every part of a budget is one row of JSON per person, up to about 1.9 MB each (D1 keeps up to 2 MB in one value; a bigger save is refused with "That's more than one part of a budget can hold."). People can keep their own copy with Download My Data, and bring one back with Upload A Backup (both in Settings). D1's Time Travel can put the whole database back to an earlier minute (<code>npx wrangler d1 time-travel</code>; how far back depends on the plan).</li>
+              <li><strong>Testing on this computer:</strong> <code>npx wrangler dev --local</code> serves it at <code>http://127.0.0.1:8787</code>, and the site uses that address when it's opened at localhost or 127.0.0.1 (<code>Boot.js</code>).</li>
+              <li><strong>Privacy Policy update emails:</strong> every few minutes the Worker reads the live Privacy Policy page's <code>policy-version</code> tag; when it's new, every account with a verified email gets one email (a few each run) with the page's <code>policy-changes</code> text.</li>
+            </ul>
+          </section>
+
+          <section id="trouble" aria-labelledby="troubleTitle">
+            <h2 id="troubleTitle">8. When Something Goes Wrong</h2>
+            <div class="tableScroll">
+              <table>
+                <thead><tr><th>What happens</th><th>What to check</th></tr></thead>
+                <tbody>
+                  <tr><td>A change doesn't show up</td><td>The live <code>Boot.js</code>'s version; GitHub's Pages settings and the repo's Actions tab (the publish can fail); the fingerprints (section 3); then purge Cloudflare's cache.</td></tr>
+                  <tr><td>A page is blank, or something broke after a release</td><td>The browser's console. "Refused to ..." is the Content-Security-Policy (section 5). A script error: <code>git revert</code> the merge on <code>main</code> and push, then fix it on <code>Testing</code>.</td></tr>
+                  <tr><td>The browser says the connection isn't private</td><td>GitHub's Pages settings (Custom domain should pass its check, with Enforce HTTPS on) and the "GitHub DNS renewal" Configuration Rule (section 4).</td></tr>
+                  <tr><td>Nobody can sign in, or "Passwords aren't set up on the server yet"</td><td>The Worker's secrets (<code>npx wrangler secret list</code>), then <code>npx wrangler tail</code> while trying.</td></tr>
+                  <tr><td>Account emails don't arrive</td><td>Resend's dashboard (the domain still verified, the email sent), the DNS records (section 6), the spam folder, and the DMARC reports at admin@.</td></tr>
+                  <tr><td>Spreadsheets shared with admin@ stop being read</td><td>The admin@ Google account's access the Worker holds may need making again; spreadsheets shared by link still work meanwhile.</td></tr>
+                  <tr><td>Create Account's person check always fails</td><td>Cloudflare's Turnstile dashboard: the site key in <code>Login.js</code> and the Worker's secret have to be the same pair.</td></tr>
+                  <tr><td>The API doesn't answer</td><td><code>npx wrangler tail</code>, the Workers dashboard in Cloudflare, and Cloudflare's status page.</td></tr>
+                  <tr><td>Analytics stopped counting</td><td>The analytics hosts in the Content-Security-Policy (section 5); Cloudflare Web Analytics only counts browsers that load its script.</td></tr>
+                  <tr><td>Phones keep showing an old page saved to the home screen</td><td>Pages are never cached (section 3), so pulling down to reload, or closing the app from the home screen and opening it again, gets the new one.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="files" aria-labelledby="filesTitle">
+            <h2 id="filesTitle">9. Files That Matter Most</h2>
+            <ul>
+              <li><code>Javascript/Boot.js</code>: every page's first script. The version, each page's name from its address, which pages work without signing in, the API's address, and every script's fingerprint.</li>
+              <li><code>Javascript/Layout.js</code>: what every page shares (sliding between pages, the footer, Help, signing out, the Quick Entry icon's app).</li>
+              <li><code>_tools/stamp.mjs</code> and <code>_tools/hooks/pre-commit</code>: fingerprints, and the check before each commit.</li>
+              <li><code>CNAME</code>, <code>robots.txt</code>, <code>sitemap.xml</code>, <code>llms.txt</code>, and <code>404.html</code> (GitHub Pages shows it for any address it doesn't have).</li>
+              <li><code>how-it-works.html</code>: the full guide to what the site does.</li>
+              <li>This page, <code>future-proofing.html</code>: update it when any of these settings change.</li>
+            </ul>
+          </section>
+
+        </article>
+      </main>
+    </div>
+  </body>
+</html>

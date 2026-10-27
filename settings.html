@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=8742e1f961">
+    <link rel="stylesheet" href="/stylesheet.css?v=96ddaa69eb">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=8e4789e8e9">
+    <link rel="stylesheet" href="/budgetStyle.css?v=d5b3872db7">
     <title>Prismal Budget - Settings</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -245,6 +245,12 @@
             <div class="panelButtons">
               <button id="downloadDataButton" type="button" class="budgetButton primary">Download My Data</button>
             </div>
+            <h4 class="settingsSubheading">Upload A Backup</h4>
+            <p>Bring your budget back from a file Download My Data saved. Part by part (History, Recurring Entries, Other Accounts, and the rest), you pick what happens where the backup and your budget both have something. The file is read on this device.</p>
+            <div class="panelButtons">
+              <button id="uploadBackupButton" type="button" class="budgetButton">Upload A Backup</button>
+            </div>
+            <input id="uploadBackupFile" type="file" accept=".json,application/json" hidden>
             <h4 class="settingsSubheading">Analytics On This Device</h4>
             <p id="analyticsStatus"></p>
             <div id="analyticsButtons" class="panelButtons"></div>
@@ -277,6 +283,7 @@
             <li><strong>Quick Entry icons:</strong> turn off Show balances on Quick Entry icons, and they stop showing In Bank, the lowest it gets, and your Other Accounts' balances (just their names), on every icon.</li>
             <li><strong>Birth Date:</strong> Prismal Budget is for people 18 and older. If you typed the wrong birth date when you signed up, fix it here: type it, or pick it with the calendar button.</li>
             <li>Change your password, add passkeys, turn off Quick Entry icons, sign out everywhere, download your data, or delete your account.</li>
+            <li><strong>Upload A Backup:</strong> pick a file Download My Data saved, and for each part of your budget it has (History, Home's Calendar, Upcoming, Recurring Entries, Other Accounts, Goals, Bob's Page, Tracker, Connected Spreadsheets, Paycheck Calculator, Notes, and Change Logs), pick one: <strong>Prefer Current Data</strong> keeps yours where the two clash (like an entry with the same title and type on the same day) and adds the rest from the backup; <strong>Prefer Uploaded Data</strong> does the same, but the backup's wins where they clash; <strong>Remove Current Data</strong> puts the backup's in place of yours. Parts the backup doesn't have stay as they are. Undo can't take it back, so the window offers Download My Data first.</li>
             <li><strong>Sounds:</strong> turn Music (a quiet bed of far-off twinkles, with a clearer few now and then) and Sound effects (a soft crystal sound for what you tap) on or off for this device. They mix with your own audio instead of stopping it.</li>
             <li>Connected spreadsheets have their own page: open the menu, then Spreadsheets.</li>
           </ul>

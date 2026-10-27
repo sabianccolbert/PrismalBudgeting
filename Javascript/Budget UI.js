@@ -690,7 +690,7 @@ const BudgetUI = (() => {
   }
 
   // Needs, Wants, or Future: what an entry's money is for (see ENTRY PURPOSES in Process Budget.js), at the bottom of every
-  // form that makes or changes an entry once Jeremy's Needs, Wants, And Future card is on (shown). It's kept for the
+  // form that makes or changes an entry once Bob's Needs, Wants, And Future card is on (shown). It's kept for the
   // entry's title, so it starts on the title's (lookup: purposeOf) and follows the title as it's typed (follow), until
   // one is tapped. With no budget to look in (the Quick Entry page: lookup null), nothing's picked to start, which leaves
   // the title's as it is. value(): "none", "needs", "wants", or "future"; undefined when it isn't shown or nothing's picked.
@@ -700,7 +700,7 @@ const BudgetUI = (() => {
     const picker = segmented(PURPOSE_CHOICES, lookup ? lookup(title) : "", () => { touched = true; });
     picker.el.classList.add("purposeChoices");
     const hint = lookup
-      ? "Every entry with this title shares it. Jeremy's Needs, Wants, And Future card adds up what each one costs."
+      ? "Every entry with this title shares it. Bob's Needs, Wants, And Future card adds up what each one costs."
       : "Every entry with this title shares it. Left unpicked, the title keeps the one it has.";
     const el = field("Needs, Wants, Or Future", picker.el, { hint });
     el.classList.add("purposeField");
@@ -715,6 +715,46 @@ const BudgetUI = (() => {
         picker.set(purpose);
       },
       value: () => (el.hidden || !picker.value() ? undefined : picker.value())
+    };
+  }
+
+  // An entry's note (see ENTRY NOTES in Process Budget.js), as long as it needs to be: the very last thing in its form,
+  // under the form's buttons, a button that shows or hides it, with the note right under it (so the button stays put as
+  // it opens and closes). It starts closed, and the button says whether there's one. maxLength: 0 for none (the Quick
+  // Entry page has one). value(): the note ("" for none).
+  let noteCount = 0;
+  function noteField({ note = "", maxLength = 0 } = {}) {
+    const el = element("div", "noteField");
+    const button = element("button", "budgetButton noteToggle");
+    button.type = "button";
+    const box = element("textarea", "noteBox");
+    box.id = `entryNote${++noteCount}`;
+    box.value = note;
+    box.rows = 5;
+    box.placeholder = "Anything to remember about it";
+    box.setAttribute("aria-label", "Note");
+    if (maxLength) box.maxLength = maxLength;
+    box.hidden = true;
+    button.setAttribute("aria-controls", box.id);
+    const show = () => {
+      button.textContent = !box.hidden ? "Hide Note ▴" : box.value.trim() ? "Show Note ▾" : "Add A Note ▾";
+      button.setAttribute("aria-expanded", String(!box.hidden));
+    };
+    button.addEventListener("click", () => {
+      box.hidden = !box.hidden;
+      show();
+      if (!box.hidden && window.matchMedia("(pointer: fine)").matches) box.focus();
+    });
+    show();
+    el.append(button, box);
+    return {
+      el,
+      input: box,
+      value: () => box.value,
+      set(text) {
+        box.value = String(text ?? "");
+        show();
+      }
     };
   }
 
@@ -916,16 +956,19 @@ const BudgetUI = (() => {
   // into or out of (accounts: [{ name, balance, max }], or names), then the amount (cost or gain: with an account, it can
   // be a % of it, which is why the account comes first), date, Placeholder (for a day from today on), and Needs, Wants,
   // Or Future (purposes: whether to ask, see purposeField; purposeLookup: null where there's no budget to look in). The
-  // calendar's New Entry panel and the Quick Entry page share it, so they always match.
-  // read(): { entry: { title, amount, date, sprite, placeholder, purpose } } when it's filled in right, otherwise { error }.
-  //   The title carries the Other Account picked: "Title → Account" (or just the account's name when no title is typed).
+  // calendar's New Entry panel and the Quick Entry page share it, so they always match. Its note (noteEl, see noteField)
+  // goes under the form's buttons. noteMax: the longest a note can be (0 for no limit).
+  // read(): { entry: { title, amount, date, sprite, placeholder, purpose, note } } when it's filled in right, otherwise
+  //   { error }. The title carries the Other Account picked: "Title → Account" (or just the account's name when no title
+  //   is typed).
   // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
   //   unreadable), sprite ("" for Auto), account ("" for none), date (null when blank, undefined when it isn't a day),
-  //   placeholder, purpose }
-  // fill({ title, amount, sprite, account, placeholder, purpose }): puts these in, leaving the fields they don't have as
-  //   they are (the Quick Entry page's prisms). dateEl and purposeEl: those fields, for a form that doesn't need them.
+  //   placeholder, purpose, note }
+  // fill({ title, amount, sprite, account, placeholder, purpose, note }): puts these in, leaving the fields they don't
+  //   have as they are (the Quick Entry page's prisms). dateEl and purposeEl: those fields, for a form that doesn't need
+  //   them.
   // setAccounts(accounts): new balances for the Other Account list (the Quick Entry page's, after an Undo or Redo)
-  function newEntryFields({ date = today, accounts = [], purposes = jeremyCardOn("purposes"), purposeLookup = purposeOf } = {}) {
+  function newEntryFields({ date = today, accounts = [], purposes = bobCardOn("purposes"), purposeLookup = purposeOf, noteMax = 0 } = {}) {
     const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas...", maxLength: MAX_TITLE });
     const amount = amountField();
     const dateInput = dateField({ label: "Date", date });
@@ -933,6 +976,7 @@ const BudgetUI = (() => {
     const refraction = refractionField({ onChange: (key) => { account.setVisible(isAccountType(key)); followTitle(); } });
     const placeholder = placeholderField();
     const purpose = purposeField({ shown: purposes, lookup: purposeLookup });
+    const note = noteField({ maxLength: noteMax });
     const showPlaceholder = () => placeholder.setDate(dateInput.value() ?? date);
     dateInput.input.addEventListener("input", showPlaceholder);
     dateInput.input.addEventListener("change", showPlaceholder);
@@ -945,10 +989,11 @@ const BudgetUI = (() => {
       els: [title.el, refraction.el, account.el, amount.el, dateInput.el, placeholder.el, purpose.el],
       dateEl: dateInput.el,
       purposeEl: purpose.el,
+      noteEl: note.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), date: dateInput.value(), placeholder: placeholder.value(), purpose: purpose.value() }),
+      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), date: dateInput.value(), placeholder: placeholder.value(), purpose: purpose.value(), note: note.value() }),
       setAccounts: account.setAccounts,
-      fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", placeholder: newPlaceholder = false, purpose: newPurpose } = {}) {
+      fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", placeholder: newPlaceholder = false, purpose: newPurpose, note: newNote } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
           amount.input.value = Math.round(newAmount * 100) !== 0 ? Math.abs(newAmount).toFixed(2) : "";
@@ -961,10 +1006,11 @@ const BudgetUI = (() => {
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
         if (typeof percent === "number" && percent !== 0) amount.setPercent(percent);
         if (PURPOSE_CHOICES.some(choice => choice.key === newPurpose)) purpose.set(newPurpose);
+        if (typeof newNote === "string") note.set(newNote);
       },
       read() {
         if (title.value().includes(ACCOUNT_ARROW)) return { error: TITLE_ARROW };
-        const entry = { title: withAccount(title.value(), account.value()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value(), purpose: purpose.value() };
+        const entry = { title: withAccount(title.value(), account.value()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value(), purpose: purpose.value(), note: note.value() };
         if (!entry.title) return { error: "Give the entry a title." };
         const { percent, error } = readPercentField(amount);
         if (error) return { error };
@@ -987,9 +1033,9 @@ const BudgetUI = (() => {
   // results): line is the entry as its day stores it ("❗️ -$4.50 Coffee") on date. Its title (see renameEntry in Process
   // Budget.js: any entry before today, and from today on one that doesn't land by itself from a recurring entry or a
   // connected spreadsheet), its refraction type and Other Account, Set to or Add to it, Move to another day, whether it's a
-  // placeholder (for a day from today on), its title's Needs, Wants, Or Future (once Jeremy's card for it is on), or
-  // Delete. Changing its type or account takes it off as it is and puts it on as
-  // the new one, adding into an entry already on that day with the same title and type (changeEntryKind). One that lands
+  // placeholder (for a day from today on), its title's Needs, Wants, Or Future (once Bob's card for it is on), Delete,
+  // and its note (under the buttons). Changing its type or account takes it off as it is and puts it on as the new one,
+  // adding into an entry already on that day with the same title and type (changeEntryKind). One that lands
   // by itself on a day after the calendar (Search's, which isn't in the budget yet) goes into Upcoming for that day once
   // it's changed, the way a changed day on the calendar does. inHistory: a day in History, where the same changes keep
   // the balances (In Bank, and the Other Accounts'; see changeHistoryEntry) and it only moves to another day in History.
@@ -1012,7 +1058,7 @@ const BudgetUI = (() => {
       stacked,
       title: `${inHistory ? showDate(date) : showDay(date)} Entry`,
       build(form, panel) {
-        const display = renderEntryLine(line, lineIndex);
+        const display = renderEntryLine(line, lineIndex, date);
         display.classList.add("panelEntry");
         // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own
         const account = linkedAccount(parts[0], title);
@@ -1063,17 +1109,20 @@ const BudgetUI = (() => {
         moveTo.input.addEventListener("input", showPlaceholder);
         moveTo.input.addEventListener("change", showPlaceholder);
         showPlaceholder();
-        // Needs, Wants, Or Future (once Jeremy's card for it is on): its title's, following a new title as it's typed
-        const purpose = purposeField({ shown: jeremyCardOn("purposes"), title });
+        // Needs, Wants, Or Future (once Bob's card for it is on): its title's, following a new title as it's typed
+        const purpose = purposeField({ shown: bobCardOn("purposes"), title });
         const newTitleNow = () => withAccount(titleBox ? titleBox.value() : ownTitle, accountPicker.value());
         titleBox?.input.addEventListener("input", () => purpose.follow(newTitleNow()));
         accountPicker.el.addEventListener("click", () => purpose.follow(newTitleNow()));
+        // Its note, under the buttons (it goes wherever the entry goes)
+        const currentNote = entryNote(date, title, refraction);
+        const note = noteField({ note: currentNote });
 
         form.append(display, ...[accountNote, historyNote, titleBox?.el, titleNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, purpose.el, buttonRow([
           { label: "Save", kind: "primary", type: "submit" },
           { label: "Delete", kind: "danger", onClick: deleteEntry },
           { label: "Cancel", onClick: () => panel.close() }
-        ]));
+        ]), note.el);
 
         form.addEventListener("submit", (event) => {
           event.preventDefault();
@@ -1091,6 +1140,8 @@ const BudgetUI = (() => {
           // (Left as it is when the switch isn't there: a day before today never has one)
           const newPlaceholder = placeholder.el.hidden ? undefined : placeholder.value();
           const newPurpose = purpose.value();
+          // (Left out when it didn't change, so the entry keeps its own wherever it goes)
+          const newNote = note.value() !== currentNote ? note.value() : undefined;
 
           const newSprite = type.value();
           const newAccount = accountPicker.value();
@@ -1101,12 +1152,12 @@ const BudgetUI = (() => {
             const newTitle = withAccount(newOwn, newAccount);
             // "→ Savings" has no title of its own, so it can't leave its account without one
             if (!newTitle) return panel.setError(titleBox ? "Give the entry a title, or keep its Other Account." : "This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
-            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, purpose: newPurpose };
+            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, purpose: newPurpose, note: newNote };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
             return submit(panel, () => changeKind(kind));
           }
 
-          const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder, purpose: newPurpose };
+          const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder, purpose: newPurpose, note: newNote };
           // (A % entry set to dollars becomes a plain amount, even the same one)
           const amountChanged = mode === "set"
             ? (newPercent !== null ? newPercent !== currentPercent : newAmount !== currentAmount || (currentPercent !== null && amount.percentShown()))
@@ -1124,8 +1175,11 @@ const BudgetUI = (() => {
             change.renameTo = newOwn;
           }
           if (!renamed && !amountChanged && !change.moveDate && !placeholderChanged) {
-            // Only its title's purpose changed, or nothing did
-            if (newPurpose !== undefined && newPurpose !== purposeOf(title)) return submit(panel, () => saveEntryPurpose(title, newPurpose));
+            // Only its title's purpose or its note changed, or nothing did
+            const purposeChanged = newPurpose !== undefined && newPurpose !== purposeOf(title);
+            if (purposeChanged || newNote !== undefined) {
+              return submit(panel, () => saveEntryExtras(date, title, refraction, { purpose: purposeChanged ? newPurpose : undefined, note: newNote }));
+            }
             return panel.close();
           }
 
@@ -1142,12 +1196,11 @@ const BudgetUI = (() => {
   }
 
   // New Entry (Home's button, and a zoomed day's + on Home or History, with that day in its date box): title, refraction
-  // type (Auto to start), for Hidden or Transfer an Other Account, the amount (cost or gain), date, Placeholder, and once
-  // Jeremy's card for it is on, Needs, Wants, Or Future. A day
-  // has one entry per title, type, and Other Account, so when one is already there (its own, or a recurring or connected
-  // spreadsheet's entry landing there), the form says so and asks whether to add the new amount to it or set it to the new
-  // amount. Either way a recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on
-  // the calendar.
+  // type (Auto to start), for Hidden or Transfer an Other Account, the amount (cost or gain), date, Placeholder, once
+  // Bob's card for it is on, Needs, Wants, Or Future, and a note under its buttons. A day has one entry per title, type,
+  // and Other Account, so when one is already there (its own, or a recurring or connected spreadsheet's entry landing
+  // there), the form says so and asks whether to add the new amount to it or set it to the new amount. Either way a
+  // recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on the calendar.
   function openNewEntry(origin, { date = today } = {}) {
     openPanel({
       origin,
@@ -1165,7 +1218,7 @@ const BudgetUI = (() => {
         form.append(...fields.els, matchField, buttonRow([
           { label: "Add Entry", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }
-        ]));
+        ]), fields.noteEl);
 
         // The entry already there, if there's one (looked up again as the form changes; not while it's being added, when
         // it would find the new entry itself)
@@ -1179,7 +1232,7 @@ const BudgetUI = (() => {
           if (!match) return;
           const mark = entryMark(match.sprite);
           const from = mark === RECURRING_MARK ? " (a recurring entry)" : mark === SHEET_MARK ? " (from a connected spreadsheet)" : "";
-          matchNote.replaceChildren(renderEntryLine(`${match.sprite} ${formatMoney(match.amount)} ${capitalize(withAccount(title, account))}`, 1), ` is already on ${showDay(day)}${from}. Add this amount to it, or set it to this amount?`);
+          matchNote.replaceChildren(renderEntryLine(`${match.sprite} ${formatMoney(match.amount)} ${capitalize(withAccount(title, account))}`, 1, day), ` is already on ${showDay(day)}${from}. Add this amount to it, or set it to this amount?`);
         };
         let pending = 0;
         const queueFind = () => {
@@ -1199,7 +1252,9 @@ const BudgetUI = (() => {
           if (match && mode === "set") {
             const sprite = entry.sprite || getSpecialType(match.sprite);
             const amount = typeof entry.percent === "number" ? { amount: "", percent: entry.percent } : { amount: String(entry.amount) };
-            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, purpose: entry.purpose }));
+            // (A note goes after the one the entry has, like adding to it does)
+            const note = entry.note.trim() ? joinNotes(entryNote(entry.date, entry.title, sprite), entry.note) : undefined;
+            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, purpose: entry.purpose, note }));
           }
           submit(panel, () => addCalendarEntry(entry));
         });
@@ -1292,9 +1347,10 @@ const BudgetUI = (() => {
   // One line of a day cell: the date (as people read it: the caller passes it shown), a system line (In
   // Bank, Costs, Gains, in the day's own light grey), or an entry. Entries with a cost show red, a gain green, and $0.00 a
   // darker grey, and placeholders yellow whatever their amount (without their ⏳, which is only how they're stored).
-  // A browser translating the page leaves entries, amounts, and dates as they are (they're the person's
-  // own words and numbers); only the budget's own words, like In Bank, get translated.
-  function renderEntryLine(line, lineIndex) {
+  // Given its day, an entry with a note is underlined. A browser translating the page leaves entries, amounts, and
+  // dates as they are (they're the person's own words and numbers); only the budget's own words, like In Bank, get
+  // translated.
+  function renderEntryLine(line, lineIndex, date = null) {
     if (lineIndex === 0) return noTranslate(element("div", "lineDate", line));
     const parts = getParts(line);
     const amount = parseAmount(parts[1]);
@@ -1313,6 +1369,7 @@ const BudgetUI = (() => {
     el.dataset.line = lineIndex;
     el.classList.add(amountClass(amount));
     if (isPlaceholder(parts[0])) el.classList.add("isPlaceholder");
+    if (date && lineHasNote(date, line)) el.classList.add("hasNote");
     return el;
   }
 
@@ -1399,6 +1456,7 @@ const BudgetUI = (() => {
     checkboxField,
     placeholderField,
     purposeField,
+    noteField,
     frequencyField,
     accountField,
     accountChoice,

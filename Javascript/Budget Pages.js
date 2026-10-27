@@ -91,10 +91,12 @@ function renderRecurringPage(view) {
     extraClass: "recurringTable",
     renderEntry(tr, row) {
       // (A placeholder's row is yellow, its type without the ⏳ it's stored with. A % entry shows its percent: each day
-      // it lands works out its own amount.)
+      // it lands works out its own amount. A title with a note of its own is underlined.)
       if (isPlaceholder(row[5])) tr.classList.add("isPlaceholder");
       tr.appendChild(cell(baseSprite(row[5]), "typeCell"));
-      tr.appendChild(noTranslate(clippedCell(row[0], "titleCell")));
+      const titleCell = clippedCell(row[0], "titleCell");
+      if (recurringNote(row[0], row[5])) titleCell.firstChild.classList.add("hasNote");
+      tr.appendChild(noTranslate(titleCell));
       const percent = percentOf(row[5]);
       tr.appendChild(noTranslate(cell(percent !== null ? `${percent < 0 ? "-" : ""}${showPercent(percent)}` : row[1], "amountCell")));
       tr.appendChild(noTranslate(dateCell(row[2])));
@@ -195,7 +197,7 @@ function historyDay(cellText) {
   day.appendChild(BudgetUI.element("span", "historyYear", String(date.getFullYear())));
   content.appendChild(day);
   lines.forEach((line, l) => {
-    if (l === 0 || line.trim()) content.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDate(date) : line, l));
+    if (l === 0 || line.trim()) content.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDate(date) : line, l, date));
   });
   content.appendChild(zoomDayButtons());
   td.classList.toggle("isNegative", (readInBank(cellText) ?? 0) < 0);
@@ -314,8 +316,8 @@ function markClipped(table) {
 // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate,
 // interest since, max] (see Other Accounts in Process Budget.js). Balances are each account's starting amount plus its
 // entries (Hidden and Transfer entries with it picked): today (over its max, when it has one: "$500.00/$2000.00"), and
-// in 6 months (AHEAD_MONTHS, see budgetAhead). Each account's Entries button lists every entry for it. Savings and Cash
-// can't be deleted.
+// in 6 months (AHEAD_MONTHS, see budgetAhead). Tapping an account opens it, with every entry for it to change. Savings
+// and Cash can't be deleted.
 function renderAccountsPage(view) {
   renderToolbar("accounts", (origin) => openAccountPanel(origin, null), { newLabel: "New Account", newInEditMode: true });
   view.replaceChildren();
@@ -325,7 +327,7 @@ function renderAccountsPage(view) {
 
   const tableEl = buildRowTable({
     tableName: "accounts",
-    columns: editMode ? ["Account", "Balance", AHEAD_LABEL] : ["Account", "Balance", AHEAD_LABEL, { label: "", className: "entriesHead" }],
+    columns: ["Account", "Balance", AHEAD_LABEL],
     rows: indexedRows(accountsData.list, 1),
     extraClass: "accountsTable",
     sections: false,
@@ -336,22 +338,11 @@ function renderAccountsPage(view) {
       tr.appendChild(noTranslate(cell(row[0], "titleCell")));
       tr.appendChild(noTranslate(balanceCell(summary ? summary.today : 0, row)));
       tr.appendChild(noTranslate(cell(formatMoney(ahead.accounts.get(index) ?? 0), "amountCell")));
-      if (editMode) return;
-      const entriesCell = cell("", "entriesCell");
-      const button = BudgetUI.element("button", "budgetButton entriesButton", "Entries");
-      button.type = "button";
-      button.setAttribute("aria-label", `${row[0]}'s entries`);
-      button.addEventListener("click", (event) => {
-        event.stopPropagation(); // (Not the row's own tap)
-        openAccountEntries(button, index);
-      });
-      entriesCell.appendChild(button);
-      tr.appendChild(entriesCell);
     },
     onEntryClick: (index, origin) => openAccountPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
-  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", `Balances come from each account's Hidden and Transfer entries (and its interest, when it has some). ${AHEAD_LABEL} counts the ones still to come: on the calendar, in Upcoming, and from your recurring entries and connected spreadsheets. Tap an account to rename it, set its balance, interest, or max, or see its latest entries; Entries lists every one, to change any of them.`));
+  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", `Balances come from each account's Hidden and Transfer entries (and its interest, when it has some). ${AHEAD_LABEL} counts the ones still to come: on the calendar, in Upcoming, and from your recurring entries and connected spreadsheets. Tap an account to rename it, set its balance, interest, or max, or see every entry for it, and tap an entry to change it.`));
 }
 
 // An account's balance today, with its max after it when it has one ("$500.00/$2000.00"). On a narrow screen the max can
@@ -365,38 +356,8 @@ function balanceCell(balance, row) {
   return td;
 }
 
-// An account's Entries: every entry for it (on the calendar, in History, and in Upcoming), newest first, each with its
-// day, the entry, and what it put in or took out of the account. Tapping one opens its options over the list, the same
-// as on a zoomed day (on a day in History, changing it keeps the balances), and the list follows the change.
-function openAccountEntries(origin, index) {
-  const name = String(accountsData.list[index]?.[0] ?? "").trim();
-  BudgetUI.openPanel({
-    origin,
-    size: "large",
-    title: `${name} Entries`,
-    build(form, panel) {
-      const summary = BudgetUI.element("p", "panelHint");
-      const list = BudgetUI.element("ul", "accountEntries accountEntryList");
-      const draw = () => {
-        const entries = accountEntryLines(index);
-        summary.textContent = entries.length === 0
-          ? `None yet. Hidden and Transfer entries with ${name} picked under Other Account show up here.`
-          : `${entries.length} ${entries.length === 1 ? "entry" : "entries"}, newest first. Tap one to change it. The amount at the right is what it put in or took out of ${name}.`;
-        list.replaceChildren(...entries.map(entry => accountEntryRow(entry)));
-      };
-      // (Drawn again after each change while it's open)
-      const follow = () => {
-        if (panel.panel.isConnected && !panel.panel.classList.contains("isClosing")) draw();
-        else document.removeEventListener("budget:updated", follow);
-      };
-      document.addEventListener("budget:updated", follow);
-      draw();
-      form.append(summary, list, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
-    }
-  });
-}
-
-// One of an account's Entries: a button with its day, the entry, and what the account got
+// One of an account's entries in its panel: a button with its day, the entry, and what the account got, which opens the
+// entry's options over the panel, the same as on a zoomed day (on a day in History, changing it keeps the balances)
 function accountEntryRow(entry) {
   const item = BudgetUI.element("li", "accountEntryItem");
   const button = BudgetUI.element("button", "accountEntryButton");
@@ -405,12 +366,25 @@ function accountEntryRow(entry) {
   const coming = entry.date > today;
   const line = BudgetUI.element("span", `accountEntryLine ${BudgetUI.amountClass(parseAmount(getParts(entry.line)[1]))}`, shownLine(entry.line));
   if (isPlaceholder(sprite)) line.classList.add("isPlaceholder");
+  if (lineHasNote(entry.date, entry.line)) line.classList.add("hasNote");
   const change = BudgetUI.element("span", `accountEntryAmount ${BudgetUI.amountClass(entry.change)}`, (entry.change > 0 ? "+" : "") + formatMoney(entry.change));
   const date = BudgetUI.element("span", "accountEntryDate");
   date.append(noTranslate(BudgetUI.element("span", "", showDate(entry.date))), coming ? " (coming up)" : "");
   button.append(date, noTranslate(line), noTranslate(change));
   button.addEventListener("click", () => BudgetUI.openEntryOptions(button, entry.line, entry.date, { inHistory: entry.place === "history", stacked: true }));
   item.appendChild(button);
+  return item;
+}
+
+// A month's interest in an account's entries, laid out like an entry (it isn't one, so it doesn't open)
+function accountInterestRow(credit) {
+  const item = BudgetUI.element("li", "accountEntryItem isInterest");
+  const row = BudgetUI.element("div", "accountEntryButton");
+  const date = BudgetUI.element("span", "accountEntryDate");
+  date.append(noTranslate(BudgetUI.element("span", "", showDate(credit.date))), credit.date > today ? " (coming up)" : "");
+  row.append(date, BudgetUI.element("span", "accountEntryLine", "% Interest"),
+    noTranslate(BudgetUI.element("span", `accountEntryAmount ${BudgetUI.amountClass(credit.change)}`, (credit.change > 0 ? "+" : "") + formatMoney(credit.change))));
+  item.appendChild(row);
   return item;
 }
 
@@ -1124,16 +1098,19 @@ function openRecurringPanel(origin, index) {
       end.input.addEventListener("input", showPlaceholder);
       end.input.addEventListener("change", showPlaceholder);
       showPlaceholder();
-      // Needs, Wants, Or Future (once Jeremy's card for it is on): its title's, following a new title as it's typed
-      const purpose = BudgetUI.purposeField({ shown: jeremyCardOn("purposes"), title: existing ? String(existing[0]) : "" });
+      // Needs, Wants, Or Future (once Bob's card for it is on): its title's, following a new title as it's typed
+      const purpose = BudgetUI.purposeField({ shown: bobCardOn("purposes"), title: existing ? String(existing[0]) : "" });
       const followTitle = () => purpose.follow(withAccount(title.value(), account.value()));
       title.input.addEventListener("input", followTitle);
       account.el.addEventListener("click", followTitle);
+      // Its own note, under the buttons (each day it lands on can have one of its own too)
+      const currentNote = existing ? recurringNote(existing[0], existing[5]) : "";
+      const note = BudgetUI.noteField({ note: currentNote });
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteEntry }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Entry", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, purpose.el, BudgetUI.buttonRow(buttons));
+      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, purpose.el, BudgetUI.buttonRow(buttons), note.el);
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -1153,6 +1130,7 @@ function openRecurringPanel(origin, index) {
         // (Left as it was when the switch isn't there: an End Date before today)
         if (!placeholder.el.hidden) fields.placeholder = placeholder.value();
         fields.purpose = purpose.value();
+        if (note.value() !== currentNote) fields.note = note.value();
         BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
       });
 
@@ -1216,7 +1194,8 @@ function openTrackerPanel(origin, index) {
 
 // New account (index null, from edit mode) or change the tapped one: its name, its balance today (typing one sets
 // its starting amount, so no entry is made), its interest, its max (optional: the most it can hold, like a credit card's
-// limit, shown after its balance), and the latest entries that changed it.
+// limit, shown after its balance), and every entry for it, to change. A change to one of its entries while it's open
+// redraws them, and the balance follows it unless a new one was typed (Save only sets the balance when one was).
 function openAccountPanel(origin, index) {
   const existing = index === null ? null : accountsData.list[index];
   const summary = existing ? accountSummaries().find(account => account.index === index) : null;
@@ -1247,7 +1226,24 @@ function openAccountPanel(origin, index) {
       BudgetUI.cashRegister(max.input);
       const fields = [name.el, balance.el, interest.el, max.el];
       if (isMandatory) fields.push(BudgetUI.element("p", "panelHint", mandatoryAccountNote(existing[0])));
-      if (summary) fields.push(accountEntriesField(summary));
+      const entries = summary ? accountEntriesField(index, existing[0]) : null;
+      if (entries) fields.push(entries.el);
+      // The balance shown, to tell a typed one from one that only followed its entries
+      let shownBalance = summary ? summary.today : null;
+      const showBalance = (amount) => {
+        shownBalance = amount;
+        balance.input.value = Math.round(amount * 100) !== 0 ? Math.abs(amount).toFixed(2) : "";
+        balance.setSign(amount < 0 ? -1 : 1);
+      };
+      // (Its entries and balance are drawn again after each change while it's open)
+      const follow = () => {
+        if (!panel.panel.isConnected || panel.panel.classList.contains("isClosing")) return document.removeEventListener("budget:updated", follow);
+        entries?.draw();
+        const now = accountSummaries().find(account => account.index === index);
+        const typed = balance.value();
+        if (now && (typed === null ? 0 : typed) === Math.round((shownBalance ?? 0) * 100) / 100) showBalance(now.today);
+      };
+      if (summary) document.addEventListener("budget:updated", follow);
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, ...(isMandatory ? [] : [{ label: "Delete", kind: "danger", onClick: deleteAccount }]), { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Account", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
@@ -1263,7 +1259,9 @@ function openAccountPanel(origin, index) {
         if (Number.isNaN(rate)) return panel.setError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}), or turn Interest off.`);
         const most = max.value() ? readMoneyInput(max.value()) : null;
         if (most !== null && (!Number.isFinite(most) || most > MAX_AMOUNT)) return panel.setError("Enter the most it can hold, like 2000.00, or leave Max blank.");
-        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), balance: amount, interest: rate ? { rate } : null, max: most || null }, index));
+        // (A balance that wasn't typed is left out, so it keeps whatever its entries make it)
+        const typedBalance = !existing || Math.round(amount * 100) !== Math.round((shownBalance ?? 0) * 100);
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), ...(typedBalance ? { balance: amount } : {}), interest: rate ? { rate } : null, max: most || null }, index));
       });
 
       // Delete: the account goes, and its entries stay where they are
@@ -1304,35 +1302,25 @@ function interestFields(current) {
   };
 }
 
-// An account's entries for its panel: the ones still to come on the calendar, then the latest ones (its interest
-// too). Amounts are what the account gets (a Transfer's opposite amount, or a Hidden entry's own; see accountChange).
-const ACCOUNT_ENTRIES_SHOWN = 8;
-
-function accountEntriesField(summary) {
-  const all = [...summary.entries, ...summary.interestCredits.filter(credit => credit.date <= gridEndDate).map(credit => ({ ...credit, sprite: "", title: "", interest: true }))]
-    .sort((a, b) => b.date - a.date);
-  const upcoming = all.filter(entry => entry.date > today);
-  const latest = all.filter(entry => entry.date <= today).slice(0, ACCOUNT_ENTRIES_SHOWN);
-  if (upcoming.length === 0 && latest.length === 0) {
-    return BudgetUI.field("Entries", BudgetUI.element("p", "panelText", `None yet. Hidden and Transfer entries with ${summary.name} picked under Other Account change it.`));
-  }
+// An account's entries for its panel, newest first, in a box that scrolls: every entry for it (on the calendar, in
+// History, and in Upcoming; see accountEntryLines), each one tapped to change it, and its interest through the calendar.
+// Amounts at the right are what the account got (a Transfer's opposite amount, or a Hidden entry's own; see
+// accountChange). { el, draw } (draw lists them again, after a change)
+function accountEntriesField(index, name) {
   const list = BudgetUI.element("ul", "accountEntries");
-  for (const entry of [...upcoming, ...latest]) {
-    const item = BudgetUI.element("li", entry.date > today ? "accountEntry upcomingChange" : "accountEntry");
-    if (isPlaceholder(entry.sprite)) item.classList.add("isPlaceholder");
-    item.appendChild(noTranslate(BudgetUI.element("span", "accountEntryDate", showDate(entry.date))));
-    const amount = noTranslate(BudgetUI.element("span", "accountEntryAmount", (entry.change > 0 ? "+" : "") + formatMoney(entry.change)));
-    if (entry.change > 0) amount.classList.add("positive");
-    if (entry.change < 0) amount.classList.add("negative");
-    item.appendChild(amount);
-    // Its own title ("Payday"), or its type when it has none
-    const sprite = getSpecialType(entry.sprite) === "⭕️" ? "⭕️" : "✖️";
-    const label = entry.interest ? "% Interest" : `${sprite} ${entry.title || (sprite === "⭕️" ? "Transfer" : "Hidden")}`;
-    const what = BudgetUI.element("span", "accountEntryType", entry.date > today ? `${label}, coming up` : label);
-    item.appendChild(entry.title ? noTranslate(what) : what);
-    list.appendChild(item);
-  }
-  return BudgetUI.field("Entries", list, { hint: "What each entry put in or took out. Upcoming ones are on the calendar after today." });
+  const none = BudgetUI.element("p", "panelText", `None yet. Hidden and Transfer entries with ${name} picked under Other Account change it.`);
+  const draw = () => {
+    const summary = accountSummaries().find(account => account.index === index);
+    const interest = (summary ? summary.interestCredits : []).filter(credit => credit.date <= gridEndDate);
+    const entries = [...accountEntryLines(index), ...interest.map(credit => ({ ...credit, interest: true }))].sort((a, b) => b.date - a.date);
+    list.replaceChildren(...entries.map(entry => (entry.interest ? accountInterestRow(entry) : accountEntryRow(entry))));
+    list.hidden = entries.length === 0;
+    none.hidden = entries.length > 0;
+  };
+  draw();
+  const box = BudgetUI.element("div", "accountEntriesBox");
+  box.append(none, list);
+  return { el: BudgetUI.field("Entries", box, { hint: "Tap one to change it. At the right: what it put in or took out." }), draw };
 }
 
 // New section (index null, inserted at atIndex) or rename/delete the tapped one
