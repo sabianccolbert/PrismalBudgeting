@@ -1,13 +1,37 @@
 // Budget Search: Home's and History's Search (the same one on both). It finds entries by title in History,
 // the calendar, Upcoming, and (with a To date after the calendar) recurring entries and connected spreadsheets'
 // entries still to come; see search() in Process Budget.js. The Search button opens it, floating over the
-// page, and its results show under it.
+// page, and its results show under it. Tapping a result opens its options, like an entry on a zoomed day, and the
+// results follow every change.
 
 wireSearch(); // Works right away (a search before the budget loads says it's still loading)
 
+// The query whose results are showing (null for none), to look again after a change
+let shownSearch = null;
+
 // Suggestions for a title's Tracker button follow the tracker's rows, and the Other Account filter the accounts
 window.workspaceReady.then((loaded) => { if (loaded) { fillTrackerRowTitles(); fillAccountFilter(); } });
-document.addEventListener("budget:updated", () => { if (workspaceLoaded) { fillTrackerRowTitles(); fillAccountFilter(); } });
+document.addEventListener("budget:updated", () => {
+  if (!workspaceLoaded) return;
+  fillTrackerRowTitles();
+  fillAccountFilter();
+  refreshSearchResults();
+});
+
+// The results showing are found again after a change (or another device's), so they show the budget as it is now. Not a
+// search of its own: the change's log row (being written while the page redraws) is left as it was.
+function refreshSearchResults() {
+  const container = document.getElementById("searchResults");
+  if (!shownSearch || !container || container.hidden) return;
+  const logRow = [...formEntryRow];
+  try {
+    renderSearchResults(search(shownSearch));
+  } catch (error) {
+    if (!(error instanceof BudgetInputError)) console.warn("Search couldn't look again:", error);
+  } finally {
+    formEntryRow = logRow;
+  }
+}
 
 // The Other Account filter: any, none, or one of the accounts (keeping the one picked while it's still there)
 function fillAccountFilter() {
@@ -117,16 +141,18 @@ function wireSearch() {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     submitButton.disabled = true;
-    const result = await searchBudget({
+    const query = {
       terms: terms.items().map(({ title, mode, exact }) => ({ title, match: mode, exact })),
       from: document.getElementById("searchFrom").value,
       to: document.getElementById("searchTo").value,
       type: typeFilter.value,
       account: accountFilter.value
-    });
+    };
+    const result = await searchBudget(query);
     submitButton.disabled = false;
     BudgetUI.setPickTarget(null);
     BudgetUI.warnIfUnsaved(result);
+    shownSearch = result.ok ? query : null;
     if (!result.ok) return showSearchMessage(result.message);
     renderSearchResults(result.search);
   });
@@ -173,9 +199,10 @@ function fillTrackerRowTitles() {
   }));
 }
 
-// Results: newest first, each with a checkbox and a running total of the checked amounts, like the
-// spreadsheet's Search tab. Transfers start unchecked, unless a tracker
-// row that counts transfers found them.
+// Results: newest first, each with a checkbox and a running total of the checked amounts. Transfers start unchecked,
+// unless a tracker row that counts transfers found them. Tapping a result (anywhere but its checkbox) opens its options,
+// the same as on a zoomed day: one in History keeps the balances, and one that would land by itself after the calendar
+// (a recurring entry's or a connected spreadsheet's, still to come) goes into Upcoming for its day once it's changed.
 function renderSearchResults({ results, from, to, searchingFor }) {
   const container = document.getElementById("searchResults");
   container.replaceChildren();
@@ -187,6 +214,7 @@ function renderSearchResults({ results, from, to, searchingFor }) {
   closeButton.type = "button";
   closeButton.setAttribute("aria-label", "Close search results");
   closeButton.addEventListener("click", () => {
+    shownSearch = null;
     container.hidden = true;
     container.replaceChildren();
   });
@@ -199,7 +227,7 @@ function renderSearchResults({ results, from, to, searchingFor }) {
   }
 
   const total = BudgetUI.element("p", "searchTotal");
-  container.appendChild(total);
+  container.append(total, BudgetUI.element("p", "searchHint", "Tap a result to change it."));
 
   const tableEl = document.createElement("table");
   tableEl.className = "dataTable searchTable";
@@ -245,11 +273,17 @@ function renderSearchResults({ results, from, to, searchingFor }) {
     if (result.amount < 0) amountCell.classList.add("negative");
     tr.appendChild(amountCell);
     const percent = percentOf(result.sprite);
-    const entryCell = BudgetUI.element("td", "", `${baseSprite(result.sprite)} ${result.title}${percent !== null ? ` (${showPercent(percent)})` : ""}`);
+    const entryCell = BudgetUI.element("td", "searchEntry", `${baseSprite(result.sprite)} ${result.title}${percent !== null ? ` (${showPercent(percent)})` : ""}`);
     tr.appendChild(entryCell);
     // (A placeholder's amount and entry are yellow)
     if (isPlaceholder(result.sprite)) [amountCell, entryCell].forEach(td => td.classList.add("isPlaceholder"));
     BudgetUI.noTranslate(tr); // Dates, amounts, and entries show as they are
+    tr.classList.add("clickable");
+    tr.addEventListener("click", (event) => {
+      if (event.target.closest("input, td:first-child")) return; // (Its checkbox)
+      const line = `${result.sprite} ${formatMoney(result.amount)} ${result.title}`;
+      BudgetUI.openEntryOptions(entryCell, line, result.date, { inHistory: result.date < gridStartDate });
+    });
     return checkbox;
   });
 

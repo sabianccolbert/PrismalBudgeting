@@ -84,34 +84,51 @@ function freezeAndSaveStarfield() {
 }
 
 /* GROUP: The screen layer */
-// Floating windows (panels, Search, Help, the date picker), notes, and the version badge live in one layer that always
-// covers the part of the page that's on the screen, at its normal size: the browser's visual viewport, which moves and
-// shrinks when the page is pinch-zoomed or a phone's keyboard is up. (position: fixed on its own sticks to the page's
-// full-size layout viewport instead, which left them in odd spots then.) The layer's own pixels are the screen's, so
-// what's in it doesn't zoom with the page; its size and place follow the visual viewport (placeScreenLayer).
+// Floating windows (panels, Search, Help, the date picker) live in one layer over the part of the page that's on the
+// screen, at its normal size: the browser's visual viewport, which moves and shrinks when the page is pinch-zoomed or a
+// phone's keyboard is up. (position: fixed on its own sticks to the page's full-size layout viewport instead, which left
+// them in odd spots then.) The layer's own pixels are the screen's, so a window opens at its own size however the page is
+// zoomed. While nothing is open in it, it follows the visual viewport (placeScreenLayer). Once a window opens, the layer
+// stays put on the page instead (pinned: part of the page, where the screen was), so the page can be scrolled and
+// pinch-zoomed with the window in it, the way the rest of the page is; when the last one closes, it follows the screen
+// again. Notes, the idle sign-out's countdown, and the version badge are in a second layer that always follows the
+// screen (NOTE_LAYER), so they're always in sight.
 const SCREEN_LAYER = document.createElement("div");
 SCREEN_LAYER.id = "screenLayer";
-document.body.appendChild(SCREEN_LAYER);
+const NOTE_LAYER = document.createElement("div");
+NOTE_LAYER.id = "noteLayer";
+document.body.append(SCREEN_LAYER, NOTE_LAYER);
 // (Boot.js added the version badge before this ran)
 const VERSION_BADGE = document.getElementById("versionBadge");
-if (VERSION_BADGE) SCREEN_LAYER.appendChild(VERSION_BADGE);
-let SCREEN = { x: 0, y: 0, width: 0, height: 0, scale: 1 }; // Where the layer is (page pixels) and its size (its own)
+if (VERSION_BADGE) NOTE_LAYER.appendChild(VERSION_BADGE);
+let SCREEN = { x: 0, y: 0, width: 0, height: 0, scale: 1 }; // Where the screen is (page pixels) and its size (its own)
 const SCREEN_LISTENERS = new Set();
 let SCREEN_FRAME = 0;
+let SCREEN_PINNED = false; // A window is open: the layer stays put on the page
 
-// Put the layer over the visual viewport (and tell what's in it that the screen moved)
-function placeScreenLayer() {
+// Put a layer over the visual viewport (fixed, or PAGE: pinned to the page where the screen is)
+function coverScreen(LAYER, PAGE = false) {
+  const VIEW = window.visualViewport;
+  const X = PAGE ? (VIEW ? VIEW.pageLeft : window.scrollX) : SCREEN.x;
+  const Y = PAGE ? (VIEW ? VIEW.pageTop : window.scrollY) : SCREEN.y;
+  LAYER.style.width = `${SCREEN.width}px`;
+  LAYER.style.height = `${SCREEN.height}px`;
+  LAYER.style.transform = `translate(${X}px, ${Y}px) scale(${1 / SCREEN.scale})`;
+}
+
+// Follow the visual viewport (and tell what's in the screen layer that the screen moved, unless it's pinned)
+function placeScreenLayer(FORCE = false) {
   SCREEN_FRAME = 0;
   const VIEW = window.visualViewport;
   const SCALE = VIEW && VIEW.scale > 0 ? VIEW.scale : 1;
   const NEXT = VIEW
     ? { x: VIEW.offsetLeft, y: VIEW.offsetTop, width: VIEW.width * SCALE, height: VIEW.height * SCALE, scale: SCALE }
     : { x: 0, y: 0, width: document.documentElement.clientWidth, height: window.innerHeight, scale: 1 };
-  if (Object.keys(NEXT).every(KEY => Math.abs(NEXT[KEY] - SCREEN[KEY]) < 0.01)) return;
+  if (!FORCE && Object.keys(NEXT).every(KEY => Math.abs(NEXT[KEY] - SCREEN[KEY]) < 0.01)) return;
   SCREEN = NEXT;
-  SCREEN_LAYER.style.width = `${NEXT.width}px`;
-  SCREEN_LAYER.style.height = `${NEXT.height}px`;
-  SCREEN_LAYER.style.transform = `translate(${NEXT.x}px, ${NEXT.y}px) scale(${1 / NEXT.scale})`;
+  coverScreen(NOTE_LAYER);
+  if (SCREEN_PINNED) return;
+  coverScreen(SCREEN_LAYER);
   SCREEN_LISTENERS.forEach((LISTENER) => {
     try { LISTENER(); } catch (ERROR) { console.warn("Couldn't follow the screen:", ERROR); }
   });
@@ -119,29 +136,50 @@ function placeScreenLayer() {
 
 // Once per frame, however often the screen moves
 function queueScreenLayer() {
-  if (!SCREEN_FRAME) SCREEN_FRAME = requestAnimationFrame(placeScreenLayer);
+  if (!SCREEN_FRAME) SCREEN_FRAME = requestAnimationFrame(() => placeScreenLayer());
 }
 
-placeScreenLayer();
+// Is a window in the screen layer (shown, or still shrinking away)?
+function windowOpen() {
+  return [...SCREEN_LAYER.children].some(CHILD => !CHILD.hidden && CHILD.getClientRects().length > 0);
+}
+
+// The layer pins itself to the page (where the screen is) as a window opens, and follows the screen again once none is
+// left
+function pinScreenLayer() {
+  const PIN = windowOpen();
+  if (PIN === SCREEN_PINNED) return;
+  SCREEN_PINNED = PIN;
+  SCREEN_LAYER.classList.toggle("isPinned", PIN);
+  placeScreenLayer(true);
+  if (PIN) coverScreen(SCREEN_LAYER, true);
+}
+new MutationObserver(pinScreenLayer).observe(SCREEN_LAYER, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "class"] });
+
+placeScreenLayer(true);
 window.visualViewport?.addEventListener("resize", queueScreenLayer);
 window.visualViewport?.addEventListener("scroll", queueScreenLayer);
 window.addEventListener("resize", queueScreenLayer);
 
 window.ScreenLayer = {
   element: SCREEN_LAYER,
-  // The page's zoom (1 when it isn't pinch-zoomed): a page pixel is this many of the layer's
+  // Notes (toasts) and other notices that always stay in sight
+  notes: NOTE_LAYER,
+  // The page's zoom when the layer was placed (1 when it isn't pinch-zoomed): a page pixel is this many of the layer's
   scale: () => SCREEN.scale,
   // The layer's size, in its own pixels
   size: () => ({ width: SCREEN.width, height: SCREEN.height }),
-  // Where an element is, in the layer's own pixels: { left, top, right, bottom, width, height }
+  // Where an element is, in the layer's own pixels: { left, top, right, bottom, width, height } (from where the layer is
+  // now, which a pinned layer's scroll moves)
   rectOf(EL) {
     const BOX = EL.getBoundingClientRect();
-    const LEFT = (BOX.left - SCREEN.x) * SCREEN.scale;
-    const TOP = (BOX.top - SCREEN.y) * SCREEN.scale;
+    const LAYER = SCREEN_LAYER.getBoundingClientRect();
+    const LEFT = (BOX.left - LAYER.left) * SCREEN.scale;
+    const TOP = (BOX.top - LAYER.top) * SCREEN.scale;
     return { left: LEFT, top: TOP, right: LEFT + BOX.width * SCREEN.scale, bottom: TOP + BOX.height * SCREEN.scale, width: BOX.width * SCREEN.scale, height: BOX.height * SCREEN.scale };
   },
-  // LISTENER runs after the screen moved or changed size (the page was zoomed or scrolled while zoomed, or a keyboard
-  // came up), so something placed by its box can be placed again
+  // LISTENER runs after the screen moved or changed size while the layer follows it (the page was zoomed or scrolled
+  // while zoomed, or a keyboard came up), so something placed by its box can be placed again
   onChange(LISTENER) {
     SCREEN_LISTENERS.add(LISTENER);
   }
@@ -238,6 +276,53 @@ document.addEventListener("visibilitychange", () => {
     if (typeof S.setFrozen === "function") S.setFrozen(false);
   }
 });
+
+/* GROUP: A Quick Entry icon's app comes back to Quick Entry */
+// A Quick Entry icon on a phone's home screen opens as an app of its own (quick.html's meta tags). Its Home button can go
+// on to the budget (signing in first), but the icon is for Quick Entry: left on another page and opened again, the app
+// goes back to the Quick Entry page it opened on. That page is kept in the app's own session storage (QUICK_APP_KEY).
+// Leaving the app hides its page without leaving it by a link, so the time it was hidden is kept too (APP_LEFT_KEY, taken
+// off when a link or the app itself leaves the page, pagehide); back on the screen after APP_AWAY_MS or more (a passkey's
+// sheet over it is shorter), or opened again on that page, it goes back to Quick Entry. Only in an app opened from the
+// home screen (in a browser's tab, a page stays where it was left), and never from the login page, where a passkey's or a
+// password's sheet can come and go while signing in.
+const QUICK_APP_KEY = "prismal_quick_app";
+const APP_LEFT_KEY = "prismal_app_left";
+const APP_AWAY_MS = 3000;
+const RUNNING_AS_APP = window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
+const readSession = (KEY) => { try { return sessionStorage.getItem(KEY); } catch { return null; } };
+const writeSession = (KEY, VALUE) => {
+  try {
+    if (VALUE === null) sessionStorage.removeItem(KEY);
+    else sessionStorage.setItem(KEY, VALUE);
+  } catch {}
+};
+
+// Back to the Quick Entry page the app opened on, when it's away from it (and has nothing unsaved)
+function backToQuickEntry() {
+  const LEFT = Number(readSession(APP_LEFT_KEY));
+  writeSession(APP_LEFT_KEY, null);
+  const QUICK = readSession(QUICK_APP_KEY);
+  if (!QUICK || !LEFT || Date.now() - LEFT < APP_AWAY_MS || window.PAGE === "quick" || window.PAGE === "login" || hasChangesToSave()) return;
+  if (typeof window.transitionTo === "function") window.transitionTo(QUICK, true);
+  else location.replace(QUICK);
+}
+
+if (RUNNING_AS_APP) {
+  if (window.PAGE === "quick") {
+    // (Its key is all it needs: quick.html?key=...)
+    const KEY = new URLSearchParams(location.search).get("key");
+    if (KEY) writeSession(QUICK_APP_KEY, `/quick.html?key=${encodeURIComponent(KEY)}`);
+  } else if (readSession(QUICK_APP_KEY)) {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") writeSession(APP_LEFT_KEY, String(Date.now()));
+      else backToQuickEntry();
+    });
+    window.addEventListener("pagehide", () => writeSession(APP_LEFT_KEY, null));
+    // (Opened again on this page: the phone had closed the page while the app was away)
+    onDOMReady(backToQuickEntry);
+  }
+}
 
 /* GROUP: DOM helpers */
 // Get the transition wrapper element.
@@ -998,15 +1083,18 @@ function onDOMReady(fn) {
 /* GROUP: Floating help */
 // A page's Help (a .helpView section, opened by its data-toggle button) floats over the page instead of
 // pushing it around: × , Escape, or a tap outside closes it. It moves into the screen layer (above), out of the
-// page's #transitionContainer, which is transformed and would make a fixed-position section scroll with the page.
+// page's #transitionContainer, which is transformed and would make a fixed-position section scroll with the page. The
+// dimmed backdrop under it stays in <body>, fixed over the whole window, so it still covers the page wherever the page is
+// scrolled while the help is open (in the screen layer, pinned to the page, it would only cover where the help opened).
 let OPEN_HELP = null;
 const HELP_BACKDROP = document.createElement("div");
 HELP_BACKDROP.className = "overlayBackdrop";
 HELP_BACKDROP.hidden = true;
+document.body.appendChild(HELP_BACKDROP);
 
 // A page's Help moves into the screen layer as a floating dialog, with its ×
 function setupFloatingHelp(BUTTON, HELP) {
-  SCREEN_LAYER.append(HELP_BACKDROP, HELP);
+  SCREEN_LAYER.append(HELP);
   HELP.setAttribute("role", "dialog");
   HELP.setAttribute("aria-modal", "true");
   const CLOSE = document.createElement("button");

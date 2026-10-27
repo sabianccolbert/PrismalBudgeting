@@ -23,7 +23,7 @@ window.workspaceReady.then((loaded) => {
   wireUndoButtons();
   wireQuickWaiting();
   wireGoals();
-  document.getElementById("addEntryButton")?.addEventListener("click", (event) => openNewEntryPanel(event.currentTarget));
+  document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
 });
 
@@ -335,8 +335,8 @@ function renderCalendar() {
       if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(gridDates[r][c]) : line, l));
     });
 
-    // Its v closes the zoomed day (handled in Process Budget.js)
-    content.replaceChildren(fragment, zoomCloseButton());
+    // Its round + (New Entry on that day) and v (close) show once it's zoomed (handled in Process Budget.js)
+    content.replaceChildren(fragment, zoomDayButtons());
 
     td.dataset.row = r;
     td.dataset.col = c;
@@ -443,8 +443,7 @@ function renderInfoRow() {
     button.type = "button";
     const line = `${upcoming.sprite} ${formatMoney(upcoming.amount)} ${upcoming.title}`;
     button.appendChild(BudgetUI.element("span", "upcomingDate", showDate(upcoming.date)));
-    const entry = BudgetUI.element("span", "upcomingEntry", shownLine(line));
-    if (upcoming.amount > 0) entry.classList.add("positive");
+    const entry = BudgetUI.element("span", `upcomingEntry ${BudgetUI.amountClass(upcoming.amount)}`, shownLine(line));
     if (isPlaceholder(upcoming.sprite)) entry.classList.add("isPlaceholder");
     button.appendChild(entry);
     button.addEventListener("click", () => BudgetUI.openEntryOptions(button, line, upcoming.date));
@@ -546,8 +545,8 @@ function goalRow(goal, index) {
   return item;
 }
 
-// New goal (index null) or change one: its title, amount (or a % of what it's for today, which stays that amount), what
-// it's for, and the day to reach it by
+// New goal (index null) or change one: its title, what it's for (each Other Account with its balance under its name), its
+// amount (or a % of what it's for today, which stays that amount), and the day to reach it by
 function openGoalPanel(origin, index = null) {
   const existing = index === null ? null : (accountsData?.goals || [])[index];
   BudgetUI.openPanel({
@@ -558,22 +557,26 @@ function openGoalPanel(origin, index = null) {
       const intro = BudgetUI.element("p", "panelHint", "An amount to reach by a day, like $2000.00 in Savings by June. With what it's for picked, Home shows how far along it is.");
       const title = BudgetUI.textField({ label: "Title", value: existing ? existing.title : "", placeholder: "Vacation, emergency fund...", maxLength: MAX_TITLE });
       const amount = BudgetUI.amountField({ label: "Amount", amount: existing ? existing.amount : null, percent: existing ? existing.percent : null, signs: BudgetUI.BALANCE_SIGNS });
-      const target = BudgetUI.element("select", "selectInput");
-      target.append(new Option("Nothing", "none"), new Option("In Bank", "inBank"), new Option("Total (In Bank and every Other Account)", "total"),
-        ...otherAccounts().map(account => new Option(`${account.name} (${formatMoney(account.balance)})`, `account:${account.name}`)));
-      if (existing) target.value = existing.kind === "account" ? `account:${existing.account}` : existing.kind;
-      if (!target.value) target.value = "none";
+      const accounts = otherAccounts();
+      const picked = !existing ? "none" : existing.kind !== "account" ? existing.kind
+        : accounts.some(account => account.name === existing.account) ? `account:${existing.account}` : "none";
+      const allowPercent = () => amount.setPercentAllowed(target.value() !== "none");
+      const target = BudgetUI.choiceList([
+        { key: "none", label: "Nothing" },
+        { key: "inBank", label: "In Bank" },
+        { key: "total", label: "Total", detail: "In Bank and every Other Account" },
+        ...accounts.map(account => BudgetUI.accountChoice(account, `account:${account.name}`))
+      ], picked, allowPercent, "What it's for");
+      target.el.classList.add("accountChoices");
       const targetHint = "A % goal is that percent of it today, and stays that amount.";
-      const targetField = BudgetUI.field("For", target, { optional: true, hint: targetHint });
-      const allowPercent = () => amount.setPercentAllowed(target.value !== "none");
-      target.addEventListener("change", allowPercent);
+      const targetField = BudgetUI.field("For", target.el, { optional: true, hint: targetHint });
       allowPercent();
       const date = BudgetUI.dateField({ label: "By", date: existing ? createSafeMidnight(existing.date, true) : null });
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: removeIt }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Goal", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(...(existing ? [] : [intro]), title.el, amount.el, targetField, date.el, BudgetUI.buttonRow(buttons));
+      form.append(...(existing ? [] : [intro]), title.el, targetField, amount.el, date.el, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -585,7 +588,7 @@ function openGoalPanel(origin, index = null) {
         const by = date.value();
         if (by === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
         if (!by) return panel.setError("Pick the day to reach it by.");
-        const [kind, ...name] = target.value.split(":");
+        const [kind, ...name] = target.value().split(":");
         const fields = { title: title.value(), kind, account: name.join(":"), amount: value, percent, date: by };
         BudgetUI.submit(panel, () => saveGoal(fields, index));
       });
@@ -604,66 +607,7 @@ function openGoalPanel(origin, index = null) {
 // #region ENTRY PANELS
 // =====================================================================
 
-// New entry: title, amount (cost or gain), date, optional refraction type, and for Hidden or Transfer,
-// an Other Account. A day has one entry per title, type, and Other Account, so when one is already there (its own,
-// or a recurring or connected spreadsheet's entry landing there), the form says so and asks whether to add the new
-// amount to it or set it to the new amount. Either way a recurring or spreadsheet entry becomes a temp for that day
-// (like ❗️✔️), the same as changing it on the calendar.
-function openNewEntryPanel(origin) {
-  BudgetUI.openPanel({
-    origin,
-    size: "large",
-    title: "New Entry",
-    build(form, panel) {
-      const fields = BudgetUI.newEntryFields({ accounts: otherAccounts() });
-      let mode = "add";
-      const modeToggle = BudgetUI.segmented([{ key: "add", label: "Add to it" }, { key: "set", label: "Set to this" }], mode, (key) => { mode = key; });
-      const matchNote = BudgetUI.element("div", "panelText matchNote");
-      const matchBox = BudgetUI.element("div", "matchBox");
-      matchBox.append(matchNote, modeToggle.el);
-      const matchField = BudgetUI.field("Already on that day", matchBox);
-      matchField.hidden = true;
-      form.append(...fields.els, matchField, BudgetUI.buttonRow([
-        { label: "Add Entry", kind: "primary", type: "submit" },
-        { label: "Cancel", onClick: () => panel.close() }
-      ]));
-
-      // The entry already there, if there's one (looked up again as the form changes)
-      let match = null;
-      const findMatch = () => {
-        const { title, sprite, account, date } = fields.values();
-        match = title && !title.includes(ACCOUNT_ARROW) ? entryOnDay(withAccount(title, account), sprite, date || today) : null;
-        matchField.hidden = !match;
-        if (!match) return;
-        const mark = entryMark(match.sprite);
-        const from = mark === RECURRING_MARK ? " (a recurring entry)" : mark === SHEET_MARK ? " (from a connected spreadsheet)" : "";
-        matchNote.replaceChildren(BudgetUI.renderEntryLine(`${match.sprite} ${formatMoney(match.amount)} ${capitalize(withAccount(title, account))}`, 1), ` is already on ${showDay(date || today)}${from}. Add this amount to it, or set it to this amount?`);
-      };
-      let pending = 0;
-      const queueFind = () => {
-        cancelAnimationFrame(pending);
-        pending = requestAnimationFrame(findMatch);
-      };
-      form.addEventListener("input", queueFind);
-      form.addEventListener("change", queueFind);
-      form.addEventListener("click", queueFind); // The refraction type's buttons
-      findMatch();
-
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const { entry, error } = fields.read();
-        if (error) return panel.setError(error);
-        findMatch();
-        if (match && mode === "set") {
-          const sprite = entry.sprite || getSpecialType(match.sprite);
-          const amount = typeof entry.percent === "number" ? { amount: "", percent: entry.percent } : { amount: String(entry.amount) };
-          return BudgetUI.submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder }));
-        }
-        BudgetUI.submit(panel, () => addCalendarEntry(entry));
-      });
-    }
-  });
-}
+// (New Entry is BudgetUI.openNewEntry: History's days open it too)
 
 // Quick Entry Icon: makes a key (only while signed in) and opens the Quick Entry page with it in the
 // link, ready to add to the home screen. The icon then opens that New Entry form with no login. The key

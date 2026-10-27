@@ -37,7 +37,9 @@ window.workspaceReady.then(async (loaded) => {
 // grows into the entry form once the spreadsheet opens: each part of an entry has a yellow ➕ that opens a
 // second panel to pick its tab and cells, and all but the date can be typed in instead.
 
-const SHEET_FIELD_KEYS = ["date", "title", "amount", "type", "account"];
+// The parts of an entry, in the order the form shows them (the refraction type and Other Account before the amount, which can
+// be a % of the account)
+const SHEET_FIELD_KEYS = ["date", "title", "type", "account", "amount"];
 const SHEET_SIGNS = [{ key: "written", label: "As Written" }, { key: "costs", label: "All Costs" }, { key: "gains", label: "All Gains" }];
 const SHEET_PREVIEW_LINES = 8;
 const SHARING_EMAIL = "admin@prismalbudget.org";

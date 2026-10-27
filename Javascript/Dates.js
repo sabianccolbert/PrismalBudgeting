@@ -574,7 +574,8 @@ const DatePicker = (() => {
   }
 
   // Under the date box (its row, with the calendar button), at the left of it, or above it when it doesn't fit below. In the screen
-  // layer's own pixels (Layout.js).
+  // layer's own pixels (Layout.js). Its own size is its layout's, not its box on the screen, which is still small while it
+  // zooms open.
   function place() {
     if (!shown) return;
     const { el, input } = shown;
@@ -582,7 +583,7 @@ const DatePicker = (() => {
     const anchor = input.closest(".dateRow") || input;
     const area = layer ? layer.size() : { width: document.documentElement.clientWidth, height: window.innerHeight };
     const rect = layer ? layer.rectOf(anchor) : anchor.getBoundingClientRect();
-    const box = layer ? layer.rectOf(el) : el.getBoundingClientRect();
+    const box = { width: el.offsetWidth, height: el.offsetHeight };
     const left = Math.min(Math.max(rect.left, MARGIN), Math.max(MARGIN, area.width - box.width - MARGIN));
     let top = rect.bottom + 6;
     if (top + box.height > area.height - MARGIN) {

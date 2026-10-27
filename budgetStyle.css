@@ -154,7 +154,7 @@
   font-size: calc(1em * var(--zoomText, var(--zoom, 1)));
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto; /* (A finger scrolls its lines, then the page, which it's part of) */
   pointer-events: auto; /* It covers the screen now, so taps land on it (Process Budget.js closes it for ones beside the day) */
   background: none;
   box-shadow: none;
@@ -244,39 +244,56 @@
   transform-origin: right center;
 }
 
-/* A zoomed day's v (close), tucked into its top right corner. Its size is divided by the day's zoom, so on screen it's
-   the same however far the day is zoomed: a 32px spot with a 20px v (--V_SPOT and --V_SIZE). */
+/* A zoomed day's round buttons in its top right corner: v (close) in the corner, and + (New Entry on that day) to its
+   left, each a glass circle like the site's other buttons. Their sizes are divided by the day's zoom, so on screen
+   they're the same however far the day is zoomed: --V_SPOT across, with a --V_SIZE mark, --V_INSET from the corner and
+   from each other. */
 :root {
-  --V_SPOT: 32px;
-  --V_SIZE: 20px;
+  --V_SPOT: 30px;
+  --V_SIZE: 17px;
+  --V_INSET: 4px;
 }
 
 .cell-action-btn {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: calc(var(--V_INSET) / var(--zoom, 1));
+  right: calc(var(--V_INSET) / var(--zoom, 1));
+  box-sizing: border-box;
   width: calc(var(--V_SPOT) / var(--zoom, 1));
   height: calc(var(--V_SPOT) / var(--zoom, 1));
   margin: 0 !important;
   padding: 0 !important;
   pointer-events: auto;
-  background: transparent;
-  border: none;
+  background: var(--GLASS_BUTTON);
+  border: calc(1.5px / var(--zoom, 1)) solid var(--GLASS_LINE_BRIGHT);
+  border-radius: 50%;
   outline: none;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--TEXT_BRIGHT);
   font-size: calc(var(--V_SIZE) / var(--zoom, 1));
   line-height: 1;
   font-family: sans-serif;
-  text-shadow: 0 0 4px #000;
+  text-shadow: none;
   cursor: pointer;
   z-index: 5;
 
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
+  transition: opacity 0.2s ease, visibility 0.2s ease, transform var(--SLOW_TRANSFORM), border-color var(--SLOW_BORDER);
+}
+
+.cell-action-btn.cellAdd {
+  right: calc((2 * var(--V_INSET) + var(--V_SPOT)) / var(--zoom, 1));
+}
+
+.cell-action-btn:hover,
+.cell-action-btn:focus-visible {
+  transform: scale(1.08);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
 }
 
 .elastic-table td.is-magnified .cell-action-btn,
@@ -285,14 +302,19 @@
   visibility: visible;
 }
 
-/* A phone's zoomed day isn't scaled, so its v is just its size, in the top right corner of the day it draws */
+/* A phone's zoomed day isn't scaled, so its buttons are just their size, in the top right corner of the day it draws */
 .elastic-table td.is-fullZoom .cell-action-btn {
-  top: var(--dayY, 0px);
-  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - var(--V_SPOT));
+  top: calc(var(--dayY, 0px) + var(--V_INSET));
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - var(--V_SPOT) - var(--V_INSET));
   right: auto;
   width: var(--V_SPOT);
   height: var(--V_SPOT);
+  border-width: 1.5px;
   font-size: var(--V_SIZE);
+}
+
+.elastic-table td.is-fullZoom .cell-action-btn.cellAdd {
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * var(--V_SPOT) - 2 * var(--V_INSET));
 }
 
 /*========================================*
@@ -310,8 +332,9 @@
   --PANEL_BORDER: rgba(150, 165, 255, 0.35);
   --PANEL_RADIUS: var(--GLASS_RADIUS);
   /* (Floating windows' glass, --HOVER_GRADIENT and --FLOAT_SHADOW, is in stylesheet.css: the date picker uses it too) */
-  --NEGATIVE_TEXT: #ff6b7a;
-  --POSITIVE_TEXT: #5ee39a;              /* Positive entries */
+  --NEGATIVE_TEXT: #ff6b7a;              /* Costs (negative entries) */
+  --POSITIVE_TEXT: #5ee39a;              /* Gains (positive entries) */
+  --ZERO_TEXT: #6f7396;                  /* $0.00 entries: a darker grey */
   --PLACEHOLDER_TEXT: #ffd447;           /* Placeholder entries, whatever their amount */
   --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
 }
@@ -734,14 +757,23 @@
   color: var(--TEXT_BRIGHT);
 }
 
+/* An entry's words follow its amount: a gain green, a cost red, and $0.00 a darker grey. The lines the budget writes
+   itself (In Bank, Gains, Costs) stay the day's light grey (a day below $0 turns red itself). Placeholders are yellow
+   whatever their amount (at the end). */
 .lineEntry.positive,
 .positive {
   color: var(--POSITIVE_TEXT);
 }
 
-.lineSystem.negative,
+.lineEntry.negative,
 .negative {
   color: var(--NEGATIVE_TEXT);
+}
+
+.lineEntry.isZero,
+.upcomingEntry.isZero,
+.accountEntryLine.isZero {
+  color: var(--ZERO_TEXT);
 }
 
 /* Calendar days: today glows (a blue-violet radial gradient from its center, a bright edge, and a glow around it),
@@ -791,13 +823,6 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* While a day is zoomed, the page under it holds still (Process Budget.js lockPageScroll) */
-html.dayZoomed,
-html.dayZoomed body {
-  overflow: hidden !important;
-  overscroll-behavior: none;
-}
-
 /* Date picking: tap a day to fill the waiting date field (its calendar button opens the date picker instead) */
 body.datePicking .elastic-table {
   outline: 2px dashed rgba(238, 0, 0, 0.55);
@@ -833,21 +858,8 @@ body.datePicking .elastic-table td {
   white-space: nowrap;
 }
 
-/* A primary button's border is the red-orange gradient, over a red radial gradient (stylesheet.css GRADIENT
-   BORDERS) */
-.budgetButton.primary {
-  border-color: transparent;
-  color: #fff;
-}
-
-.budgetButton.danger {
-  color: var(--NEGATIVE_TEXT);
-  border-color: var(--NEGATIVE_TEXT);
-}
-
-.budgetButton.danger:hover {
-  background: radial-gradient(ellipse at center, rgba(255, 80, 100, 0.3), transparent 80%), var(--GLASS_BUTTON);
-}
+/* (Recommended .primary buttons glow, not-recommended .danger ones are darker, and chosen ones have the red-orange ring:
+   stylesheet.css BUTTONS and GRADIENT BORDERS) */
 
 .budgetButton:disabled {
   opacity: 0.45;
@@ -859,7 +871,6 @@ body.datePicking .elastic-table td {
  *========================================*/
 
 .budgetPanel {
-  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   box-sizing: border-box;
   color: var(--BASE_COLOR);
   text-align: left;
@@ -1086,7 +1097,7 @@ body.datePicking .elastic-table td {
 .searchBar select:focus {
   transform: none;
   text-shadow: none;
-  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+  box-shadow: none;
   outline: none;
 }
 
@@ -1103,11 +1114,6 @@ body.datePicking .elastic-table td {
 .budgetCard select option,
 .searchBar select option {
   background: #141238;
-}
-
-/* The date field a calendar tap will fill (its border is the gradient: stylesheet.css GRADIENT BORDERS) */
-input.dateInput.isPickTarget {
-  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
 }
 
 .amountRow {
@@ -1144,10 +1150,47 @@ input.dateInput.isPickTarget {
 }
 
 /* The chosen one: the red-orange border and a red glow, over a red radial gradient from its center */
-.segmented .budgetButton[aria-checked="true"] {
+.segmented .budgetButton[aria-checked="true"],
+.choiceList .budgetButton[aria-checked="true"] {
   color: #fff;
   background: var(--PICK_FILL), rgba(120, 0, 20, 0.35);
   box-shadow: 0 0 10px rgba(200, 0, 0, 0.6);
+}
+
+/* A choice list (Budget UI.js choiceList: an Other Account to pick, or what a goal is for): buttons that wrap, each
+   with its name and, under it, a second line (an account's balance, smaller and dimmer, red below $0). A long name
+   wraps inside its button. */
+.choiceList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.choiceList .budgetButton {
+  flex-direction: column;
+  gap: 0.1em;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.35em 0.85em;
+  font-size: 0.9em;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.choiceList .choiceDetail {
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+  font-variant-numeric: tabular-nums;
+}
+
+.choiceList .choiceDetail.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.choiceList .budgetButton[aria-checked="true"] .choiceDetail:not(.negative) {
+  color: var(--BASE_COLOR);
 }
 
 .checkboxField {
@@ -1218,7 +1261,7 @@ input.dateInput.isPickTarget {
   font-size: calc(var(--UI_TEXT) * 0.9);
 }
 
-/* Other Account picker (New Entry and Recurring, for Hidden and Transfer) */
+/* A connected spreadsheet's typed Other Account (a list of the names alone; entries pick theirs with a choiceList) */
 .budgetPanel select.accountSelect {
   width: auto;
   min-width: 12em;
@@ -1361,7 +1404,6 @@ input.dateInput.isPickTarget {
 /* Search: the Search button above the calendar opens it, floating over the page like a large panel (it
    lives in the screen layer, see wireSearch in Budget Search.js). Its results show under its form. */
 .searchBar {
-  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   position: fixed;
   z-index: 1300;
   top: max(2vh, env(safe-area-inset-top, 0px));
@@ -1653,6 +1695,21 @@ input.dateInput.isPickTarget {
 
 .searchTotal {
   font-size: 0.95em;
+}
+
+/* "Tap a result to change it." (Budget Search.js): each result opens its options */
+.searchHint {
+  margin: -0.3em 0 0.5em;
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+.searchTable tr.clickable {
+  cursor: pointer;
+}
+
+.searchTable tr.clickable:hover td {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .searchScroll {
@@ -2333,16 +2390,17 @@ input.dateInput.isPickTarget {
   color: #fff;
 }
 
-/* Quick Entry glows: a blue-violet radial gradient from its center and a bright edge (on hover, the red one joins) */
+/* Quick Entry glows: a blue-violet radial gradient from its center and a bright edge (a recommended button, .primary,
+   looks the same), and glows a little more under the pointer */
 .budgetButton.homeQuick {
   color: var(--TEXT_BRIGHT);
-  background: var(--GLOW_FILL), linear-gradient(90deg, rgba(40, 70, 210, 0.55), rgba(130, 50, 220, 0.55));
+  background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
   border-color: var(--GLOW_EDGE);
   box-shadow: var(--GLOW_SHADOW);
 }
 
 .budgetButton.homeQuick:not(:disabled):hover {
-  background: var(--PICK_FILL), var(--GLOW_FILL), linear-gradient(90deg, rgba(40, 70, 210, 0.55), rgba(130, 50, 220, 0.55));
+  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(110, 125, 255, 0.6);
 }
 
 /* New Entry: the prism, with a + on it, and its name under it */
@@ -2903,6 +2961,94 @@ html.watchView .quickBalanceAmount {
   opacity: 0.85;
 }
 
+/* Other Accounts: each account's Entries button, at the end of its row (Budget Pages.js) */
+.accountsTable td.entriesCell {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.accountsTable .entriesButton {
+  padding: 0.3em 0.8em;
+  font-size: 0.85em;
+}
+
+/* A balance with its max ("$500.00/$2000.00") can put the max under the balance, each staying whole, and a long account
+   name takes more lines, so the table fits a narrow phone */
+.accountsTable td.amountCell.withMax {
+  white-space: normal;
+}
+
+.accountsTable td.amountCell.withMax > span {
+  white-space: nowrap;
+}
+
+.accountsTable .titleCell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 400px) {
+  .accountsTable .entriesButton {
+    padding: 0.3em 0.55em;
+  }
+}
+
+/* An account's Entries (its floating list): every entry for it, newest first, each a button that opens its options. Its
+   day, then the entry (red for a cost, green for a gain, darker grey for $0.00, yellow for a placeholder), then what the
+   account got, at the right. The list scrolls in the panel. */
+.accountEntryList {
+  max-height: none;
+}
+
+.accountEntryItem {
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.accountEntryItem .accountEntryButton {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15em 0.8em;
+  width: 100%;
+  margin: 0;
+  padding: 0.4em 0.35em;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.accountEntryItem .accountEntryButton:hover,
+.accountEntryItem .accountEntryButton:focus-visible {
+  transform: none;
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.accountEntryButton .accountEntryDate {
+  flex: 0 0 auto;
+  color: var(--TEXT_DIM);
+}
+
+.accountEntryButton .accountEntryLine {
+  flex: 1 1 12em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.accountEntryButton .accountEntryAmount {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+
 .sectionInsertRow td {
   padding: 0;
   text-align: center;
@@ -2946,7 +3092,6 @@ html.watchView .quickBalanceAmount {
 
 /* Rounded content cards, same look as the home page's info row */
 .budgetCard {
-  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   box-sizing: border-box;
   width: min(94vw, 760px);
   margin: 0 auto 2.5vmin;
@@ -3482,10 +3627,12 @@ footer.hasHelp > hr {
   margin: -0.3em -0.4em 0 0.5em;
 }
 
+/* Help's dimmed backdrop: in <body>, fixed over the whole window (just under the screen layer, where the help is), so it
+   covers the page however it's scrolled while the help is open (Layout.js) */
 .overlayBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 1400;
+  z-index: 999;
   background: rgba(0, 0, 0, 0.6);
 }
 
@@ -3876,6 +4023,8 @@ html:not(.frontPage) .frontSignIn,
 .isPlaceholder .positive,
 .isPlaceholder .negative,
 .lineEntry.isPlaceholder,
+.upcomingEntry.isPlaceholder,
+.accountEntryLine.isPlaceholder,
 .dataTable td.isPlaceholder,
 .dataTable td.amountCell.isPlaceholder,
 .recurringTable tr.isPlaceholder td,

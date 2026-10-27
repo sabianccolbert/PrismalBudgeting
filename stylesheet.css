@@ -63,9 +63,11 @@
   --SLIDE_DISTANCE: 100vh;
   --SLIDE_DURATION: 0.6s;
 
-  /* The red glow on chosen, hovered, and focused controls */
+  /* The red glow on chosen controls */
   --SHADOW: 0 0 20px rgba(200, 0, 0, 1);
   --PICK_SHADOW: 0 0 16px rgba(230, 30, 0, 0.75);
+  /* A button under the pointer: a soft blue-violet glow around its brighter edge */
+  --HOVER_SHADOW: 0 0 12px rgba(110, 125, 255, 0.55);
 
   /* Brand colors: links, and text (body text, titles and dates, and labels and hints) */
   --LINK_LIGHT: #ee0000;
@@ -96,8 +98,15 @@
   --GLOW_EDGE: rgba(150, 165, 255, 0.9);
   --GLOW_SHADOW: 0 0 16px rgba(96, 112, 255, 0.55), inset 0 0 12px rgba(120, 140, 255, 0.25);
 
-  /* Chosen, hovered, and focused buttons: the red-orange gradient border and red glow, over a red radial gradient from
-     their center (see GRADIENT BORDERS at the end) */
+  /* What a recommended button (Save, Add Entry, Sign In) is filled with, under --GLOW_FILL: it glows like Quick Entry */
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(40, 70, 210, 0.55), rgba(130, 50, 220, 0.55));
+  /* A button that's not recommended (Delete, Sign Out Everywhere), and one that can't be used now: darker (the first with
+     muted red words) */
+  --DARK_BUTTON: rgba(6, 7, 22, 0.88);
+  --DANGER_TEXT: #d98a94;
+
+  /* Chosen buttons (a picked refraction type or account, Cost or Gain, an open date picker's button): the red-orange
+     gradient border and red glow, over a red radial gradient from their center (see GRADIENT BORDERS at the end) */
   --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 96, 40, 0.42) 0%, rgba(214, 24, 24, 0.22) 50%, rgba(120, 0, 30, 0.08) 85%, transparent 100%);
 
   /* How wide the page's content gets */
@@ -112,8 +121,7 @@
   /* Placeholders */
   --PLACEHOLDER_COLOR: rgba(90, 90, 90, 0.5);
 
-  /* The red-orange diagonal gradient on the borders of chosen, hovered, and focused controls
-     (see GRADIENT BORDERS at the end) */
+  /* The red-orange diagonal gradient on the borders of chosen controls (see GRADIENT BORDERS at the end) */
   --EDGE_GRADIENT: linear-gradient(135deg, #ee0000 0%, #ff4500 55%, #ff9a1a 100%);
 
   /* Floating windows (panels, Search, Help, the date picker): deep violet to navy glass */
@@ -388,8 +396,13 @@ img {
 /*========================================*
  *  8) BUTTONS
  *========================================*
- *  Pill-shaped glass buttons, and how they look on hover: they grow a little, and get the red-orange gradient
- *  border, a red glow, and a red radial gradient from their center (GRADIENT BORDERS).
+ *  Pill-shaped glass buttons, the same everywhere (Home's are the model):
+ *   - one that can be tapped is bright glass with a light edge; under the pointer it grows a little, and its edge
+ *     brightens and glows blue-violet;
+ *   - the recommended one (Save, Add Entry, Sign In: .primary) glows like Quick Entry;
+ *   - one that's not recommended (Delete, Delete Account: .danger), and one that can't be used now (disabled), is darker;
+ *   - a chosen one (a picked refraction type or account, Cost or Gain, an open date picker's button) has the red-orange
+ *     gradient border and a red glow (GRADIENT BORDERS).
  */
 
 button {
@@ -421,13 +434,18 @@ button {
 }
 
 button:hover {
-  /* It grows and glows (the border and fill turn red: GRADIENT BORDERS) */
+  /* It grows, and its edge brightens and glows */
   transform: scale(1.05);
-
-  text-shadow: 0 0 10px rgba(255, 60, 0, 0.85);
   color: #fff;
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+}
 
-  box-shadow: var(--PICK_SHADOW);
+/* Can't be used now: darker, and it doesn't react */
+button:disabled {
+  opacity: 0.45;
+  background: var(--DARK_BUTTON);
+  pointer-events: none;
 }
 
 /* A button's small picture before its words (Undo, Redo, Search, Quick Entry): an image from Resources/Icons, as a
@@ -445,10 +463,10 @@ button:hover {
 .iconSearch { background-image: url("/Resources/Icons/Search.webp?v=46152f5765"); }
 .iconQuick  { background-image: url("/Resources/Icons/QuickEntry.webp?v=a219571ba6"); }
 
-/* The calendar (a date box's button): the dark blue icon, lifted to a bright neon blue like Home's calendar card's */
+/* The calendar on a date box's button: thin light grey lines (--BASE_COLOR), like the site's other small marks (?, ×,
+   and the date picker's ‹ and ›) */
 .iconCalendar {
-  background-image: url("/Resources/Icons/Calendar.webp?v=d6ac912434");
-  filter: brightness(2.8) drop-shadow(0 0 4px rgba(60, 120, 255, 0.9));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9cce4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='2.5'/%3E%3Cpath d='M3.5 9.5h17M8 3v4M16 3v4M7.6 13.2h.8M11.6 13.2h.8M15.6 13.2h.8M7.6 16.6h.8M11.6 16.6h.8'/%3E%3C/svg%3E");
 }
 
 /* #endregion 8) BUTTONS */
@@ -606,7 +624,8 @@ header .stacked h2 {
   color: #fff;
   text-shadow: none;
   outline: none;
-  box-shadow: var(--PICK_SHADOW);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
 }
 
 .navIcon {
@@ -842,11 +861,14 @@ img.sprite {
   overflow: visible;
 }
 
-/* The screen layer (Layout.js): floating windows, notes, and the version badge, always over the part of the page that's
-   on the screen, at its normal size, even while the page is pinch-zoomed or a phone's keyboard is up (Layout.js sizes
-   and places it from the browser's visual viewport). Taps go through it, except on what's in it. Fixed boxes in it are
-   placed in it, not on the page. */
-#screenLayer {
+/* The screen layer (Layout.js): floating windows, opened over the part of the page that's on the screen, at their normal
+   size, even while the page is pinch-zoomed or a phone's keyboard is up (Layout.js sizes and places it from the browser's
+   visual viewport). While a window is open, the layer is pinned to the page where it opened (.isPinned), so the page
+   scrolls and zooms with it. The note layer (notes, the idle sign-out's countdown, and the version badge) always follows
+   the screen, over the windows. Taps go through both, except on what's in them. Fixed boxes in them are placed in them,
+   not on the page. */
+#screenLayer,
+#noteLayer {
   position: fixed;
   top: 0;
   left: 0;
@@ -857,13 +879,17 @@ img.sprite {
   pointer-events: none;
 }
 
-#screenLayer > * {
-  pointer-events: auto;
+#screenLayer.isPinned {
+  position: absolute;
 }
 
-#screenLayer > .toastStack,
-#screenLayer > #versionBadge {
-  pointer-events: none;
+#noteLayer {
+  z-index: 1600;
+}
+
+#screenLayer > *,
+#noteLayer > .idleWarning {
+  pointer-events: auto;
 }
 
 /* The release's name, small, in the screen's bottom left corner */
@@ -929,12 +955,9 @@ input[type="password"] {
   letter-spacing: 0.12em;
 }
 
-/* Hover and focus states: it grows a little and glows red (the border turns into the gradient: GRADIENT BORDERS) */
-input:hover,
+/* The box being typed in has a bright edge (GRADIENT BORDERS' boxes, at the end), and nothing else moves or glows */
 input:focus {
   outline: none;
-  transform: scale(1.05);
-  box-shadow: var(--PICK_SHADOW);
   color: #fff;
 }
 .hidden {
@@ -1113,15 +1136,22 @@ input[type="checkbox"].pillSwitch:disabled {
   margin: 0 0 1.1em;
 }
 
-.authCard input:not([type="checkbox"]):hover,
-.authCard input:not([type="checkbox"]):focus {
-  transform: scale(1.02);
-}
-
 .authCard button {
   width: 100%;
   margin: 0.7em 0 0;
   font-size: clamp(15px, 3.4vmin, 19px);
+}
+
+/* Its main button (Sign In, Create Account, Send Reset Link...) is the recommended one: it glows like Quick Entry */
+.authCard #primary-action-btn {
+  color: var(--TEXT_BRIGHT);
+  background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--GLOW_SHADOW);
+}
+
+.authCard #primary-action-btn:hover {
+  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(110, 125, 255, 0.6);
 }
 
 .authCard .textButton {
@@ -1157,17 +1187,14 @@ input[type="checkbox"].pillSwitch:disabled {
 /*========================================*
  *  13) GRADIENT BORDERS
  *========================================*
- *  Chosen, hovered, and focused controls get a red-orange diagonal gradient border (--EDGE_GRADIENT).
- *   - Buttons, button-like links, nav buttons, panels, and notices draw it as a ring over their own border
- *     (the ::before below), which keeps their round corners and see-through backgrounds. --EDGE_WIDTH is
- *     how thick it is, and --EDGE_OUTSET how far outside the padding it starts (their border's width, unless set).
- *   - The buttons also get a red radial gradient from their center (--PICK_FILL) over their glass.
- *   - Text boxes can't have a ::before, so they paint the gradient as a background under a solid fill
- *     (--EDGE_FILL: the box's color while it's focused, set by what it's in).
+ *  Chosen controls (a picked refraction type, account, or Cost or Gain; an open ? or date picker), the New Prism form,
+ *  and the idle sign-out's countdown get a red-orange diagonal gradient border (--EDGE_GRADIENT), drawn as a ring over
+ *  their own border (the ::before below), which keeps their round corners and see-through backgrounds. --EDGE_WIDTH is
+ *  how thick it is, and --EDGE_OUTSET how far outside the padding it starts (their border's width, unless set). The
+ *  buttons among them also get a red radial gradient from their center (--PICK_FILL) over their glass. Then the
+ *  recommended and not recommended buttons (see BUTTONS), and text boxes: the one being typed in gets a bright edge,
+ *  nothing more.
  */
-:root {
-  --EDGE_FILL: rgb(10, 11, 34);
-}
 
 button,
 a.budgetButton {
@@ -1190,50 +1217,29 @@ a.budgetButton {
   --EDGE_OUTSET: 1px;
 }
 
-button:not([class]):hover,
-.helpButton:hover,
-.budgetButton.primary,
-.budgetButton:not(.danger):not(:disabled):hover,
 .segmented .budgetButton[aria-checked="true"],
-.fieldHelpButton:hover,
-.fieldHelpButton:focus-visible,
+.choiceList .budgetButton[aria-checked="true"],
 .fieldHelpButton[aria-expanded="true"],
+button.pickDay[aria-expanded="true"],
 .budgetPanel.prismDraft,
-.idleWarning,
-.navButtons a:hover,
-.navButtons a:focus-visible {
+.idleWarning {
   border-color: transparent;
 }
 
 /* The buttons among them also get the red radial gradient from their center */
-button:not([class]):hover,
-.helpButton:hover,
-.budgetButton.primary,
-.budgetButton:not(.danger):not(:disabled):hover,
 .segmented .budgetButton[aria-checked="true"],
-.fieldHelpButton:hover,
-.fieldHelpButton:focus-visible,
-.fieldHelpButton[aria-expanded="true"] {
+.choiceList .budgetButton[aria-checked="true"],
+.fieldHelpButton[aria-expanded="true"],
+button.pickDay[aria-expanded="true"] {
   background: var(--PICK_FILL), var(--GLASS_BUTTON);
 }
 
-.navButtons a:hover,
-.navButtons a:focus-visible {
-  background: var(--PICK_FILL), var(--GLASS);
-}
-
-button:not([class]):hover::before,
-.helpButton:hover::before,
-.budgetButton.primary::before,
-.budgetButton:not(.danger):not(:disabled):hover::before,
 .segmented .budgetButton[aria-checked="true"]::before,
-.fieldHelpButton:hover::before,
-.fieldHelpButton:focus-visible::before,
+.choiceList .budgetButton[aria-checked="true"]::before,
 .fieldHelpButton[aria-expanded="true"]::before,
+button.pickDay[aria-expanded="true"]::before,
 .budgetPanel.prismDraft::before,
-.idleWarning::before,
-.navButtons a:hover::before,
-.navButtons a:focus-visible::before {
+.idleWarning::before {
   content: "";
   position: absolute;
   inset: calc(-1 * var(--EDGE_OUTSET, var(--EDGE_WIDTH, 2px)));
@@ -1246,13 +1252,45 @@ button:not([class]):hover::before,
   pointer-events: none;
 }
 
+/* Recommended (Save, Add Entry, Set It Up): it glows like Home's Quick Entry, and a little more under the pointer */
+.budgetButton.primary {
+  color: var(--TEXT_BRIGHT);
+  background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--GLOW_SHADOW);
+}
+
+.budgetButton.primary:not(:disabled):hover {
+  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(110, 125, 255, 0.6);
+}
+
+/* Not recommended (Delete, Sign Out Everywhere, Delete Account): darker, its words a muted red */
+.budgetButton.danger {
+  color: var(--DANGER_TEXT);
+  background: var(--DARK_BUTTON);
+  border-color: rgba(255, 107, 122, 0.3);
+  box-shadow: none;
+}
+
+.budgetButton.danger:not(:disabled):hover {
+  color: var(--NEGATIVE_TEXT, #ff6b7a);
+  border-color: rgba(255, 107, 122, 0.6);
+  box-shadow: none;
+}
+
+/* Boxes: a little brighter edge under the pointer, and a bright one while it's being typed in. No glow. (A date box a tap
+   on a day will fill shows it on the calendar instead: its dashed outline, budgetStyle.css body.datePicking.) */
 input:not([type="checkbox"]):not([type="range"]):not([type="number"]):hover,
+select:hover,
+textarea:hover {
+  border-color: var(--GLASS_LINE_BRIGHT);
+}
+
 input:not([type="checkbox"]):not([type="range"]):not([type="number"]):focus,
-input.dateInput.isPickTarget,
 select:focus,
 textarea:focus {
-  border-color: transparent;
-  background: linear-gradient(var(--EDGE_FILL), var(--EDGE_FILL)) padding-box, var(--EDGE_GRADIENT) border-box;
+  border-color: var(--GLOW_EDGE);
+  box-shadow: none;
 }
 
 /*========================================*
@@ -1310,14 +1348,12 @@ button.pickDay .buttonIcon {
   height: 1.35em;
 }
 
-/* Open: it glows red, like a chosen button */
+/* Open: it's chosen (the red-orange ring and fill: GRADIENT BORDERS), with a red glow */
 button.pickDay[aria-expanded="true"] {
-  background: var(--PICK_FILL), var(--GLASS_BUTTON);
   box-shadow: var(--PICK_SHADOW);
 }
 
 .datePicker {
-  --EDGE_FILL: rgb(16, 15, 50); /* A focused box's color inside its gradient border */
   position: absolute;
   z-index: 1350;
   box-sizing: border-box;
@@ -1369,7 +1405,7 @@ button.pickDay[aria-expanded="true"] {
 .datePicker input.pickerInput:hover,
 .datePicker input.pickerInput:focus {
   transform: none;
-  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+  box-shadow: none;
 }
 
 .datePicker .pickerStep {

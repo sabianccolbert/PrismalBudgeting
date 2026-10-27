@@ -1,15 +1,14 @@
-// Sounds: the site's crystal sound effects and its music (now and then a few soft, far-off twinkles), from
-// Resources/Sounds/ (made by _tools/make-sounds.mjs). Every tap or click gets a sound by what it does:
+// Sounds: the site's crystal sound effects and its music (a quiet bed of soft, far-off twinkles, with a clearer few now
+// and then), from Resources/Sounds/ (made by _tools/make-sounds.mjs). Every tap or click gets a sound by what it does:
 //   - delete, off, cancel, close, sign out: a quick crystal shatter
 //   - yes, save, add, on, sign in: one twinkling ding
 //   - any other button: a small, gentle twinkle
 //   - going to another page: a crystal rolling across other crystals (Layout.js plays it as the page slides out)
 //   - anything else (a day, a box, a list): a soft shimmer that's easy to miss
 // Settings turns music and sound effects on or off for this device (both on to start). Browsers only let a page play
-// sound after a tap, so nothing plays before the first one. Sounds never get in the way of the person's own audio:
-// on an iPhone they mix with it (and the silent switch silences them), and if anything interrupts them (another app's
-// audio taking over, a call), they stop for the rest of the visit (this tab), so that audio can play on undisturbed.
-// Settings can turn them back on.
+// sound after a tap, so nothing plays before the first one. On an iPhone they mix with the person's own audio instead of
+// stopping it (and the silent switch silences them). Something that takes the speaker (a call) pauses them, and the
+// next tap plays them again.
 
 (function sounds() {
   "use strict";
@@ -23,35 +22,37 @@
     ambient: ["Ambient1", "Ambient2", "Ambient3", "Ambient4", "Ambient5"]
   };
   // How loud each kind plays (the files are all made at about the same loudness)
-  const VOLUMES = { twinkle: 0.16, ding: 0.24, shatter: 0.2, transition: 0.2, soft: 0.08, ambient: 0.1 };
+  const VOLUMES = { twinkle: 0.16, ding: 0.24, shatter: 0.2, transition: 0.2, soft: 0.08, ambient: 0.06 };
   const MASTER_VOLUME = 0.8;
-  // Music: a few far-off twinkles every AMBIENT_MIN_S to AMBIENT_MAX_S seconds, on the signed-in pages
+  // Music, on the signed-in pages: a quiet bed of far-off twinkles, one every AMBIENT_BED_MIN_S to AMBIENT_BED_MAX_S
+  // seconds (each about 2.6 seconds long, so they run together), at AMBIENT_BED_SHARE of the music's volume, lower and
+  // softer; and now and then (every AMBIENT_MIN_S to AMBIENT_MAX_S seconds) a clearer few, at the music's own volume
   const AMBIENT_MIN_S = 7;
   const AMBIENT_MAX_S = 18;
+  const AMBIENT_BED_MIN_S = 1.4;
+  const AMBIENT_BED_MAX_S = 3.2;
+  const AMBIENT_BED_SHARE = 0.3;
+  const AMBIENT_BED_LOWPASS = 3800; // Hz: the bed's twinkles sound farther off
   const MUSIC_PAGES = ["home", "recurring", "history", "accounts", "menu", "spreadsheets", "tracker", "calculator", "logs", "settings"];
 
-  // This device's choices (Settings), and this visit's pause after an interruption
+  // This device's choices (Settings)
   const EFFECTS_KEY = "prismal_sound_effects"; // "off" when turned off
   const MUSIC_KEY = "prismal_music";           // "off" when turned off
-  const PAUSED_KEY = "prismal_sounds_paused";  // In this tab's session storage: "1" after an interruption
 
-  const read = (storage, key) => { try { return window[storage].getItem(key); } catch (e) { return null; } };
-  const write = (storage, key, value) => {
+  const read = (key) => { try { return localStorage.getItem(key); } catch (e) { return null; } };
+  const write = (key, value) => {
     try {
-      if (value === null) window[storage].removeItem(key);
-      else window[storage].setItem(key, value);
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
     } catch (e) {}
   };
 
-  const paused = () => read("sessionStorage", PAUSED_KEY) === "1";
-  const effectsOn = () => read("localStorage", EFFECTS_KEY) !== "off" && !paused();
-  const musicOn = () => read("localStorage", MUSIC_KEY) !== "off" && !paused() && MUSIC_PAGES.includes(window.PAGE) && !window.PUBLIC_PAGE;
+  const effectsOn = () => read(EFFECTS_KEY) !== "off";
+  const musicOn = () => read(MUSIC_KEY) !== "off" && MUSIC_PAGES.includes(window.PAGE) && !window.PUBLIC_PAGE;
 
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   let context = null;
   let master = null;
-  let ourSuspend = false;    // The page suspended it itself (hidden, or paused): not an interruption
-  let lastVisibleChange = 0; // When the page was last hidden or shown (an interruption right then is the page leaving the screen)
   const fileData = new Map(); // name -> Promise of its bytes
   const buffers = new Map();  // name -> Promise of { buffer, start (where the sound starts: an MP3 begins with a little silence) }
 
@@ -104,11 +105,9 @@
       master = context.createGain();
       master.gain.value = MASTER_VOLUME;
       master.connect(context.destination);
-      context.addEventListener("statechange", noticeInterruption);
       Object.values(FILES).flat().filter(name => !name.startsWith("Ambient")).forEach(loadSound);
     }
-    if (context.state !== "running" && !paused()) {
-      ourSuspend = false;
+    if (context.state !== "running") {
       const resumed = context.resume();
       if (resumed && typeof resumed.catch === "function") resumed.catch(() => {});
     }
@@ -118,7 +117,7 @@
   // The music starts once the audio is playing (right away when it is, or when it starts: a tap's resume takes a moment)
   let musicWaiting = false;
   function startMusicWhenRunning() {
-    if (!context || paused()) return;
+    if (!context) return;
     if (context.state === "running") {
       startMusic();
       return;
@@ -133,29 +132,8 @@
     });
   }
 
-  // Something else took the speaker while the page was on the screen (another app's audio, a call): sounds stop for the
-  // rest of this visit, so that audio isn't interrupted again
-  function noticeInterruption() {
-    if (!context || ourSuspend || context.state === "running") return;
-    if (document.visibilityState !== "visible" || Date.now() - lastVisibleChange < 1500) return;
-    if (context.state === "interrupted" || context.state === "suspended") pauseForVisit();
-  }
-  try {
-    navigator.audioSession?.addEventListener?.("statechange", () => {
-      if (navigator.audioSession.state === "interrupted" && document.visibilityState === "visible" && Date.now() - lastVisibleChange >= 1500) pauseForVisit();
-    });
-  } catch (e) {}
-
-  // Stop everything for this visit (Settings can turn sounds back on)
-  function pauseForVisit() {
-    write("sessionStorage", PAUSED_KEY, "1");
-    stopMusic();
-    suspend();
-  }
-
   function suspend() {
     if (!context || context.state === "closed") return;
-    ourSuspend = true;
     const suspended = context.suspend();
     if (suspended && typeof suspended.catch === "function") suspended.catch(() => {});
   }
@@ -171,17 +149,25 @@
     startSound(sound, VOLUMES[kind] * volume, detune ? 0.97 + Math.random() * 0.06 : 1, 0);
   }
 
-  function startSound(sound, gainValue, rate, pan) {
+  // lowpass: a frequency (Hz) above which it's softened, for a sound that's farther off
+  function startSound(sound, gainValue, rate, pan, lowpass = 0) {
     const source = context.createBufferSource();
     source.buffer = sound.buffer;
     source.playbackRate.value = rate;
     const gain = context.createGain();
     gain.gain.value = gainValue;
     let last = gain;
+    if (lowpass) {
+      const filter = context.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = lowpass;
+      last.connect(filter);
+      last = filter;
+    }
     if (pan && typeof context.createStereoPanner === "function") {
       const panner = context.createStereoPanner();
       panner.pan.value = pan;
-      gain.connect(panner);
+      last.connect(panner);
       last = panner;
     }
     source.connect(gain);
@@ -190,31 +176,49 @@
   }
 
   /* ---------- Music ---------- */
-  let musicTimer = 0;
+  // Two timers: the quiet bed, and the clearer twinkles now and then. Each stops by itself when the music can't play
+  // (it's off, the page is off the screen, or the audio isn't running), and the next tap starts them again.
+  const musicTimers = { bed: 0, now: 0 };
+  const PLAYING = -1; // A loop's timer while its sound loads
+  const canPlayMusic = () => musicOn() && !!context && context.state === "running" && document.visibilityState === "visible";
+  const randomBetween = (low, high) => low + Math.random() * (high - low);
 
+  // (Each loop starts unless it's already going: one can stop a few seconds before the other)
   function startMusic() {
-    if (musicTimer || !musicOn() || !context || context.state !== "running" || document.visibilityState !== "visible") return;
+    if (!canPlayMusic()) return;
     FILES.ambient.forEach(loadSound);
-    const next = () => {
-      musicTimer = setTimeout(async () => {
-        musicTimer = 0;
-        if (!musicOn() || !context || context.state !== "running" || document.visibilityState !== "visible") return;
+    // (While a sound loads, its loop is still running: PLAYING. stopMusic in the meantime ends it.)
+    const loop = (timer, minS, maxS, play) => {
+      musicTimers[timer] = setTimeout(async () => {
+        if (!canPlayMusic()) {
+          musicTimers[timer] = 0;
+          return;
+        }
+        musicTimers[timer] = PLAYING;
         const sound = await loadSound(FILES.ambient[Math.floor(Math.random() * FILES.ambient.length)]);
-        if (sound && context.state === "running") startSound(sound, VOLUMES.ambient * (0.6 + Math.random() * 0.5), 0.96 + Math.random() * 0.08, Math.random() * 1.2 - 0.6);
-        next();
-      }, (AMBIENT_MIN_S + Math.random() * (AMBIENT_MAX_S - AMBIENT_MIN_S)) * 1000);
+        if (musicTimers[timer] !== PLAYING) return;
+        if (sound && context.state === "running") play(sound);
+        loop(timer, minS, maxS, play);
+      }, randomBetween(minS, maxS) * 1000);
     };
-    next();
+    if (!musicTimers.bed) {
+      loop("bed", AMBIENT_BED_MIN_S, AMBIENT_BED_MAX_S, (sound) =>
+        startSound(sound, VOLUMES.ambient * AMBIENT_BED_SHARE * randomBetween(0.7, 1.1), randomBetween(0.78, 1.02), randomBetween(-0.8, 0.8), AMBIENT_BED_LOWPASS));
+    }
+    if (!musicTimers.now) {
+      loop("now", AMBIENT_MIN_S, AMBIENT_MAX_S, (sound) =>
+        startSound(sound, VOLUMES.ambient * randomBetween(0.6, 1.1), randomBetween(0.96, 1.04), randomBetween(-0.6, 0.6)));
+    }
   }
 
   function stopMusic() {
-    clearTimeout(musicTimer);
-    musicTimer = 0;
+    clearTimeout(musicTimers.bed);
+    clearTimeout(musicTimers.now);
+    musicTimers.bed = musicTimers.now = 0;
   }
 
-  // Off the screen, nothing plays (and it isn't an interruption); back on it, it starts again at the next tap
+  // Off the screen, nothing plays; back on it, it starts again at the next tap
   document.addEventListener("visibilitychange", () => {
-    lastVisibleChange = Date.now();
     if (document.visibilityState === "hidden") {
       stopMusic();
       suspend();
@@ -284,20 +288,13 @@
       if (Date.now() - lastTapSound < 300) return;
       play("transition", { detune: false });
     },
-    effectsOn: () => read("localStorage", EFFECTS_KEY) !== "off",
-    musicOn: () => read("localStorage", MUSIC_KEY) !== "off",
-    paused,
-    setEffects(on) { write("localStorage", EFFECTS_KEY, on ? null : "off"); },
+    effectsOn,
+    musicOn: () => read(MUSIC_KEY) !== "off",
+    setEffects(on) { write(EFFECTS_KEY, on ? null : "off"); },
     setMusic(on) {
-      write("localStorage", MUSIC_KEY, on ? null : "off");
+      write(MUSIC_KEY, on ? null : "off");
       if (on) startMusicWhenRunning();
       else stopMusic();
-    },
-    // Sounds paused for this visit (after an interruption) play again (from a tap, which lets the page play sound)
-    resume() {
-      write("sessionStorage", PAUSED_KEY, null);
-      ensureContext();
-      startMusicWhenRunning();
     }
   };
 })();

@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.21.2026.B";
+  const SITE_VERSION = "10.26.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,22 +26,22 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "fb14b90be6",
-    "/Javascript/Budget Search.js": "1dfe4e44ff",
-    "/Javascript/Budget UI.js": "d2f9526b2b",
-    "/Javascript/Calendar Page.js": "4d93c26383",
-    "/Javascript/Dates.js": "9f645c4b1f",
+    "/Javascript/Budget Pages.js": "ab42e28eda",
+    "/Javascript/Budget Search.js": "b27e8d9f21",
+    "/Javascript/Budget UI.js": "3350692905",
+    "/Javascript/Calendar Page.js": "98c71180cb",
+    "/Javascript/Dates.js": "a3889d2342",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "322015e58b",
-    "/Javascript/Login.js": "5621c1f33e",
+    "/Javascript/Layout.js": "efdbf4112d",
+    "/Javascript/Login.js": "f0b44ebbb6",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "09292ba0f2",
+    "/Javascript/Process Budget.js": "2a3caf961c",
     "/Javascript/Quick Entry.js": "0f2d6781c2",
-    "/Javascript/Session.js": "6961a399bf",
-    "/Javascript/Settings Page.js": "74b22d45cf",
-    "/Javascript/Sounds.js": "a4d1a0d98e",
-    "/Javascript/Spreadsheets Page.js": "d212bf4b40",
+    "/Javascript/Session.js": "643caf8465",
+    "/Javascript/Settings Page.js": "053c18e009",
+    "/Javascript/Sounds.js": "ddad73382f",
+    "/Javascript/Spreadsheets Page.js": "1d4c741d9b",
     "/Javascript/Spreadsheets.js": "c49a687361",
     "/Javascript/Sprites.js": "5b494b26db",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
@@ -58,11 +58,11 @@
     "/Resources/Sounds/Twinkle1.mp3": "5f9b9a22de",
     "/Resources/Sounds/Twinkle2.mp3": "23912ae518",
     "/Resources/Sounds/Twinkle3.mp3": "053548a0e8",
-    "/Resources/Sprites/Costs.webp": "6c239b521e",
+    "/Resources/Sprites/Costs.webp": "d2a34fae6e",
     "/Resources/Sprites/Gains.webp": "a5e3b75e17",
     "/Resources/Sprites/Hidden.webp": "cb92741fc5",
     "/Resources/Sprites/InBank.webp": "40a6bd5f60",
-    "/Resources/Sprites/Negative.webp": "9bfda25302",
+    "/Resources/Sprites/Negative.webp": "4f6dda7720",
     "/Resources/Sprites/Recurring.webp": "f35a230cbd",
     "/Resources/Sprites/Regular.webp": "660dede305",
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
