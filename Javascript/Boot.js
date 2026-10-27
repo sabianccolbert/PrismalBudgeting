@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.26.2026.A";
+  const SITE_VERSION = "10.27.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,23 +26,24 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Budget Pages.js": "ab42e28eda",
+    "/Javascript/Budget Pages.js": "f52f40f47d",
     "/Javascript/Budget Search.js": "b27e8d9f21",
-    "/Javascript/Budget UI.js": "3350692905",
-    "/Javascript/Calendar Page.js": "98c71180cb",
+    "/Javascript/Budget UI.js": "1c7a7c4331",
+    "/Javascript/Calendar Page.js": "786083648d",
     "/Javascript/Dates.js": "a3889d2342",
     "/Javascript/Debug.js": "8ebdd719db",
+    "/Javascript/Jeremy Page.js": "438eed04d0",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "efdbf4112d",
+    "/Javascript/Layout.js": "f1928de084",
     "/Javascript/Login.js": "f0b44ebbb6",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "2a3caf961c",
-    "/Javascript/Quick Entry.js": "0f2d6781c2",
+    "/Javascript/Process Budget.js": "86d4e70d2c",
+    "/Javascript/Quick Entry.js": "8b4bdc25f4",
     "/Javascript/Session.js": "643caf8465",
-    "/Javascript/Settings Page.js": "053c18e009",
+    "/Javascript/Settings Page.js": "f5d0c6ac03",
     "/Javascript/Sounds.js": "ddad73382f",
     "/Javascript/Spreadsheets Page.js": "1d4c741d9b",
-    "/Javascript/Spreadsheets.js": "c49a687361",
+    "/Javascript/Spreadsheets.js": "6c1da9b8b4",
     "/Javascript/Sprites.js": "5b494b26db",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
@@ -104,6 +105,7 @@
     if (p === "/menu/tracker") return "tracker";
     if (p === "/menu/calculator") return "calculator";
     if (p === "/menu/logs") return "logs";
+    if (p === "/menu/jeremy") return "jeremy";
 
     return "generic";
   }
@@ -237,13 +239,14 @@
   ];
 
   // Quick Entry borrows the budget helpers and New Entry form without loading a budget (see Quick Entry.js)
-  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "spreadsheets", "tracker", "calculator", "logs", "settings", "quick"];
+  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "spreadsheets", "tracker", "calculator", "logs", "jeremy", "settings", "quick"];
 
   // The script that draws each budget page (the menu data pages share Budget Pages.js)
   const PAGE_SCRIPTS = {
     home: "/Javascript/Calendar Page.js",
     settings: "/Javascript/Settings Page.js",
     spreadsheets: "/Javascript/Spreadsheets Page.js",
+    jeremy: "/Javascript/Jeremy Page.js",
     quick: "/Javascript/Quick Entry.js"
   };
 

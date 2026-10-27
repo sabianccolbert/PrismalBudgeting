@@ -1124,11 +1124,16 @@ function openRecurringPanel(origin, index) {
       end.input.addEventListener("input", showPlaceholder);
       end.input.addEventListener("change", showPlaceholder);
       showPlaceholder();
+      // Needs, Wants, Or Future (once Jeremy's card for it is on): its title's, following a new title as it's typed
+      const purpose = BudgetUI.purposeField({ shown: jeremyCardOn("purposes"), title: existing ? String(existing[0]) : "" });
+      const followTitle = () => purpose.follow(withAccount(title.value(), account.value()));
+      title.input.addEventListener("input", followTitle);
+      account.el.addEventListener("click", followTitle);
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteEntry }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Entry", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, BudgetUI.buttonRow(buttons));
+      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, purpose.el, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -1147,6 +1152,7 @@ function openRecurringPanel(origin, index) {
         fields.endDate = fields.endDate || "None";
         // (Left as it was when the switch isn't there: an End Date before today)
         if (!placeholder.el.hidden) fields.placeholder = placeholder.value();
+        fields.purpose = purpose.value();
         BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
       });
 

@@ -1,4 +1,4 @@
-// Calendar Page: the home page. "Lowest in bank after today", Dave (and the goals under his message),
+// Calendar Page: the home page. "Lowest in bank after today", Jeremy's message (his card opens his page),
 // Upcoming, the calendar's day cells, and the new-entry / entry-options panels.
 // Zooming a day is handled in Process Budget.js (LAYOUT FUNCTIONS); tapping an entry inside a
 // zoomed day opens its options here.
@@ -9,20 +9,18 @@
 
 window.workspaceReady.then((loaded) => {
   if (!loaded) {
-    const dave = document.getElementById("daveMessage");
-    if (dave) dave.textContent = "Couldn't load your budget data. Please refresh to try again.";
+    const jeremy = document.getElementById("jeremyMessage");
+    if (jeremy) jeremy.textContent = "Couldn't load your budget data. Please refresh to try again.";
     // The calendar's first day says "Loading..." until the budget is there
     const firstDay = document.querySelector(".elastic-table .cell-content");
     if (firstDay) firstDay.textContent = "Couldn't load your budget";
     return;
   }
-  startDaveVisit(); // Dave's tip for this visit, if there is one (Process Budget.js DAVE'S TIPS)
   renderHome();
   wireCalendar();
   wireGettingStarted();
   wireUndoButtons();
   wireQuickWaiting();
-  wireGoals();
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
 });
@@ -37,7 +35,6 @@ function renderHome() {
   renderQuickWaiting();
   renderCalendar();
   renderInfoRow();
-  renderGoals();
   renderUndoButtons();
 }
 
@@ -416,7 +413,7 @@ function openInBankOptions(lineEl, r, c) {
 //#endregion
 
 // =====================================================================
-// #region INFO ROW (lowest in bank, Dave, upcoming)
+// #region INFO ROW (lowest in bank, Jeremy, upcoming)
 // =====================================================================
 
 function renderInfoRow() {
@@ -427,7 +424,8 @@ function renderInfoRow() {
   }
   renderAfterCalendar();
 
-  renderDave();
+  const jeremy = document.getElementById("jeremyMessage");
+  if (jeremy) jeremy.textContent = jeremyMessage;
 
   const list = document.getElementById("upcomingList");
   if (!list) return;
@@ -474,131 +472,6 @@ function renderAfterCalendar() {
   document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${showStoredDate(found.lowest.date)}` : "Lowest is on --";
   show("afterLowest", found.lowest);
   show("afterDay28", found.day28);
-}
-
-// Dave's tip, highlighted, while it has its 10 minutes (see DAVE'S TIPS in Process Budget.js); otherwise his
-// everyday message. When the tip's time is up on an open page, he goes back to the everyday one.
-let daveTipTimer = 0;
-function renderDave() {
-  const dave = document.getElementById("daveMessage");
-  if (!dave) return;
-  const tip = currentDaveTip();
-  dave.textContent = tip ? tip.text : daveMessage;
-  dave.closest(".daveCard")?.classList.toggle("daveTip", !!tip);
-  const label = document.getElementById("daveTipLabel");
-  if (label) label.hidden = !tip;
-  clearTimeout(daveTipTimer);
-  if (tip) daveTipTimer = setTimeout(renderDave, Math.max(0, tip.until - Date.now()) + 100);
-}
-
-//#endregion
-
-// =====================================================================
-// #region GOALS (Dave's card; see Goals in Process Budget.js)
-// =====================================================================
-// Under Dave's message: each goal with how far along it is (tap one to change or delete it), and the Goals button, which
-// sets a new one.
-
-function wireGoals() {
-  document.getElementById("goalsButton")?.addEventListener("click", (event) => openGoalPanel(event.currentTarget));
-}
-
-function renderGoals() {
-  const list = document.getElementById("goalList");
-  if (!list) return;
-  const goals = accountsData?.goals || [];
-  list.hidden = goals.length === 0;
-  list.replaceChildren(...goals.map(goalRow));
-}
-
-// Its title, then what it's for and its amount ("Savings: $1200.00 of $2000.00 by 06/01/2027"), how far along it is (a
-// bar), and Reached, how much of it so far, or that its day passed
-function goalRow(goal, index) {
-  const balance = goalBalance(goal);
-  const date = createSafeMidnight(goal.date, true);
-  const target = goalTarget(goal);
-  const reached = balance !== null && balance >= goal.amount;
-  const share = balance !== null && goal.amount > 0 ? Math.max(0, Math.min(100, Math.floor(balance / goal.amount * 100))) : null;
-  const amount = formatMoney(goal.amount) + (goal.percent !== null ? ` (${showPercent(goal.percent)} when set)` : "");
-  const by = isNaN(date.getTime()) ? "" : ` by ${showDate(date)}`;
-  let details = balance !== null ? `${target}: ${formatMoney(balance)} of ${amount}${by}` : `${target ? target + ": " : ""}${amount}${by}`;
-  if (goal.kind === "account" && balance === null) details += ` (${goal.account} isn't one of your Other Accounts anymore)`;
-  const status = reached ? "Reached" : date < today ? "Its day passed" : share !== null ? `${share}%` : "";
-
-  const item = BudgetUI.element("li", `goalItem${reached ? " isReached" : ""}`);
-  const button = BudgetUI.element("button", "goalButton");
-  button.type = "button";
-  button.setAttribute("aria-label", `Change the goal ${goal.title}`);
-  const top = BudgetUI.element("span", "goalTop");
-  top.append(BudgetUI.noTranslate(BudgetUI.element("span", "goalTitle", `🎯 ${goal.title}`)));
-  if (status) top.append(BudgetUI.element("span", "goalStatus", status));
-  button.append(top, BudgetUI.noTranslate(BudgetUI.element("span", "goalDetails", details)));
-  if (share !== null) {
-    const bar = BudgetUI.element("span", "goalBar");
-    const fill = BudgetUI.element("span", "goalFill");
-    fill.style.width = `${reached ? 100 : share}%`;
-    bar.append(fill);
-    button.append(bar);
-  }
-  button.addEventListener("click", () => openGoalPanel(button, index));
-  item.append(button);
-  return item;
-}
-
-// New goal (index null) or change one: its title, what it's for (each Other Account with its balance under its name), its
-// amount (or a % of what it's for today, which stays that amount), and the day to reach it by
-function openGoalPanel(origin, index = null) {
-  const existing = index === null ? null : (accountsData?.goals || [])[index];
-  BudgetUI.openPanel({
-    origin,
-    size: "small",
-    title: existing ? "Change Goal" : "New Goal",
-    build(form, panel) {
-      const intro = BudgetUI.element("p", "panelHint", "An amount to reach by a day, like $2000.00 in Savings by June. With what it's for picked, Home shows how far along it is.");
-      const title = BudgetUI.textField({ label: "Title", value: existing ? existing.title : "", placeholder: "Vacation, emergency fund...", maxLength: MAX_TITLE });
-      const amount = BudgetUI.amountField({ label: "Amount", amount: existing ? existing.amount : null, percent: existing ? existing.percent : null, signs: BudgetUI.BALANCE_SIGNS });
-      const accounts = otherAccounts();
-      const picked = !existing ? "none" : existing.kind !== "account" ? existing.kind
-        : accounts.some(account => account.name === existing.account) ? `account:${existing.account}` : "none";
-      const allowPercent = () => amount.setPercentAllowed(target.value() !== "none");
-      const target = BudgetUI.choiceList([
-        { key: "none", label: "Nothing" },
-        { key: "inBank", label: "In Bank" },
-        { key: "total", label: "Total", detail: "In Bank and every Other Account" },
-        ...accounts.map(account => BudgetUI.accountChoice(account, `account:${account.name}`))
-      ], picked, allowPercent, "What it's for");
-      target.el.classList.add("accountChoices");
-      const targetHint = "A % goal is that percent of it today, and stays that amount.";
-      const targetField = BudgetUI.field("For", target.el, { optional: true, hint: targetHint });
-      allowPercent();
-      const date = BudgetUI.dateField({ label: "By", date: existing ? createSafeMidnight(existing.date, true) : null });
-
-      const buttons = existing
-        ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: removeIt }, { label: "Cancel", onClick: () => panel.close() }]
-        : [{ label: "Add Goal", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(...(existing ? [] : [intro]), title.el, targetField, amount.el, date.el, BudgetUI.buttonRow(buttons));
-
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const { percent, error } = BudgetUI.readPercentField(amount);
-        if (error) return panel.setError(error);
-        const value = amount.value();
-        if (percent === null && (value === null || Number.isNaN(value))) return panel.setError("Enter the amount, like 2000.00.");
-        if (percent === null && Math.abs(value) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-        const by = date.value();
-        if (by === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
-        if (!by) return panel.setError("Pick the day to reach it by.");
-        const [kind, ...name] = target.value().split(":");
-        const fields = { title: title.value(), kind, account: name.join(":"), amount: value, percent, date: by };
-        BudgetUI.submit(panel, () => saveGoal(fields, index));
-      });
-
-      function removeIt() {
-        if (!window.confirm(`Delete the goal ${existing.title}?`)) return;
-        BudgetUI.submit(panel, () => deleteGoal(index));
-      }
-    }
-  });
 }
 
 //#endregion
