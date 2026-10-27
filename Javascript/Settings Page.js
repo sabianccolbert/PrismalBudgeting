@@ -176,8 +176,7 @@ function renderDateFormatNote() {
 // =====================================================================
 // #region SOUNDS (this device)
 // =====================================================================
-// Music and sound effects, each on or off for this device (Sounds.js keeps them). Sounds pause for the rest of a visit
-// when something else takes the speaker (another app's audio, a call); the card says so, and can turn them back on.
+// Music and sound effects, each on or off for this device (Sounds.js keeps them)
 
 function wireSounds() {
   const music = document.getElementById("musicSwitch");
@@ -188,32 +187,12 @@ function wireSounds() {
   }
   music.checked = Sounds.musicOn();
   effects.checked = Sounds.effectsOn();
-  music.addEventListener("change", () => {
-    Sounds.setMusic(music.checked);
-    renderSoundNote();
-  });
+  music.addEventListener("change", () => Sounds.setMusic(music.checked));
   effects.addEventListener("change", () => {
     Sounds.setEffects(effects.checked);
     if (effects.checked) Sounds.play("ding");
-    renderSoundNote();
   });
-  renderSoundNote();
-}
-
-function renderSoundNote() {
-  const note = document.getElementById("soundNote");
-  const buttons = document.getElementById("soundButtons");
-  buttons.replaceChildren();
-  if (Sounds.paused() && (Sounds.musicOn() || Sounds.effectsOn())) {
-    note.textContent = "Sounds are paused for this visit: something else (like another app's music, or a call) took over your speaker, so they stopped to stay out of its way.";
-    buttons.appendChild(settingsButton("Turn Sounds Back On", "primary", () => {
-      Sounds.resume();
-      Sounds.play("ding");
-      renderSoundNote();
-    }));
-    return;
-  }
-  note.textContent = "They mix with your own music or podcasts instead of stopping them (on an iPhone, the silent switch silences them), and if anything interrupts them, they stop for the rest of your visit.";
+  document.getElementById("soundNote").textContent = "They mix with your own music or podcasts instead of stopping them (on an iPhone, the silent switch silences them).";
 }
 
 //#endregion

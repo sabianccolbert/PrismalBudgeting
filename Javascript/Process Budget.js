@@ -31,7 +31,7 @@ const TABLE_SHAPES = {
   history:    { cols: 7, minRows: 1 },  // [0] column titles, then one row per week (newest first)
   search:     { cols: 4, minRows: 3 },  // [0]-[2] search summary
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
-  accounts:   { cols: 6, minRows: 1 },  // Other Accounts: [0] column titles, then [name, balance, "default" | "", starting amount, interest rate, interest since]
+  accounts:   { cols: 7, minRows: 1 },  // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest since, max]
   account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
   logs:       { cols: 8, minRows: 1 }   // [0] column titles, then [time, duration, action, 4 details, status]
 };
@@ -149,7 +149,7 @@ async function loadWorkspace() {
   try {
     const requestedAt = performance.now(); // The daily update's change log starts when the budget is asked for
 
-    const response = await fetch(`${window.API_BASE_URL}/api/data/load`, {
+    const response = await fetch(budgetLoadAddress(), {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -168,35 +168,7 @@ async function loadWorkspace() {
     }
 
     const data = await response.json();
-    dataRevision = Number.isInteger(data.revision) ? data.revision : null;
-
-    // A table's stored JSON text, parsed. If stored content exists but can't be parsed, that table is locked
-    // from saving, so the (possibly recoverable) stored copy is never overwritten with an empty one.
-    function parseDB(dbResult, tableName) {
-      if (dbResult && dbResult.length > 0 && dbResult[0].content) {
-        try {
-          return JSON.parse(dbResult[0].content);
-        } catch (e) {
-          console.error(`JSON parse error on DB content for "${tableName}"; saving it is disabled:`, e);
-          unsavableTables.add(tableName);
-          return null;
-        }
-      }
-      return null;
-    }
-
-    // Each table back as rows of cells. Tables keep every stored row (only the calendar has a fixed size).
-    calendarData   = normalizeApiGrid(parseDB(data.calendar, "calendar"), calendarRows, calendarCols);
-    recurringData  = normalizeApiTable(parseDB(data.recurring, "recurring"), TABLE_SHAPES.recurring);
-    trackerData    = normalizeApiTable(parseDB(data.tracker, "tracker"), TABLE_SHAPES.tracker);
-    futureData     = normalizeApiTable(parseDB(data.future, "future"), TABLE_SHAPES.future);
-    historyData    = normalizeApiTable(parseDB(data.history, "history"), TABLE_SHAPES.history);
-    searchData     = normalizeApiTable(parseDB(data.search, "search"), TABLE_SHAPES.search);
-    calculatorData = normalizeApiTable(parseDB(data.calculator, "calculator"), TABLE_SHAPES.calculator);
-    const storedAccounts = parseDB(data.accounts, "accounts");
-    accountsData   = normalizeApiAccounts(storedAccounts);
-    logsData       = normalizeApiTable(parseDB(data.logs, "logs"), TABLE_SHAPES.logs);
-    sheetsData     = normalizeApiSheets(parseDB(data.sheets, "sheets"));
+    const storedAccounts = readLoadedTables(data);
     workspaceLoaded = true;
     // Accounts that were just set up (like Savings in a new budget) are saved right away, so the
     // Quick Entry page can list them too
@@ -250,6 +222,50 @@ async function loadWorkspace() {
     console.error("Failed to load workspace:", err);
     return false;
   }
+}
+
+// Where the budget loads from: /api/data/load, naming the Quick Entry icons this device made or used (ownQuickIcons), whose
+// waiting entries it adds as it loads (the API marks only those as picked up; see holdQuickEntries)
+function budgetLoadAddress() {
+  return `${window.API_BASE_URL}/api/data/load?icons=${encodeURIComponent(ownQuickIcons().join(","))}`;
+}
+
+// The budget as /api/data/load sent it, into the page's tables, with its revision and its waiting quick entries'
+// signature (see LIVE UPDATES). Returns the stored Other Accounts as they were (to tell whether setting them up changed
+// them).
+function readLoadedTables(data) {
+  dataRevision = Number.isInteger(data.revision) ? data.revision : null;
+  quickSignature = typeof data.quick_signature === "string" ? data.quick_signature : null;
+  unsavableTables = new Set();
+
+  // A table's stored JSON text, parsed. If stored content exists but can't be parsed, that table is locked
+  // from saving, so the (possibly recoverable) stored copy is never overwritten with an empty one.
+  function parseDB(dbResult, tableName) {
+    if (dbResult && dbResult.length > 0 && dbResult[0].content) {
+      try {
+        return JSON.parse(dbResult[0].content);
+      } catch (e) {
+        console.error(`JSON parse error on DB content for "${tableName}"; saving it is disabled:`, e);
+        unsavableTables.add(tableName);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // Each table back as rows of cells. Tables keep every stored row (only the calendar has a fixed size).
+  calendarData   = normalizeApiGrid(parseDB(data.calendar, "calendar"), calendarRows, calendarCols);
+  recurringData  = normalizeApiTable(parseDB(data.recurring, "recurring"), TABLE_SHAPES.recurring);
+  trackerData    = normalizeApiTable(parseDB(data.tracker, "tracker"), TABLE_SHAPES.tracker);
+  futureData     = normalizeApiTable(parseDB(data.future, "future"), TABLE_SHAPES.future);
+  historyData    = normalizeApiTable(parseDB(data.history, "history"), TABLE_SHAPES.history);
+  searchData     = normalizeApiTable(parseDB(data.search, "search"), TABLE_SHAPES.search);
+  calculatorData = normalizeApiTable(parseDB(data.calculator, "calculator"), TABLE_SHAPES.calculator);
+  const storedAccounts = parseDB(data.accounts, "accounts");
+  accountsData   = normalizeApiAccounts(storedAccounts);
+  logsData       = normalizeApiTable(parseDB(data.logs, "logs"), TABLE_SHAPES.logs);
+  sheetsData     = normalizeApiSheets(parseDB(data.sheets, "sheets"));
+  return storedAccounts;
 }
 
 //#endregion
@@ -694,9 +710,83 @@ function addCalendarEntry(entry) {
 }
 
 // Change, move, or delete a calendar entry (or one in Upcoming; History's go through changeHistoryEntry). change: { title,
-// sprite, date, action, amount, moveDate }. Can be undone.
+// sprite, date, action, amount, moveDate, renameTo (a new title of its own, see renameEntry) }. Can be undone.
 function changeCalendarEntry(change) {
-  return runBudgetAction("", () => unique(change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+  return runBudgetAction("", () => entryChange(change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+}
+
+// A change to an entry (unique's), after its new title when it has one (renameTo): renamed first, then changed on its
+// new title. Only renamed, nothing else happens to it.
+function entryChange(change) {
+  if (change.renameTo === undefined) return unique(change);
+  const renamed = renameEntry(change);
+  if (notFound) return {};
+  const placeholderChanged = change.placeholder !== undefined && !!change.placeholder !== isPlaceholder(renamed.sprite);
+  const amountChanged = String(change.amount ?? "").trim() !== "" || typeof change.percent === "number";
+  if (change.action !== "delete" && !change.moveDate && !amountChanged && !placeholderChanged) return {};
+  const { renameTo, ...rest } = change;
+  const result = unique({ ...rest, title: renamed.title, sprite: getSpecialType(renamed.sprite) });
+  formEntryRow[3] = `${formEntryRow[3]} (renamed from ${capitalize(String(change.title || "").trim())})`;
+  return result;
+}
+
+// An entry gets a new title of its own (change.renameTo; its Other Account stays after it). On a day from today on, an
+// entry that lands by itself (a recurring entry's or a connected spreadsheet's, or a temp of one) keeps its title: it's
+// changed on the Recurring Entries or Spreadsheets page instead. Any entry on a day before today can be renamed (in
+// History too). It stays what it was (its type, mark, %, and placeholder), unless an entry with the new title and type
+// is already on that day: then the two become one (a day has one of each), their amounts added, a placeholder only if
+// both were, and a plain amount. Returns { title, sprite }: the entry as it is now.
+const RENAME_LANDED = "This entry comes from a recurring entry or a connected spreadsheet, so from today on its title is changed there (on the Recurring Entries or Spreadsheets page).";
+function renameEntry(change) {
+  const date = createSafeMidnight(change.date || today);
+  const { account } = splitAccount(String(change.title || "").trim());
+  const own = String(change.renameTo ?? "").replace(/\s+/g, " ").trim();
+  if (own.includes(ACCOUNT_ARROW)) throw new BudgetInputError(TITLE_ARROW);
+  if (own.length > MAX_TITLE) throw new BudgetInputError(`Titles can be up to ${MAX_TITLE} characters.`);
+  const newTitle = capitalize(withAccount(own, account));
+  if (!newTitle) throw new BudgetInputError("Give the entry a title.");
+  const special = getSpecialType(change.sprite);
+  // (One that's just as it landed isn't on its day while a change runs: see stripRecurringEntries)
+  if (landsByItself(change.title, special, date)) throw new BudgetInputError(RENAME_LANDED);
+  const from = { oldAmt: 0, oldSprite: "", hasBlocker: false };
+  if (injectOrDefer("delete", date, 0, change.title, special, from)) {
+    notFound = true;
+    return { title: change.title, sprite: change.sprite };
+  }
+  if (date >= today && entryMark(from.oldSprite)) throw new BudgetInputError(RENAME_LANDED);
+  const into = { oldAmt: 0, oldSprite: "", hasBlocker: false };
+  const merging = !injectOrDefer("delete", date, 0, newTitle, special, into);
+  let sprite = from.oldSprite;
+  let amount = from.oldAmt;
+  let placeholder = isPlaceholder(from.oldSprite);
+  if (merging) {
+    sprite = special + (entryMark(into.oldSprite) || entryMark(from.oldSprite));
+    amount = Math.round((amount + into.oldAmt) * 100) / 100;
+    placeholder = placeholder && isPlaceholder(into.oldSprite);
+  }
+  injectOrDefer("set", date, amount, newTitle, sprite, {}, placeholder);
+  formEntryRow[2] = "✏️ Rename Entry";
+  formEntryRow[3] = `${baseSprite(from.oldSprite)} ${capitalize(String(change.title || "").trim())}`;
+  formEntryRow[4] = "On: " + showDate(date);
+  formEntryRow[5] = "To: " + newTitle;
+  formEntryRow[6] = merging ? `Added into the ${newTitle} already there` : "";
+  return { title: newTitle, sprite: placeholderSprite(sprite, placeholder && date >= today) };
+}
+
+// Can an entry (its sprite, on date) get a new title? Any entry on a day before today; from today on, one that doesn't
+// land by itself (see renameEntry)
+function canRenameEntry(sprite, date) {
+  return date < today || !entryMark(sprite);
+}
+
+// Is the entry with this title and type on date, from today on, one that lands by itself (or a temp of one)? Also while a
+// change runs, when the calendar's recurring and spreadsheet entries are off it (stripRecurringEntries).
+function landsByItself(title, sprite, date) {
+  if (!(date instanceof Date) || isNaN(date.getTime()) || date < today) return false;
+  const special = getSpecialType(sprite);
+  const there = entryOnDay(title, special, date);
+  if (there) return !!entryMark(there.sprite);
+  return !!scheduledHit(title, date, special);
 }
 
 // A calendar entry's refraction type or Other Account changed (and maybe its amount and day too). change: { title,
@@ -708,11 +798,16 @@ function changeEntryKind(change) {
   return runBudgetAction("", () => entryKindChange(change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
-// changeEntryKind's change itself: off as it was, then on as the new one
+// changeEntryKind's change itself: off as it was, then on as the new one (a new title of its own too, where it can have
+// one: see renameEntry)
 function entryKindChange(change) {
   const percent = readPercent(change.percent);
   const amount = Math.round(Number(change.amount) * 100) / 100;
   if (percent === null && (!Number.isFinite(amount) || amount === 0)) throw new BudgetInputError("Enter an amount, like 12.50. To take the entry off, tap Delete.");
+  const ownTitle = (title) => cleanString(splitAccount(String(title || "")).title);
+  if (ownTitle(change.title) !== ownTitle(change.newTitle) && landsByItself(change.title, change.sprite, createSafeMidnight(change.date))) {
+    throw new BudgetInputError(RENAME_LANDED);
+  }
   unique({ title: change.title, sprite: change.sprite, date: change.date, action: "delete" });
   if (notFound) return {};
   return unique({
@@ -747,7 +842,7 @@ function changeHistoryEntry(change) {
       throw new BudgetInputError(`An entry in History can only move to another day in History (${showDate(oldestHistoryDay() || gridStartDate)} through ${showDate(addDays(gridStartDate, -1))}).`);
     }
     const balances = accountBalancesToday();
-    const result = (isKind ? entryKindChange(change) : unique(change)) || {};
+    const result = (isKind ? entryKindChange(change) : entryChange(change)) || {};
     return { ...result, afterRefresh: () => keepAccountBalances(balances) };
   }, { label, dates, keepBalances: true });
 }
@@ -801,6 +896,11 @@ function describeEntryChange(change) {
   const hasPercent = typeof change.percent === "number";
   const amount = Number(change.amount);
   const amountChanged = action !== "delete" && (hasPercent || String(change.amount ?? "").trim() !== "");
+  if (change.renameTo !== undefined) {
+    const renamed = capitalize(withAccount(String(change.renameTo).trim(), splitAccount(title).account));
+    const more = amountChanged || (change.moveDate && day(change.moveDate) !== day(change.date)) ? " and changed it" : "";
+    return `renamed ${title} to ${renamed} on ${day(change.date)}${more}`;
+  }
   if (change.moveDate && day(change.moveDate) !== day(change.date)) {
     return `moved ${title} from ${day(change.date)} to ${day(change.moveDate)}${amountChanged ? " and changed its amount" : ""}`;
   }
@@ -885,11 +985,11 @@ function updateSheetReads(reads) {
 
 /* ---------- Quick Entry (the home screen icon's page, quick.html) ---------- */
 // The Quick Entry page can't open the budget (its key can only queue entries), so its entries wait in the API until a
-// budget opens. The ones from this device's own icons are added then, each like a New Entry; the ones from other
-// devices' icons (someone else sharing the budget) wait on Home (Calendar Page.js), where whoever has it open adds them
-// or deletes them. One that's added leaves the API's queue in the same request that saves the table it landed in (see
-// saveChanges): never lost, never added twice. Once a budget has loaded them, the icon can't change them or take them
-// back anymore.
+// budget opens. The ones from this device's own icons are added then, each like a New Entry (the load picks them up, so
+// the icon can't change them or take them back anymore); the ones from other devices' icons (someone else sharing the
+// budget) wait on Home (Calendar Page.js), still their icon's to change or take back, until whoever has it open adds them
+// (Add picks each one up first, as it is then) or deletes them. One that's added leaves the API's queue in the same
+// request that saves the table it landed in (see saveChanges): never lost, never added twice.
 
 // Refraction types by name, as the Quick Entry page sends them
 const QUICK_ENTRY_TYPES = { auto: "", regular: "❗️", hidden: "✖️", transfer: "⭕️" };
@@ -980,11 +1080,24 @@ function describeQuickEntry(entry) {
   return `${capitalize(String(entry.title || "").trim())} (${amount}) on ${isNaN(date.getTime()) ? entry.date : showDay(date)}`;
 }
 
-// Home's Add: a waiting quick entry goes into the budget, like a New Entry (Undo can take it back). Resolves like any
-// change ({ ok, message }); one that can't be added stays waiting, and the message says why.
+// Home's Add: a waiting quick entry goes into the budget, like a New Entry (Undo can take it back). It's picked up first
+// (POST /api/quick/pickup), so its icon can't change it while it's added, and it's added as it is then (its icon may have
+// changed it since Home showed it). Resolves like any change ({ ok, message }); one that can't be added stays waiting
+// (and Delete still takes it off), and the message says why.
 async function addWaitingQuickEntry(id) {
   const quick = waitingQuickEntries.find(item => item.id === id);
   if (!quick) return { ok: false, message: "That quick entry isn't waiting anymore." };
+  const answer = await budgetApi("/api/quick/pickup", { ids: [id] });
+  if (!answer.ok || !answer.data || !Array.isArray(answer.data.entries)) {
+    return { ok: false, message: "That quick entry couldn't be added. Please check your connection and try again." };
+  }
+  const current = answer.data.entries.find(item => item.id === id);
+  if (!current || !current.entry) {
+    waitingQuickEntries = waitingQuickEntries.filter(item => item !== quick);
+    notifyBudgetChanged();
+    return { ok: false, message: "That quick entry was taken back on the icon that added it." };
+  }
+  quick.entry = current.entry;
   const result = await runBudgetAction("", () => quickEntry(quick), quickEntryUndo(quick));
   if (result.ok) waitingQuickEntries = waitingQuickEntries.filter(item => item !== quick);
   return result;
@@ -1953,10 +2066,31 @@ function describeAliases(text) {
 const ACCOUNTS_VERSION = 3;
 const DEFAULT_ACCOUNT = "Savings";
 const MAX_ACCOUNT_NAME = 60;
+// The accounts every budget has, which can't be deleted (either can be renamed): Savings, the default, and Cash. Each is
+// marked in its row's [2].
+const MANDATORY_ACCOUNTS = [[DEFAULT_ACCOUNT, "default"], ["Cash", "cash"]];
 
-// The default account (Savings), which can't be deleted
+// The default account (Savings)
 function isDefaultAccount(row) {
   return String(row?.[2] ?? "").trim() === "default";
+}
+
+// Savings or Cash, which can't be deleted
+function isMandatoryAccount(row) {
+  const mark = String(row?.[2] ?? "").trim();
+  return MANDATORY_ACCOUNTS.some(([, kind]) => kind === mark);
+}
+
+// Why a mandatory account can't be deleted
+function mandatoryAccountNote(name) {
+  return `${name} is one of the accounts every budget has (Savings and Cash), so it can't be deleted. It can be renamed.`;
+}
+
+// The most an account can hold (its row's [6], like a credit card's limit), or null when it has none
+function accountMax(row) {
+  const text = String(row?.[6] ?? "").trim();
+  const max = text ? Math.round(parseAmount(text) * 100) / 100 : 0;
+  return max > 0 ? max : null;
 }
 
 // The accounts (not the column titles), in order: [{ index, row, name, clean }]
@@ -1971,9 +2105,40 @@ function accountRows() {
   return accounts;
 }
 
-// The accounts in order with today's balances, for the account pickers: [{ name, balance }]
+// The accounts in order with today's balances (and the most each can hold), for the account pickers: [{ name, balance,
+// max (null for none) }]
 function otherAccounts() {
-  return accountRows().map(account => ({ name: account.name, balance: parseAmount(account.row[1]) }));
+  return accountRows().map(account => ({ name: account.name, balance: parseAmount(account.row[1]), max: accountMax(account.row) }));
+}
+
+// Every entry for an Other Account (account row index) on the calendar, in History, and in Upcoming, newest first (a
+// day's own order kept): [{ date, line (as its day stores it), change (what the account gets, see accountChange), place:
+// "calendar" | "history" | "upcoming" }]. A $0.00 blocker (which only keeps a recurring or spreadsheet entry off its day)
+// isn't one.
+function accountEntryLines(index) {
+  const accounts = accountTitleMap();
+  const found = [];
+  const add = (text, date, place) => {
+    const line = readLine(text);
+    if (!line.title || line.system || isNaN(date.getTime())) return;
+    if (line.amount === 0 && entryMark(line.sprite)) return;
+    const account = linkedAccount(line.sprite, line.title, accounts);
+    if (account && account.index === index) found.push({ date, line: String(text).trim(), change: accountChange(line.sprite, line.amount), place });
+  };
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) String(calendarData[r][c] ?? "").split("\n").slice(1).forEach(text => add(text, gridDates[r][c], "calendar"));
+  }
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 0; c < 7; c++) {
+      const lines = String(historyData[r][c] ?? "").split("\n");
+      const date = createSafeMidnight(lines[0].trim(), true);
+      lines.slice(1).forEach(text => add(text, date, "history"));
+    }
+  }
+  for (const row of futureData.slice(1)) {
+    if (String(row[0]).trim()) add(`${String(row[3]).trim()} ${formatMoney(parseAmount(row[1]))} ${String(row[0]).trim()}`, createSafeMidnight(row[2], true), "upcoming");
+  }
+  return found.map((entry, order) => ({ ...entry, order })).sort((a, b) => b.date - a.date || a.order - b.order);
 }
 
 // Each account's balance today goes in its row, and its changes still to come go with them (interest too), and so
@@ -2200,7 +2365,8 @@ function interestCredits(start, entries, interest, until) {
 }
 
 // New account (index null) or change the tapped one. fields: { name, balance (today's, a number; leave it out
-// to keep it), interest ({ rate } a year in %, or null for none; leave it out to keep it) }. A new name goes on its
+// to keep it), interest ({ rate } a year in %, or null for none; leave it out to keep it), max (the most it can hold,
+// like a credit card's limit: a number, or null for none; leave it out to keep it) }. A new name goes on its
 // entries and tracker aliases too, so they stay with it. A balance sets the starting amount so today's balance comes
 // out to it (the entries stay as they are). A new balance or a new rate starts interest counting from today, with
 // the interest so far kept in today's balance.
@@ -2228,15 +2394,21 @@ function accountEntry(fields, index) {
     throw new BudgetInputError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}).`);
   }
   if (rate !== undefined) rate = Math.round(rate * 1000) / 1000;
+  let max = fields.max === undefined ? undefined : (fields.max === null ? 0 : Number(fields.max));
+  if (max !== undefined && (!Number.isFinite(max) || max < 0 || max > MAX_AMOUNT)) {
+    throw new BudgetInputError("Enter the most it can hold, like 2000.00 (up to $1,000,000,000), or leave Max blank.");
+  }
+  const maxText = max ? formatMoney(max) : "";
 
   formEntryRow[3] = "Account: " + name;
   formEntryRow[4] = "";
   formEntryRow[5] = "";
   if (isNew) {
-    list.push([name, formatMoney(balance || 0), "", balance ? formatMoney(balance) : "", rate ? String(rate) : "", rate ? formatToMMDDYYYY(today) : ""]);
+    list.push([name, formatMoney(balance || 0), "", balance ? formatMoney(balance) : "", rate ? String(rate) : "", rate ? formatToMMDDYYYY(today) : "", maxText]);
     formEntryRow[2] = "🏦 New Account";
     if (balance) formEntryRow[5] = "Balance: " + formatMoney(balance);
     if (rate) formEntryRow[6] = `Interest: ${rate}% a year`;
+    if (maxText) formEntryRow[6] = [formEntryRow[6], `Max: ${maxText}`].filter(Boolean).join(", ");
     return {};
   }
   let oldName = String(row[0]).trim();
@@ -2261,6 +2433,10 @@ function accountEntry(fields, index) {
     row[5] = newRate ? formatToMMDDYYYY(today) : "";
     if (balanceChanged) formEntryRow[5] = `Balance: ${formatMoney(balance)} (was ${formatMoney(now)})`;
     if (newRate !== oldRate) formEntryRow[6] = newRate ? `Interest: ${newRate}% a year` : "Interest: Off";
+  }
+  if (max !== undefined && maxText !== String(row[6] ?? "").trim()) {
+    row[6] = maxText;
+    formEntryRow[6] = [formEntryRow[6], `Max: ${maxText || "None"}`].filter(Boolean).join(", ");
   }
   return {};
 }
@@ -2390,18 +2566,19 @@ function combineSameEntries(lines) {
   return kept;
 }
 
-// The same for Upcoming: entries on one day with the same title and type become one, their amounts added (a
-// placeholder only if both were, and a plain amount)
+// The same for Upcoming: entries on one day with the same title (its Other Account too) and type become one, whatever
+// their marks or %, their amounts added (the mark stays if either had one, like combineSameEntries; a placeholder only if
+// both were, and a plain amount)
 function combineSameUpcoming() {
   let kept = [futureData[0]];
   let byKey = new Map();
   for (let f = 1; f < futureData.length; f++) {
     let row = futureData[f];
-    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + baseSprite(String(row[3]).trim());
+    let key = String(row[2]).trim() + "|" + cleanString(row[0]) + "|" + getSpecialType(String(row[3]).trim());
     let same = cleanString(row[0]) ? byKey.get(key) : undefined;
     if (same) {
       same[1] = formatMoney(parseAmount(same[1]) + parseAmount(row[1]));
-      same[3] = decoratedSprite(same[3], { placeholder: isPlaceholder(same[3]) && isPlaceholder(row[3]) });
+      same[3] = decoratedSprite(combineSprites(same[3], row[3]), { placeholder: isPlaceholder(same[3]) && isPlaceholder(row[3]) });
       continue;
     }
     byKey.set(key, row);
@@ -2928,7 +3105,7 @@ function renameCategory(tableName, index, title) {
 
 // Recurring entries end yesterday instead of vanishing, so the normal flow removes them and turns
 // their temps into unique entries (same as expiring one in the spreadsheet). Everything else is removed.
-// The default account (Savings) and the tracker rows that fill in by themselves (Costs, Gains, Transfers,
+// Savings and Cash (MANDATORY_ACCOUNTS) and the tracker rows that fill in by themselves (Costs, Gains, Transfers,
 // Undefined) can't be deleted; a deleted account's entries stay as they are.
 function deleteTableRows(tableName, indexes) {
   let table = ROW_TABLES[tableName];
@@ -2937,8 +3114,8 @@ function deleteTableRows(tableName, indexes) {
     .filter(i => Number.isInteger(i) && i >= table.headerRows && i < rows.length)
     .sort((a, b) => b - a);
   if (valid.length === 0) throw new BudgetInputError("Nothing is selected to delete.");
-  let locked = tableName === "accounts" ? valid.find(i => isDefaultAccount(rows[i])) : undefined;
-  if (locked !== undefined) throw new BudgetInputError(`${rows[locked][0]} is your default account, so it can't be deleted.`);
+  let locked = tableName === "accounts" ? valid.find(i => isMandatoryAccount(rows[i])) : undefined;
+  if (locked !== undefined) throw new BudgetInputError(mandatoryAccountNote(rows[locked][0]));
   let automatic = tableName === "tracker" ? valid.find(i => TRACKER_AUTO_ROWS.includes(cleanString(rows[i][0]))) : undefined;
   if (automatic !== undefined) throw new BudgetInputError(`${String(rows[automatic][0]).trim()} fills in by itself, so it can't be deleted.`);
 
@@ -3210,6 +3387,7 @@ function upcomingEntriesMaintenance() {
     futureData.splice(futureRowsToDeleteIndexes[i], 1);
   }
   if (isDailyUpdate) formEntryRow[4] = "Upcomings Added: " + deletedUpcoming;
+  combineSameUpcoming(); // (One entry per title and type on a day, like the calendar's days)
 
   // Keep what's left in date order (header stays on top)
   if (latestDay > gridEndDate && futureData.length > 1) {
@@ -4524,9 +4702,9 @@ function normalizeApiTable(rawData, shape) {
 }
 
 // Rebuild the Other Accounts store: { version: 3, list, equity, coming, inBank }
-//   list: [0] column titles, then [name, balance today, "default" | "", starting amount, interest rate, interest
-//         since] (see Other Accounts in BUDGET LOGIC). The default account, Savings, is added if it's missing.
-//         Balances come only from entries, so a version 2 store's typed-in balance in [1] isn't kept.
+//   list: [0] column titles, then [name, balance today, "default" | "cash" | "", starting amount, interest rate, interest
+//         since, max] (see Other Accounts in BUDGET LOGIC). Savings and Cash (MANDATORY_ACCOUNTS) are added if they're
+//         missing. Balances come only from entries, so a version 2 store's typed-in balance in [1] isn't kept.
 //   equity: the spreadsheet's business-version (LLC) equity tables, { tabName: table }, kept as stored
 //           (the website doesn't change them). A store without a version is only these tables.
 //   coming: each account's changes after today, for the Quick Entry page (accountChangesAhead fills it in again;
@@ -4551,11 +4729,20 @@ function normalizeApiAccounts(rawData) {
 
   let list = normalizeApiTable(isCurrent ? parsed.list : [], TABLE_SHAPES.accounts);
   if (parsed.version === 2) list.forEach((row, i) => { if (i > 0) row[1] = formatMoney(0); });
-  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since"];
-  if (!list.some((row, i) => i > 0 && isDefaultAccount(row))) {
-    let savings = list.findIndex((row, i) => i > 0 && cleanString(row[0]) === cleanString(DEFAULT_ACCOUNT));
-    if (savings !== -1) list[savings][2] = "default";
-    else list.splice(1, 0, [DEFAULT_ACCOUNT, formatMoney(0), "default", ""]);
+  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since", "Max"];
+  // Each mandatory account: the one marked as it, or one with its name that isn't marked, or a new one after the one
+  // before it (a budget whose Savings was renamed to Cash keeps that one, and gets no second Cash)
+  let after = 0;
+  for (const [name, kind] of MANDATORY_ACCOUNTS) {
+    const mark = (row) => String(row[2] ?? "").trim();
+    let at = list.findIndex((row, i) => i > 0 && mark(row) === kind);
+    if (at === -1) at = list.findIndex((row, i) => i > 0 && !mark(row) && cleanString(row[0]) === cleanString(name));
+    if (at !== -1) list[at][2] = kind;
+    else if (!list.some((row, i) => i > 0 && cleanString(row[0]) === cleanString(name))) {
+      at = after + 1;
+      list.splice(at, 0, [name, formatMoney(0), kind, "", "", "", ""]);
+    }
+    if (at !== -1) after = at;
   }
   const accounts = { version: ACCOUNTS_VERSION, list, equity };
   const isChange = (item) => Array.isArray(item) && item.length === 3 && typeof item[0] === "string" &&
@@ -5220,7 +5407,8 @@ window.updateGridCell = async function(gridName, row, col, textValue) {
 
 // 1. TOUCH: TWO-FINGER PINCH ON A DAY, AND SWIPING BETWEEN ZOOMED DAYS
 // Two fingers on one day pinch, stretch, turn, and move just that day, which settles back when they let go. Two
-// fingers that start on different days (or off the days) zoom the page itself, like anywhere else on it.
+// fingers that start on different days (or off the days), or on a zoomed day, zoom the page itself, like anywhere else
+// on it (a zoomed day is part of the page, so it zooms with it).
 
 let isTransforming = false;
 let targetEl = null;
@@ -5254,14 +5442,11 @@ function wireElasticTable(table) {
     const t2 = e.touches[1];
     const cell1 = t1.target.closest('td');
     const cell2 = t2.target.closest('td');
-    if (!cell1 || cell1 !== cell2 || !cell1.querySelector('.cell-content')) return;
+    if (!cell1 || cell1 !== cell2 || !cell1.querySelector('.cell-content') || cell1.classList.contains('is-editing')) return;
 
     targetEl = cell1.querySelector('.cell-content');
-    // A zoomed day stays over the dimmed page, already shows everything, and keeps its scroll
-    if (!cell1.classList.contains('is-editing')) {
-      cell1.style.zIndex = '20';
-      targetEl.style.overflow = 'visible';
-    }
+    cell1.style.zIndex = '20';
+    targetEl.style.overflow = 'visible';
     isTransforming = true;
     startDist = getDistance(t1, t2);
     startAngle = getAngle(t1, t2);
@@ -5382,9 +5567,10 @@ function finishDaySwipe(e) {
 }
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
-// A tapped day zooms in over a dimmed page and stays zoomed until its v, or anything outside it, is tapped. The page
-// under it holds still meanwhile (lockPageScroll). Entries never wrap: a day that isn't zoomed cuts them off at its
-// edge. On a computer it doubles in size (scaled, see budgetStyle.css), as tall as its lines, and its entries run
+// A tapped day zooms in over a dimmed page and stays zoomed until its v, or anything outside it, is tapped; its +
+// opens New Entry on that day. It's part of the page: it opens where the screen is, then the page can be scrolled
+// and pinch-zoomed with it, the way the rest of the page is. Entries never wrap: a day that isn't zoomed cuts them off at
+// its edge. On a computer it doubles in size (scaled, see budgetStyle.css), as tall as its lines, and its entries run
 // past its edges over the dimmed page (it moves left when its widest entry would run off the screen). On phones
 // (touch screens and narrow windows) every day zooms the same: as wide as most of the screen, as tall as its lines
 // (more lines than fit scroll), and an entry longer than the screen ends in "..." at its edge (tapping it shows it
@@ -5398,6 +5584,11 @@ const fullZoomQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)")
 // Does the device ask for less motion?
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let zoomBackdrop = null;
+// Where a phone's zoomed day sits on the page: the screen as it was when the day zoomed in ({ x, y: its top left corner,
+// in page pixels; width, height: its size, in the page's pixels before a pinch; pinch: the page's zoom then; layoutWidth:
+// the window's width then }). It stays there while the page is scrolled or pinch-zoomed (the day moves and zooms with the
+// page), and sliding to the next day keeps it. null until a day zooms.
+let zoomAnchor = null;
 // A phone's zoomed day: this share of the screen's width (up to ZOOM_MAX_WIDTH pixels); its text this share of what that
 // zoom would make it, between ZOOM_TEXT_MIN and ZOOM_TEXT_MAX pixels; at least this share of its width tall; and up to
 // this share of the screen's height (taller lines scroll)
@@ -5416,14 +5607,19 @@ const ZOOM_CLOSE_MS = 320;
 const DAY_SLIDE_MS = 340;
 const ZOOM_EASING = 'cubic-bezier(0.33, 0, 0.2, 1)';
 
-// A zoomed day's v (close), for Home's days and History's
-function zoomCloseButton() {
-  const button = document.createElement('button');
-  button.className = 'cell-action-btn';
-  button.type = 'button';
-  button.textContent = 'v';
-  button.setAttribute('aria-label', 'Close day');
-  return button;
+// A zoomed day's round buttons in its top right corner, for Home's days and History's: + (New Entry on that day) and v
+// (close)
+function zoomDayButtons() {
+  const buttons = document.createDocumentFragment();
+  for (const [kind, text, label] of [['cellAdd', '+', 'New entry on this day'], ['cellClose', 'v', 'Close day']]) {
+    const button = document.createElement('button');
+    button.className = `cell-action-btn ${kind}`;
+    button.type = 'button';
+    button.textContent = text;
+    button.setAttribute('aria-label', label);
+    buttons.appendChild(button);
+  }
+  return buttons;
 }
 
 // Zoom a day in (closing any other): doubled on a computer, laid out to fill the screen on a phone.
@@ -5447,7 +5643,7 @@ function zoomDay(cell, animate = true) {
     document.getElementById('transitionContainer')?.appendChild(zoomBackdrop);
   }
   zoomBackdrop.classList.add('shown');
-  lockPageScroll(true);
+  document.documentElement.classList.add('dayZoomed');
   if (!fullZoomQuery.matches) {
     keepDoubledDayOnScreen(cell, place);
     return;
@@ -5461,8 +5657,9 @@ function closeZoomedDay(immediate = false) {
   const cell = activeEditCell;
   window.editingCell = false;
   activeEditCell = null;
+  zoomAnchor = null;
   if (zoomBackdrop) zoomBackdrop.classList.remove('shown');
-  lockPageScroll(false);
+  document.documentElement.classList.remove('dayZoomed');
   if (!cell) return;
   const finish = () => unzoomCell(cell);
   const scale = Number(cell.style.getPropertyValue('--zoom')) || 1;
@@ -5478,25 +5675,6 @@ function closeZoomedDay(immediate = false) {
     { duration: ZOOM_CLOSE_MS, easing: 'cubic-bezier(0.4, 0, 0.6, 1)', fill: 'forwards' } // Holds the shrunk day until finish puts it back
   );
   cell.zoomClose.onfinish = finish;
-}
-
-// While a day is zoomed, the page under it holds still (html.dayZoomed, budgetStyle.css), so sliding from day to day
-// doesn't move the page too. A finger that drags anywhere but the zoomed day's own lines (when they scroll) or a box over
-// it doesn't scroll the page either (phones don't always honor the page's overflow). That listener is only there while
-// a day is zoomed: one that can stop scrolling makes the browser wait on the page before every scroll.
-function lockPageScroll(locked) {
-  document.documentElement.classList.toggle('dayZoomed', locked);
-  if (locked) document.addEventListener('touchmove', holdPageStill, { passive: false });
-  else document.removeEventListener('touchmove', holdPageStill);
-}
-
-// A finger dragging while a day is zoomed (see lockPageScroll)
-function holdPageStill(e) {
-  if (!activeEditCell || e.touches.length !== 1) return;
-  const lines = activeEditCell.querySelector('.cell-content');
-  if (lines && lines.contains(e.target) && lines.scrollHeight > lines.clientHeight + 1) return;
-  if (e.target.closest?.('.budgetPanel, .datePicker, .searchBar')) return;
-  e.preventDefault();
 }
 
 // A day that was zoomed is just a day again (after it shrank back into its spot, or slid off the screen), unless it
@@ -5636,7 +5814,8 @@ function keepDoubledDayOnScreen(cell, place) {
 // would run off the screen ends in "..." instead. Measured at its own size (which nothing draws in between), then moved
 // there. On a page that's still pinch-zoomed in (a browser that didn't zoom it back out, see unzoomPage), it's laid out
 // the same, then moved onto the part of the page on the screen and scaled down by the page's zoom (zoomPinch), so it
-// looks just the same. animate: it grows out of the day (opening); without, it just moves (when the screen resizes, or
+// looks just the same. It goes where the screen was when it zoomed in (zoomAnchor), so it stays put on the page when the
+// page scrolls or zooms. animate: it grows out of the day (opening); without, it just moves (when the window resizes, or
 // the day's entries change), keeping its scroll.
 function fitZoomedDay(animate = false) {
   const cell = activeEditCell;
@@ -5649,11 +5828,21 @@ function fitZoomedDay(animate = false) {
   cell.style.setProperty('--zoomText', '1');
   const box = cell.getBoundingClientRect();
   const textSize = parseFloat(getComputedStyle(content).fontSize) || 1;
-  const view = window.visualViewport;
-  const pinch = pageZoomedIn() ? view.scale : 1;
+  if (!zoomAnchor) {
+    const view = window.visualViewport;
+    const pinch = pageZoomedIn() ? view.scale : 1;
+    const layoutWidth = document.documentElement.clientWidth || window.innerWidth;
+    zoomAnchor = {
+      x: window.scrollX + (pinch > 1 ? view.offsetLeft : 0),
+      y: window.scrollY + (pinch > 1 ? view.offsetTop : 0),
+      width: pinch > 1 ? view.width * pinch : layoutWidth,
+      height: view ? view.height * pinch : window.innerHeight,
+      pinch,
+      layoutWidth
+    };
+  }
+  const { pinch, width: viewWidth, height: viewHeight } = zoomAnchor;
   cell.zoomPinch = pinch;
-  const viewWidth = pinch > 1 ? view.width * pinch : (document.documentElement.clientWidth || window.innerWidth);
-  const viewHeight = view ? view.height * pinch : window.innerHeight;
   const width = Math.min(viewWidth * ZOOM_WIDTH_SHARE, ZOOM_MAX_WIDTH);
   const scale = width / box.width;
   const textScale = Math.min(Math.max(textSize * scale * ZOOM_TEXT_SHARE, ZOOM_TEXT_MIN), ZOOM_TEXT_MAX) / textSize;
@@ -5669,9 +5858,9 @@ function fitZoomedDay(animate = false) {
     cell.style.setProperty(name, `${pixels}px`);
   }
   cell.style.transformOrigin = '0 0';
-  const moved = pinch > 1
-    ? `translate(${view.offsetLeft - box.left}px, ${view.offsetTop - box.top}px) scale(${1 / pinch})`
-    : `translate(${-box.left}px, ${-box.top}px)`;
+  // (From where the day is on the page to where the screen was)
+  const shift = `translate(${zoomAnchor.x - (box.left + window.scrollX)}px, ${zoomAnchor.y - (box.top + window.scrollY)}px)`;
+  const moved = pinch > 1 ? `${shift} scale(${1 / pinch})` : shift;
   cell.style.transform = moved;
   content.scrollLeft = animate ? 0 : scrolled.left;
   content.scrollTop = animate ? 0 : scrolled.top;
@@ -5694,27 +5883,33 @@ const refitZoomedDay = () => {
     else fitZoomedDay(false);
   });
 };
-window.addEventListener('scroll', () => { if (activeEditCell) refitZoomedDay(); }, { passive: true });
-window.addEventListener('resize', () => { if (activeEditCell) refitZoomedDay(); });
-// (Two fingers zooming or moving the page while it's pinch-zoomed in, or zooming it in: the day follows the screen)
-const followPinchedScreen = () => {
-  if (activeEditCell?.classList.contains('is-fullZoom') && ((activeEditCell.zoomPinch || 1) > 1 || pageZoomedIn())) refitZoomedDay();
-};
-window.visualViewport?.addEventListener('resize', followPinchedScreen);
-window.visualViewport?.addEventListener('scroll', followPinchedScreen);
+// (A window that changes width, like a phone turned sideways, lays it out again for the screen it has now. Scrolling or
+// pinch-zooming the page moves and zooms it with the page instead; so does a height change alone, which a phone's
+// browser makes as its toolbar slides away while the page scrolls.)
+window.addEventListener('resize', () => {
+  if (!activeEditCell) return;
+  const width = document.documentElement.clientWidth || window.innerWidth;
+  if (zoomAnchor && Math.abs(zoomAnchor.layoutWidth - width) < 1) return;
+  zoomAnchor = null;
+  refitZoomedDay();
+});
 // A day tapped while the page was still sliding in was measured on the move
 document.getElementById('transitionContainer')?.addEventListener('transitionend', (e) => {
   if (activeEditCell && e.target === e.currentTarget) refitZoomedDay();
 });
 document.addEventListener('budget:updated', () => { if (activeEditCell) refitZoomedDay(); }); // After the page redraws it
 
-// A tap on a table: its day zooms in, and a zoomed day's v closes it. On a page that's pinch-zoomed in, the page zooms
-// back out first, where the browser lets a page do that (unzoomPage); where it doesn't, the zoomed day is laid out on the
-// part of the page on the screen instead (fitZoomedDay), so it never lands off the screen.
+// A tap on a table: its day zooms in, a zoomed day's v closes it, and its + opens New Entry on that day (Budget UI.js).
+// On a page that's pinch-zoomed in, the page zooms back out first, where the browser lets a page do that (unzoomPage);
+// where it doesn't, the zoomed day is laid out on the part of the page on the screen instead (fitZoomedDay), so it never
+// lands off the screen.
 function zoomTappedDay(e) {
-  if (e.target.closest('.cell-action-btn')) {
-    closeZoomedDay();
+  const action = e.target.closest('.cell-action-btn');
+  if (action) {
     e.stopPropagation();
+    const cell = action.closest('td');
+    if (!action.classList.contains('cellAdd')) closeZoomedDay();
+    else if (cell === activeEditCell && typeof BudgetUI !== 'undefined' && dayTime(cell) !== null) BudgetUI.openNewEntry(action, { date: new Date(dayTime(cell)) });
     return;
   }
 
@@ -6090,8 +6285,7 @@ function reloadForNewerBudget() {
 }
 
 const BUDGET_NOTICES = {
-  conflict: ["Your budget was changed on another device or tab, so this page reloaded with the newest version. Your last change wasn't saved, so please make it again.", true],
-  refreshed: ["Your budget was changed on another device or tab, so this page refreshed to show it.", false]
+  conflict: ["Your budget was changed on another device or tab, so this page reloaded with the newest version. Your last change wasn't saved, so please make it again.", true]
 };
 
 // A note for the page to show once it reloads
@@ -6115,32 +6309,116 @@ function deviceDayChanged() {
   return createSafeMidnight(new Date()).getTime() !== pageDay.getTime();
 }
 
-// Coming back to this page (another tab, or the phone woke up): if the budget was saved somewhere else
-// in the meantime, or a new day started, reload to show it. Not while something here is unsaved: that
-// save is refused anyway, and reloads then (and the next change reloads for a new day).
-let lastRevisionCheck = 0;
-async function checkForNewerBudget() {
-  if (document.visibilityState !== "visible" || !workspaceLoaded || dataRevision === null || savingNow || hasUnsavedChanges()) return;
+//#endregion
+
+// =====================================================================
+// #region LIVE UPDATES (another device's changes show up here by themselves)
+// =====================================================================
+// Two devices (or two people sharing a budget) with it open see each other's changes within a few seconds: while the
+// page is on the screen, it asks the server every LIVE_CHECK_MS for the budget's revision and its waiting quick entries'
+// signature, and when either changed somewhere else, the budget loads again in place (no reload: loadInPlace) and the
+// page redraws. Not while something here is unsaved or still saving, or while a panel is open, the page is in Edit, a row
+// is being dragged, or a box the page draws again is being typed in (like the Paycheck Calculator's): then it waits for
+// the next check. A budget brought up to date through another day (a new day here, or another time zone there) reloads the
+// page instead, so the daily update runs first.
+
+const LIVE_CHECK_MS = 5000;
+let quickSignature = null; // The waiting quick entries the page loaded, summed up by the API (its quick_signature)
+let liveChecking = false;
+let liveLoadOwed = false;  // A load picked this device's quick entries up but wasn't used: the next check loads again
+
+// Is the page in the middle of something the budget loading again would change under it?
+function liveUpdateWaits() {
+  const active = document.activeElement;
+  const typing = !!active?.closest?.("#dataView") && active.matches("input, textarea, select");
+  return typing || !!document.querySelector(".budgetPanel:not(.isClosing), .dataTable.isEditing, .dataTable.isDragging, form[data-typing]");
+}
+
+// One check: the budget's revision (and its waiting quick entries) on the server, and the budget again when they changed
+async function liveCheck() {
+  if (liveChecking || document.visibilityState !== "visible" || !workspaceLoaded || dataRevision === null || reloadingBudget) return;
   if (deviceDayChanged()) {
+    if (savingNow || hasUnsavedChanges()) return; // (The next change reloads for the new day)
     reloadingBudget = true;
     workspaceLoaded = false;
     window.location.reload();
     return;
   }
-  if (Date.now() - lastRevisionCheck < 10000) return;
-  lastRevisionCheck = Date.now();
-  const known = dataRevision;
-  const result = await budgetApi("/api/data/revision");
-  if (!result.ok || !result.data || !Number.isInteger(result.data.revision)) return;
-  // (A save from this page while the answer was on its way, like a connected spreadsheet's update, moved the
-  // revision on itself: that's not a change from somewhere else)
-  if (dataRevision !== known) return;
-  if (result.data.revision !== dataRevision && workspaceLoaded && !savingNow && !hasUnsavedChanges()) {
-    reloadingBudget = true;
-    workspaceLoaded = false;
-    rememberBudgetNotice("refreshed");
-    window.location.reload();
+  if (savingNow || hasUnsavedChanges() || liveUpdateWaits() || navigator.onLine === false) return;
+  liveChecking = true;
+  try {
+    const known = dataRevision;
+    const result = await budgetApi("/api/data/revision");
+    if (!result.ok || !result.data || !Number.isInteger(result.data.revision)) return;
+    // (A save from this page while the answer was on its way moved the revision on itself: that's not a change from
+    // somewhere else)
+    if (dataRevision !== known) return;
+    const quickChanged = typeof result.data.quick === "string" && quickSignature !== null && result.data.quick !== quickSignature;
+    if (result.data.revision !== dataRevision || quickChanged || liveLoadOwed) await loadInPlace();
+  } finally {
+    liveChecking = false;
   }
+}
+
+// The budget loads again from the server, in place: its tables, everything worked out again, and the page redrawn
+// (budget:updated). This device's own quick entries are added after it, the same as when the page opened. A budget whose
+// daily update was done through another day than this page's (a day behind, or a device a day ahead) reloads the page
+// instead.
+function loadInPlace() {
+  const run = budgetQueue.then(async () => {
+    if (!workspaceLoaded || savingNow || hasUnsavedChanges() || budgetConflict || liveUpdateWaits()) return null;
+    const token = localStorage.getItem("prismal_jwt");
+    if (!token) return null;
+    let response;
+    try {
+      response = await fetch(budgetLoadAddress(), { headers: { Authorization: `Bearer ${token}` } });
+    } catch (e) {
+      return null; // (Offline: the next check tries again)
+    }
+    if (response.status === 401) {
+      signedOutElsewhere();
+      return null;
+    }
+    if (!response.ok) return null;
+    const data = await response.json();
+    // (Something changed here while it loaded: this page's copy is kept, and the next check loads again, since this load
+    // may have picked this device's quick entries up)
+    if (!workspaceLoaded || hasUnsavedChanges() || liveUpdateWaits()) {
+      liveLoadOwed = true;
+      return null;
+    }
+    const processed = data.last_processed_date ? createSafeMidnight(data.last_processed_date) : null;
+    if (!processed || isNaN(processed.getTime()) || processed.getTime() !== today.getTime()) {
+      reloadingBudget = true;
+      workspaceLoaded = false;
+      window.location.reload();
+      return null;
+    }
+    const snapshot = snapshotTables();
+    const kept = { revision: dataRevision, quick: quickSignature, unsavable: unsavableTables };
+    try {
+      readLoadedTables(data);
+      stripRecurringEntries();
+      refreshBudgetData();
+    } catch (err) {
+      restoreTables(snapshot);
+      ({ revision: dataRevision, quick: quickSignature, unsavable: unsavableTables } = kept);
+      console.error("The budget couldn't be loaded again here:", err);
+      return null;
+    }
+    // This page has what the server has (anything worked out differently here is saved with the next change)
+    for (const table of Object.values(BUDGET_TABLES)) table.saved();
+    liveLoadOwed = false;
+    lastActiveDay = latestActiveDay(lastDailyUpdate, data.quick_entries);
+    notifyBudgetChanged();
+    return data.quick_entries;
+  });
+  budgetQueue = run.catch(() => {});
+  return run.then(async (queue) => {
+    if (!queue) return;
+    await holdQuickEntries(queue);
+    notifyBudgetChanged(); // (Home's Quick Entries To Add)
+  }).catch(err => console.error("The budget couldn't be loaded again here:", err));
 }
 
 if (window.PAGE !== "quick") {
@@ -6155,14 +6433,11 @@ if (window.PAGE !== "quick") {
     event.preventDefault();
     event.returnValue = "";
   });
-  document.addEventListener("visibilitychange", checkForNewerBudget);
-  // Back to this page with the browser's Back button: browsers can show it just as it was left (the
-  // back/forward cache), so check it the same way
-  window.addEventListener("pageshow", (event) => {
-    if (!event.persisted) return;
-    lastRevisionCheck = 0;
-    checkForNewerBudget();
-  });
+  // Every few seconds while the page is on the screen, and right away when it comes back (another tab, the phone woke
+  // up, or the browser's Back button showing it just as it was left)
+  setInterval(liveCheck, LIVE_CHECK_MS);
+  document.addEventListener("visibilitychange", liveCheck);
+  window.addEventListener("pageshow", (event) => { if (event.persisted) liveCheck(); });
 }
 
 //#endregion

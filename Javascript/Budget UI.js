@@ -98,13 +98,21 @@ const BudgetUI = (() => {
     else form.append(error);
     closeButton.addEventListener("click", () => closePanel());
 
-    // Floating panels go in the screen layer (Layout.js), which stays on the visible screen however the page is zoomed
-    // or scrolled (and isn't in the page's #transitionContainer, which is transformed)
+    // Floating panels go in the screen layer (Layout.js): each opens on the part of the page that's on the screen, then
+    // stays put on the page, which can be scrolled and pinch-zoomed with it (the layer isn't in the page's
+    // #transitionContainer, which is transformed). A small one is placed again when its size changes (its error
+    // showing, say), so it never runs past the screen's bottom.
     if (inline) {
       (document.getElementById("panelSlot") || document.querySelector("main") || document.body).appendChild(panel);
     } else {
       onScreen(panel);
-      if (size === "small") positionNear(panel, origin);
+      if (size === "small") {
+        positionNear(panel, origin);
+        if (typeof ResizeObserver === "function") {
+          api.resizes = new ResizeObserver(() => { if (panel.isConnected && !panel.classList.contains("isClosing")) positionNear(panel, api.origin); });
+          api.resizes.observe(panel);
+        }
+      }
     }
     // It grows out of what opened it (the same zoom as Help and Search: FloatingWindows in Layout.js)
     window.FloatingWindows?.zoomOpen(panel, origin);
@@ -113,8 +121,10 @@ const BudgetUI = (() => {
     // Date fields fill from calendar taps right away (no keyboard needed on phones)
     const firstDate = form.querySelector("input.dateInput");
     if (firstDate && hasCalendar()) setPickTarget(firstDate);
+    // (A computer starts in the first box, except one marked data-skip-focus, like an entry's Title, which a stray key
+    // would rename)
     if (window.matchMedia("(pointer: fine)").matches) {
-      const firstField = form.querySelector("input:not([type=checkbox]):not(:disabled), textarea:not(:disabled), select:not(:disabled)");
+      const firstField = form.querySelector("input:not([type=checkbox]):not(:disabled):not([data-skip-focus]), textarea:not(:disabled), select:not(:disabled)");
       if (firstField) firstField.focus({ preventScroll: true });
     }
 
@@ -130,6 +140,7 @@ const BudgetUI = (() => {
     if (pickTarget && api.panel.contains(pickTarget)) setPickTarget(null);
 
     const panel = api.panel;
+    api.resizes?.disconnect();
     panel.classList.add("isClosing");
     panel.inert = true; // A closing panel can't be clicked, typed in, or picked into
     // It shrinks back into what opened it, then goes (right away when it can't, or shouldn't, zoom)
@@ -150,19 +161,22 @@ const BudgetUI = (() => {
     while (currentPanel) closePanel(immediate);
   }
 
-  // Into the screen layer (Layout.js), or the page's <body> without one
-  function onScreen(el) {
-    (window.ScreenLayer ? window.ScreenLayer.element : document.body).appendChild(el);
+  // Into the screen layer (Layout.js), or the page's <body> without one. notes: the layer for notes, which always stays on
+  // the screen (Layout.js's ScreenLayer.notes)
+  function onScreen(el, notes = false) {
+    const layer = window.ScreenLayer;
+    (layer ? (notes && layer.notes) || layer.element : document.body).appendChild(el);
     return el;
   }
 
   // Small panels sit just below their origin (or above it near the bottom of the screen), kept on the screen: in the
-  // screen layer's own pixels, placed again when the screen moves (like a phone's keyboard coming up)
+  // screen layer's own pixels, placed again when the screen moves (like a phone's keyboard coming up). The panel's size
+  // is its layout's (offsetWidth and offsetHeight), not its box on the screen, which is still small while it zooms open.
   function positionNear(panel, origin) {
     const margin = 8;
     const layer = window.ScreenLayer;
     const area = layer ? layer.size() : { width: document.documentElement.clientWidth, height: window.innerHeight };
-    const box = layer ? layer.rectOf(panel) : panel.getBoundingClientRect();
+    const box = { left: panel.offsetLeft, top: panel.offsetTop, width: panel.offsetWidth, height: panel.offsetHeight };
     // (An origin that's gone, like a redrawn day's entry, leaves the panel where it is, kept on the screen)
     const rect = !origin || !origin.isConnected ? { ...box, bottom: box.top - margin, top: box.top - margin, width: box.width }
       : layer ? layer.rectOf(origin) : origin.getBoundingClientRect();
@@ -451,18 +465,62 @@ const BudgetUI = (() => {
     fieldEl.insertBefore(help, fieldEl.children[1].nextSibling);
   }
 
+  // Buttons where exactly one is picked (like segmented's), each with its words and, when it has one, a second line under
+  // them (an account's balance). options: [{ key, label, detail (the second line, or none), negative (the detail is below
+  // $0, so it's red), own (the person's words, kept out of the browser's translation) }]. onChange(key) runs when one is
+  // tapped. set(key) picks one (without onChange); setOptions(options) puts in new ones, keeping the pick.
+  function choiceList(options, value, onChange, label = "") {
+    const group = element("div", "choiceList");
+    group.setAttribute("role", "radiogroup");
+    if (label) group.setAttribute("aria-label", label);
+    let current = value;
+    let buttons = [];
+    function set(key) {
+      current = key;
+      for (const [optionKey, button] of buttons) button.setAttribute("aria-checked", String(optionKey === key));
+    }
+    function setOptions(list) {
+      buttons = list.map(option => {
+        const button = element("button", "budgetButton choice");
+        button.type = "button";
+        button.setAttribute("role", "radio");
+        const name = element("span", "choiceName", option.label);
+        button.appendChild(option.own ? noTranslate(name) : name);
+        if (option.detail) button.appendChild(noTranslate(element("span", `choiceDetail${option.negative ? " negative" : ""}`, option.detail)));
+        button.addEventListener("click", () => {
+          set(option.key);
+          if (onChange) onChange(option.key);
+        });
+        return [option.key, button];
+      });
+      group.replaceChildren(...buttons.map(([, button]) => button));
+      set(current);
+    }
+    setOptions(options);
+    return { el: group, value: () => current, set, setOptions };
+  }
+
+  // An Other Account in a choiceList: its name, with its balance today under it (and the most it can hold, when it has a
+  // max: "$500.00/$2000.00"), or just its name when there's no balance to show (Quick Entry with balances off)
+  function accountChoice({ name, balance = null, max = null }, key = name) {
+    const hasBalance = typeof balance === "number";
+    const detail = hasBalance ? formatMoney(balance) + (max ? `/${formatMoney(max)}` : "") : "";
+    return { key, label: name, own: true, detail, negative: hasBalance && balance < 0 };
+  }
+
   // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked. It's picked on
   // its own and never changes the title: the entry is saved as "Title → Account" (withAccount in Process Budget.js).
   // Only a picked account links the entry: a title that's an account's name doesn't pick it. A Transfer changes the
   // account by the opposite of its amount (the money moved from or to In Bank), a Hidden entry by its own amount
-  // (accountChange).
-  // accounts: in order, [{ name, balance }] (each shows its balance today), or just names.
+  // (accountChange). Each account is a button with its balance today on a second line (accountChoice).
+  // accounts: in order, [{ name, balance, max }], or just names.
   // amount: the form's amountField. type(): the picked refraction type. account: picked to start.
   function accountField({ accounts = [], amount, type = () => "⭕️", account = "" }) {
     let list = [];
     let shown = false; // Hidden or Transfer is picked (see setVisible)
-    const select = element("select", "selectInput accountSelect");
-    const wrapper = field("Other Account", select, { optional: true });
+    const choices = choiceList([], "", () => describe(), "Other Account");
+    choices.el.classList.add("accountChoices");
+    const wrapper = field("Other Account", choices.el, { optional: true });
     const hint = element("span", "panelHint");
     wrapper.appendChild(hint);
     wrapper.hidden = true;
@@ -471,11 +529,10 @@ const BudgetUI = (() => {
 
     // The accounts to pick from, each with its balance; the one picked stays picked while it's still there
     function setAccounts(accounts) {
-      const picked = select.value;
+      const picked = choices.value();
       list = accounts.map(account => (typeof account === "string" ? { name: account, balance: null } : account));
-      select.replaceChildren(new Option("None", ""), ...list.map(({ name, balance }) =>
-        new Option(typeof balance === "number" ? `${name} (${formatMoney(balance)})` : name, name)));
-      select.value = accountTitled(picked);
+      choices.setOptions([{ key: "", label: "None" }, ...list.map(account => accountChoice(account))]);
+      choices.set(accountTitled(picked));
       wrapper.hidden = !shown || list.length === 0;
       if (shown) describe();
     }
@@ -484,7 +541,7 @@ const BudgetUI = (() => {
     // The hint under the picker: what the entry does to the account. With an account picked, the amount can be a % of
     // its balance instead.
     function describe() {
-      const name = select.value;
+      const name = choices.value();
       amount.setPercentAllowed?.(shown && !wrapper.hidden && !!name);
       const value = amount.value();
       const isTransfer = type() === "⭕️";
@@ -507,16 +564,14 @@ const BudgetUI = (() => {
     }
 
     // Pick an account by name (any capitals), or none
-    const pick = (name) => { select.value = accountTitled(name); };
+    const pick = (name) => choices.set(accountTitled(name));
     pick(account);
 
-    select.addEventListener("change", describe);
     amount.el.addEventListener("input", describe);
     amount.el.addEventListener("click", describe); // The Cost / Gain and $ / % buttons
 
     return {
       el: wrapper,
-      select,
       pick,
       setAccounts,
       // Shown for Hidden and Transfer (when there are accounts to pick)
@@ -525,7 +580,7 @@ const BudgetUI = (() => {
         wrapper.hidden = !visible || list.length === 0;
         describe();
       },
-      value: () => (wrapper.hidden ? "" : select.value)
+      value: () => (wrapper.hidden ? "" : choices.value())
     };
   }
 
@@ -828,9 +883,10 @@ const BudgetUI = (() => {
     return { el: group, value: () => current, set };
   }
 
-  // The New Entry form's fields: title, amount (cost or gain), date, optional refraction type, for
-  // Hidden or Transfer, the Other Account it moves money into or out of (accounts: their names), and Placeholder (for a
-  // day from today on). The calendar's New Entry panel and the Quick Entry page share it, so they always match.
+  // The New Entry form's fields: title, optional refraction type, for Hidden or Transfer the Other Account it moves money
+  // into or out of (accounts: [{ name, balance, max }], or names), then the amount (cost or gain: with an account, it can
+  // be a % of it, which is why the account comes first), date, and Placeholder (for a day from today on). The calendar's
+  // New Entry panel and the Quick Entry page share it, so they always match.
   // read(): { entry: { title, amount, date, sprite, placeholder } } when it's filled in right, otherwise { error }. The
   //   title carries the Other Account picked: "Title → Account" (or just the account's name when no title is typed).
   // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
@@ -851,7 +907,7 @@ const BudgetUI = (() => {
     dateInput.input.addEventListener("change", showPlaceholder);
     showPlaceholder();
     return {
-      els: [title.el, amount.el, dateInput.el, refraction.el, account.el, placeholder.el],
+      els: [title.el, refraction.el, account.el, amount.el, dateInput.el, placeholder.el],
       dateEl: dateInput.el,
       inputs: { title: title.input, amount: amount.input },
       values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), date: dateInput.value(), placeholder: placeholder.value() }),
@@ -890,14 +946,18 @@ const BudgetUI = (() => {
     };
   }
 
-  // An entry's options (an entry tapped on a zoomed day on Home or History, or in Upcoming): line is the entry as its day
-  // stores it ("❗️ -$4.50 Coffee") on date. Set to or Add to it, its refraction type and Other Account, Move to another
-  // day, whether it's a placeholder (for a day from today on), or Delete. Changing its type or account takes it off as it
-  // is and puts it on as the new one, adding into an entry already on that day with the same title and type
-  // (changeEntryKind). inHistory: a day in History, where the same changes keep the balances (In Bank, and the Other
-  // Accounts'; see changeHistoryEntry) and it only moves to another day in History. The panel shows the whole entry,
-  // however long its title.
-  function openEntryOptions(origin, line, date, { lineIndex = 1, inHistory = false } = {}) {
+  // An entry's options (an entry tapped on a zoomed day on Home or History, in Upcoming, an account's Entries, or Search's
+  // results): line is the entry as its day stores it ("❗️ -$4.50 Coffee") on date. Its title (see renameEntry in Process
+  // Budget.js: any entry before today, and from today on one that doesn't land by itself from a recurring entry or a
+  // connected spreadsheet), its refraction type and Other Account, Set to or Add to it, Move to another day, whether it's a
+  // placeholder (for a day from today on), or Delete. Changing its type or account takes it off as it is and puts it on as
+  // the new one, adding into an entry already on that day with the same title and type (changeEntryKind). One that lands
+  // by itself on a day after the calendar (Search's, which isn't in the budget yet) goes into Upcoming for that day once
+  // it's changed, the way a changed day on the calendar does. inHistory: a day in History, where the same changes keep
+  // the balances (In Bank, and the Other Accounts'; see changeHistoryEntry) and it only moves to another day in History.
+  // stacked: it opens over the panel that's open (an account's Entries), which comes back when it closes. The panel
+  // shows the whole entry, however long its title.
+  function openEntryOptions(origin, line, date, { lineIndex = 1, inHistory = false, stacked = false } = {}) {
     const parts = getParts(line);
     const refraction = getSpecialType(parts[0]);
     const wasPlaceholder = isPlaceholder(parts[0]);
@@ -906,10 +966,12 @@ const BudgetUI = (() => {
     const title = parts.slice(2).join(" ");
     const changeEntry = inHistory ? changeHistoryEntry : changeCalendarEntry;
     const changeKind = inHistory ? changeHistoryEntry : changeEntryKind;
+    const renamable = canRenameEntry(parts[0], date);
 
     openPanel({
       origin,
       size: "small",
+      stacked,
       title: `${inHistory ? showDate(date) : showDay(date)} Entry`,
       build(form, panel) {
         const display = renderEntryLine(line, lineIndex);
@@ -939,9 +1001,16 @@ const BudgetUI = (() => {
           ? dateField({ label: "Move to", optional: true, min: oldestHistoryDay(), max: addDays(gridStartDate, -1), hint: "Another day in History: type it, or use the calendar button to pick one." })
           : dateField({ label: "Move to", optional: true });
 
+        // Its title of its own (the Other Account stays after it), where it can change
+        const { title: ownTitle, account: ownAccount } = splitAccount(title);
+        const titleBox = renamable
+          ? textField({ label: "Title", value: ownTitle, placeholder: ownAccount ? "None of its own" : "Coffee, paycheck, gas...", maxLength: MAX_TITLE })
+          : null;
+        if (titleBox) titleBox.input.dataset.skipFocus = "1";
+        const titleNote = renamable ? null : element("p", "panelHint", "Its title comes from its recurring entry or connected spreadsheet, so from today on it's changed there.");
+
         // Its refraction type and Other Account can change too. Then it comes off as it is and goes on as the new
         // one, adding into an entry already on that day with the same title and type.
-        const { title: ownTitle } = splitAccount(title);
         const type = refractionField({ value: refraction, allowAuto: false, onChange: (key) => accountPicker.setVisible(isAccountType(key)) });
         const accountPicker = accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "" });
         accountPicker.setVisible(isAccountType(refraction));
@@ -957,7 +1026,7 @@ const BudgetUI = (() => {
         moveTo.input.addEventListener("change", showPlaceholder);
         showPlaceholder();
 
-        form.append(display, ...[accountNote, historyNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, buttonRow([
+        form.append(display, ...[accountNote, historyNote, titleBox?.el, titleNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, buttonRow([
           { label: "Save", kind: "primary", type: "submit" },
           { label: "Delete", kind: "danger", onClick: deleteEntry },
           { label: "Cancel", onClick: () => panel.close() }
@@ -965,6 +1034,9 @@ const BudgetUI = (() => {
 
         form.addEventListener("submit", (event) => {
           event.preventDefault();
+          const newOwn = titleBox ? titleBox.value() : ownTitle;
+          if (newOwn.includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
+          const renamed = newOwn !== ownTitle;
           const { percent: newPercent, error: percentError } = readPercentField(amount);
           if (percentError) return panel.setError(percentError);
           const newAmount = newPercent !== null ? 0 : amount.value() ?? 0; // A blank box is 0 (Set to 0, or nothing added)
@@ -982,9 +1054,9 @@ const BudgetUI = (() => {
             if (newPercent !== null && mode === "add") return panel.setError("To add a percent to it, save its new type or account first.");
             const total = mode === "set" ? newAmount : currentAmount + newAmount;
             if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-            const newTitle = withAccount(ownTitle, newAccount);
-            // "→ Savings" has no title of its own, so it can't leave its account (this box doesn't change titles)
-            if (!newTitle) return panel.setError("This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
+            const newTitle = withAccount(newOwn, newAccount);
+            // "→ Savings" has no title of its own, so it can't leave its account without one
+            if (!newTitle) return panel.setError(titleBox ? "Give the entry a title, or keep its Other Account." : "This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
             const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
             return submit(panel, () => changeKind(kind));
@@ -1003,7 +1075,11 @@ const BudgetUI = (() => {
           }
           if (move && move.getTime() !== date.getTime()) change.moveDate = move;
           const placeholderChanged = newPlaceholder !== undefined && newPlaceholder !== wasPlaceholder;
-          if (!amountChanged && !change.moveDate && !placeholderChanged) return panel.close(); // Nothing changed
+          if (renamed) {
+            if (!withAccount(newOwn, ownAccount)) return panel.setError("Give the entry a title.");
+            change.renameTo = newOwn;
+          }
+          if (!renamed && !amountChanged && !change.moveDate && !placeholderChanged) return panel.close(); // Nothing changed
 
           submit(panel, () => changeEntry(change));
         });
@@ -1013,6 +1089,69 @@ const BudgetUI = (() => {
           if (!window.confirm(`Delete ${title} on ${showDay(date)}?`)) return;
           submit(panel, () => changeEntry({ title, sprite: refraction, date, action: "delete" }));
         }
+      }
+    });
+  }
+
+  // New Entry (Home's button, and a zoomed day's + on Home or History, with that day in its date box): title, refraction
+  // type (Auto to start), for Hidden or Transfer an Other Account, the amount (cost or gain), date, and Placeholder. A day
+  // has one entry per title, type, and Other Account, so when one is already there (its own, or a recurring or connected
+  // spreadsheet's entry landing there), the form says so and asks whether to add the new amount to it or set it to the new
+  // amount. Either way a recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on
+  // the calendar.
+  function openNewEntry(origin, { date = today } = {}) {
+    openPanel({
+      origin,
+      size: "large",
+      title: "New Entry",
+      build(form, panel) {
+        const fields = newEntryFields({ date, accounts: otherAccounts() });
+        let mode = "add";
+        const modeToggle = segmented([{ key: "add", label: "Add to it" }, { key: "set", label: "Set to this" }], mode, (key) => { mode = key; });
+        const matchNote = element("div", "panelText matchNote");
+        const matchBox = element("div", "matchBox");
+        matchBox.append(matchNote, modeToggle.el);
+        const matchField = field("Already on that day", matchBox);
+        matchField.hidden = true;
+        form.append(...fields.els, matchField, buttonRow([
+          { label: "Add Entry", kind: "primary", type: "submit" },
+          { label: "Cancel", onClick: () => panel.close() }
+        ]));
+
+        // The entry already there, if there's one (looked up again as the form changes)
+        let match = null;
+        const findMatch = () => {
+          const { title, sprite, account, date: picked } = fields.values();
+          const day = picked || date;
+          match = title && !title.includes(ACCOUNT_ARROW) ? entryOnDay(withAccount(title, account), sprite, day) : null;
+          matchField.hidden = !match;
+          if (!match) return;
+          const mark = entryMark(match.sprite);
+          const from = mark === RECURRING_MARK ? " (a recurring entry)" : mark === SHEET_MARK ? " (from a connected spreadsheet)" : "";
+          matchNote.replaceChildren(renderEntryLine(`${match.sprite} ${formatMoney(match.amount)} ${capitalize(withAccount(title, account))}`, 1), ` is already on ${showDay(day)}${from}. Add this amount to it, or set it to this amount?`);
+        };
+        let pending = 0;
+        const queueFind = () => {
+          cancelAnimationFrame(pending);
+          pending = requestAnimationFrame(findMatch);
+        };
+        form.addEventListener("input", queueFind);
+        form.addEventListener("change", queueFind);
+        form.addEventListener("click", queueFind); // The refraction type's and account's buttons
+        findMatch();
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const { entry, error } = fields.read();
+          if (error) return panel.setError(error);
+          findMatch();
+          if (match && mode === "set") {
+            const sprite = entry.sprite || getSpecialType(match.sprite);
+            const amount = typeof entry.percent === "number" ? { amount: "", percent: entry.percent } : { amount: String(entry.amount) };
+            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder }));
+          }
+          submit(panel, () => addCalendarEntry(entry));
+        });
       }
     });
   }
@@ -1048,7 +1187,7 @@ const BudgetUI = (() => {
     return DatePicker.button(textInput, { label, ...options });
   }
 
-  // The date box a calendar tap fills: it glows, and the calendar gets a dashed outline, so it's clear
+  // The date box a calendar tap fills: the calendar gets a dashed outline, so it's clear
   // tapping a day works
   function setPickTarget(input) {
     if (pickTarget) pickTarget.classList.remove("isPickTarget");
@@ -1100,8 +1239,8 @@ const BudgetUI = (() => {
   // =====================================================================
 
   // One line of a day cell: the date (as people read it: the caller passes it shown), a system line (In
-  // Bank, Costs, Gains), or an entry. Entries with a positive amount show green, and placeholders yellow (without
-  // their ⏳, which is only how they're stored).
+  // Bank, Costs, Gains, in the day's own light grey), or an entry. Entries with a cost show red, a gain green, and $0.00 a
+  // darker grey, and placeholders yellow whatever their amount (without their ⏳, which is only how they're stored).
   // A browser translating the page leaves entries, amounts, and dates as they are (they're the person's
   // own words and numbers); only the budget's own words, like In Bank, get translated.
   function renderEntryLine(line, lineIndex) {
@@ -1110,7 +1249,6 @@ const BudgetUI = (() => {
     const amount = parseAmount(parts[1]);
     if (isSystemLine(parts[0])) {
       const el = element("div", "lineSystem");
-      if (amount < 0) el.classList.add("negative");
       // "✅ $812.40 Lowest: 11/14": the day shows in this device's date format
       const words = parts.slice(2).join(" ");
       // The day's In Bank can be tapped on a zoomed day to set it (Calendar Page.js openInBankOptions)
@@ -1122,9 +1260,16 @@ const BudgetUI = (() => {
     }
     const el = noTranslate(element("div", "lineEntry", shownLine(line)));
     el.dataset.line = lineIndex;
-    if (amount > 0) el.classList.add("positive");
+    el.classList.add(amountClass(amount));
     if (isPlaceholder(parts[0])) el.classList.add("isPlaceholder");
     return el;
+  }
+
+  // An entry's color by its amount: "negative" (red) for a cost, "positive" (green) for a gain, "isZero" (darker grey) for
+  // $0.00
+  function amountClass(amount) {
+    const cents = Math.round(amount * 100);
+    return cents < 0 ? "negative" : cents > 0 ? "positive" : "isZero";
   }
 
   // A table's neon bar under its column titles runs as one gradient across the whole row (see .dataTable
@@ -1169,7 +1314,7 @@ const BudgetUI = (() => {
   // the other. A longer note stays longer, so there's time to read it (4.5 to 12 seconds).
   let toastStack = null;
   function showToast(message, isWarning = false) {
-    if (!toastStack || !toastStack.isConnected) toastStack = onScreen(element("div", "toastStack"));
+    if (!toastStack || !toastStack.isConnected) toastStack = onScreen(element("div", "toastStack"), true);
     const toast = element("div", `budgetToast${isWarning ? " warning" : ""}`, message);
     toast.setAttribute("role", "status");
     toastStack.appendChild(toast);
@@ -1204,11 +1349,14 @@ const BudgetUI = (() => {
     placeholderField,
     frequencyField,
     accountField,
+    accountChoice,
+    choiceList,
     isAccountType,
     termList,
     aliasField,
     segmented,
     newEntryFields,
+    openNewEntry,
     openEntryOptions,
     buttonRow,
     setPickTarget,
@@ -1216,6 +1364,7 @@ const BudgetUI = (() => {
     datePickActive,
     pickDate,
     renderEntryLine,
+    amountClass,
     noTranslate,
     spanHeaderBar,
     showToast

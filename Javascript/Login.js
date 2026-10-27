@@ -196,8 +196,9 @@ const MODES = {
 
 let mode = 'login';
 
-// Switch the page to a mode: its title, hint, fields, and buttons
-function setMode(newMode) {
+// Switch the page to a mode: its title, hint, fields, and buttons. holdAssist: the device's last passkey is about to be
+// tried by itself (tryLastPasskey), so passkey autofill waits for it
+function setMode(newMode, { holdAssist = false } = {}) {
   mode = newMode;
   const config = MODES[mode];
   setStatus('');
@@ -224,8 +225,8 @@ function setMode(newMode) {
   toggleBtn.classList.toggle('hidden', !config.toggle);
   forgotBtn.classList.toggle('hidden', !config.showForgot);
   passkeyBtn.classList.toggle('hidden', !(config.passkeys && Passkeys.supported));
-  if (config.passkeys) startPasskeyAutofill();
-  else stopPasskeyAutofill();
+  if (config.passkeys && !holdAssist) startPasskeyAutofill();
+  else if (!config.passkeys) stopPasskeyAutofill();
   if (mode === 'create') startTurnstile(); // Its check runs while the form is filled in
 }
 
@@ -569,7 +570,7 @@ function stopPasskeyAutofill() {
 // Back on the login page (another app, another tab, or the phone woke up): a fresh challenge, and autofill
 // waiting again if the phone stopped it
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && mode === 'login' && (!autofill || !signInIsFresh())) startPasskeyAutofill();
+  if (document.visibilityState === 'visible' && mode === 'login' && !holdingSignIn && (!autofill || !signInIsFresh())) startPasskeyAutofill();
 });
 
 // The device's passkey sheet. It has to open right in the tap (Safari refuses one that waited on anything
@@ -628,14 +629,23 @@ passkeyBtn.addEventListener('click', async () => {
 // As soon as the login page shows, the passkey this device last signed in with (Passkeys.lastUsed) is tried by itself:
 // the device asks for the face, fingerprint, or PIN for that one passkey, so signing back in (whichever account it is,
 // with several on the device) takes one step. Not after Logout or Sign Out Everywhere, so another account can sign in.
-// Some browsers (like Safari) only open a passkey request right in a tap, and say no at once otherwise; then, or when
-// it's cancelled, the page carries on as usual (the button, and the passkeys under the username box). Cancelled twice
+// While it's asking, the device doesn't offer its own sign-in help too (its saved passwords under the passkey's sheet):
+// the username and password boxes wait (holdSignInBoxes), and so does passkey autofill. Some browsers (like Safari) only
+// open a passkey request right in a tap, and say no at once otherwise; then, or when it's cancelled, the page carries on
+// as usual (the boxes with the device's own help, the button, and the passkeys under the username box). Cancelled twice
 // in a row (or the device doesn't have that passkey anymore), it isn't tried by itself again until a passkey signs in.
+const lastPasskeyToTry = () => (Passkeys.usable ? Passkeys.lastUsed() : null);
+let holdingSignIn = false; // The last passkey is being tried (holdSignInBoxes)
 async function tryLastPasskey() {
-  const only = Passkeys.lastUsed();
-  if (!only || !Passkeys.usable || mode !== 'login') return;
+  const only = lastPasskeyToTry();
+  if (!only || mode !== 'login') {
+    holdSignInBoxes(false);
+    return;
+  }
+  holdSignInBoxes(true);
   await stopPasskeyAutofill();
   if (mode !== 'login' || (!signInIsFresh() && await prepareSignIn())) {
+    holdSignInBoxes(false);
     startPasskeyAutofill();
     return;
   }
@@ -647,10 +657,29 @@ async function tryLastPasskey() {
     // (A no that came at once is the browser's own, not the person's)
     if (error.name === 'NotAllowedError' && Date.now() - started >= Passkeys.INSTANT_MS) Passkeys.declinedLast(only);
     else if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') console.warn("The passkey wasn't tried by itself:", error);
+    holdSignInBoxes(false);
     if (mode === 'login') startPasskeyAutofill();
     return;
   }
+  holdSignInBoxes(false);
   await finishPasskeySignIn(credential);
+}
+
+// The username and password boxes wait (disabled, and their autocomplete off) while the last passkey is tried by itself,
+// so the device has nothing to fill in under the passkey's sheet; then they're back as they were
+function holdSignInBoxes(hold) {
+  holdingSignIn = hold;
+  for (const input of [usernameInput, passwordInput]) {
+    if (hold) {
+      if (input.dataset.autocomplete === undefined) input.dataset.autocomplete = input.autocomplete;
+      input.autocomplete = 'off';
+      input.disabled = true;
+    } else if (input.dataset.autocomplete !== undefined) {
+      input.autocomplete = input.dataset.autocomplete;
+      delete input.dataset.autocomplete;
+      input.disabled = input.closest('.hidden') !== null;
+    }
+  }
 }
 
 // The device answered: the API checks it and, when it's good, signs in the passkey's account (and the device remembers
@@ -786,20 +815,22 @@ if (verifyToken) {
 } else if (resetToken) {
   setMode('reset');
 } else {
-  setMode(pageParams.has('new') ? 'create' : 'login');
-  if (pageParams.has('new')) clearPageParams();
   let signedOut = null;
   try {
     signedOut = sessionStorage.getItem('prismal_signed_out');
     sessionStorage.removeItem('prismal_signed_out');
   } catch (e) {}
+  // Signing in starts with this device's last passkey (not right after signing out on purpose, with Logout or Sign Out
+  // Everywhere, so another account can sign in, or after deleting the account)
+  const startsWithPasskey = !pageParams.has('new') && !pageParams.has('deleted') && signedOut !== 'logout' && signedOut !== 'everywhere' && !!lastPasskeyToTry();
+  setMode(pageParams.has('new') ? 'create' : 'login', { holdAssist: startsWithPasskey });
+  if (startsWithPasskey) holdSignInBoxes(true); // (Before anything can offer to fill them in)
+  if (pageParams.has('new')) clearPageParams();
   if (pageParams.has('deleted')) {
     setStatus("Your account and all of its data were deleted.", true);
     clearPageParams();
   } else if (SIGNED_OUT_REASONS[signedOut]) {
     setStatus(SIGNED_OUT_REASONS[signedOut], true);
   }
-  // Signing in starts with this device's last passkey (not right after signing out on purpose, with Logout or Sign Out
-  // Everywhere, so another account can sign in)
-  if (mode === 'login' && signedOut !== 'logout' && signedOut !== 'everywhere' && !pageParams.has('deleted')) tryLastPasskey();
+  if (startsWithPasskey) tryLastPasskey();
 }
