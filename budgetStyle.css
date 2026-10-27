@@ -1999,16 +1999,16 @@ body.datePicking .elastic-table td {
 }
 
 /*========================================*
- *  HOME: LOWEST IN BANK, DAVE, AND UPCOMING
+ *  HOME: LOWEST IN BANK, JEREMY, AND UPCOMING
  *========================================*/
 
-/* Lowest across the top; Dave and Upcoming side by side under it (one column on phones) */
+/* Lowest across the top; Jeremy and Upcoming side by side under it (one column on phones) */
 .infoRow {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   grid-template-areas:
     "lowest lowest"
-    "dave upcoming";
+    "jeremy upcoming";
   gap: clamp(8px, 1.6vw, 18px);
   width: var(--PAGE_WIDTH);
   margin: 0 auto clamp(10px, 2.2vmin, 22px);
@@ -2106,20 +2106,36 @@ body.datePicking .elastic-table td {
   }
 }
 
-.daveCard {
-  grid-area: dave;
-  position: relative; /* Its tip's gradient border (below) */
+/* Jeremy's card: his picture and message, and the whole card opens his page (it lights up like the Menu's links) */
+.infoCard.jeremyCard {
+  grid-area: jeremy;
   display: flex;
   align-items: flex-start;
   gap: 0.9em;
+  margin: 0;
+  font-size: 1em;
+  text-align: left;
+  text-decoration: none;
+  color: var(--BASE_COLOR);
+  transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER);
+}
+
+.infoCard.jeremyCard:hover,
+.infoCard.jeremyCard:focus-visible {
+  transform: scale(1.02);
+  text-shadow: none;
+  outline: none;
+  border-color: var(--GLOW_EDGE);
+  background: var(--GLOW_FILL), var(--GLASS);
+  box-shadow: var(--GLOW_SHADOW);
 }
 
 .upcomingCard {
   grid-area: upcoming;
 }
 
-/* Dave's picture, in a circle (it shows his name if it can't load) */
-.daveImage {
+/* Jeremy's picture, in a circle (it shows his name if it can't load), on Home and at the top of his page */
+.jeremyImage {
   flex-shrink: 0;
   width: 12vmin;
   height: 12vmin;
@@ -2135,19 +2151,33 @@ body.datePicking .elastic-table td {
   overflow: hidden;
 }
 
-.daveMessage {
-  margin: 0;
+.jeremyText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.5em;
+  min-width: 0;
+}
+
+.jeremyMessage {
   font-size: 1em;
   line-height: 1.4;
 }
 
-.daveText {
-  flex: 1 1 auto;
-  min-width: 0;
+/* "More from Jeremy ›": the card opens his page */
+.jeremyMore {
+  align-self: flex-end;
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
 }
 
-/* Goals, under Dave's message (Calendar Page.js renderGoals): each one a button that opens it, with a thin bar for how
-   far along it is, then the Goals button */
+.infoCard.jeremyCard:hover .jeremyMore,
+.infoCard.jeremyCard:focus-visible .jeremyMore {
+  color: var(--TEXT_BRIGHT);
+}
+
+/* Goals, on Jeremy's page (Jeremy Page.js renderGoalsCard): each one a button that opens it, with a thin bar for how
+   far along it is and what Jeremy says reaching it takes */
 .goalList {
   margin: 0.7em 0 0;
   padding: 0;
@@ -2228,54 +2258,20 @@ body.datePicking .elastic-table td {
   background: linear-gradient(90deg, #2fd88a, #7dffb0);
 }
 
-.goalsButton {
-  margin-top: 0.7em;
-  padding: 0.3em 0.9em;
-  font-size: 0.9em;
+/* What Jeremy says about it; one in danger gets the red-orange edge */
+.goalPlan {
+  font-size: 0.88em;
+  line-height: 1.4;
+  color: var(--BASE_COLOR);
 }
 
-/* Dave's tip (Process Budget.js DAVE'S TIPS): for its 10 minutes, his card gets the red-orange gradient border
-   and a slow glow (it fades in and out with opacity alone, so it never makes the page redraw), and a label */
-.daveCard.daveTip {
-  border-color: transparent;
+.goalItem.isDanger .goalButton {
+  border-color: rgba(255, 110, 40, 0.75);
+  box-shadow: 0 0 10px rgba(255, 69, 0, 0.3);
 }
 
-.daveCard.daveTip::before,
-.daveCard.daveTip::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  pointer-events: none;
-}
-
-.daveCard.daveTip::before {
-  padding: 2px;
-  background: var(--EDGE_GRADIENT);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-}
-
-.daveCard.daveTip::after {
-  box-shadow: 0 0 22px rgba(255, 69, 0, 0.55);
-  opacity: 0.7;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .daveCard.daveTip::after {
-    animation: daveTipGlow 2.4s ease-in-out infinite alternate;
-  }
-}
-
-@keyframes daveTipGlow {
-  from { opacity: 0.25; }
-  to   { opacity: 1; }
-}
-
-.daveTipLabel {
+.goalItem.isDanger .goalStatus {
   color: #ff9a1a;
-  opacity: 1;
 }
 
 .upcomingList {
@@ -2498,7 +2494,7 @@ body.datePicking .elastic-table td {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "lowest"
-      "dave"
+      "jeremy"
       "upcoming";
   }
 }
@@ -3747,6 +3743,570 @@ footer.hasHelp > hr {
 @media (max-width: 700px) {
   .paycheckResults {
     grid-template-columns: 1fr;
+  }
+}
+
+/*========================================*
+ *  JEREMY'S PAGE (menu/jeremy.html, Jeremy Page.js)
+ *========================================*
+ *  A column of glass cards: his highlights (with his picture) at the top, then each card with its title, a ? after it,
+ *  and its switch at the right. A card that's off is only its title row, dimmed.
+ */
+
+:root {
+  /* Needs, Wants, and Future in the pie chart: three hues kept apart for every kind of color blindness on the cards' dark
+     glass, each one named beside its amount, so the color never has to say it alone */
+  --PURPOSE_NEEDS: #3987e5;
+  --PURPOSE_WANTS: #d95926;
+  --PURPOSE_FUTURE: #199e70;
+}
+
+.budgetCard.jeremyTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 1em;
+}
+
+.jeremyTop .jeremyImage {
+  width: 16vmin;
+  height: 16vmin;
+  min-width: 64px;
+  min-height: 64px;
+}
+
+.jeremyTopText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* One line from each card that's on; a line that needs a look has the red-orange edge, and the note about the cards
+   that are off is quieter */
+.jeremyHighlights {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jeremyHighlight {
+  margin: 0.45em 0 0;
+  padding: 0.1em 0 0.1em 0.7em;
+  line-height: 1.4;
+  border-left: 2px solid var(--PANEL_BORDER);
+}
+
+.jeremyHighlight strong {
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+}
+
+.jeremyHighlight.isWarning {
+  border-left-color: #ff6a1a;
+}
+
+.jeremyHighlight.isQuiet {
+  color: var(--TEXT_DIM);
+  border-left-color: transparent;
+}
+
+/* A card's title row: its title, the ? right after it, and its switch at the right */
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  min-width: 0;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.3em;
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
+}
+
+.sectionHelpButton {
+  flex-shrink: 0;
+  font-size: 0.95em;
+}
+
+.sectionSwitch {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0 0 0 auto;
+  padding-left: 0.6em;
+  font-size: 1em; /* The global label is much bigger */
+  cursor: pointer;
+}
+
+.sectionState {
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+.sectionHelp {
+  margin: 0.6em 0 0;
+  padding: 0.55em 0.8em;
+  font-size: 0.9em;
+  line-height: 1.45;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.sectionBody {
+  margin-top: 0.8em;
+}
+
+.budgetCard.jeremySection.isOff {
+  background: var(--PANEL_DARK);
+  box-shadow: none;
+}
+
+.jeremySection.isOff .sectionTitle {
+  color: var(--BASE_COLOR);
+  text-shadow: none;
+}
+
+.jeremySection .panelButtons.sectionButtons {
+  margin: 0 0 0.7em;
+}
+
+.jeremyTip {
+  line-height: 1.45;
+}
+
+/* A tip's button for what's behind it ("See paydays ›") */
+.budgetButton.tipMore {
+  margin: 0.2em 0 0;
+  padding: 0.35em 1em;
+  font-size: 0.9em;
+}
+
+.jeremyList {
+  margin: 0.2em 0 0;
+  padding-left: 1.2em;
+  line-height: 1.45;
+}
+
+/* Data: a row each, what it is (with a note under it) at the left and its figure at the right; a row with more behind it
+   is a button with a › */
+.jeremyData {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jeremyDataItem + .jeremyDataItem {
+  border-top: 1px solid var(--PANEL_LINE);
+}
+
+.jeremyDataRow {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.55em 0.3em;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+button.jeremyDataRow {
+  cursor: pointer;
+}
+
+button.jeremyDataRow:hover,
+button.jeremyDataRow:focus-visible {
+  transform: none;
+  outline: none;
+  background: rgba(104, 124, 255, 0.14);
+  box-shadow: inset 0 0 0 1px var(--PANEL_BORDER);
+}
+
+.jeremyDataText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+}
+
+.jeremyDataLabel {
+  color: var(--TEXT_BRIGHT);
+}
+
+.jeremyDataNote {
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+.jeremyDataValue {
+  flex-shrink: 0;
+  max-width: 45%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--TEXT_BRIGHT);
+}
+
+.jeremyDataValue.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.jeremyDataMore {
+  flex-shrink: 0;
+  font-size: 1.2em;
+  color: var(--TEXT_DIM);
+}
+
+/* Accounts: the table, with the day's box at the top of its third column; the Total row stands out, and the Interest
+   column only shows when an account has interest */
+.jeremyAccountsBox {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
+}
+
+.dataTable.jeremyAccounts {
+  font-size: 1em;
+}
+
+.jeremyAccounts th {
+  font-size: 1em;
+}
+
+.jeremyAccounts th.dayHead {
+  min-width: 9.5em;
+  padding: 0.5vmin 1vmin;
+}
+
+.jeremyAccounts .dayHead .dateRow {
+  justify-content: center;
+  gap: 0.3em;
+}
+
+/* Just wide enough for its date */
+.jeremyAccounts .dayHead .dateRow input.dateInput {
+  flex: none;
+  width: 6.6em;
+  padding: 0.3em 0.25em;
+  font-size: 0.95em;
+  text-align: center;
+}
+
+.jeremyAccounts.noInterest .interestHead,
+.jeremyAccounts.noInterest .interestCell {
+  display: none;
+}
+
+.jeremyAccounts .accountMax,
+.jeremyAccounts .interestRate {
+  display: block;
+  font-size: 0.8em;
+  color: var(--TEXT_DIM);
+}
+
+.jeremyAccounts tr.totalRow td {
+  color: var(--TEXT_BRIGHT);
+  background: rgba(40, 42, 110, 0.55);
+}
+
+.jeremyAccounts tr.totalRow td.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.jeremyAccountsNote {
+  margin: 0.5em 0 0;
+}
+
+.jeremyAccountsNote.isError {
+  color: var(--NEGATIVE_TEXT);
+  opacity: 1;
+}
+
+/* A window's table or list, in a box that scrolls up and down within it (the window stays on the screen) */
+.jeremyScroll {
+  max-height: min(55vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
+}
+
+.dataTable.jeremyTable {
+  font-size: 0.95em;
+}
+
+.jeremyTable td,
+.jeremyTable th {
+  white-space: normal;
+}
+
+.jeremyTable td.amountCell {
+  white-space: nowrap;
+}
+
+/* Needs, Wants, And Future: the days, then the chart beside its legend (the legend under it on phones) */
+.purposeDates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em 1em;
+  margin: 0 0 0.8em;
+}
+
+.purposeDate {
+  display: flex;
+  flex: 1 1 13em;
+  flex-direction: column;
+  gap: 0.3em;
+  min-width: 0;
+}
+
+.purposeChartBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1em 1.6em;
+}
+
+.purposeChart {
+  flex-shrink: 0;
+  width: clamp(170px, 38vmin, 230px);
+  height: clamp(170px, 38vmin, 230px);
+  overflow: visible;
+}
+
+.purposeSlice {
+  cursor: pointer;
+  outline: none;
+  transition: opacity 0.15s ease-out, filter 0.15s ease-out;
+}
+
+.purposeSlice.needs,
+.purposeSwatch.needs {
+  fill: var(--PURPOSE_NEEDS);
+  background: var(--PURPOSE_NEEDS);
+}
+
+.purposeSlice.wants,
+.purposeSwatch.wants {
+  fill: var(--PURPOSE_WANTS);
+  background: var(--PURPOSE_WANTS);
+}
+
+.purposeSlice.future,
+.purposeSwatch.future {
+  fill: var(--PURPOSE_FUTURE);
+  background: var(--PURPOSE_FUTURE);
+}
+
+/* The slice pointed at (or tabbed to) lifts, and the others step back */
+.purposeChart:hover .purposeSlice:not(:hover),
+.purposeChart:focus-within .purposeSlice:not(:focus) {
+  opacity: 0.55;
+}
+
+.purposeSlice:hover,
+.purposeSlice:focus-visible {
+  filter: brightness(1.2);
+}
+
+.purposeCenterAmount {
+  fill: var(--TEXT_BRIGHT);
+  font-size: 20px;
+}
+
+.purposeCenterLabel {
+  fill: var(--TEXT_DIM);
+  font-size: 13px;
+}
+
+.purposeLegend {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.purposeLegendButton {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.5em 0.4em;
+  font: inherit;
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--PANEL_LINE);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.purposeLegendButton:hover,
+.purposeLegendButton:focus-visible {
+  transform: none;
+  outline: none;
+  background: rgba(104, 124, 255, 0.14);
+}
+
+.purposeLegendButton:disabled {
+  cursor: default;
+  opacity: 0.55;
+  background: none;
+}
+
+.purposeSwatch {
+  flex-shrink: 0;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 3px;
+}
+
+.purposeName {
+  flex: 1 1 auto;
+  color: var(--TEXT_BRIGHT);
+}
+
+.purposeAmount,
+.purposeShare {
+  font-variant-numeric: tabular-nums;
+}
+
+.purposeShare {
+  min-width: 3em;
+  text-align: right;
+  color: var(--TEXT_DIM);
+}
+
+.budgetButton.purposeUnsorted {
+  margin: 0.9em 0 0;
+  padding: 0.35em 1em;
+  font-size: 0.9em;
+}
+
+/* A purpose's titles (and the ones with no purpose yet), each with what it cost and its share, or its buttons */
+.purposeTitles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.purposeTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  padding: 0.5em 0.2em;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.purposeTitle.hasChoices {
+  flex-wrap: wrap;
+}
+
+.purposeTitleText {
+  display: flex;
+  flex: 1 1 10em;
+  flex-direction: column;
+  gap: 0.1em;
+  min-width: 0;
+}
+
+.purposeTitleName {
+  overflow-wrap: anywhere;
+  color: var(--TEXT_BRIGHT);
+}
+
+.purposeTitleCount {
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+.purposeTitleAmount {
+  font-variant-numeric: tabular-nums;
+}
+
+.purposeTitleAmount.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.purposeTitleShare {
+  min-width: 3em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--TEXT_DIM);
+}
+
+.purposeTitleChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.purposeTitleChoices .budgetButton {
+  margin: 0;
+  padding: 0.3em 0.8em;
+  font-size: 0.9em;
+}
+
+/* Needs, Wants, Or Future in an entry's form: four buttons that wrap on a narrow phone */
+.purposeChoices {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .budgetCard.jeremyTop {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .jeremyDataValue {
+    max-width: 55%;
+  }
+
+  /* Accounts packs closer on a phone, so all four columns fit */
+  .dataTable.jeremyAccounts {
+    font-size: 0.86em;
+    border-spacing: 2px;
+  }
+
+  .jeremyAccounts th,
+  .jeremyAccounts td {
+    padding-left: 0.35em;
+    padding-right: 0.35em;
+  }
+
+  .jeremyAccounts th.dayHead {
+    min-width: 0;
+    padding: 0.3em 0.2em;
+  }
+
+  .jeremyAccounts td.titleCell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* The narrowest phones: smaller still, with the day's calendar button under its box */
+@media (max-width: 380px) {
+  .dataTable.jeremyAccounts {
+    font-size: 0.8em;
+  }
+
+  .jeremyAccounts .dayHead .dateRow {
+    flex-wrap: wrap;
   }
 }
 

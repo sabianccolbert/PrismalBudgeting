@@ -1,7 +1,8 @@
 // Process Budget: the budget itself, for every page that shows one. Loading it from the API and saving what
 // changed, the daily update that brings it up to today, every change (calendar entries, recurring entries, the
-// tracker, Other Accounts, connected spreadsheets, Quick Entry), the budget math, Dave, Search, Undo and Redo, and
-// the helpers the pages share (dates, amounts, titles). Pages draw from it and redraw on its "budget:updated" event.
+// tracker, Other Accounts, connected spreadsheets, Quick Entry), the budget math, Jeremy's message on Home and his page's
+// settings, Search, Undo and Redo, and the helpers the pages share (dates, amounts, titles). Pages draw from it and redraw
+// on its "budget:updated" event.
 
 // =====================================================================
 // GLOBAL VARIABLES
@@ -84,7 +85,7 @@ function setBudgetDay(day) {
   nextFourStart = addDays(gridEndDate, 1);
 }
 
-// DAVE
+// JEREMY (his message on Home, see commenceJeremy)
 let visibleUncommons = 0;
 let visibleNegatives = 0;
 let nextFourNegative = false;
@@ -97,7 +98,7 @@ const affirmationPresets = ["I am capable of quiet focus.", "My mind is filled w
 // Home Page (computed every time the budget refreshes, so they're never stored)
 let lowestInBank = 0;     // "Lowest in bank after today"
 let upcomingEntries = []; // Future Dates entries past the calendar: [{ date, sprite, amount, title }]
-let daveMessage = "";     // Dave's message
+let jeremyMessage = "";   // Jeremy's message
 
 // Others
 let formEntryRow = ["", "", "", "", "", "", ""]; // Change Logs row being built: [time, duration, action, 4 details]
@@ -192,7 +193,7 @@ async function loadWorkspace() {
     lastActiveDay = latestActiveDay(lastDailyUpdate, data.quick_entries);
 
     // Catch up any missed days, then rebuild everything computed from the entries
-    // (recurring entries, math, Dave, tracker). Only tables that changed get saved.
+    // (recurring entries, math, Jeremy's message, tracker). Only tables that changed get saved.
     const loadSnapshot = snapshotTables();
     try {
       beginChangeLog("🕛 Daily Update", requestedAt);
@@ -641,7 +642,7 @@ mirrors the old onFormSubmit flow:
   1. strip recurring entries (and In Bank, Gains/Costs, next-28 lines) out of the calendar
   2. apply the change (calendar entry, recurring entry, tracker row, search, ...)
   3. re-add Future Dates and recurring entries, and remove expired recurring entries
-  4. sort each day's entries, then redo the budget math, Dave, and the tracker
+  4. sort each day's entries, then redo the budget math, Jeremy's message, and the tracker
   5. log it to Change Logs, save, and tell the page to re-render ("budget:updated")
 Changes run one at a time (the spreadsheet used a script lock). A change that fails part
 way is rolled back, so half-finished data is never saved.
@@ -689,12 +690,13 @@ let changeLogStart = 0;
 /* ---------- Actions the page UI calls (each resolves to { ok, saved, notFound, message, ... }) ---------- */
 
 // New calendar entry. entry: { title, sprite, amount (signed number), percent (signed, for a % amount instead; see
-// PERCENT_MARK), date, placeholder }. Can be undone.
+// PERCENT_MARK), date, placeholder, purpose (what its title's money is for: Needs, Wants, or Future, see ENTRY PURPOSES;
+// left out, it stays as it is) }. Can be undone.
 function addCalendarEntry(entry) {
   const hasPercent = typeof entry.percent === "number";
   const signed = hasPercent ? entry.percent : entry.amount;
   return runBudgetAction("", () => {
-    const added = unique({
+    unique({
       title: entry.title,
       sprite: entry.sprite,
       action: signed > 0 ? "add" : "subtract",
@@ -704,15 +706,31 @@ function addCalendarEntry(entry) {
       placeholder: entry.placeholder === true,
       adding: true
     });
-    // (A placeholder isn't a purchase yet, so Dave's refund tip leaves it be)
-    return entry.placeholder === true || hasPercent ? {} : { purchase: { title: entry.title, amount: entry.amount, date: createSafeMidnight(entry.date || today), type: added.entryType } };
+    noteEntryPurpose(entry.title, entry.purpose);
+    return {};
   }, { label: `added ${capitalize(String(entry.title || "").trim())} (${hasPercent ? showPercent(entry.percent) : formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
 // Change, move, or delete a calendar entry (or one in Upcoming; History's go through changeHistoryEntry). change: { title,
-// sprite, date, action, amount, moveDate, renameTo (a new title of its own, see renameEntry) }. Can be undone.
+// sprite, date, action, amount, moveDate, renameTo (a new title of its own, see renameEntry), purpose (its title's, see
+// addCalendarEntry) }. Can be undone.
 function changeCalendarEntry(change) {
-  return runBudgetAction("", () => entryChange(change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+  return runBudgetAction("", () => keepEntryPurpose(entryChange(change), change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+}
+
+// After a change to an entry, its title's purpose as the form says (change.purpose; see ENTRY PURPOSES), on the title it
+// has now, unless it was deleted or couldn't be found
+function keepEntryPurpose(result, change) {
+  if (change.purpose !== undefined && String(change.action || "").toLowerCase() !== "delete" && !notFound) noteEntryPurpose(changedTitle(change), change.purpose);
+  return result;
+}
+
+// An entry's title after a change: its new one (a new type or Other Account's newTitle, or a rename's own title with its
+// account after it), or the one it had
+function changedTitle(change) {
+  if (change.newTitle !== undefined) return change.newTitle;
+  if (change.renameTo !== undefined) return withAccount(String(change.renameTo), splitAccount(String(change.title || "")).account);
+  return change.title;
 }
 
 // A change to an entry (unique's), after its new title when it has one (renameTo): renamed first, then changed on its
@@ -795,7 +813,7 @@ function landsByItself(title, sprite, date) {
 // itself leaves a $0.00 temp), then goes on as the new one, adding into an entry already there with that title and type
 // (a day has one of each). Can be undone in one step.
 function changeEntryKind(change) {
-  return runBudgetAction("", () => entryKindChange(change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
+  return runBudgetAction("", () => keepEntryPurpose(entryKindChange(change), change), { label: describeKindChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
 // changeEntryKind's change itself: off as it was, then on as the new one (a new title of its own too, where it can have
@@ -842,7 +860,7 @@ function changeHistoryEntry(change) {
       throw new BudgetInputError(`An entry in History can only move to another day in History (${showDate(oldestHistoryDay() || gridStartDate)} through ${showDate(addDays(gridStartDate, -1))}).`);
     }
     const balances = accountBalancesToday();
-    const result = (isKind ? entryKindChange(change) : entryChange(change)) || {};
+    const result = keepEntryPurpose((isKind ? entryKindChange(change) : entryChange(change)) || {}, change);
     return { ...result, afterRefresh: () => keepAccountBalances(balances) };
   }, { label, dates, keepBalances: true });
 }
@@ -914,9 +932,14 @@ function describeEntryChange(change) {
   return `changed ${title} on ${day(change.date)}`;
 }
 
-// New or changed recurring entry (index = the row that was clicked, null from the New Entry panel)
+// New or changed recurring entry (index = the row that was clicked, null from the New Entry panel). fields.purpose: its
+// title's (see addCalendarEntry).
 function saveRecurringEntry(fields, index = null) {
-  return runBudgetAction("", () => (index === null ? recurring(fields) : editRecurringRow(index, fields)));
+  return runBudgetAction("", () => {
+    const result = index === null ? recurring(fields) : editRecurringRow(index, fields);
+    noteEntryPurpose(fields.title, fields.purpose);
+    return result;
+  });
 }
 
 // New or changed tracker row (index = the row that was clicked, null from the New Entry panel)
@@ -1128,7 +1151,7 @@ function quickEntry(quick) {
   // (A % entry is worked out again here; on a day that passed before the budget opened, it's the amount the Quick Entry
   // page worked out)
   const hasPercent = typeof entry.percent === "number" && date >= today;
-  const added = unique({
+  unique({
     title: entry.title,
     sprite: Object.prototype.hasOwnProperty.call(QUICK_ENTRY_TYPES, entry.type) ? QUICK_ENTRY_TYPES[entry.type] : "",
     action: (hasPercent ? entry.percent : entry.amount) > 0 ? "add" : "subtract",
@@ -1139,8 +1162,8 @@ function quickEntry(quick) {
     adding: true
   });
   formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
-  const purchase = entry.placeholder === true || hasPercent ? null : { title: entry.title, amount: entry.amount, date, type: added.entryType };
-  return { quickEntry: { id: quick.id, table }, purchase };
+  noteEntryPurpose(entry.title, entry.purpose, true); // (Picked on the Quick Entry page, or left out to stay as it is)
+  return { quickEntry: { id: quick.id, table } };
 }
 
 // Does History have a cell for this day? (an entry for an older day would have nowhere to go)
@@ -1179,7 +1202,6 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
 
   const snapshot = snapshotTables();
   const undoBefore = undo ? captureEntryDays(undo.dates) : null;
-  const lowestBefore = lowestInBank; // For Dave's refund tip
   let result = {};
 
   try {
@@ -1207,8 +1229,6 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
   }
 
   markChangedTables(snapshot);
-  noticeRiskyPurchase(result.purchase, lowestBefore);
-  delete result.purchase;
   if (result.newUndoStep) rememberUndoStep(result.newUndoStep);
   if (result.historyStep) moveHistoryStep(result.historyStep.direction);
   delete result.newUndoStep;
@@ -1333,7 +1353,7 @@ function refreshBudgetData() {
   organizeCellEntries();
   resolvePercentEntries();
   writeBudgetMath();
-  commenceDave();
+  commenceJeremy();
   updateTrackerTab();
   updateAccountBalances();
 }
@@ -1550,7 +1570,7 @@ function unique(entry) {
   formEntryRow[2] = formEntryType;
   let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : percent !== null ? `${showPercent(percent)} (${formatMoney(Math.abs(amt))})` : formatMoney(rawAmtString);
   formEntryRow[6] = capitalize(rawAction) + ": " + formEntrySuffix;
-  return { entryType: targetIncomingSpecial }; // The refraction type it landed as (Auto picks one)
+  return {};
 }
 
 // Put an entry on a day (calendar, History, or Future Dates, depending on the date), combining it
@@ -2297,31 +2317,68 @@ function accountSummaries(interestUntil = gridEndDate) {
 // How far ahead Other Accounts looks ("In 6 Months")
 const AHEAD_MONTHS = 6;
 
-// The budget AHEAD_MONTHS from today: In Bank that day, and each Other Account's balance (its interest too), with the
-// days after the calendar filled in the way the daily update will fill them (Upcoming entries, then recurring and
-// connected spreadsheets' entries; see dayAfterCalendar). summaries: accountSummaries(). { inBank, accounts: Map(account
-// row index -> balance) }
+// The budget AHEAD_MONTHS from today: In Bank that day, and each Other Account's balance (its interest too). summaries:
+// accountSummaries(). { inBank, accounts: Map(account row index -> balance) }
 function budgetAhead(summaries) {
   const until = addMonths(today, AHEAD_MONTHS);
+  const projection = projectBudget(until, summaries);
+  return { inBank: projection.inBankOn(until), accounts: new Map(summaries.map(summary => [summary.index, projection.accountOn(summary.index, until)])) };
+}
+
+// The budget from today through until, a day at a time: the calendar's days as they are, and the days after it filled in
+// the way the daily update will fill them (Upcoming entries, then recurring and connected spreadsheets' entries; see
+// dayAfterCalendar). summaries: accountSummaries(), when the caller has them. Returns { until, summaries, inBank: [{ date,
+// amount }] (In Bank at the end of each day, today first), inBankOn(date), accountOn(index, date) (an Other Account's
+// balance at the end of date, its interest too; index: its row), interestBetween(index, from, to) (the interest it gets
+// after from, through to: below $0 is interest paid), accountParts(index) (what its balance comes from: { start, interest,
+// entries }, to work it out again with more entries, see interestCredits) }. Days after until count as until.
+function projectBudget(until, summaries = accountSummaries()) {
   const accounts = accountTitleMap();
   const coming = new Map(summaries.map(summary => [summary.index, []]));
-  let inBank = readInBank(calendarData[3][6]) ?? 0;
+  const inBank = [];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (gridDates[r][c] >= today && gridDates[r][c] <= until) inBank.push({ date: gridDates[r][c], amount: readInBank(calendarData[r][c]) ?? 0 });
+    }
+  }
+  let balance = readInBank(calendarData[3][6]) ?? 0;
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
   const sheetDays = sheetEntriesByDay(nextFourStart, until);
   for (let day = nextFourStart; day <= until; day = addDays(day, 1)) {
     const text = dayAfterCalendar(day, recurringRows, futureByDate, sheetDays);
-    inBank = Math.round((inBank + dayMath(text.split("\n")).bankChange) * 100) / 100;
+    balance = Math.round((balance + dayMath(text.split("\n")).bankChange) * 100) / 100;
+    inBank.push({ date: day, amount: balance });
     for (const { account, change } of accountLineChanges(text, accounts)) coming.get(account.index)?.push({ date: day, change });
   }
-  const balances = new Map();
-  for (const summary of summaries) {
+  const byIndex = new Map(summaries.map(summary => {
     const entries = [...summary.entries, ...(coming.get(summary.index) || [])];
     const credits = summary.interest ? interestCredits(summary.start, entries, summary.interest, until) : [];
-    const total = [...entries, ...credits].reduce((sum, item) => (item.date <= until ? sum + item.change : sum), 0);
-    balances.set(summary.index, Math.round((summary.start + total) * 100) / 100);
-  }
-  return { inBank, accounts: balances };
+    return [summary.index, { start: summary.start, interest: summary.interest, entries, credits }];
+  }));
+  const round = (amount) => Math.round(amount * 100) / 100;
+  const through = (list, date) => list.reduce((total, item) => (item.date <= date ? total + item.change : total), 0);
+  return {
+    until,
+    summaries,
+    inBank,
+    inBankOn(date) {
+      const at = Math.max(0, Math.min(getDayDifference(date, today), inBank.length - 1));
+      return inBank[at]?.amount ?? 0;
+    },
+    accountOn(index, date) {
+      const account = byIndex.get(index);
+      return account ? round(account.start + through(account.entries, date) + through(account.credits, date)) : 0;
+    },
+    interestBetween(index, from, to) {
+      const account = byIndex.get(index);
+      return account ? round(account.credits.reduce((total, credit) => (credit.date > from && credit.date <= to ? total + credit.change : total), 0)) : 0;
+    },
+    accountParts(index) {
+      const account = byIndex.get(index);
+      return account ? { start: account.start, interest: account.interest, entries: account.entries } : null;
+    }
+  };
 }
 
 // An account's starting amount (its row's [3]; blank is $0.00)
@@ -2587,13 +2644,16 @@ function combineSameUpcoming() {
   futureData = kept;
 }
 
-/* ---------- Goals (Dave's card) ---------- */
-// A goal is an amount to reach by a day, with a title, and what it's for: an Other Account, In Bank, the Total (In Bank
-// and every Other Account together, like Other Accounts' Total today), or nothing. A % goal is that percent of what it's
-// for on the day it's set, and stays that amount (its percent is kept to show it). Home lists them under Dave's message,
-// with how far along each one is. They're kept with the Other Accounts (accountsData.goals): [{ title, kind: "none" |
-// "inBank" | "total" | "account", account (the account's name, for "account"), amount, percent (null for a plain
-// amount), date (the day to reach it by), made (the day it was set) }], dates as MM/DD/YYYY. Dave doesn't mention them.
+/* ---------- Goals (Jeremy's Goals card) ---------- */
+// A goal is an amount for an Other Account, In Bank, or the Total (In Bank and every Other Account together, like Other
+// Accounts' Total today) to reach, by a day if it has one, with a title of its own if it has one. A credit card's can be
+// to climb from below $0 to $0 (paid off) or more. A % goal is that percent of what it's for on the day it's set, and
+// stays that amount (its percent is kept to show it). Jeremy's page lists them with how far along each one is, and works
+// out what reaching each one takes (Jeremy Page.js). They're kept with the Other Accounts (accountsData.goals): [{ title
+// ("" for none), kind: "inBank" | "total" | "account" ("none": one set before goals needed what they're for, kept until
+// it's changed), account (the account's name, for "account"), amount, percent (null for a plain amount), date (the day to
+// reach it by, "" for none), made (the day it was set), start (what it was for held then, so how far along it is counts
+// from there, like a credit card climbing to $0; left out by goals set before it was kept) }], dates as MM/DD/YYYY.
 
 const MAX_GOALS = 20;
 const GOAL_KINDS = ["none", "inBank", "total", "account"];
@@ -2620,13 +2680,19 @@ function normalizeGoals(list) {
       amount: Math.round(goal.amount * 100) / 100,
       percent: Number.isFinite(goal.percent) ? goal.percent : null,
       date: String(goal.date ?? "").slice(0, 10),
-      made: String(goal.made ?? "").slice(0, 10)
+      made: String(goal.made ?? "").slice(0, 10),
+      ...(Number.isFinite(goal.start) ? { start: Math.round(goal.start * 100) / 100 } : {})
     }));
 }
 
 // What a goal is for, as people read it: "Savings", "In Bank", "Total", or ""
 function goalTarget(goal) {
   return goal.kind === "account" ? goal.account : goal.kind === "inBank" ? "In Bank" : goal.kind === "total" ? "Total" : "";
+}
+
+// A goal's name: its title, or without one, what it's for
+function goalName(goal) {
+  return goal.title || goalTarget(goal) || "Goal";
 }
 
 // What a goal is for, today: In Bank, the Total, or its account's balance; null for none (or an account that's gone).
@@ -2642,9 +2708,10 @@ function goalBalance(goal, calendar = calendarData) {
   return account ? account.balance : null;
 }
 
-// fields: { title, kind, account (its name, for "account"), amount (a number), percent (a signed percent of what it's
-// for today, instead of amount), date (the day to reach it by) }. A % goal that keeps its percent and what it's for keeps
-// its amount (the one worked out when it was set). calendar: the calendar as it was before the change (with In Bank).
+// fields: { title ("" for none), kind ("inBank", "total", or "account"), account (its name, for "account"), amount (a
+// number), percent (a signed percent of what it's for today, instead of amount), date (the day to reach it by, or null
+// for none) }. A % goal that keeps its percent and what it's for keeps its amount (the one worked out when it was set).
+// calendar: the calendar as it was before the change (with In Bank).
 function goalEntry(fields, index, calendar = calendarData) {
   const goals = accountsData.goals || [];
   const isNew = index === null || index === undefined;
@@ -2652,9 +2719,9 @@ function goalEntry(fields, index, calendar = calendarData) {
   if (!isNew && !old) throw new BudgetInputError("That goal couldn't be found. Please try again.");
   if (isNew && goals.length >= MAX_GOALS) throw new BudgetInputError(`You can have up to ${MAX_GOALS} goals. Delete one first.`);
   const title = capitalize(String(fields.title || "").replace(/\s+/g, " ").trim());
-  if (!title) throw new BudgetInputError("Give the goal a title.");
   if (title.length > MAX_TITLE) throw new BudgetInputError(`Titles can be up to ${MAX_TITLE} characters.`);
-  const kind = GOAL_KINDS.includes(fields.kind) ? fields.kind : "none";
+  const kind = fields.kind;
+  if (!["inBank", "total", "account"].includes(kind)) throw new BudgetInputError("Pick what it's for: In Bank, the Total, or one of your Other Accounts.");
   let account = "";
   if (kind === "account") {
     const found = accountRows().find(known => known.clean === cleanString(fields.account));
@@ -2662,10 +2729,9 @@ function goalEntry(fields, index, calendar = calendarData) {
     account = found.name;
   }
   const date = fields.date instanceof Date && !isNaN(fields.date.getTime()) ? createSafeMidnight(fields.date) : null;
-  if (!date) throw new BudgetInputError("Pick the day to reach it by.");
 
   const percent = readPercent(fields.percent);
-  const goal = { title, kind, account, amount: 0, percent, date: formatToMMDDYYYY(date), made: formatToMMDDYYYY(today) };
+  const goal = { title, kind, account, amount: 0, percent, date: date ? formatToMMDDYYYY(date) : "", made: formatToMMDDYYYY(today) };
   if (percent !== null) {
     if (old && old.percent === percent && old.kind === kind && cleanString(old.account) === cleanString(account)) {
       goal.amount = old.amount;
@@ -2681,13 +2747,17 @@ function goalEntry(fields, index, calendar = calendarData) {
     if (Math.abs(goal.amount) > MAX_AMOUNT) throw new BudgetInputError(AMOUNT_TOO_BIG);
     if (old && old.percent === null && old.amount === goal.amount) goal.made = old.made;
   }
+  // What it's for holds now (or what it held when the goal was set, while that's still what it's for)
+  const sameTarget = !!old && old.kind === kind && cleanString(old.account) === cleanString(account);
+  const start = sameTarget && Number.isFinite(old.start) ? old.start : goalBalance(goal, calendar);
+  if (Number.isFinite(start)) goal.start = Math.round(start * 100) / 100;
   if (isNew) goals.push(goal);
   else goals[index] = goal;
   accountsData.goals = goals;
 
   formEntryRow[2] = isNew ? "🎯 New Goal" : "🎯 Change Goal";
-  formEntryRow[3] = "Goal: " + title + (goalTarget(goal) ? ` (${goalTarget(goal)})` : "");
-  formEntryRow[4] = "By: " + showDate(date);
+  formEntryRow[3] = "Goal: " + (title ? `${title} (${goalTarget(goal)})` : goalTarget(goal));
+  formEntryRow[4] = "By: " + (date ? showDate(date) : "Any Day");
   formEntryRow[5] = "";
   formEntryRow[6] = "Amount: " + (percent !== null ? `${showPercent(percent)} (${formatMoney(goal.amount)})` : formatMoney(goal.amount));
   return {};
@@ -2701,11 +2771,115 @@ function removeGoal(index) {
   if (goals.length > 0) accountsData.goals = goals;
   else delete accountsData.goals;
   formEntryRow[2] = "🎯 Delete Goal";
-  formEntryRow[3] = "Goal: " + goal.title;
+  formEntryRow[3] = "Goal: " + goalName(goal);
   formEntryRow[4] = "";
   formEntryRow[5] = "";
   formEntryRow[6] = "";
   return {};
+}
+
+/* ---------- Jeremy's page (menu/jeremy.html, drawn by Jeremy Page.js) ---------- */
+// Jeremy's page is a column of cards. Data and Accounts always show; each of the rest has its own on/off switch, and
+// starts off (a budget that had goals before the page did starts with Goals on, so they don't go missing). Which ones
+// are on is kept with the budget, so every device, and anyone sharing the budget, sees the same page:
+// accountsData.jeremy = { cards: [the ids of the cards that are on], purposes: (see ENTRY PURPOSES) }. It's left out
+// until something's been set, so loading a budget alone never counts as a change.
+
+// Each switchable card's id and its name (for Change Logs; the page has its own words)
+const JEREMY_CARDS = new Map([
+  ["goals", "Goals"],
+  ["purposes", "Needs, Wants, And Future"],
+  ["payday", "Payday"],
+  ["pace", "Spending Pace"],
+  ["bills", "Big Bills"],
+  ["weekly", "Weekly Check"],
+  ["catchup", "Catchup Entries"],
+  ["refund", "Refunds"]
+]);
+
+// The stored settings, checked: { cards, purposes }, or null with nothing stored (and no goals)
+function normalizeJeremy(stored, hasGoals) {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return hasGoals ? { cards: ["goals"], purposes: {} } : null;
+  const cards = Array.isArray(stored.cards) ? [...JEREMY_CARDS.keys()].filter(id => stored.cards.includes(id)) : [];
+  const purposes = {};
+  const kept = stored.purposes && typeof stored.purposes === "object" && !Array.isArray(stored.purposes) ? stored.purposes : {};
+  for (const [key, purpose] of Object.entries(kept).slice(0, MAX_PURPOSES)) {
+    // (A "__proto__" key would replace the object's prototype instead of adding a title)
+    if (key !== "__proto__" && key.length <= MAX_ENTRY_TITLE && ENTRY_PURPOSES.includes(purpose)) purposes[key] = purpose;
+  }
+  return { cards, purposes };
+}
+
+// The settings to change, made when there are none yet
+function jeremySettings() {
+  if (!accountsData.jeremy) accountsData.jeremy = { cards: [], purposes: {} };
+  return accountsData.jeremy;
+}
+
+// Is this card on? (Data and Accounts, which have no switch, always are)
+function jeremyCardOn(id) {
+  if (!JEREMY_CARDS.has(id)) return true;
+  return !!accountsData?.jeremy?.cards?.includes(id);
+}
+
+// A card's switch
+function turnJeremyCard(id, on) {
+  return runBudgetAction("💡 Jeremy's Cards", () => {
+    if (!JEREMY_CARDS.has(id)) throw new BudgetInputError("That card couldn't be found. Please reload the page.");
+    const jeremy = jeremySettings();
+    jeremy.cards = [...JEREMY_CARDS.keys()].filter(card => (card === id ? on : jeremy.cards.includes(card)));
+    formEntryRow[3] = `${JEREMY_CARDS.get(id)}: ${on ? "On" : "Off"}`;
+    return {};
+  });
+}
+
+/* ---------- Entry purposes (Jeremy's Needs, Wants, And Future card) ---------- */
+// What an entry's money is for: Needs (rent, groceries, bills), Wants (eating out, fun), or Future (savings, paying down
+// debt), or none. It's kept for each title (as the tracker compares them, titleKey: "Groceries → Cash" is Groceries), so
+// every entry with a title shares it, on every day: accountsData.jeremy.purposes: { title -> "needs" | "wants" |
+// "future" } (a title with none isn't kept). Once that card is on, every form that makes or changes an entry asks for it
+// at the bottom, and the card's pie chart adds up what each one cost.
+
+const ENTRY_PURPOSES = ["needs", "wants", "future"];
+const PURPOSE_NAMES = new Map([["none", "None"], ["needs", "Needs"], ["wants", "Wants"], ["future", "Future"]]);
+const MAX_PURPOSES = 2000;
+
+// A title's purpose: "needs", "wants", "future", or "none"
+function purposeOf(title) {
+  const key = titleKey(String(title ?? ""));
+  const purposes = accountsData?.jeremy?.purposes;
+  if (!key || !purposes || !Object.prototype.hasOwnProperty.call(purposes, key)) return "none";
+  return ENTRY_PURPOSES.includes(purposes[key]) ? purposes[key] : "none";
+}
+
+// Within a change: a title gets this purpose ("needs", "wants", "future", or "none"; anything else, like a form
+// without the question, leaves it as it is). Change Logs say so. A title new to the list when MAX_PURPOSES titles
+// already have one is refused, or with skipWhenFull just left without one (a quick entry still joins the budget).
+function noteEntryPurpose(title, purpose, skipWhenFull = false) {
+  if (purpose !== "none" && !ENTRY_PURPOSES.includes(purpose)) return;
+  const key = titleKey(String(title ?? ""));
+  if (!key || purposeOf(title) === purpose) return;
+  const jeremy = jeremySettings();
+  if (purpose === "none") {
+    delete jeremy.purposes[key];
+  } else {
+    const isNew = !Object.prototype.hasOwnProperty.call(jeremy.purposes, key);
+    if (isNew && Object.keys(jeremy.purposes).length >= MAX_PURPOSES) {
+      if (skipWhenFull) return;
+      throw new BudgetInputError(`Up to ${MAX_PURPOSES} titles can have Needs, Wants, or Future. Set some you don't use anymore to None first.`);
+    }
+    jeremy.purposes[key] = purpose;
+  }
+  formEntryRow[3] = `${formEntryRow[3]} (${PURPOSE_NAMES.get(purpose)})`.trim();
+}
+
+// Only a title's purpose changed (an entry's options with nothing else changed)
+function saveEntryPurpose(title, purpose) {
+  return runBudgetAction("🏷️ Entry Purpose", () => {
+    formEntryRow[3] = capitalize(String(title || "").trim());
+    noteEntryPurpose(title, purpose);
+    return {};
+  });
 }
 
 /* ---------- Connected spreadsheets ---------- */
@@ -2720,7 +2894,7 @@ function removeGoal(index) {
 //   - Changing one for its day (or deleting it) makes a temp, like ❗️➕, that keeps the spreadsheet's entry
 //     off that day; a unique entry with its title and type takes in its amount (it becomes a temp)
 //   - Once a day passes its entries stay as they were (they turn into temps, see performDailyUpdate)
-//   - The next 28 days after the calendar, Lowest, Search, reminders, and Dave count them too
+//   - The next 28 days after the calendar, Lowest, Search, reminders, and Jeremy count them too
 // A day has one entry per title and type, so an entry with the title and type of a recurring entry that lands
 // the same day is left out (the Spreadsheets page says so). A spreadsheet that's off keeps its entries (it's read again
 // when it's turned back on) and its temps; deleting one turns its temps from today on into unique entries.
@@ -3024,7 +3198,7 @@ function sheetLanding(entries) {
   return result;
 }
 
-// The spreadsheets' costs that are "uncommon" for Dave's savings tip, like a recurring entry that lands every
+// The spreadsheets' costs that are "uncommon" for Jeremy's Big Bills card, like a recurring entry that lands every
 // 3 months or less often: no entry with its title and type comes 90 days before or after it. Keys:
 // "day's time|clean title|type".
 function uncommonSheetKeys() {
@@ -3753,8 +3927,10 @@ function getPredictionData(lastInBank) {
   return [nextLowest, finalInBank, lowest];
 }
 
-// Dave's message for the home page: a greeting, what needs attention, and today's affirmation
-function commenceDave() {
+// Jeremy's message on Home, worked out with every change (so it's quick, in plain words): a greeting, what needs
+// attention (days below $0 on the calendar, going below $0 in the 28 days after it, uncommon recurring entries on it, and
+// Upcoming entries), and today's affirmation. Everything else he has to say waits for his page (Jeremy Page.js).
+function commenceJeremy() {
   let message = "Oops, looks like I couldn't read the budget! Sorry about that...";
   try {
     let janFirst = createSafeMidnight(new Date(today.getFullYear(), 0, 1));
@@ -3762,11 +3938,11 @@ function commenceDave() {
     // (A $0.00 temp only keeps a recurring entry off its day, so it isn't a payment; a $0.00 note, like "Add To
     // Savings", still counts)
     let futureDatesAmount = futureData.slice(1).filter(row => String(row[0]).trim() !== "" && !(parseAmount(row[1]) === 0 && entryMark(row[3]))).length;
-    let tempDaveMessage = greetingPresets[todaysDay % greetingPresets.length];
-    tempDaveMessage += nicknamePresets[todaysDay % nicknamePresets.length];
+    let written = greetingPresets[todaysDay % greetingPresets.length];
+    written += nicknamePresets[todaysDay % nicknamePresets.length];
     // A budget with no recurring entries yet is brand new
     let hasRecurring = recurringData.slice(2).some(row => String(row[0]).trim() !== "" && String(row[0]).trim() !== "-");
-    if (!hasRecurring) tempDaveMessage = "Woah! Nice new budget, don't forget to add your recurring entries! ";
+    if (!hasRecurring) written = "Woah! Nice new budget, don't forget to add your recurring entries! ";
     let discrepancies = 0;
     let writtenDisc = 0;
     if (nextFourNegative) discrepancies++;
@@ -3774,75 +3950,75 @@ function commenceDave() {
     if (futureDatesAmount) discrepancies++;
     if (visibleNegatives) discrepancies++;
     if (discrepancies === 0) {
-      tempDaveMessage += allClearPresets[todaysDay % allClearPresets.length];
+      written += allClearPresets[todaysDay % allClearPresets.length];
     } else if (discrepancies === 2) {
-      tempDaveMessage += "I've found a couple things to keep in mind: ";
+      written += "I've found a couple things to keep in mind: ";
     } else if (discrepancies === 3) {
-      tempDaveMessage += "I've found a few things to keep in mind: ";
+      written += "I've found a few things to keep in mind: ";
     } else if (discrepancies > 3) {
-      tempDaveMessage += "I've found these things to keep in mind: ";
+      written += "I've found these things to keep in mind: ";
     }
     if (nextFourNegative) { // Next four negative
       writtenDisc++;
       if (discrepancies === 1) {
-        tempDaveMessage += "All I see right now is that you'll be going negative sometime after the current four weeks. ";
+        written += "All I see right now is that you'll be going negative sometime after the current four weeks. ";
       } else {
-        tempDaveMessage += "It looks like you'll be going negative sometime after the current four weeks";
-        if (writtenDisc === discrepancies) tempDaveMessage += ". ";
+        written += "It looks like you'll be going negative sometime after the current four weeks";
+        if (writtenDisc === discrepancies) written += ". ";
       }
     }
     if (visibleUncommons > 0) { // Visible yearlies
       if (writtenDisc > 0) {
-        tempDaveMessage += ", ";
-        if (writtenDisc === discrepancies - 1) tempDaveMessage += "and ";
+        written += ", ";
+        if (writtenDisc === discrepancies - 1) written += "and ";
       }
       let firstLetter = writtenDisc > 0 ? "y" : "Y";
       writtenDisc++;
       let plurality = (visibleUncommons > 1) ? "s" : "";
       if (discrepancies === 1) {
-        tempDaveMessage += "All I see right now is that you've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the current four weeks. ";
+        written += "All I see right now is that you've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the current four weeks. ";
       } else {
-        tempDaveMessage += firstLetter + "ou've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the current four weeks";
-        if (writtenDisc === discrepancies) tempDaveMessage += ". ";
+        written += firstLetter + "ou've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the current four weeks";
+        if (writtenDisc === discrepancies) written += ". ";
       }
     }
     if (futureDatesAmount > 0) { // Future dates
       if (writtenDisc > 0) {
-        tempDaveMessage += ", ";
-        if (writtenDisc === discrepancies - 1) tempDaveMessage += "and ";
+        written += ", ";
+        if (writtenDisc === discrepancies - 1) written += "and ";
       }
       let firstLetter = writtenDisc > 0 ? "t" : "T";
       writtenDisc++;
       let plurality = (futureDatesAmount > 1) ? "s" : "";
       let isAre = (futureDatesAmount > 1) ? "are" : "is";
       if (discrepancies === 1) {
-        tempDaveMessage += "All I see right now is that there " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the current four weeks. ";
+        written += "All I see right now is that there " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the current four weeks. ";
       } else {
-        tempDaveMessage += firstLetter + "here " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the current four weeks";
-        if (writtenDisc === discrepancies) tempDaveMessage += ". ";
+        written += firstLetter + "here " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the current four weeks";
+        if (writtenDisc === discrepancies) written += ". ";
       }
     }
     if (visibleNegatives > 0) { // Visible negatives
       if (writtenDisc > 0) {
-        tempDaveMessage += ", ";
-        if (writtenDisc === discrepancies - 1) tempDaveMessage += "and ";
+        written += ", ";
+        if (writtenDisc === discrepancies - 1) written += "and ";
       }
       let firstLetter = writtenDisc > 0 ? "y" : "Y";
       let plurality = (visibleNegatives > 1) ? "s" : "";
       if (discrepancies === 1) {
-        tempDaveMessage += "All I see right now is that you have " + visibleNegatives + " day" + plurality + " negative on the budget. ";
+        written += "All I see right now is that you have " + visibleNegatives + " day" + plurality + " negative on the budget. ";
       } else {
-        tempDaveMessage += firstLetter + "ou have " + visibleNegatives + " day" + plurality + " negative on the budget. ";
+        written += firstLetter + "ou have " + visibleNegatives + " day" + plurality + " negative on the budget. ";
       }
     }
-    tempDaveMessage += farewellPresets[todaysDay % farewellPresets.length];
-    tempDaveMessage += affirmationPresets[affirmationIndex(today)];
-    message = tempDaveMessage;
+    written += farewellPresets[todaysDay % farewellPresets.length];
+    written += affirmationPresets[affirmationIndex(today)];
+    message = written;
   } catch (error) {
-    console.error("Dave's message couldn't be worked out:", error);
+    console.error("Jeremy's message couldn't be worked out:", error);
     hadError = true;
   }
-  daveMessage = message;
+  jeremyMessage = message;
 }
 
 // Which affirmation a day gets: the same one on the same date every year, the leap year one on February 29, and
@@ -3852,332 +4028,6 @@ function affirmationIndex(date) {
   const isLeapYear = new Date(date.getFullYear(), 1, 29).getMonth() === 1;
   if (!isLeapYear || day < 59) return day;
   return day === 59 ? 365 : day - 1;
-}
-
-/* ---------- Dave's tips (his "smart" messages) ---------- */
-// Besides his everyday message, Dave has tips about things worth a closer look. The first time Home opens on a
-// day, he shows one of that day's tips for 10 minutes, highlighted. Each visit after that (once the tip before
-// has had its 10 minutes) shows the next one, until all of the day's tips have been shown; then he's back to
-// his everyday message. A purchase that takes the budget below $0 (or further below) gets its tip right away.
-// Which tips were shown is kept on this device (they're only reminders), and stays after signing out (Layout.js
-// keeps just which tips and when), so signing back in goes on to the next tip instead of starting the day's over.
-// Tips are worked out once per visit (startDaveVisit), never on every change, so they can't slow changes down. In
-// this order:
-//   payday:  today has a paycheck: about how much usually goes out, besides recurring bills, before the next
-//            one (looking back 4 months, and only with 4 months of History)
-//   pace:    the last 7 days' spending, besides recurring bills, is well over a usual week's (4 months of History)
-//   savings: a big uncommon bill (or one-time cost added for a later day) is coming up in the next 60 days, and
-//            how much to set aside from each paycheck until then
-//   inBank:  on Sundays: compare In Bank with the bank, and add what's missing (or a Catchup entry)
-//   catchup: once a week, when Catchup entries in the last 30 days add up to $100 or more: add purchases as
-//            they happen instead
-//   refund:  a purchase took the lowest In Bank after today below $0, or further below
-
-const DAVE_TIP_MINUTES = 10;
-const DAVE_BIG_BILL = 200;      // A "big" bill: a cost of at least this much
-const DAVE_BILL_DAYS = 60;      // How far ahead the savings tip looks
-const DAVE_HISTORY_MONTHS = 4;  // How far back the payday and pace tips look (and how much History they need)
-const DAVE_PAYDAY_DAYS = 4;     // The payday tip's next payday: the first paycheck at least this many days away
-const DAVE_PACE_OVER = 50;      // The pace tip: the last 7 days are at least this much over a usual week...
-const DAVE_PACE_RATIO = 1.25;   // ...and at least this many times it
-const DAVE_CATCHUP = 100;       // The catchup tip: Catchup entries in the last 30 days add up to at least this much
-const DAVE_CATCHUP_DAYS = 30;
-const DAVE_TIPS = [["payday", paydayTip], ["pace", paceTip], ["savings", savingsTip], ["inBank", inBankTip], ["catchup", catchupTip]];
-const DAVE_WEEKLY_TIPS = ["inBank", "catchup"]; // Shown at most once every 7 days
-const DAVE_SUNDAY_TIPS = ["inBank"];            // ...and only on a Sunday
-
-// Where this device keeps Dave's tips for the signed-in account
-const daveStorageKey = () => `prismal_dave_${localStorage.getItem("prismal_username") || ""}`;
-
-// { day, shown: [today's tips shown so far], current: { id, text, until } | null, weekly: { tip id: the last day
-// it was shown (MM/DD/YYYY) }, refund: { text, day } | null (a purchase's tip, waiting for Home) }
-function readDaveState() {
-  const day = formatToMMDDYYYY(today);
-  let state = null;
-  try { state = JSON.parse(localStorage.getItem(daveStorageKey()) || "null"); } catch (e) {}
-  if (!state || typeof state !== "object" || Array.isArray(state)) state = {};
-  if (state.day !== day) Object.assign(state, { day, shown: [], current: null });
-  if (!Array.isArray(state.shown)) state.shown = [];
-  if (!state.weekly || typeof state.weekly !== "object") state.weekly = {};
-  if (state.refund && state.refund.day !== day) state.refund = null;
-  return state;
-}
-
-// Save Dave's tips on this device (best effort)
-function writeDaveState(state) {
-  try { localStorage.setItem(daveStorageKey(), JSON.stringify(state)); } catch (e) {}
-}
-
-// What the tips share while startDaveVisit works them out (recentSpending, worked out once), or null
-let daveTipsShared = null;
-
-// A visit to Home: the tip whose 10 minutes aren't up yet keeps showing; otherwise the next one for today
-// starts (a waiting purchase's tip first)
-function startDaveVisit() {
-  const state = readDaveState();
-  const now = Date.now();
-  if (state.current && state.current.until > now) return;
-  state.current = null;
-  let tip = state.refund ? { id: "refund", text: state.refund.text } : null;
-  state.refund = null;
-  daveTipsShared = {};
-  try {
-    for (const [id, makeTip] of DAVE_TIPS) {
-      if (tip) break;
-      if (state.shown.includes(id) || !weeklyTipDue(state, id)) continue;
-      const text = makeTip();
-      if (text) tip = { id, text };
-    }
-  } finally {
-    daveTipsShared = null;
-  }
-  if (tip) {
-    state.current = { ...tip, until: now + DAVE_TIP_MINUTES * 60000 };
-    if (tip.id !== "refund") state.shown.push(tip.id);
-    if (DAVE_WEEKLY_TIPS.includes(tip.id)) state.weekly[tip.id] = state.day;
-  }
-  writeDaveState(state);
-}
-
-// The tip Dave is showing ({ id, text, until }), or null for his everyday message
-function currentDaveTip() {
-  const state = readDaveState();
-  if (!state.current || !(state.current.until > Date.now())) return null;
-  // The weekly check says today's In Bank as it is now
-  if (state.current.id === "inBank") return { ...state.current, text: inBankTip() || state.current.text };
-  return state.current;
-}
-
-// A purchase (a Regular cost from New Entry or a quick entry) that took the lowest In Bank after today below
-// $0, or further below. On Home, Dave says so right away; elsewhere (like quick entries added as another page
-// opens), on the next visit to Home.
-function noticeRiskyPurchase(purchase, lowestBefore) {
-  if (!purchase || !(purchase.amount < 0) || purchase.type !== "❗️" || purchase.date < gridStartDate) return;
-  if (lowestInBank >= 0 || lowestInBank > lowestBefore - 0.005) return;
-  const text = `Hey, that purchase (${capitalize(String(purchase.title || "").trim())}, ${formatMoney(purchase.amount)} on ${showDay(purchase.date)}) seems to risk your budget balance. Is a refund possible?`;
-  const state = readDaveState();
-  if (window.PAGE === "home") state.current = { id: "refund", text, until: Date.now() + DAVE_TIP_MINUTES * 60000 };
-  else state.refund = { text, day: state.day };
-  writeDaveState(state);
-}
-
-// A weekly tip is due when it's never been shown on this device, or 7 days have passed since (others always are).
-// The weekly check is only due on a Sunday.
-function weeklyTipDue(state, id) {
-  if (!DAVE_WEEKLY_TIPS.includes(id)) return true;
-  if (DAVE_SUNDAY_TIPS.includes(id) && today.getDay() !== 0) return false;
-  const last = state.weekly[id] ? createSafeMidnight(state.weekly[id], true) : null;
-  return !last || isNaN(last.getTime()) || getDayDifference(today, last) >= 7;
-}
-
-// The weekly check (Sundays): compare today's In Bank with the bank (once there are entries to check)
-function inBankTip() {
-  const spot = calendarSpot(today);
-  const inBank = spot ? readInBank(calendarData[spot.r][spot.c]) : null;
-  const hasEntries = historyData.slice(1).some(row => row.some(cell => String(cell ?? "").trim() !== "")) ||
-    calendarData.some(row => row.some(cell => ownEntryLines(cell).length > 0));
-  if (inBank === null || !hasEntries) return null;
-  return `Time for your weekly check! Look at today's In Bank here (${formatMoney(inBank)}), and compare it with what your bank account actually has. Try to find which purchases are causing any difference, and add them in (on the day they happened, or just to today). Anything you can't find: tap today's In Bank on the calendar and type what your bank says, and I'll add a Catchup entry to make up the difference.`;
-}
-
-// A paycheck: a gain from a recurring entry or a connected spreadsheet (its line has a ✔️ or ➕) that's
-// Regular (not Hidden or a transfer)
-function isPaycheckLine(line) {
-  const { sprite, amount } = readLine(line);
-  return !!entryMark(sprite) && getSpecialType(sprite) === "❗️" && amount > 0;
-}
-
-// The days that land a paycheck from a recurring entry or a connected spreadsheet, from first through last
-function paycheckDays(first, last) {
-  const paychecks = getParsedRecurringRows().filter(row => row.amt > 0 && row.parsed.special === "❗️");
-  const sheetDays = sheetEntriesByDay(first, last);
-  const found = [];
-  for (let day = first; day <= last; day = addDays(day, 1)) {
-    const fromSheet = [...(sheetDays.get(day.getTime())?.values() || [])].some(entry => entry.special === "❗️" && entry.amount > 0);
-    if (fromSheet || paychecks.some(row => recurringRowHits(row.parsed, day))) found.push(day);
-  }
-  return found;
-}
-
-// Each day from 4 months ago through today, from History and the calendar: { spent, catchup, payday }, where spent
-// is what went out of In Bank besides recurring bills (Regular costs that didn't come from a recurring entry or a
-// connected spreadsheet),
-// and catchup is its Catchup costs (Regular, or a Transfer with no Other Account like In Bank's own Catchup entries;
-// never Hidden, which doesn't change In Bank). enough: History reaches back the whole 4 months. Worked out once per visit
-// (several tips use it: see startDaveVisit).
-function recentSpending() {
-  if (daveTipsShared?.spending) return daveTipsShared.spending;
-  const from = new Date(today.getFullYear(), today.getMonth() - DAVE_HISTORY_MONTHS, today.getDate());
-  const days = new Map(); // day's time -> { spent, catchup, payday }
-  let earliest = null;
-  const readDay = (date, cellText) => {
-    if (isNaN(date.getTime())) return;
-    if (!earliest || date < earliest) earliest = date;
-    if (date < from || date > today) return;
-    const day = { spent: 0, catchup: 0, payday: false };
-    for (const text of String(cellText).split("\n").slice(1)) {
-      const line = readLine(text);
-      if (line.blank || line.system) continue;
-      if (isPaycheckLine(text)) day.payday = true;
-      if (line.amount >= 0) continue;
-      const special = getSpecialType(line.sprite);
-      if (special === "❗️" && !entryMark(line.sprite)) day.spent -= line.amount;
-      if (special !== "✖️" && /^catch ?up$/.test(line.clean)) day.catchup -= line.amount;
-    }
-    days.set(date.getTime(), day);
-  };
-  for (let r = 1; r < historyData.length; r++) {
-    for (let c = 0; c < 7; c++) {
-      const cellText = String(historyData[r][c] ?? "");
-      if (cellText.trim()) readDay(createSafeMidnight(cellText.split("\n")[0].trim(), true), cellText);
-    }
-  }
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 7; c++) readDay(gridDates[r][c], calendarData[r][c]);
-  }
-  const spending = { days, enough: !!earliest && earliest <= from };
-  if (daveTipsShared) daveTipsShared.spending = spending;
-  return spending;
-}
-
-// On a payday: about how much usually goes out, besides recurring bills, before the next one
-function paydayTip() {
-  const todaySpot = calendarSpot(today);
-  if (!todaySpot || !String(calendarData[todaySpot.r][todaySpot.c]).split("\n").slice(1).some(isPaycheckLine)) return null;
-  const { days, enough } = recentSpending();
-  if (!enough) return null;
-
-  // "The next N days": until the next payday from a recurring entry or a connected spreadsheet (two weeks if
-  // there isn't one). Paychecks
-  // within a few days of each other (like two people's, a day apart) are one payday, so the next one counted
-  // is at least DAVE_PAYDAY_DAYS away.
-  const next = paycheckDays(addDays(today, DAVE_PAYDAY_DAYS), addDays(today, 62))[0];
-  const span = next ? getDayDifference(next, today) : 14;
-
-  // What went out in the N days from each payday in those 4 months, on average (or, with none to go by, a
-  // day's average times N)
-  const sums = [];
-  let total = 0;
-  let pastDays = 0;
-  for (const [time, day] of days) {
-    if (time >= today.getTime()) continue;
-    total += day.spent;
-    pastDays++;
-    const start = new Date(time);
-    if (!day.payday || addDays(start, span) > today) continue;
-    let sum = 0;
-    for (let d = 0; d < span; d++) sum += days.get(addDays(start, d).getTime())?.spent || 0;
-    sums.push(sum);
-  }
-  const average = sums.length > 0 ? sums.reduce((a, b) => a + b, 0) / sums.length : (pastDays ? total / pastDays * span : 0);
-  if (Math.round(average) <= 0) return null;
-  return `Hey, you just got paid! Keep in mind, besides your recurring bills, you tend to spend about ${formatMoney(Math.round(average))} in the next ${span} days, so be careful what you spend it on!`;
-}
-
-// Spending pace: the last 7 days (today too), besides recurring bills, against a usual week in the 4 months
-// before them. Shown when they're at least $50 and 25% over it.
-function paceTip() {
-  const { days, enough } = recentSpending();
-  if (!enough) return null;
-  const weekStart = addDays(today, -6).getTime();
-  let thisWeek = 0;
-  let before = 0;
-  let beforeDays = 0;
-  for (const [time, day] of days) {
-    if (time >= weekStart) {
-      thisWeek += day.spent;
-    } else {
-      before += day.spent;
-      beforeDays++;
-    }
-  }
-  if (beforeDays < 28) return null;
-  const usualWeek = before / beforeDays * 7;
-  const over = thisWeek - usualWeek;
-  if (over < DAVE_PACE_OVER || thisWeek < usualWeek * DAVE_PACE_RATIO) return null;
-  return `Heads up: you've spent about ${formatMoney(Math.round(thisWeek))} in the last 7 days besides your recurring bills, about ${formatMoney(Math.round(over))} more than usual for a week. Taking it easy for a few days keeps your budget on track!`;
-}
-
-// Catchup entries (titled Catchup or Catch Up) in the last 30 days: when they add up to $100 or more, purchases
-// are being missed, so add them as they happen
-function catchupTip() {
-  const { days } = recentSpending();
-  const from = addDays(today, -(DAVE_CATCHUP_DAYS - 1)).getTime();
-  let total = 0;
-  for (const [time, day] of days) if (time >= from) total += day.catchup;
-  if (total < DAVE_CATCHUP) return null;
-  return `Your Catchup entries add up to ${formatMoney(Math.round(total))} in the last ${DAVE_CATCHUP_DAYS} days, so some purchases are slipping by. Try adding each one as it happens (the Quick Entry icon on your phone's home screen makes it quick), so your In Bank stays right without guessing.`;
-}
-
-// The next big uncommon bill: a recurring cost of $200 or more that lands every 3 months or less often, a
-// connected spreadsheet's cost of $200 or more with no other like it within 90 days, or a one-time cost of $200
-// or more added for a later day (on the calendar or in Upcoming), in the next 60 days (not transfers), and how
-// much to set aside from each paycheck until then (today's counts). A recurring entry that lands more often (like every
-// month) is never one: not as it lands, not changed for its day (a temp, on the calendar or in Upcoming), and not an
-// entry with its title and type added for a day by hand.
-function savingsTip() {
-  const lastDay = addDays(today, DAVE_BILL_DAYS);
-  const recurringRows = getParsedRecurringRows();
-  const uncommon = recurringRows.filter(row => row.amt <= -DAVE_BIG_BILL && !isTransferEntry(row.sprite) && isUncommonFrequency(row.parsed.frequency));
-  const uncommonKeys = new Set(uncommon.map(row => row.parsed.cleanTitle + "|" + row.parsed.special));
-  const frequentKeys = new Set(recurringRows.filter(row => !isUncommonFrequency(row.parsed.frequency)).map(row => row.parsed.cleanTitle + "|" + row.parsed.special));
-  const uncommonSheets = uncommonSheetKeys(); // A spreadsheet's cost with no other like it within 90 days
-  // Is this cost (title and type as compared, on its day) one to remind about?
-  const isUncommonBill = (key, mark, day) => !frequentKeys.has(key) &&
-    (!mark || (mark === RECURRING_MARK ? uncommonKeys.has(key) : uncommonSheets.has(day.getTime() + "|" + key)));
-  const bills = [];
-
-  // On the calendar after today: uncommon recurring and spreadsheet ones as they are there (one changed for its
-  // day counts as changed), and one-time costs added for those days
-  for (let day = addDays(today, 1); day <= gridEndDate && day <= lastDay; day = addDays(day, 1)) {
-    const spot = calendarSpot(day);
-    for (const line of String(calendarData[spot.r][spot.c]).split("\n").slice(1)) {
-      const parts = getParts(line);
-      const amount = parseAmount(parts[1]);
-      if (amount > -DAVE_BIG_BILL || systemEmojis.includes(parts[0]) || isTransferEntry(parts[0])) continue;
-      if (isUncommonBill(extractTitle(line) + "|" + getSpecialType(parts[0]), entryMark(parts[0]), day)) {
-        bills.push({ date: day, title: parts.slice(2).join(" "), amount });
-      }
-    }
-  }
-
-  // After the calendar: where they'll land (unless an Upcoming entry changed that day), and Upcoming costs
-  const upcoming = futureData.slice(1)
-    .map(row => ({ date: createSafeMidnight(row[2], true), title: String(row[0] ?? "").trim(), amount: parseAmount(row[1]), sprite: String(row[3] ?? "") }))
-    .filter(row => row.title && !isNaN(row.date.getTime()));
-  const changed = new Set(upcoming.filter(row => entryMark(row.sprite)).map(row => row.date.getTime() + "|" + cleanString(row.title) + "|" + getSpecialType(row.sprite)));
-  if (uncommon.length > 0) {
-    for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
-      for (const row of uncommon) {
-        if (recurringRowHits(row.parsed, day) && !changed.has(day.getTime() + "|" + row.parsed.cleanTitle + "|" + row.parsed.special)) {
-          bills.push({ date: day, title: row.title, amount: row.amt });
-        }
-      }
-    }
-  }
-  for (const [time, day] of sheetEntriesByDay(nextFourStart, lastDay)) {
-    for (const entry of day.values()) {
-      const key = time + "|" + entry.clean + "|" + entry.special;
-      if (entry.amount <= -DAVE_BIG_BILL && entry.special !== "⭕️" && isUncommonBill(entry.clean + "|" + entry.special, SHEET_MARK, new Date(time)) && !changed.has(key)) {
-        bills.push({ date: new Date(time), title: entry.title, amount: entry.amount });
-      }
-    }
-  }
-  for (const row of upcoming) {
-    if (row.date <= gridEndDate || row.date > lastDay || row.amount > -DAVE_BIG_BILL || isTransferEntry(row.sprite)) continue;
-    if (isUncommonBill(cleanString(row.title) + "|" + getSpecialType(row.sprite), entryMark(row.sprite), row.date)) bills.push(row);
-  }
-  if (bills.length === 0) return null;
-
-  bills.sort((a, b) => a.date - b.date);
-  const first = bills[0];
-  const more = bills.length > 1 ? `, and ${bills.length - 1} more in the next ${DAVE_BILL_DAYS} days` : "";
-  const paydays = paycheckDays(today, addDays(first.date, -1)).length;
-  const cost = Math.abs(first.amount);
-  const setAside = paydays === 0 ? " It lands before your next paycheck, so check that what you have now covers it."
-    : paydays === 1 ? ` Setting aside ${formatMoney(Math.ceil(cost))} from your paycheck before then covers it.`
-    : ` Setting aside about ${formatMoney(Math.ceil(cost / paydays))} from each of your ${paydays} paychecks before then covers it.`;
-  return `Hey, you have a big uncommon bill coming up: ${first.title} (${formatMoney(first.amount)}) on ${showDay(first.date)}${more}. Make sure you're saving enough to afford it!${setAside}`;
 }
 
 // Tracker sums (last 28 / 90 / 365 days) from the calendar and History, the Transfers and Undefined rows'
@@ -4701,7 +4551,7 @@ function normalizeApiTable(rawData, shape) {
   return rows;
 }
 
-// Rebuild the Other Accounts store: { version: 3, list, equity, coming, inBank }
+// Rebuild the Other Accounts store: { version: 3, list, equity, coming, inBank, goals, jeremy }
 //   list: [0] column titles, then [name, balance today, "default" | "cash" | "", starting amount, interest rate, interest
 //         since, max] (see Other Accounts in BUDGET LOGIC). Savings and Cash (MANDATORY_ACCOUNTS) are added if they're
 //         missing. Balances come only from entries, so a version 2 store's typed-in balance in [1] isn't kept.
@@ -4710,6 +4560,7 @@ function normalizeApiTable(rawData, shape) {
 //   coming: each account's changes after today, for the Quick Entry page (accountChangesAhead fills it in again;
 //           it's kept as stored until then, so loading the budget alone doesn't count as a change)
 //   inBank: In Bank from today on, for the Quick Entry page (inBankAhead; kept as stored until then too)
+//   goals: Jeremy's Goals card (see Goals in BUDGET LOGIC), and jeremy: his page's settings (see normalizeJeremy)
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
   if (typeof parsed === 'string') {
@@ -4752,6 +4603,8 @@ function normalizeApiAccounts(rawData) {
   if (isCurrent && Array.isArray(parsed.inBank)) accounts.inBank = parsed.inBank.filter(isDay);
   const goals = isCurrent ? normalizeGoals(parsed.goals) : [];
   if (goals.length > 0) accounts.goals = goals; // (Goals, see goalEntry)
+  const jeremy = isCurrent ? normalizeJeremy(parsed.jeremy, goals.length > 0) : null;
+  if (jeremy) accounts.jeremy = jeremy; // (Jeremy's page, see normalizeJeremy)
   return accounts;
 }
 
@@ -5300,7 +5153,7 @@ function timesPerMonth(frequency) {
 }
 
 // "Uncommon" recurring entries land every 3 months or less often (like the spreadsheet's 3 Month,
-// 6 Month, and Yearly): Dave points them out, and they get a reminder
+// 6 Month, and Yearly): Jeremy points them out, and they get a reminder
 function isUncommonFrequency(frequency) {
   if (frequency.unit === "months") return frequency.count >= 3;
   if (frequency.unit === "weeks") return frequency.count >= 13;

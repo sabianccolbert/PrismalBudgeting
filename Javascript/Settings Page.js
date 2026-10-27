@@ -626,13 +626,12 @@ async function deleteAccount(event) {
     return;
   }
   // The account is gone: this device stops its push notifications, stops offering the account's
-  // passkeys (where the browser supports it), and forgets the session and Dave's tips (keeping its own
-  // choices, like analytics off)
+  // passkeys (where the browser supports it), and forgets the session (keeping its own choices, like analytics off)
   if (pushSubscription) await pushSubscription.unsubscribe().catch(() => {});
   if (passkeyInfo) Passkeys.syncList(passkeyInfo.userHandle, []);
   Passkeys.forgetLast();
   workspaceLoaded = false; // Nothing more to save (and leaving doesn't ask about it)
-  clearSignedInData(true);
+  clearSignedInData();
   transitionTo("/login.html?deleted=1", true, "right");
 }
 
