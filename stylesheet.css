@@ -1166,8 +1166,9 @@ input[type="checkbox"].pillSwitch:disabled {
   color: #fff;
 }
 
-/* Apple, Google, and Microsoft's buttons, under a line: plain white with dark words, the way each one's sign-in
-   buttons look on a dark page */
+/* On standby with signing in with Apple, Google, or Microsoft (Login.js): their buttons, under a line, plain white with
+   dark words, the way each one's sign-in buttons look on a dark page
+
 .authCard .providerButtons {
   display: flex;
   flex-direction: column;
@@ -1189,6 +1190,7 @@ input[type="checkbox"].pillSwitch:disabled {
   background: #f2f2f2;
   box-shadow: 0 0 14px rgba(255, 255, 255, 0.25);
 }
+*/
 
 .authCard .termsField,
 .authCard .formHint {

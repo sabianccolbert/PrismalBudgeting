@@ -675,6 +675,11 @@ function paymentCalculator() {
     }));
     account.input.value = choices.some(choice => choice.value === picked) ? picked : "";
   };
+  // The budget ahead (projectBudget) and the picked account's entries (paymentsEntries), worked out again only when
+  // another account is picked or the budget changes, not as the rest is typed
+  let projection = null;
+  let entries = null;
+
   // An account picked: what it owes and its interest go in the boxes
   account.input.addEventListener("change", () => {
     const summary = accountSummaries().find(item => String(item.index) === account.input.value);
@@ -720,49 +725,60 @@ function paymentCalculator() {
       results.append(line(describePayoff(base, options)));
       shown = base;
       if (extraAmount > 0) {
-        const more = payOff({ ...options, payment: options.payment + extraAmount });
+        const withExtra = { ...options, payment: options.payment + extraAmount };
+        const more = payOff(withExtra);
         if (more.paidOff) {
-          const sooner = base.paidOff ? `, ${base.schedule.length - more.schedule.length} payments sooner, with ${formatMoney(Math.max(0, base.interest - more.interest))} less interest` : "";
+          const fewer = base.schedule.length - more.schedule.length;
+          const saved = formatMoney(Math.max(0, base.interest - more.interest));
+          const sooner = !base.paidOff ? "" : fewer > 0 ? `, with ${fewer} fewer ${fewer === 1 ? "payment" : "payments"} and ${saved} less interest` : `, with ${saved} less interest`;
           results.append(line(`With ${formatMoney(extraAmount)} more each payment: paid off on ${showDate(more.paidOff)}${sooner}.`, "positive"));
         } else {
-          results.append(line(`With ${formatMoney(extraAmount)} more each payment: ${describePayoff(more, options)}`));
+          results.append(line(`With ${formatMoney(extraAmount)} more each payment: ${describePayoff(more, withExtra)}`));
         }
         shown = more;
       }
     }
     if (byDay) {
       const needed = paymentToPayOffBy(options, byDay);
-      results.append(line(needed === null
-        ? `It can't be paid off by ${showDate(byDay)}: pick a day on or after the first payment.`
-        : `To be done by ${showDate(byDay)}: ${formatMoney(needed)} each payment.`));
+      const why = byDay < options.first
+        ? "pick a day on or after the first payment"
+        : byDay > addMonths(options.from, PAYOFF_YEARS * 12) ? `pick a day within ${PAYOFF_YEARS} years` : "its interest adds up faster than any payment pays";
+      results.append(line(needed === null ? `It can't be paid off by ${showDate(byDay)}: ${why}.` : `To be done by ${showDate(byDay)}: ${formatMoney(needed)} each payment.`));
     }
     if (shown && shown.schedule.length > 0) results.append(scheduleTable(shown.schedule, extraAmount > 0));
+    results.append(BudgetUI.element("p", "panelHint", "An estimate from what's typed here: a lender's own figures can differ (its fees, how it counts days, and rounding)."));
   };
 
-  // An Other Account's own pace, with the budget's entries still to come, and its entries before and after today
-  let projection = null;
+  // An Other Account's own pace, with the budget's entries still to come, and its entries before and after today (the
+  // list stays put as the rest is typed, so it keeps its place)
+  const paceText = BudgetUI.element("div", "paymentsPace");
+  pace.append(paceText);
   const showPace = (typed) => {
     const summary = accountSummaries().find(item => String(item.index) === account.input.value);
     pace.hidden = !summary;
     if (!summary) return;
-    if (!projection) projection = projectBudget(addMonths(today, 12 * ACCOUNT_PAYOFF_YEARS));
+    if (!projection) {
+      projection = projectBudget(addMonths(today, 12 * ACCOUNT_PAYOFF_YEARS));
+      entries?.remove();
+      entries = paymentsEntries(summary, projection);
+      pace.append(entries);
+    }
     const options = typed.options;
     const extraAmount = typed.problem ? 0 : typed.extra;
     const result = accountPayoff(summary.index, projection, options ? { extra: extraAmount, frequency: options.frequency, first: options.first } : {});
-    pace.replaceChildren(BudgetUI.element("h3", "", `${summary.name} At Your Budget's Pace`));
+    paceText.replaceChildren(BudgetUI.element("h3", "", `${summary.name} At Your Budget's Pace`));
     if (!result || result.owed <= 0) {
-      pace.append(line(`${summary.name} isn't below $0 today, so there's nothing to pay off.`));
+      paceText.append(line(`${summary.name} isn't below $0 today, so there's nothing to pay off.`));
     } else {
-      pace.append(line(result.now.paidOff
+      paceText.append(line(result.now.paidOff
         ? `${summary.name} owes ${formatMoney(result.owed)} today. With its own entries and the ones your budget has coming (like a recurring payment), it's back to $0 on ${showDate(result.now.paidOff)} (in ${howLong(today, result.now.paidOff)}), with ${formatMoney(result.now.interest)} in interest from today.`
         : `${summary.name} owes ${formatMoney(result.owed)} today, and with its own entries and the ones your budget has coming, it isn't back to $0 within ${ACCOUNT_PAYOFF_YEARS} years.`));
       if (result.withExtra) {
-        pace.append(line(result.withExtra.paidOff
+        paceText.append(line(result.withExtra.paidOff
           ? `With ${formatMoney(extraAmount)} more each payment (from the first payment's day): back to $0 on ${showDate(result.withExtra.paidOff)}${result.now.paidOff ? `, ${howLong(result.withExtra.paidOff, result.now.paidOff)} sooner` : ""}, with ${formatMoney(Math.max(0, result.now.interest - result.withExtra.interest))} less interest.`
           : `With ${formatMoney(extraAmount)} more each payment, it still isn't back to $0 within ${ACCOUNT_PAYOFF_YEARS} years.`, "positive"));
       }
     }
-    pace.append(paymentsEntries(summary, projection));
   };
 
   let pending = 0;
@@ -823,7 +839,11 @@ function paymentsEntries(summary, projection) {
   const yearOut = addMonths(today, 12);
   const parts = projection.accountParts(summary.index);
   const known = accountEntryLines(summary.index);
-  const coming = (parts ? parts.entries : []).filter(entry => entry.coming && entry.date <= yearOut).map(entry => ({
+  // (Upcoming's entries are in both: the budget's own are kept)
+  const sameEntry = (date, change, title) => `${date.getTime()}|${change}|${cleanString(title)}`;
+  const listed = new Set(known.map(entry => sameEntry(entry.date, entry.change, readLine(entry.line).title)));
+  const projected = (parts ? parts.entries : []).filter(entry => entry.coming && entry.date <= yearOut && !listed.has(sameEntry(entry.date, entry.change, entry.title)));
+  const coming = projected.map(entry => ({
     date: entry.date,
     line: `${entry.sprite} ${formatMoney(accountChange(entry.sprite, entry.change))} ${entry.title}`,
     change: entry.change,

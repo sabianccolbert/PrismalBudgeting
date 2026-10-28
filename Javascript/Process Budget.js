@@ -2459,8 +2459,9 @@ function describeInterest(interest) {
 // balance) takes each day in order with the account's balance at its start (its starting amount, its entries before
 // that day, and the interest added before it), and gives back the interest added to it that day, to the cent (0 on most
 // days):
-//   - It's added on interest.day every interest.every months: first in the month that many months on from the first
-//     such day after it started counting (every month: that first day itself)
+//   - It's added on interest.day every interest.every months, counting that day of the month from the first one after
+//     it started counting: first on the interest.every-th of them (every month: the first one itself, every 3 months:
+//     the third), then every interest.every months
 //   - "daily": every day earns a 365th of the yearly rate, on the balance and the interest earned since it was last
 //     added
 //   - "simple": every day earns a 365th of the yearly rate, on the balance without any interest added to it
@@ -2587,16 +2588,21 @@ function payOff({ owed, interest, payment, frequency, first, from, until = addMo
 }
 
 // The smallest payment (to the cent) that pays off `owed` by the day `by` (options: as payOff takes them, without a
-// payment), or null when none can (a day before the first payment)
+// payment), or null when none can: a day before the first payment, one more than PAYOFF_YEARS away, or interest that
+// adds up faster than MAX_AMOUNT a payment pays
 function paymentToPayOffBy(options, by) {
-  if (by < options.first) return null;
+  if (by < options.first || by > addMonths(options.from, PAYOFF_YEARS * 12)) return null;
   const works = (cents) => {
     const result = payOff({ ...options, payment: cents / 100, until: by });
     return result.paidOff !== null;
   };
   const years = Math.max(1, getDayDifference(by, options.from) / 365);
   let high = Math.ceil(options.owed * (1 + (options.interest ? options.interest.rate / 100 : 0) * (years + 1)) * 100) + 100;
-  if (!works(high)) return null;
+  // (Interest compounding for years before the first payment can outgrow that guess)
+  while (!works(high)) {
+    if (high > MAX_AMOUNT * 100) return null;
+    high *= 2;
+  }
   let low = 0;
   while (high - low > 1) {
     const middle = Math.floor((low + high) / 2);

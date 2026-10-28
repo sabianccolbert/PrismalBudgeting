@@ -1,8 +1,9 @@
-// Login: the sign-in page. Signing in (with the username or an email of the account and the password, a passkey (the
-// one this device last used is tried by itself), or Apple, Google, or Microsoft), creating an account (those too),
-// Forgot Password and the reset link, turning passkey sign-in on right after a password sign-in, and the links emails
-// carry: verifying the account's email, and confirming another email of the account's. The API checks everything
-// again; the checks here only say what's wrong sooner.
+// Login: the sign-in page. Signing in (with the username or an email of the account and the password, or a passkey:
+// the one this device last used is tried by itself), creating an account, Forgot Password and the reset link, turning
+// passkey sign-in on right after a password sign-in, and the links emails carry: verifying the account's email, and
+// confirming another email of the account's. The API checks everything again; the checks here only say what's wrong
+// sooner. Signing in with Apple, Google, or Microsoft is on standby: its code is commented out (see APPLE, GOOGLE, AND
+// MICROSOFT below).
 
 const authForm = document.getElementById('auth-form');
 const pageTitle = document.querySelector('header .logo');
@@ -144,8 +145,8 @@ const MODES = {
     primary: 'Login',
     toggle: 'New Account?',
     showForgot: true,
-    passkeys: true,
-    providers: true
+    // providers: true, (On standby, see APPLE, GOOGLE, AND MICROSOFT)
+    passkeys: true
   },
   create: {
     title: 'Create Your Account',
@@ -153,17 +154,17 @@ const MODES = {
     groups: ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'turnstile-group'],
     primary: 'Create Account',
     toggle: 'Back to Login',
-    newPassword: true,
-    providers: true
+    // providers: true, (On standby)
+    newPassword: true
   },
-  // Someone new, back from signing in with Apple, Google, or Microsoft: the rest of a new account (no password; the
-  // email only when the provider didn't check one, see showProviderSignup)
-  provider: {
-    title: 'Create Your Account',
-    groups: ['username-group', 'email-group', 'age-group', 'terms-group', 'turnstile-group'],
-    primary: 'Create Account',
-    toggle: 'Back to Login'
-  },
+  // On standby: someone new, back from signing in with Apple, Google, or Microsoft, gets the rest of a new account (no
+  // password; the email only when the provider didn't check one, see showProviderSignup)
+  // provider: {
+  //   title: 'Create Your Account',
+  //   groups: ['username-group', 'email-group', 'age-group', 'terms-group', 'turnstile-group'],
+  //   primary: 'Create Account',
+  //   toggle: 'Back to Login'
+  // },
   forgot: {
     title: 'Reset Your Password',
     hint: "Enter your account's email (or another email you added to it), and we'll send you a link to choose a new password.",
@@ -237,9 +238,15 @@ function setMode(newMode, { holdAssist = false } = {}) {
   passkeyBtn.classList.toggle('hidden', !(config.passkeys && Passkeys.supported));
   if (config.passkeys && !holdAssist) startPasskeyAutofill();
   else if (!config.passkeys) stopPasskeyAutofill();
-  if (mode !== 'provider') providerSignup = null;
-  renderProviders();
-  if (mode === 'create' || mode === 'provider') startTurnstile(); // Its check runs while the form is filled in
+  if (mode === 'create') startTurnstile(); // Its check runs while the form is filled in
+  // On standby (APPLE, GOOGLE, AND MICROSOFT below):
+  // if (mode === 'provider') {
+  //   usernameLabel.textContent = 'Username';
+  //   startTurnstile();
+  // } else {
+  //   providerSignup = null;
+  // }
+  // renderProviders();
 }
 
 // The message under the form (light for good news, red otherwise)
@@ -279,10 +286,11 @@ authForm.addEventListener('submit', async (e) => {
     else setMode('login');
     return;
   }
-  if (mode === 'provider') {
-    registerWithProvider();
-    return;
-  }
+  // On standby (APPLE, GOOGLE, AND MICROSOFT below):
+  // if (mode === 'provider') {
+  //   registerWithProvider();
+  //   return;
+  // }
   setStatus('');
 
   const username = usernameInput.value.trim();
@@ -824,14 +832,17 @@ function declinePasskeys() {
 //#endregion
 
 // =====================================================================
-// #region APPLE, GOOGLE, AND MICROSOFT
+// #region APPLE, GOOGLE, AND MICROSOFT (on standby)
 // =====================================================================
 // Signing in with Apple, Google, or Microsoft (the API's signin.js): a button for each one the server has set up, on
 // Sign In and Create Account. It goes to the provider's own sign-in page, which sends the person back here with a code
 // in the address (#signin=...), taken out of the address right away: it signs in to the account the provider is
 // connected to, or for someone new, makes an account (a username, a birth date, and agreeing to the Privacy Policy &
 // Terms of Use, with an email only when the provider didn't check one; no password). The code only works in this tab.
+// It's on standby until each provider is set up (its secrets, and its official button and logo): this code and every
+// line that uses it (marked "On standby") are commented out, and the API doesn't route to signin.js either.
 
+/*
 // What a sign-in that came back with a problem (#signin-error=...) says
 const PROVIDER_ERRORS = {
   cancelled: "Signing in was cancelled.",
@@ -960,31 +971,34 @@ async function registerWithProvider() {
   }
   setStatus(status === 0 ? "Failed to connect to the server." : (data.error || "An error occurred."));
 }
+*/
 
 //#endregion
 
 // A sign-in that's over but not signed out yet (left 15 minutes idle, or past its end: Boot.js shows this page for it)
 // is signed out here, the server's session too, and the page says why
 if (readStored('prismal_jwt') && !signedInNow()) {
-  const idle = Date.now() - Number(readStored('prismal_last_activity') || 0) >= IDLE_SIGN_OUT_MS;
+  const lastActivity = Number(readStored('prismal_last_activity') || 0);
+  const idle = lastActivity > 0 && Date.now() - lastActivity >= IDLE_SIGN_OUT_MS;
   endServerSession();
   clearSignedInData();
   try { sessionStorage.setItem('prismal_signed_out', idle ? 'idle' : 'expired'); } catch (e) {}
 }
 
-// Back from Apple, Google, or Microsoft: #signin=<code>, or #signin-error=<reason> (taken out of the address right
-// away)
-const providerReturn = new URLSearchParams(location.hash.slice(1));
-if (providerReturn.has('signin') || providerReturn.has('signin-error')) history.replaceState(null, '', location.pathname + location.search);
-loadProviders();
+// On standby (APPLE, GOOGLE, AND MICROSOFT above): back from Apple, Google, or Microsoft, #signin=<code> or
+// #signin-error=<reason> (taken out of the address right away)
+// const providerReturn = new URLSearchParams(location.hash.slice(1));
+// if (providerReturn.has('signin') || providerReturn.has('signin-error')) history.replaceState(null, '', location.pathname + location.search);
+// loadProviders();
 
 // Start in the mode the link asked for (?new: the front page's Create Account)
 if (verifyToken) {
   verifyEmailLink(verifyToken);
 } else if (sheetEmailToken) {
   confirmSheetEmailLink(sheetEmailToken);
-} else if (providerReturn.get('signin')) {
-  finishProviderReturn(providerReturn.get('signin'));
+// On standby:
+// } else if (providerReturn.get('signin')) {
+//   finishProviderReturn(providerReturn.get('signin'));
 } else if (resetToken) {
   setMode('reset');
 } else {
@@ -1002,8 +1016,9 @@ if (verifyToken) {
   if (pageParams.has('deleted')) {
     setStatus("Your account and all of its data were deleted.", true);
     clearPageParams();
-  } else if (providerReturn.has('signin-error')) {
-    setStatus(PROVIDER_ERRORS[providerReturn.get('signin-error')] || PROVIDER_ERRORS.failed);
+  // On standby:
+  // } else if (providerReturn.has('signin-error')) {
+  //   setStatus(PROVIDER_ERRORS[providerReturn.get('signin-error')] || PROVIDER_ERRORS.failed);
   } else if (SIGNED_OUT_REASONS[signedOut]) {
     setStatus(SIGNED_OUT_REASONS[signedOut], true);
   }

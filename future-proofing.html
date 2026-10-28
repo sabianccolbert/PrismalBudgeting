@@ -12,7 +12,7 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="dark">
     <title>Prismal Budget - Site Notes</title>
-    <link rel="stylesheet" href="/stylesheet.css?v=dcf3d1956c">
+    <link rel="stylesheet" href="/stylesheet.css?v=54eceeb070">
     <link rel="stylesheet" href="/budgetStyle.css?v=acb1e6bb4e">
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
   </head>
@@ -39,7 +39,7 @@
           <section id="about" aria-labelledby="aboutTitle">
             <h2 id="aboutTitle">What This Page Is</h2>
             <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Budget Works</a>.</p>
-            <p>Last checked: October 27, 2026 (site version 10.27.2026.B).</p>
+            <p>Last checked: October 27, 2026 (site version 10.27.2026.C).</p>
           </section>
 
           <section id="map" aria-labelledby="mapTitle">
@@ -66,7 +66,7 @@
             <ol>
               <li>Work on the <code>Testing</code> branch.</li>
               <li>Change the version everywhere it's written: <code>SITE_VERSION</code> in <code>Javascript/Boot.js</code> (today's date and the next letter, like 10.27.2026.A, then .B), How It Works' "Last updated" line and its <code>dateModified</code>, and <code>sitemap.xml</code>'s <code>lastmod</code> for the public pages that changed.</li>
-              <li>Only when the Privacy Policy &amp; Terms of Use change: its <code>policy-version</code> and <code>policy-changes</code> tags and both Effective Date lines, set to the day it goes live. A new <code>policy-version</code> emails every account with a verified email, once it's live.</li>
+              <li>Only when the Privacy Policy &amp; Terms of Use change: its <code>policy-version</code> and <code>policy-changes</code> tags and both Effective Date lines, set to the day it goes live (or, when the last version already has that day or a later one, the day after it: each version has to come after the last, or no email goes out). A new <code>policy-version</code> emails every account with a verified email, once it's live.</li>
               <li>Run <code>node _tools/stamp.mjs</code>, which writes every file's fingerprint (section 3). The repo's pre-commit hook (turned on with <code>git config core.hooksPath _tools/hooks</code>) refuses a commit whose fingerprints are out of date.</li>
               <li>When the API changed (or the site calls something new on it), it goes first: in the API's folder, <code>npx wrangler secret list</code> (every secret still set), the tests (<code>npx vitest run</code>), then <code>npx wrangler deploy</code>. Running it from the wrong folder deploys nothing new.</li>
               <li>Commit on <code>Testing</code>, merge it into <code>main</code> (<code>git merge --no-ff Testing</code>), and push both. GitHub Pages publishes within a minute.</li>
@@ -178,6 +178,7 @@ X-XSS-Protection: 0</code></pre>
               <li><code>CNAME</code>, <code>robots.txt</code>, <code>sitemap.xml</code>, <code>llms.txt</code>, and <code>404.html</code> (GitHub Pages shows it for any address it doesn't have).</li>
               <li><code>how-it-works.html</code>: the full guide to what the site does.</li>
               <li>This page, <code>future-proofing.html</code>: update it when any of these settings change.</li>
+              <li>Signing in with Apple, Google, or Microsoft is built but on standby: its code is commented out, each place marked "On standby" (<code>Login.js</code>, <code>Settings Page.js</code>, <code>Layout.js</code>, <code>login.html</code>, <code>settings.html</code>, <code>stylesheet.css</code>, and the API). The private API repo's notes say what turning it on takes.</li>
             </ul>
           </section>
 

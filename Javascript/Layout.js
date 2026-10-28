@@ -471,8 +471,9 @@ function readStored(KEY) {
   try { return localStorage.getItem(KEY); } catch { return null; }
 }
 
-// This tab's own random value for signing in with Apple, Google, or Microsoft (the API's signin.js): made once and kept
-// for the tab, so a sign-in it started can only be finished in it
+// On standby with signing in with Apple, Google, or Microsoft (Login.js): this tab's own random value for it (the API's
+// signin.js), made once and kept for the tab, so a sign-in it started can only be finished in it
+/*
 function signInBrowser() {
   let value = null;
   try { value = sessionStorage.getItem("prismal_signin_browser"); } catch {}
@@ -482,6 +483,7 @@ function signInBrowser() {
   try { sessionStorage.setItem("prismal_signin_browser", value); } catch {}
   return value;
 }
+*/
 
 // A sign-in lasts while it's used: 15 minutes without a tap, key, or scroll signs it out (Session.js)
 const IDLE_SIGN_OUT_MS = 15 * 60 * 1000;
