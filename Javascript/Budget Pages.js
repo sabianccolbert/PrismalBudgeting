@@ -17,6 +17,7 @@ const PAGE_RENDERERS = {
   tracker: renderTrackerPage,
   logs: renderLogsPage,
   calculator: renderCalculatorPage,
+  payments: renderPaymentsPage,
   accounts: renderAccountsPage
 };
 
@@ -583,6 +584,264 @@ function calculatorForm(inputs) {
   return form;
 }
 
+// Payment Calculator (menu/payments.html): how long paying off a balance owed takes (a loan, a credit card), with
+// interest worked out like an Other Account's, and what paying more each time does (payOff in Process Budget.js).
+// Picking an Other Account fills in its balance and interest, works out its own pace from the budget (accountPayoff),
+// and lists its entries before and after today, each one tapped to change it. Nothing on it is saved: it's worked out
+// again as anything is typed, and a change to the budget (another device's too) only works the account's part out
+// again.
+let paymentsPage = null; // { el, refresh } while the page shows
+
+function renderPaymentsPage(view) {
+  if (paymentsPage && view.contains(paymentsPage.el)) {
+    paymentsPage.refresh();
+    return;
+  }
+  paymentsPage = paymentCalculator();
+  view.replaceChildren(paymentsPage.el);
+}
+
+// How often payments come (PAYMENT_FREQUENCIES in Process Budget.js)
+const PAYMENT_CHOICES = [
+  { value: "monthly", label: "Every month" },
+  { value: "biweekly", label: "Every 2 weeks" },
+  { value: "weekly", label: "Every week" }
+];
+
+// A dollar box typed like a cash register. value(): the amount (0 for blank), NaN when it can't be read
+function moneyField({ label, hint = "", optional = false }) {
+  const box = BudgetUI.textField({ label, placeholder: "0.00", hint, optional });
+  box.input.inputMode = "decimal";
+  BudgetUI.cashRegister(box.input);
+  return {
+    el: box.el,
+    value: () => (box.value() ? readMoneyInput(box.value()) : 0),
+    set(amount) { box.input.value = amount > 0 ? amount.toFixed(2) : ""; }
+  };
+}
+
+// "2 years, 3 months" from one day to another (whole months; "less than a month" under one)
+function howLong(from, to) {
+  let months = (to.getFullYear() - from.getFullYear()) * 12 + to.getMonth() - from.getMonth();
+  if (to.getDate() < from.getDate()) months--;
+  if (months < 1) return "less than a month";
+  const years = Math.floor(months / 12);
+  const parts = [years ? `${years} ${years === 1 ? "year" : "years"}` : "", months % 12 ? `${months % 12} ${months % 12 === 1 ? "month" : "months"}` : ""];
+  return parts.filter(Boolean).join(", ");
+}
+
+// The Payment Calculator's form, results, and (for an Other Account) its own pace and entries: { el, refresh }
+function paymentCalculator() {
+  const el = BudgetUI.element("div", "paymentsPage");
+  const form = BudgetUI.element("form", "budgetCard calculatorForm paymentsForm");
+  form.noValidate = true;
+  form.autocomplete = "off";
+  form.addEventListener("submit", (event) => event.preventDefault());
+  form.appendChild(BudgetUI.element("h3", "", "Paying It Off"));
+
+  const account = BudgetUI.selectField({ label: "Other Account", options: [], value: "", hint: "Pick one to fill in what it owes and its interest, and to see its own pace below." });
+  const owed = moneyField({ label: "Balance owed" });
+  const rate = BudgetUI.textField({ label: "Interest rate (APR, % a year)", placeholder: "Like 6.5", optional: true });
+  rate.input.inputMode = "decimal";
+  const compound = BudgetUI.selectField({ label: "Compounds", options: COMPOUNDING_CHOICES, value: "monthly", hint: COMPOUNDING_HINT });
+  const every = BudgetUI.selectField({ label: "Interest added", options: ADDED_CHOICES, value: 1 });
+  const day = BudgetUI.selectField({ label: "On day", options: DAY_CHOICES, value: today.getDate(), hint: "The day of the month interest is added (a shorter month uses its last day)." });
+  const payment = moneyField({ label: "Payment" });
+  const frequency = BudgetUI.selectField({ label: "Every", options: PAYMENT_CHOICES, value: "monthly" });
+  const first = BudgetUI.dateField({ label: "First payment", date: addMonths(today, 1) });
+  const extra = moneyField({ label: "Extra each payment", optional: true, hint: "What paying this much more each time does." });
+  const payBy = BudgetUI.dateField({ label: "Pay it off by", optional: true, hint: "The payment it takes to be done by then." });
+  const section = (title, fields) => {
+    const set = BudgetUI.element("fieldset", "calculatorSection");
+    set.append(BudgetUI.element("legend", "", title), ...fields);
+    return set;
+  };
+  form.append(section("The Balance", [account.el, owed.el, rate.el, compound.el, every.el, day.el]), section("Payments", [payment.el, frequency.el, first.el, extra.el, payBy.el]));
+
+  const results = BudgetUI.element("section", "budgetCard paymentsResults");
+  results.setAttribute("aria-live", "polite");
+  const pace = BudgetUI.element("section", "budgetCard paymentsAccount");
+  pace.hidden = true;
+  el.append(form, results, pace);
+
+  // The Other Accounts to pick from, each with its balance today (the one picked stays picked while it's there)
+  const fillAccounts = () => {
+    const picked = account.input.value;
+    const choices = [{ value: "", label: "None (type it in)" }, ...accountSummaries().map(summary => ({ value: String(summary.index), label: `${summary.name} (${formatMoney(summary.today)})` }))];
+    account.input.replaceChildren(...choices.map(choice => {
+      const option = BudgetUI.element("option", "", choice.label);
+      option.value = choice.value;
+      return option;
+    }));
+    account.input.value = choices.some(choice => choice.value === picked) ? picked : "";
+  };
+  // An account picked: what it owes and its interest go in the boxes
+  account.input.addEventListener("change", () => {
+    const summary = accountSummaries().find(item => String(item.index) === account.input.value);
+    if (summary) {
+      owed.set(Math.max(0, -summary.today));
+      rate.input.value = summary.interest ? String(summary.interest.rate) : "";
+      compound.input.value = summary.interest ? summary.interest.compound : "monthly";
+      every.input.value = String(summary.interest ? summary.interest.every : 1);
+      day.input.value = String(summary.interest ? summary.interest.day : today.getDate());
+    }
+    projection = null;
+  });
+
+  // What's typed: { problem } when something can't be read, or { options (see payOff), extra, payBy }
+  const read = () => {
+    const owedAmount = owed.value();
+    const paymentAmount = payment.value();
+    const extraAmount = extra.value();
+    const rateText = rate.value().replace(/%/g, "");
+    const rateNumber = rateText ? readMoneyInput(rateText) : 0;
+    const firstDay = first.value();
+    const byDay = payBy.value();
+    if (![owedAmount, paymentAmount, extraAmount].every(amount => Number.isFinite(amount) && amount >= 0 && amount <= MAX_AMOUNT)) return { problem: "Amounts are typed like 250.00 (up to $1,000,000,000)." };
+    if (!Number.isFinite(rateNumber) || rateNumber < 0 || rateNumber > MAX_INTEREST_RATE) return { problem: `Enter the interest rate for a year, like 6.5 (up to ${MAX_INTEREST_RATE}).` };
+    if (!(firstDay instanceof Date) || firstDay < today) return { problem: `Enter the first payment's day, today or later (${datePattern()}).` };
+    if (byDay === undefined) return { problem: `That Pay it off by date isn't a real day. Use ${datePattern()}.` };
+    const interest = rateNumber > 0 ? { rate: rateNumber, compound: compound.value(), every: Number(every.value()), day: Number(day.value()) } : null;
+    return { options: { owed: owedAmount, interest, payment: paymentAmount, frequency: frequency.value(), first: firstDay, from: today }, extra: extraAmount, payBy: byDay };
+  };
+
+  // The results: when it's paid off, the interest, what paying extra does, the payment to be done by a day, and each
+  // payment
+  const line = (text, className = "") => BudgetUI.element("p", `paymentsLine ${className}`.trim(), text);
+  const showResults = (typed) => {
+    results.replaceChildren(BudgetUI.element("h3", "", "When It's Paid Off"));
+    if (typed.problem) return results.append(line(typed.problem, "negative"));
+    const { options, extra: extraAmount, payBy: byDay } = typed;
+    if (options.owed <= 0) return results.append(line("Type what's owed, or pick an Other Account that's below $0."));
+    if (options.payment <= 0 && !byDay) return results.append(line("Type the payment, or a day to pay it off by."));
+    let shown = null;
+    if (options.payment > 0) {
+      const base = payOff(options);
+      results.append(line(describePayoff(base, options)));
+      shown = base;
+      if (extraAmount > 0) {
+        const more = payOff({ ...options, payment: options.payment + extraAmount });
+        if (more.paidOff) {
+          const sooner = base.paidOff ? `, ${base.schedule.length - more.schedule.length} payments sooner, with ${formatMoney(Math.max(0, base.interest - more.interest))} less interest` : "";
+          results.append(line(`With ${formatMoney(extraAmount)} more each payment: paid off on ${showDate(more.paidOff)}${sooner}.`, "positive"));
+        } else {
+          results.append(line(`With ${formatMoney(extraAmount)} more each payment: ${describePayoff(more, options)}`));
+        }
+        shown = more;
+      }
+    }
+    if (byDay) {
+      const needed = paymentToPayOffBy(options, byDay);
+      results.append(line(needed === null
+        ? `It can't be paid off by ${showDate(byDay)}: pick a day on or after the first payment.`
+        : `To be done by ${showDate(byDay)}: ${formatMoney(needed)} each payment.`));
+    }
+    if (shown && shown.schedule.length > 0) results.append(scheduleTable(shown.schedule, extraAmount > 0));
+  };
+
+  // An Other Account's own pace, with the budget's entries still to come, and its entries before and after today
+  let projection = null;
+  const showPace = (typed) => {
+    const summary = accountSummaries().find(item => String(item.index) === account.input.value);
+    pace.hidden = !summary;
+    if (!summary) return;
+    if (!projection) projection = projectBudget(addMonths(today, 12 * ACCOUNT_PAYOFF_YEARS));
+    const options = typed.options;
+    const extraAmount = typed.problem ? 0 : typed.extra;
+    const result = accountPayoff(summary.index, projection, options ? { extra: extraAmount, frequency: options.frequency, first: options.first } : {});
+    pace.replaceChildren(BudgetUI.element("h3", "", `${summary.name} At Your Budget's Pace`));
+    if (!result || result.owed <= 0) {
+      pace.append(line(`${summary.name} isn't below $0 today, so there's nothing to pay off.`));
+    } else {
+      pace.append(line(result.now.paidOff
+        ? `${summary.name} owes ${formatMoney(result.owed)} today. With its own entries and the ones your budget has coming (like a recurring payment), it's back to $0 on ${showDate(result.now.paidOff)} (in ${howLong(today, result.now.paidOff)}), with ${formatMoney(result.now.interest)} in interest from today.`
+        : `${summary.name} owes ${formatMoney(result.owed)} today, and with its own entries and the ones your budget has coming, it isn't back to $0 within ${ACCOUNT_PAYOFF_YEARS} years.`));
+      if (result.withExtra) {
+        pace.append(line(result.withExtra.paidOff
+          ? `With ${formatMoney(extraAmount)} more each payment (from the first payment's day): back to $0 on ${showDate(result.withExtra.paidOff)}${result.now.paidOff ? `, ${howLong(result.withExtra.paidOff, result.now.paidOff)} sooner` : ""}, with ${formatMoney(Math.max(0, result.now.interest - result.withExtra.interest))} less interest.`
+          : `With ${formatMoney(extraAmount)} more each payment, it still isn't back to $0 within ${ACCOUNT_PAYOFF_YEARS} years.`, "positive"));
+      }
+    }
+    pace.append(paymentsEntries(summary, projection));
+  };
+
+  let pending = 0;
+  const update = () => {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => {
+      const typed = read();
+      showResults(typed);
+      showPace(typed);
+    });
+  };
+  form.addEventListener("input", update);
+  form.addEventListener("change", update);
+  fillAccounts();
+  update();
+  return {
+    el,
+    refresh() {
+      fillAccounts();
+      projection = null;
+      update();
+    }
+  };
+}
+
+// A payoff in words: "Paid off on 03/01/2029: 28 payments (2 years, 4 months), $812.40 in interest, $10,812.40 paid in
+// all."
+function describePayoff(result, options) {
+  if (result.paidOff) {
+    return `Paid off on ${showDate(result.paidOff)}: ${result.schedule.length} ${result.schedule.length === 1 ? "payment" : "payments"} (${howLong(today, result.paidOff)}), ${formatMoney(result.interest)} in interest, ${formatMoney(result.paid)} paid in all.`;
+  }
+  const last = result.schedule.at(-1);
+  if (last && last.owed >= options.owed) return `${formatMoney(options.payment)} each payment never pays it off: the interest it adds is as much or more.`;
+  return `It isn't paid off within ${PAYOFF_YEARS} years.`;
+}
+
+// Each payment, in a box that scrolls: its day, the payment, the interest since the one before, and what's owed after
+// it
+function scheduleTable(schedule, withExtra) {
+  const table = createDataTable(["Date", "Payment", "Interest", "Owed After"]);
+  table.classList.add("scheduleTable");
+  const fragment = document.createDocumentFragment();
+  for (const row of schedule) {
+    const tr = document.createElement("tr");
+    tr.append(noTranslate(cell(showDate(row.date), "dateCell")), noTranslate(cell(formatMoney(row.payment), "amountCell")), noTranslate(cell(formatMoney(row.interest), "amountCell")), noTranslate(cell(formatMoney(row.owed), "amountCell")));
+    fragment.appendChild(tr);
+  }
+  table.tBodies[0].appendChild(fragment);
+  const box = BudgetUI.element("div", "paymentsSchedule");
+  box.appendChild(table);
+  return BudgetUI.field(withExtra ? "Each Payment (with the extra)" : "Each Payment", box);
+}
+
+// An account's entries for the Payment Calculator, in a box that scrolls: the ones coming up (soonest first: on the
+// calendar, in Upcoming, and the budget's still to come for a year, with its interest), then today and before (newest
+// first). Each one opens its options when tapped, like in the account's own window.
+function paymentsEntries(summary, projection) {
+  const yearOut = addMonths(today, 12);
+  const parts = projection.accountParts(summary.index);
+  const known = accountEntryLines(summary.index);
+  const coming = (parts ? parts.entries : []).filter(entry => entry.coming && entry.date <= yearOut).map(entry => ({
+    date: entry.date,
+    line: `${entry.sprite} ${formatMoney(accountChange(entry.sprite, entry.change))} ${entry.title}`,
+    change: entry.change,
+    place: "upcoming"
+  }));
+  const interest = parts && parts.interest ? interestCredits(parts.start, parts.entries, parts.interest, yearOut).map(credit => ({ ...credit, interest: true })) : [];
+  const all = [...known, ...coming, ...interest];
+  const ahead = all.filter(entry => entry.date > today).sort((a, b) => a.date - b.date);
+  const before = all.filter(entry => entry.date <= today).sort((a, b) => b.date - a.date);
+  const list = BudgetUI.element("ul", "accountEntries");
+  const heading = (text) => BudgetUI.element("li", "accountEntriesHeading", text);
+  const row = (entry) => (entry.interest ? accountInterestRow(entry) : accountEntryRow(entry));
+  if (ahead.length) list.append(heading("Coming up"), ...ahead.map(row));
+  if (before.length) list.append(heading("Today and before"), ...before.map(row));
+  if (!ahead.length && !before.length) list.append(heading("No entries yet."));
+  return BudgetUI.field("Its Entries", list, { hint: "Tap one to change it. At the right: what it put in or took out." });
+}
+
 //#endregion
 
 // =====================================================================
@@ -1098,11 +1357,11 @@ function openRecurringPanel(origin, index) {
       end.input.addEventListener("input", showPlaceholder);
       end.input.addEventListener("change", showPlaceholder);
       showPlaceholder();
-      // Needs, Wants, Or Future (once Bob's card for it is on): its title's, following a new title as it's typed
+      // Its Wavelength (once Bob's card for it is on): its title's, following a new title as it's typed
       const purpose = BudgetUI.purposeField({ shown: bobCardOn("purposes"), title: existing ? String(existing[0]) : "" });
       const followTitle = () => purpose.follow(withAccount(title.value(), account.value()));
       title.input.addEventListener("input", followTitle);
-      account.el.addEventListener("click", followTitle);
+      account.el.addEventListener("pick", followTitle);
       // Its own note, under the buttons (each day it lands on can have one of its own too)
       const currentNote = existing ? recurringNote(existing[0], existing[5]) : "";
       const note = BudgetUI.noteField({ note: currentNote });
@@ -1255,13 +1514,13 @@ function openAccountPanel(origin, index) {
         const amount = balance.value() ?? 0; // Blank is $0.00
         if (!Number.isFinite(amount)) return panel.setError("Enter the balance, like 3000.00.");
         if (Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-        const rate = interest.value();
-        if (Number.isNaN(rate)) return panel.setError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}), or turn Interest off.`);
+        const interestSet = interest.value();
+        if (Number.isNaN(interestSet)) return panel.setError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}), or turn Interest off.`);
         const most = max.value() ? readMoneyInput(max.value()) : null;
         if (most !== null && (!Number.isFinite(most) || most > MAX_AMOUNT)) return panel.setError("Enter the most it can hold, like 2000.00, or leave Max blank.");
         // (A balance that wasn't typed is left out, so it keeps whatever its entries make it)
         const typedBalance = !existing || Math.round(amount * 100) !== Math.round((shownBalance ?? 0) * 100);
-        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), ...(typedBalance ? { balance: amount } : {}), interest: rate ? { rate } : null, max: most || null }, index));
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), ...(typedBalance ? { balance: amount } : {}), interest: interestSet || null, max: most || null }, index));
       });
 
       // Delete: the account goes, and its entries stay where they are
@@ -1273,31 +1532,55 @@ function openAccountPanel(origin, index) {
   });
 }
 
-// An account's Interest: a pill switch, and while it's on, the rate for a year (APR). Each month (on the day of the
-// month it was turned on, or the balance was last typed) the account changes by a twelfth of it (interestCredits in
-// Process Budget.js). value(): the rate (a number above 0), 0 when it's off, NaN when the rate can't be read.
+// The choices for how interest compounds and how often it's added (INTEREST_COMPOUNDING and INTEREST_EVERY in Process
+// Budget.js), shared by an account's Interest and the Payment Calculator
+const COMPOUNDING_CHOICES = [
+  { value: "daily", label: "Daily" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Every 3 months" },
+  { value: "yearly", label: "Yearly" },
+  { value: "simple", label: "Doesn't compound" }
+];
+const ADDED_CHOICES = [
+  { value: 1, label: "Every month" },
+  { value: 3, label: "Every 3 months" },
+  { value: 6, label: "Every 6 months" },
+  { value: 12, label: "Every year" }
+];
+const COMPOUNDING_HINT = "How often interest starts earning interest of its own. Daily: every day (most credit cards and savings). Monthly and the rest: on the day it's added. Doesn't compound: only the balance earns it, never the interest added to it.";
+const DAY_CHOICES = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
+
+// An account's Interest: a pill switch, and while it's on, the rate for a year (APR), how it compounds, how often it's
+// added, and the day of the month it's added (see interestStepper in Process Budget.js; a new one starts on today's
+// day). value(): { rate (above 0), compound, every, day }, 0 when it's off, NaN when the rate can't be read.
 function interestFields(current) {
-  const toggle = BudgetUI.checkboxField({ label: "Add interest each month", checked: !!current });
+  const toggle = BudgetUI.checkboxField({ label: "Add interest", checked: !!current });
   const rate = BudgetUI.textField({
     label: "Interest rate (APR, % a year)",
     value: current ? String(current.rate) : "",
     placeholder: "Like 24.99",
-    hint: "Like a credit card's APR. Once a month (on the day of the month you turn it on or last set the balance), the balance changes by a twelfth of it: one below $0 (money owed) goes further below, and one above $0 grows."
+    hint: "Like a credit card's or a loan's APR, or what savings earn. A balance below $0 (money owed) goes further below, and one above $0 grows."
   });
   rate.input.inputMode = "decimal";
-  rate.el.hidden = !current;
+  const compound = BudgetUI.selectField({ label: "Compounds", options: COMPOUNDING_CHOICES, value: current ? current.compound : "monthly", hint: COMPOUNDING_HINT });
+  const every = BudgetUI.selectField({ label: "Added", options: ADDED_CHOICES, value: current ? current.every : 1 });
+  const day = BudgetUI.selectField({ label: "On day", options: DAY_CHOICES, value: current ? current.day : today.getDate(), hint: "The day of the month it's added (a shorter month uses its last day)." });
+  const details = BudgetUI.element("div", "interestDetails");
+  details.append(rate.el, compound.el, every.el, day.el);
+  details.hidden = !current;
   toggle.input.addEventListener("change", () => {
-    rate.el.hidden = !toggle.value();
+    details.hidden = !toggle.value();
     if (toggle.value() && window.matchMedia("(pointer: fine)").matches) rate.input.focus();
   });
   const el = BudgetUI.element("div", "interestFields");
-  el.append(BudgetUI.field("Interest", toggle.el), rate.el);
+  el.append(BudgetUI.field("Interest", toggle.el), details);
   return {
     el,
     value() {
       if (!toggle.value()) return 0;
       const number = readMoneyInput(rate.value().replace(/%/g, ""));
-      return Number.isFinite(number) && number > 0 && number <= MAX_INTEREST_RATE ? number : NaN;
+      if (!Number.isFinite(number) || number <= 0 || number > MAX_INTEREST_RATE) return NaN;
+      return { rate: number, compound: compound.value(), every: Number(every.value()), day: Number(day.value()) };
     }
   };
 }

@@ -1,8 +1,8 @@
-// Login: the sign-in page. Signing in (with the username or an email of the account and the password, or a passkey:
-// the one this device last used is tried by itself), creating an account, Forgot Password and the reset link, turning
-// passkey sign-in on right after a password sign-in, and the links emails carry: verifying the account's email, and
-// confirming another email of the account's. The API checks everything again; the checks here only say what's wrong
-// sooner.
+// Login: the sign-in page. Signing in (with the username or an email of the account and the password, a passkey (the
+// one this device last used is tried by itself), or Apple, Google, or Microsoft), creating an account (those too),
+// Forgot Password and the reset link, turning passkey sign-in on right after a password sign-in, and the links emails
+// carry: verifying the account's email, and confirming another email of the account's. The API checks everything
+// again; the checks here only say what's wrong sooner.
 
 const authForm = document.getElementById('auth-form');
 const pageTitle = document.querySelector('header .logo');
@@ -144,7 +144,8 @@ const MODES = {
     primary: 'Login',
     toggle: 'New Account?',
     showForgot: true,
-    passkeys: true
+    passkeys: true,
+    providers: true
   },
   create: {
     title: 'Create Your Account',
@@ -152,7 +153,16 @@ const MODES = {
     groups: ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'turnstile-group'],
     primary: 'Create Account',
     toggle: 'Back to Login',
-    newPassword: true
+    newPassword: true,
+    providers: true
+  },
+  // Someone new, back from signing in with Apple, Google, or Microsoft: the rest of a new account (no password; the
+  // email only when the provider didn't check one, see showProviderSignup)
+  provider: {
+    title: 'Create Your Account',
+    groups: ['username-group', 'email-group', 'age-group', 'terms-group', 'turnstile-group'],
+    primary: 'Create Account',
+    toggle: 'Back to Login'
   },
   forgot: {
     title: 'Reset Your Password',
@@ -227,7 +237,9 @@ function setMode(newMode, { holdAssist = false } = {}) {
   passkeyBtn.classList.toggle('hidden', !(config.passkeys && Passkeys.supported));
   if (config.passkeys && !holdAssist) startPasskeyAutofill();
   else if (!config.passkeys) stopPasskeyAutofill();
-  if (mode === 'create') startTurnstile(); // Its check runs while the form is filled in
+  if (mode !== 'provider') providerSignup = null;
+  renderProviders();
+  if (mode === 'create' || mode === 'provider') startTurnstile(); // Its check runs while the form is filled in
 }
 
 // The message under the form (light for good news, red otherwise)
@@ -265,6 +277,10 @@ authForm.addEventListener('submit', async (e) => {
   if (mode === 'verify' || mode === 'sheetEmail') {
     if (signedInHere) leaveTo('/menu/spreadsheets.html');
     else setMode('login');
+    return;
+  }
+  if (mode === 'provider') {
+    registerWithProvider();
     return;
   }
   setStatus('');
@@ -807,11 +823,168 @@ function declinePasskeys() {
 
 //#endregion
 
+// =====================================================================
+// #region APPLE, GOOGLE, AND MICROSOFT
+// =====================================================================
+// Signing in with Apple, Google, or Microsoft (the API's signin.js): a button for each one the server has set up, on
+// Sign In and Create Account. It goes to the provider's own sign-in page, which sends the person back here with a code
+// in the address (#signin=...), taken out of the address right away: it signs in to the account the provider is
+// connected to, or for someone new, makes an account (a username, a birth date, and agreeing to the Privacy Policy &
+// Terms of Use, with an email only when the provider didn't check one; no password). The code only works in this tab.
+
+// What a sign-in that came back with a problem (#signin-error=...) says
+const PROVIDER_ERRORS = {
+  cancelled: "Signing in was cancelled.",
+  expired: "That sign-in took too long, or was already used. Please try again.",
+  failed: "That sign-in didn't go through. Please try again."
+};
+
+let providers = [];        // The ones set up: [{ id, name }]
+let providerSignup = null; // Someone new, back from a provider: { code, provider, name, email, emailVerified, personName }
+
+// The providers the server has set up (none, when it can't be reached)
+async function loadProviders() {
+  try {
+    const response = await fetch(`${window.API_BASE_URL}/api/oauth/providers`);
+    const data = await response.json();
+    providers = Array.isArray(data.providers) ? data.providers.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string') : [];
+  } catch (e) {
+    providers = [];
+  }
+  renderProviders();
+}
+
+// A button for each provider, where the mode offers them
+function renderProviders() {
+  const group = document.getElementById('provider-group');
+  if (!group) return;
+  const shown = providers.length > 0 && !!MODES[mode].providers;
+  group.classList.toggle('hidden', !shown);
+  if (!shown) return;
+  group.replaceChildren(...providers.map(provider => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `providerButton ${provider.id}`;
+    button.textContent = `${mode === 'create' ? 'Sign Up' : 'Sign In'} With ${provider.name}`;
+    button.addEventListener('click', () => startProviderSignIn(provider, button));
+    return button;
+  }));
+}
+
+// Off to the provider's sign-in page
+async function startProviderSignIn(provider, button) {
+  button.disabled = true;
+  setStatus(`Opening ${provider.name}...`, true);
+  const { ok, status, data } = await api('/api/oauth/start', { provider: provider.id, intent: 'signin', browser: signInBrowser() });
+  if (ok && data.url) {
+    window.location.assign(data.url);
+    return;
+  }
+  button.disabled = false;
+  setStatus(status === 0 ? "Failed to connect to the server." : (data.error || "Couldn't start signing in. Please try again."));
+}
+
+// Back from a provider: signed in (on to Home), someone new (the rest of their account), or what went wrong
+async function finishProviderReturn(code) {
+  setMode('login');
+  setStatus('Finishing signing in...', true);
+  const { ok, status, data } = await api('/api/oauth/finish', { code, browser: signInBrowser() });
+  if (ok && data.token) {
+    saveSession(data);
+    goToBudget();
+    return;
+  }
+  if (ok && data.signup) {
+    showProviderSignup({ code, ...data.signup });
+    return;
+  }
+  setStatus(status === 0 ? "Failed to connect to the server." : (data.error || PROVIDER_ERRORS.failed));
+}
+
+// The rest of a new account: a username (starting from the provider's name for them), the email when the provider
+// didn't check one, the birth date, and agreeing
+function showProviderSignup(signup) {
+  setMode('provider');
+  providerSignup = signup;
+  const checked = signup.emailVerified && signup.email;
+  formHint.textContent = `Signing up with ${signup.name}${checked ? ` as ${signup.email}` : ''}. Pick a username and add your birth date: Prismal Budget is for people ${MIN_AGE} and older. You won't need a password (you can add one in Settings).`;
+  formHint.classList.remove('hidden');
+  const emailGroup = document.getElementById('email-group');
+  emailGroup.classList.toggle('hidden', !!checked);
+  emailInput.disabled = !!checked;
+  emailInput.value = checked ? '' : (signup.email || '');
+  if (!usernameProblem(signup.personName || '')) usernameInput.value = signup.personName;
+}
+
+// Create Account, for someone back from a provider
+async function registerWithProvider() {
+  if (!providerSignup) return setMode('login');
+  setStatus('');
+  const username = usernameInput.value.trim();
+  const usernameIssue = usernameProblem(username);
+  if (usernameIssue) return setStatus(usernameIssue);
+  const needsEmail = !(providerSignup.emailVerified && providerSignup.email);
+  const email = emailInput.value.trim();
+  if (needsEmail && !EMAIL_PATTERN.test(email)) return setStatus("Enter a valid email address.");
+  const ageIssue = birthdateProblem(typedBirthdate());
+  if (ageIssue) return setStatus(ageIssue);
+  if (!termsInput.checked) return setStatus("Please agree to the Privacy Policy & Terms of Use to create an account.");
+  primaryBtn.disabled = true;
+  setStatus("Checking that you're a person...", true);
+  const turnstileToken = await turnstilePassed();
+  if (!turnstileToken) {
+    primaryBtn.disabled = false;
+    return setStatus(TURNSTILE_WAITING);
+  }
+  setStatus('');
+  const { ok, status, data } = await api('/api/oauth/register', {
+    code: providerSignup.code,
+    browser: signInBrowser(),
+    username,
+    ...(needsEmail ? { email } : {}),
+    birthdate: formatToYMD(typedBirthdate()),
+    agreedToTerms: true,
+    turnstileToken
+  });
+  primaryBtn.disabled = false;
+  resetTurnstile(); // (Used up either way)
+  if (ok && data.token) {
+    saveSession(data);
+    goToBudget();
+    return;
+  }
+  if (data.expired) {
+    setMode('login');
+    setStatus(PROVIDER_ERRORS.expired);
+    return;
+  }
+  setStatus(status === 0 ? "Failed to connect to the server." : (data.error || "An error occurred."));
+}
+
+//#endregion
+
+// A sign-in that's over but not signed out yet (left 15 minutes idle, or past its end: Boot.js shows this page for it)
+// is signed out here, the server's session too, and the page says why
+if (readStored('prismal_jwt') && !signedInNow()) {
+  const idle = Date.now() - Number(readStored('prismal_last_activity') || 0) >= IDLE_SIGN_OUT_MS;
+  endServerSession();
+  clearSignedInData();
+  try { sessionStorage.setItem('prismal_signed_out', idle ? 'idle' : 'expired'); } catch (e) {}
+}
+
+// Back from Apple, Google, or Microsoft: #signin=<code>, or #signin-error=<reason> (taken out of the address right
+// away)
+const providerReturn = new URLSearchParams(location.hash.slice(1));
+if (providerReturn.has('signin') || providerReturn.has('signin-error')) history.replaceState(null, '', location.pathname + location.search);
+loadProviders();
+
 // Start in the mode the link asked for (?new: the front page's Create Account)
 if (verifyToken) {
   verifyEmailLink(verifyToken);
 } else if (sheetEmailToken) {
   confirmSheetEmailLink(sheetEmailToken);
+} else if (providerReturn.get('signin')) {
+  finishProviderReturn(providerReturn.get('signin'));
 } else if (resetToken) {
   setMode('reset');
 } else {
@@ -829,6 +1002,8 @@ if (verifyToken) {
   if (pageParams.has('deleted')) {
     setStatus("Your account and all of its data were deleted.", true);
     clearPageParams();
+  } else if (providerReturn.has('signin-error')) {
+    setStatus(PROVIDER_ERRORS[providerReturn.get('signin-error')] || PROVIDER_ERRORS.failed);
   } else if (SIGNED_OUT_REASONS[signedOut]) {
     setStatus(SIGNED_OUT_REASONS[signedOut], true);
   }

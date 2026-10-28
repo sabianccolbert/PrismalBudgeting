@@ -508,18 +508,159 @@ const BudgetUI = (() => {
     return { key, label: name, own: true, detail, negative: hasBalance && balance < 0 };
   }
 
+  // A dropdown for choices with a second line (an Other Account's balance, see accountChoice), which a select box can't
+  // show: a box with the picked one in it and, under it while it's open, the list of them, each its words over its
+  // second line. A tap or a click (or Enter, Space, or an arrow key) opens it, and a tap, Enter, or Space picks;
+  // Escape, Tab, or a tap anywhere else closes it, and typing a name's first letters moves to it. options, onChange,
+  // set, and setOptions work like choiceList's, and a pick (any way) sends a "pick" event from el too.
+  let dropdownCount = 0;
+  function dropdownList(options, value, onChange, label = "") {
+    const wrap = element("div", "dropdown");
+    const box = element("button", "dropdownBox");
+    box.type = "button";
+    box.setAttribute("role", "combobox");
+    box.setAttribute("aria-haspopup", "listbox");
+    box.setAttribute("aria-expanded", "false");
+    const list = element("ul", "pickerList dropdownList");
+    list.id = `dropdownList${++dropdownCount}`;
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+    box.setAttribute("aria-controls", list.id);
+    if (label) {
+      box.setAttribute("aria-label", label);
+      list.setAttribute("aria-label", label);
+    }
+    wrap.append(box, list);
+    let current = value;
+    let choices = [];
+    let active = -1;
+    let typed = "";
+    let typedAt = 0;
+
+    // A choice's words, over its second line (red below $0)
+    const lines = (option) => {
+      const name = element("span", "choiceName", option.label);
+      const parts = [option.own ? noTranslate(name) : name];
+      if (option.detail) parts.push(noTranslate(element("span", `choiceDetail${option.negative ? " negative" : ""}`, option.detail)));
+      return parts;
+    };
+    const mark = () => {
+      [...list.children].forEach((item, i) => item.classList.toggle("isActive", i === active));
+      const item = list.children[active];
+      if (item) box.setAttribute("aria-activedescendant", item.id);
+      else box.removeAttribute("aria-activedescendant");
+      if (item) item.scrollIntoView({ block: "nearest" });
+    };
+    const outside = (event) => {
+      if (!wrap.contains(event.target)) close();
+    };
+    const open = () => {
+      if (!list.hidden || choices.length === 0) return;
+      list.hidden = false;
+      box.setAttribute("aria-expanded", "true");
+      active = Math.max(0, choices.findIndex(choice => choice.key === current));
+      mark();
+      document.addEventListener("pointerdown", outside, true);
+    };
+    function close() {
+      if (list.hidden) return;
+      list.hidden = true;
+      box.setAttribute("aria-expanded", "false");
+      box.removeAttribute("aria-activedescendant");
+      document.removeEventListener("pointerdown", outside, true);
+    }
+    const choose = (index) => {
+      const option = choices[index];
+      close();
+      box.focus({ preventScroll: true });
+      if (!option) return;
+      set(option.key);
+      if (onChange) onChange(option.key);
+      wrap.dispatchEvent(new CustomEvent("pick", { bubbles: true }));
+    };
+
+    function set(key) {
+      current = key;
+      [...list.children].forEach((item, i) => item.setAttribute("aria-selected", String(choices[i].key === key)));
+      const picked = choices.find(choice => choice.key === key) || choices[0];
+      const arrow = element("span", "dropdownArrow", "▾");
+      arrow.setAttribute("aria-hidden", "true");
+      const words = element("span", "dropdownPicked");
+      if (picked) words.append(...lines(picked));
+      box.replaceChildren(words, arrow);
+    }
+    function setOptions(next) {
+      choices = next;
+      list.replaceChildren(...choices.map((option, i) => {
+        const item = element("li", "pickerOption dropdownOption");
+        item.id = `${list.id}-${i}`;
+        item.setAttribute("role", "option");
+        item.append(...lines(option));
+        item.addEventListener("click", () => choose(i));
+        return item;
+      }));
+      set(current);
+      if (!list.hidden) {
+        active = Math.max(0, choices.findIndex(choice => choice.key === current));
+        mark();
+      }
+    }
+
+    box.addEventListener("click", () => (list.hidden ? open() : close()));
+    // (The box keeps its focus while the list is pressed, so the keys keep working after a tap)
+    list.addEventListener("pointerdown", (event) => event.preventDefault());
+    box.addEventListener("keydown", (event) => {
+      const isOpen = !list.hidden;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (!isOpen) return open();
+        active = Math.min(choices.length - 1, Math.max(0, active + (event.key === "ArrowDown" ? 1 : -1)));
+        mark();
+      } else if ((event.key === "Home" || event.key === "End") && isOpen) {
+        event.preventDefault();
+        active = event.key === "Home" ? 0 : choices.length - 1;
+        mark();
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault(); // (Not the button's own click as well)
+        if (isOpen) choose(active);
+        else open();
+      } else if (event.key === "Escape" && isOpen) {
+        event.preventDefault();
+        event.stopPropagation(); // Only the list closes, not the box it's in
+        close();
+      } else if (event.key === "Tab") {
+        close();
+      } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        // The first one (after the one it's on, for a first letter) whose name starts with what's typed
+        const now = Date.now();
+        typed = now - typedAt < 700 ? typed + event.key.toLocaleLowerCase() : event.key.toLocaleLowerCase();
+        typedAt = now;
+        const from = typed.length === 1 ? active + 1 : Math.max(active, 0);
+        const order = choices.map((_, i) => (from + i) % choices.length);
+        const found = order.find(i => choices[i].label.toLocaleLowerCase().startsWith(typed));
+        if (found === undefined) return;
+        open();
+        active = found;
+        mark();
+      }
+    });
+
+    setOptions(options);
+    return { el: wrap, value: () => current, set, setOptions, close };
+  }
+
   // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked. It's picked on
   // its own and never changes the title: the entry is saved as "Title → Account" (withAccount in Process Budget.js).
   // Only a picked account links the entry: a title that's an account's name doesn't pick it. A Transfer changes the
   // account by the opposite of its amount (the money moved from or to In Bank), a Hidden entry by its own amount
-  // (accountChange). Each account is a button with its balance today on a second line (accountChoice).
+  // (accountChange). It's a dropdown of the accounts, each with its balance today on a second line (accountChoice).
   // accounts: in order, [{ name, balance, max }], or just names.
   // amount: the form's amountField. type(): the picked refraction type. account: picked to start.
   function accountField({ accounts = [], amount, type = () => "⭕️", account = "" }) {
     let list = [];
     let shown = false; // Hidden or Transfer is picked (see setVisible)
-    const choices = choiceList([], "", () => describe(), "Other Account");
-    choices.el.classList.add("accountChoices");
+    const choices = dropdownList([], "", () => describe(), "Other Account");
+    choices.el.classList.add("accountDropdown");
     const wrapper = field("Other Account", choices.el, { optional: true });
     const hint = element("span", "panelHint");
     wrapper.appendChild(hint);
@@ -578,6 +719,7 @@ const BudgetUI = (() => {
       setVisible(visible) {
         shown = visible;
         wrapper.hidden = !visible || list.length === 0;
+        if (wrapper.hidden) choices.close();
         describe();
       },
       value: () => (wrapper.hidden ? "" : choices.value())
@@ -648,15 +790,16 @@ const BudgetUI = (() => {
   }
 
   // A drop-down list of plain text options
-  function selectField({ label, options, value }) {
+  // A list to pick one from. options: words (each its own value), or { value, label }; hint: words under it
+  function selectField({ label, options, value, hint = "" }) {
     const select = element("select", "selectInput");
     for (const option of options) {
-      const optionEl = element("option", "", option);
-      optionEl.value = option;
+      const optionEl = element("option", "", typeof option === "object" ? option.label : option);
+      optionEl.value = typeof option === "object" ? String(option.value) : option;
       select.appendChild(optionEl);
     }
-    select.value = value;
-    return { el: field(label, select), input: select, value: () => select.value };
+    select.value = String(value);
+    return { el: field(label, select, hint ? { hint } : undefined), input: select, value: () => select.value };
   }
 
   // An on/off choice: a pill switch (stylesheet.css .pillSwitch) and its words, which turn it on and off too
@@ -689,20 +832,22 @@ const BudgetUI = (() => {
     };
   }
 
-  // Needs, Wants, or Future: what an entry's money is for (see ENTRY PURPOSES in Process Budget.js), at the bottom of every
-  // form that makes or changes an entry once Bob's Needs, Wants, And Future card is on (shown). It's kept for the
-  // entry's title, so it starts on the title's (lookup: purposeOf) and follows the title as it's typed (follow), until
-  // one is tapped. With no budget to look in (the Quick Entry page: lookup null), nothing's picked to start, which leaves
-  // the title's as it is. value(): "none", "needs", "wants", or "future"; undefined when it isn't shown or nothing's picked.
-  const PURPOSE_CHOICES = [{ key: "none", label: "None" }, { key: "needs", label: "Needs" }, { key: "wants", label: "Wants" }, { key: "future", label: "Future" }];
-  function purposeField({ shown = false, title = "", lookup = purposeOf } = {}) {
+  // Wavelength: what an entry's money is for (its purpose, one of the budget's wavelengths: see WAVELENGTH PLANNING in
+  // Process Budget.js), at the bottom of every form that makes or changes an entry once Bob's Wavelength Planning card
+  // is on (shown), with a button for each wavelength and None. It's kept for the entry's title, so it starts on the
+  // title's (lookup: purposeOf) and follows the title as it's typed (follow), until one is tapped. With no budget to
+  // look in (the Quick Entry page: lookup null, and wavelengths from the API), nothing's picked to start, which leaves
+  // the title's as it is. value(): a wavelength's id or "none"; undefined when it isn't shown or nothing's picked.
+  function purposeField({ shown = false, title = "", lookup = purposeOf, wavelengths = null } = {}) {
     let touched = false;
-    const picker = segmented(PURPOSE_CHOICES, lookup ? lookup(title) : "", () => { touched = true; });
+    const choices = [{ key: "none", label: "None" }, ...(wavelengths || wavelengthList()).map(wave => ({ key: wave.id, label: wave.name }))];
+    const picker = segmented(choices, lookup ? lookup(title) : "", () => { touched = true; });
     picker.el.classList.add("purposeChoices");
+    noTranslate(picker.el); // (Their own names)
     const hint = lookup
-      ? "Every entry with this title shares it. Bob's Needs, Wants, And Future card adds up what each one costs."
+      ? "Every entry with this title shares it. Bob's Wavelength Planning card adds up what each one costs."
       : "Every entry with this title shares it. Left unpicked, the title keeps the one it has.";
-    const el = field("Needs, Wants, Or Future", picker.el, { hint });
+    const el = field("Wavelength", picker.el, { hint });
     el.classList.add("purposeField");
     el.hidden = !shown;
     return {
@@ -710,6 +855,7 @@ const BudgetUI = (() => {
       follow(newTitle) {
         if (!touched && lookup) picker.set(lookup(newTitle));
       },
+      has: (purpose) => choices.some(choice => choice.key === purpose),
       set(purpose) {
         touched = true;
         picker.set(purpose);
@@ -954,11 +1100,12 @@ const BudgetUI = (() => {
 
   // The New Entry form's fields: title, optional refraction type, for Hidden or Transfer the Other Account it moves money
   // into or out of (accounts: [{ name, balance, max }], or names), then the amount (cost or gain: with an account, it can
-  // be a % of it, which is why the account comes first), date, Placeholder (for a day from today on), and Needs, Wants,
-  // Or Future (purposes: whether to ask, see purposeField; purposeLookup: null where there's no budget to look in). The
-  // calendar's New Entry panel and the Quick Entry page share it, so they always match. Its note (noteEl, see noteField)
-  // goes under the form's buttons. noteMax: the longest a note can be (0 for no limit).
-  // read(): { entry: { title, amount, date, sprite, placeholder, purpose, note } } when it's filled in right, otherwise
+  // be a % of it, which is why the account comes first), date, Placeholder (for a day from today on), and its
+  // Wavelength (purposes: whether to ask, see purposeField; purposeLookup: null where there's no budget to look in,
+  // with the wavelengths passed in). The calendar's New Entry panel and the Quick Entry page share it, so they always
+  // match. Its note (noteEl, see noteField) goes under the form's buttons. noteMax: the longest a note can be (0 for no
+  // limit). read(): { entry: { title, amount, date, sprite, placeholder, purpose, note } } when it's filled in right,
+  // otherwise
   //   { error }. The title carries the Other Account picked: "Title → Account" (or just the account's name when no title
   //   is typed).
   // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
@@ -968,14 +1115,14 @@ const BudgetUI = (() => {
   //   have as they are (the Quick Entry page's prisms). dateEl and purposeEl: those fields, for a form that doesn't need
   //   them.
   // setAccounts(accounts): new balances for the Other Account list (the Quick Entry page's, after an Undo or Redo)
-  function newEntryFields({ date = today, accounts = [], purposes = bobCardOn("purposes"), purposeLookup = purposeOf, noteMax = 0 } = {}) {
+  function newEntryFields({ date = today, accounts = [], purposes = bobCardOn("purposes"), purposeLookup = purposeOf, wavelengths = null, noteMax = 0 } = {}) {
     const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas...", maxLength: MAX_TITLE });
     const amount = amountField();
     const dateInput = dateField({ label: "Date", date });
     const account = accountField({ accounts, amount, type: () => refraction.value() });
     const refraction = refractionField({ onChange: (key) => { account.setVisible(isAccountType(key)); followTitle(); } });
     const placeholder = placeholderField();
-    const purpose = purposeField({ shown: purposes, lookup: purposeLookup });
+    const purpose = purposeField({ shown: purposes, lookup: purposeLookup, wavelengths });
     const note = noteField({ maxLength: noteMax });
     const showPlaceholder = () => placeholder.setDate(dateInput.value() ?? date);
     dateInput.input.addEventListener("input", showPlaceholder);
@@ -984,7 +1131,7 @@ const BudgetUI = (() => {
     // The purpose shown is the title's (one with no title of its own goes by its account's name)
     const followTitle = () => purpose.follow(withAccount(title.value(), account.value()));
     title.input.addEventListener("input", followTitle);
-    account.el.addEventListener("click", followTitle);
+    account.el.addEventListener("pick", followTitle);
     return {
       els: [title.el, refraction.el, account.el, amount.el, dateInput.el, placeholder.el, purpose.el],
       dateEl: dateInput.el,
@@ -1005,7 +1152,7 @@ const BudgetUI = (() => {
         title.input.dispatchEvent(new Event("input", { bubbles: true }));
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
         if (typeof percent === "number" && percent !== 0) amount.setPercent(percent);
-        if (PURPOSE_CHOICES.some(choice => choice.key === newPurpose)) purpose.set(newPurpose);
+        if (purpose.has(newPurpose)) purpose.set(newPurpose);
         if (typeof newNote === "string") note.set(newNote);
       },
       read() {
@@ -1033,7 +1180,7 @@ const BudgetUI = (() => {
   // results): line is the entry as its day stores it ("❗️ -$4.50 Coffee") on date. Its title (see renameEntry in Process
   // Budget.js: any entry before today, and from today on one that doesn't land by itself from a recurring entry or a
   // connected spreadsheet), its refraction type and Other Account, Set to or Add to it, Move to another day, whether it's a
-  // placeholder (for a day from today on), its title's Needs, Wants, Or Future (once Bob's card for it is on), Delete,
+  // placeholder (for a day from today on), its title's Wavelength (once Bob's card for it is on), Delete,
   // and its note (under the buttons). Changing its type or account takes it off as it is and puts it on as the new one,
   // adding into an entry already on that day with the same title and type (changeEntryKind). One that lands
   // by itself on a day after the calendar (Search's, which isn't in the budget yet) goes into Upcoming for that day once
@@ -1109,11 +1256,11 @@ const BudgetUI = (() => {
         moveTo.input.addEventListener("input", showPlaceholder);
         moveTo.input.addEventListener("change", showPlaceholder);
         showPlaceholder();
-        // Needs, Wants, Or Future (once Bob's card for it is on): its title's, following a new title as it's typed
+        // Its Wavelength (once Bob's card for it is on): its title's, following a new title as it's typed
         const purpose = purposeField({ shown: bobCardOn("purposes"), title });
         const newTitleNow = () => withAccount(titleBox ? titleBox.value() : ownTitle, accountPicker.value());
         titleBox?.input.addEventListener("input", () => purpose.follow(newTitleNow()));
-        accountPicker.el.addEventListener("click", () => purpose.follow(newTitleNow()));
+        accountPicker.el.addEventListener("pick", () => purpose.follow(newTitleNow()));
         // Its note, under the buttons (it goes wherever the entry goes)
         const currentNote = entryNote(date, title, refraction);
         const note = noteField({ note: currentNote });
@@ -1197,7 +1344,7 @@ const BudgetUI = (() => {
 
   // New Entry (Home's button, and a zoomed day's + on Home or History, with that day in its date box): title, refraction
   // type (Auto to start), for Hidden or Transfer an Other Account, the amount (cost or gain), date, Placeholder, once
-  // Bob's card for it is on, Needs, Wants, Or Future, and a note under its buttons. A day has one entry per title, type,
+  // Bob's card for it is on, its Wavelength, and a note under its buttons. A day has one entry per title, type,
   // and Other Account, so when one is already there (its own, or a recurring or connected spreadsheet's entry landing
   // there), the form says so and asks whether to add the new amount to it or set it to the new amount. Either way a
   // recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on the calendar.
@@ -1461,6 +1608,7 @@ const BudgetUI = (() => {
     accountField,
     accountChoice,
     choiceList,
+    dropdownList,
     isAccountType,
     termList,
     aliasField,

@@ -26,21 +26,21 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "26894360d8",
-    "/Javascript/Budget Pages.js": "e13d4efe0a",
+    "/Javascript/Bob Page.js": "5928db6ad9",
+    "/Javascript/Budget Pages.js": "d93ad70be1",
     "/Javascript/Budget Search.js": "3bc37d7928",
-    "/Javascript/Budget UI.js": "5361774c3b",
+    "/Javascript/Budget UI.js": "df1b675d3c",
     "/Javascript/Calendar Page.js": "c536948fab",
-    "/Javascript/Dates.js": "a3889d2342",
+    "/Javascript/Dates.js": "78e76345c5",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "9d8331c987",
-    "/Javascript/Login.js": "f0b44ebbb6",
+    "/Javascript/Layout.js": "8267879fca",
+    "/Javascript/Login.js": "10cc8514e1",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "9cbee26eed",
-    "/Javascript/Quick Entry.js": "21a3f204fc",
-    "/Javascript/Session.js": "643caf8465",
-    "/Javascript/Settings Page.js": "f1a636414c",
+    "/Javascript/Process Budget.js": "4d0f3beaab",
+    "/Javascript/Quick Entry.js": "fc9efcaeff",
+    "/Javascript/Session.js": "988bbb66b5",
+    "/Javascript/Settings Page.js": "5dc6bd2572",
     "/Javascript/Sounds.js": "4cfba7dffa",
     "/Javascript/Spreadsheets Page.js": "1d4c741d9b",
     "/Javascript/Spreadsheets.js": "24e47ca597",
@@ -104,6 +104,7 @@
     if (p === "/menu/spreadsheets") return "spreadsheets";
     if (p === "/menu/tracker") return "tracker";
     if (p === "/menu/calculator") return "calculator";
+    if (p === "/menu/payments") return "payments";
     if (p === "/menu/logs") return "logs";
     if (p === "/menu/bob") return "bob";
 
@@ -131,6 +132,19 @@
     storage = null;
   }
   const isLoggedIn = !!(storage && storage.getItem("prismal_jwt"));
+  // A sign-in that's over but not signed out yet: left 15 minutes without activity (Session.js signs it out once a
+  // signed-in page opens), or past the end its token gives. The login page shows for it instead of sending it Home.
+  const signInOver = (() => {
+    if (!isLoggedIn) return false;
+    const lastActivity = Number(storage.getItem("prismal_last_activity") || 0);
+    if (lastActivity && Date.now() - lastActivity >= 15 * 60 * 1000) return true;
+    try {
+      const claims = JSON.parse(atob(storage.getItem("prismal_jwt").split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+      return typeof claims.exp === "number" && claims.exp * 1000 <= Date.now();
+    } catch (e) {
+      return false;
+    }
+  })();
 
   // Home is the budget for anyone signed in, and the front page (what Prismal Budget is, with Sign In and
   // Create Account) for anyone else, search engines included. index.html starts as the front page, so it
@@ -170,7 +184,7 @@
     window.location.replace("/login.html");
     return;
   }
-  if (isLoggedIn && PAGE === "login" && !isEmailLink) {
+  if (isLoggedIn && PAGE === "login" && !isEmailLink && !signInOver) {
     window.location.replace("/index.html");
     return;
   }
@@ -239,7 +253,7 @@
   ];
 
   // Quick Entry borrows the budget helpers and New Entry form without loading a budget (see Quick Entry.js)
-  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "spreadsheets", "tracker", "calculator", "logs", "bob", "settings", "quick"];
+  const BUDGET_PAGES = ["home", "recurring", "history", "accounts", "spreadsheets", "tracker", "calculator", "payments", "logs", "bob", "settings", "quick"];
 
   // The script that draws each budget page (the menu data pages share Budget Pages.js)
   const PAGE_SCRIPTS = {
