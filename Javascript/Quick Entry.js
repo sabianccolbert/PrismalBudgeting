@@ -21,7 +21,7 @@ const QUICK_TYPE_NAMES = Object.fromEntries(Object.entries(QUICK_ENTRY_TYPES).ma
 let quickUsername = null;
 let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance }] (see showQuickAccounts)
 let quickPrisms = [];   // The account's prisms, in order: [{ title, amount, type }] (see PRISMS)
-let quickPurposes = false; // The form asks Needs, Wants, Or Future (Bob's card for it is on; the API's check says)
+let quickWavelengths = null; // The budget's wavelengths ([{ id, name }]) when the form asks for one (Bob's card for it is on; the API's check says)
 const QUICK_NOTE_MAX = 20000; // The longest note an entry from here can have (the API keeps the same limit)
 let quickQueued = [];   // The entries this icon added that are still waiting: [{ id, title, type, amount, date, joining }]
 let quickForm = null;   // The form on the page: { panel, fields, mode: "entry" (New Entry) | "prism" (New Prism) |
@@ -43,12 +43,16 @@ if (quickKey && quickParams.has("setup")) {
   history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(quickKey)}`);
 }
 
-// Home goes to the budget when this browser is signed in, and straight to the login page when it isn't (not the
-// front page)
-let quickSignedIn = false;
-try { quickSignedIn = !!localStorage.getItem("prismal_jwt"); } catch (e) {}
-const quickHomeLink = document.querySelector('.navButtons a[href="/"]');
-if (quickHomeLink && !quickSignedIn) quickHomeLink.href = "/login.html";
+// Home (and Back) go on when this browser is signed in, and straight to the login page when it isn't: not to the front
+// page, and not to a signed-in page that would sign out the moment it opens (a sign-in left idle too long, see
+// signedInNow in Layout.js). Worked out as they're tapped, since this page can stay open for days.
+const quickHomeLink = document.querySelector('.navButtons a[href="/"]:not(#quickBack)');
+const quickBackLink = document.getElementById("quickBack");
+if (quickHomeLink && !signedInNow()) quickHomeLink.setAttribute("href", "/login.html");
+quickHomeLink?.addEventListener("click", () => quickHomeLink.setAttribute("href", signedInNow() ? "/" : "/login.html"));
+quickBackLink?.addEventListener("click", () => {
+  if (!signedInNow()) quickBackLink.setAttribute("href", "/login.html");
+});
 
 checkQuickKey();
 
@@ -81,7 +85,7 @@ async function checkQuickKey() {
     // This device's own icon (where the page shares the budget's storage): the budget adds its entries when it opens here
     rememberQuickIcon(quickKey);
     quickUsername = result.data.username;
-    quickPurposes = result.data.purposes === true;
+    quickWavelengths = Array.isArray(result.data.wavelengths) && result.data.wavelengths.length > 0 ? result.data.wavelengths : null;
     showQuickAnswer(result.data);
     // Prisms need the server, so they show once the key is known to work
     quickPrisms = Array.isArray(result.data.prisms) ? result.data.prisms : [];
@@ -107,8 +111,8 @@ function openQuickEntryForm(mode = "entry", fill = null, changing = null) {
     inline: true, // The form is the page here, not something on top of it
     build(form, panel) {
       const day = changingEntry ? createSafeMidnight(changing.date, true) : quickFormDay;
-      // (Needs, Wants, Or Future starts with nothing picked: the page can't see which one a title has)
-      const fields = BudgetUI.newEntryFields({ date: day, accounts: quickAccounts, purposes: quickPurposes, purposeLookup: null, noteMax: QUICK_NOTE_MAX });
+      // (Its Wavelength starts with nothing picked: the page can't see which one a title has)
+      const fields = BudgetUI.newEntryFields({ date: day, accounts: quickAccounts, purposes: !!quickWavelengths, purposeLookup: null, wavelengths: quickWavelengths || [], noteMax: QUICK_NOTE_MAX });
       if (makingPrism) {
         form.append(BudgetUI.element("p", "panelHint prismDraftHint", "Fill in or pick only what this prism should keep: a title, an amount, a type, or an account. Then tap Save Prism."));
         panel.panel.classList.add("prismDraft");
@@ -122,7 +126,7 @@ function openQuickEntryForm(mode = "entry", fill = null, changing = null) {
         : changingEntry
           ? [{ label: "Save Changes", kind: "primary", type: "submit" }, { label: "Cancel", onClick: backToNewEntry }]
           : [{ label: "Add Entry", kind: "primary", type: "submit" }];
-      // A prism never keeps a date, a title's Needs, Wants, Or Future, or a note, so New Prism has none of them
+      // A prism never keeps a date, a title's Wavelength, or a note, so New Prism has none of them
       form.append(...fields.els.filter(el => !makingPrism || (el !== fields.dateEl && el !== fields.purposeEl)), BudgetUI.buttonRow(buttons));
       if (!makingPrism) form.append(fields.noteEl);
       if (fill) fields.fill(fill);
@@ -163,8 +167,8 @@ async function addQuickEntry(panel, fields) {
 // The form's entry as the API keeps it: { title (with its Other Account), type, amount, date: "YYYY-MM-DD", and
 // placeholder: true for a placeholder, percent for a % amount (see PERCENT_MARK in Process Budget.js), whose amount is
 // what it comes to with the account's balance today; the budget works it out again for its day, purpose: its title's
-// Needs, Wants, Or Future, when one was picked (see ENTRY PURPOSES), which the budget gives the title as it's added, and
-// note: its note, when it has one (see ENTRY NOTES) }
+// wavelength, when one was picked (see WAVELENGTH PLANNING), which the budget gives the title as it's added, and note:
+// its note, when it has one (see ENTRY NOTES) }
 function toQueued(entry) {
   const hasPercent = typeof entry.percent === "number";
   const account = quickAccounts.find(known => cleanString(known.name) === cleanString(splitAccount(entry.title).account));

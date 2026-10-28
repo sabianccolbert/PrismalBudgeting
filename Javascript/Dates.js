@@ -474,6 +474,17 @@ const DatePicker = (() => {
     return items;
   }
 
+  // The click that follows a finger's tap in a list, swallowed (the list is gone by then, so it would land on whatever
+  // was under it). A click that never comes stops being waited for.
+  function swallowNextClick() {
+    const swallow = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    document.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => document.removeEventListener("click", swallow, { capture: true }), 700);
+  }
+
   // A box to type the month or the year in, with the list that drops down under it while it's in use. items(text): the
   // choices that match ([{ value, label, current }]); pick(value): one was chosen; text(): what it says otherwise. Enter
   // (or leaving it with just one match, or an exact one) picks; the arrow keys move through the list; Escape puts it back.
@@ -496,10 +507,24 @@ const DatePicker = (() => {
     let options = [];
     let active = -1;
     let pressedWith = ""; // What pressed the list last: "mouse", "touch", or "pen"
+    let pressedAt = null; // Where a finger or pen went down on the list ({ x, y }), until it lifts
     list.addEventListener("pointerdown", (event) => {
       pressedWith = event.pointerType;
+      pressedAt = event.pointerType === "mouse" ? null : { x: event.clientX, y: event.clientY };
       event.preventDefault(); // (The box keeps its focus, so its list stays open)
     });
+    // A finger's tap picks as it lifts: Safari lets the box go (and its list hides) before the tap's click, which would
+    // land on whatever was under the list, so that click is swallowed. A finger that slid scrolled the list instead.
+    list.addEventListener("pointerup", (event) => {
+      const start = pressedAt;
+      pressedAt = null;
+      const item = event.target.closest?.(".pickerOption");
+      if (!start || !item || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) return;
+      swallowNextClick();
+      done(options[[...list.children].indexOf(item)]?.value);
+      input.blur(); // (The phone's keyboard goes away)
+    });
+    list.addEventListener("pointercancel", () => { pressedAt = null; });
 
     const mark = () => {
       [...list.children].forEach((item, i) => item.classList.toggle("isActive", i === active));
@@ -512,8 +537,7 @@ const DatePicker = (() => {
       list.replaceChildren(...options.map(option => {
         const item = make("li", "pickerOption", option.label);
         item.setAttribute("role", "option");
-        // A tap picks it (a finger sliding through the list scrolls it instead), and the calendar stays open on that
-        // month or year. Picked with a finger, the box lets go too, so the phone's keyboard goes away.
+        // A click picks it, and the calendar stays open on that month or year (a finger's tap picks as it lifts, above)
         item.addEventListener("click", () => {
           done(option.value);
           if (pressedWith && pressedWith !== "mouse") input.blur();
@@ -538,6 +562,8 @@ const DatePicker = (() => {
       fill("");
       requestAnimationFrame(() => { if (document.activeElement === input) input.select(); });
     });
+    // (Clicked again after picking, while it still has the focus: its list opens again)
+    input.addEventListener("click", () => { if (shown && list.hidden) fill(""); });
     input.addEventListener("input", () => { if (shown) fill(input.value); });
     input.addEventListener("keydown", (event) => {
       if (!shown) return;

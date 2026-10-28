@@ -8,7 +8,8 @@
 // remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices (turn off Quick Entry icons, or
 // their balances, and Sign Out Everywhere); your data and privacy (Download My Data, analytics on or off for this
 // device); and deleting the account (needs the password). Emails go out through Resend (see account.js in the API).
-// This device's own choices (the date format, and music and sound effects) work without the server.
+// This device's own choices (the date format, and music and sound effects) work without the server. Connecting Apple,
+// Google, or Microsoft is on standby (see APPLE, GOOGLE, AND MICROSOFT).
 
 // =====================================================================
 // #region SETUP
@@ -22,6 +23,8 @@ let otherEmails = null;      // From the API: [{ email, verified }], the account
 let passkeyInfo = null;      // From the API: { on, userHandle, passkeys: [{ id, name, site, synced, createdAt, lastUsedAt }] }
 let passkeyLoadStatus = 0;   // The list's HTTP status, when it didn't load (404: the API doesn't have passkeys yet)
 let passkeyAdd = null;       // { options, at }: a password-checked challenge, kept so trying again starts right away
+// On standby (APPLE, GOOGLE, AND MICROSOFT):
+// let signIns = null;       // From the API: { providers: [{ id, name }], connected: [{ provider, name, email, since }], hasPassword, passkeys }
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";
@@ -31,6 +34,7 @@ wireSounds();
 
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
+  // (On standby: a fifth, budgetApi("/api/oauth/connected") as signInResult, see APPLE, GOOGLE, AND MICROSOFT)
   const [reminders, accountResult, passkeyResult, emailsResult] = await Promise.all([
     loaded ? budgetApi("/api/notify/settings") : null,
     budgetApi("/api/account"),
@@ -43,10 +47,13 @@ window.workspaceReady.then(async (loaded) => {
     if (passkeyResult.ok && passkeyResult.data) passkeyInfo = passkeyResult.data;
     else passkeyLoadStatus = passkeyResult.status;
     if (emailsResult.ok && emailsResult.data) otherEmails = emailsResult.data.emails;
+    // if (signInResult.ok && signInResult.data) signIns = signInResult.data; (On standby)
     wireAccount();
     renderAccount();
     renderPasskeys();
+    // renderSignIns(); (On standby)
     document.getElementById("accountView").hidden = false;
+    // await signInReturn(); (On standby)
     // A link to a card (like Spreadsheets' to #email) goes to it once it's there
     if (location.hash === "#email") document.getElementById("email").scrollIntoView();
   }
@@ -454,6 +461,7 @@ function renderAccount() {
   renderQuickIcons();
   renderQuickBalances();
   renderAnalytics();
+  renderPasswordless();
 }
 
 // A new password: the other devices are signed out and Quick Entry icons stop; this one gets a new session
@@ -481,11 +489,17 @@ async function changePassword(event) {
   localStorage.setItem("prismal_jwt", result.data.token);
   localStorage.setItem("prismal_last_activity", Date.now().toString());
   const hadIcons = account.quickIcons > 0;
+  const first = account.hasPassword === false;
   account.quickIcons = 0;
+  account.hasPassword = true;
+  account.recentUntil = null;
+  // On standby (APPLE, GOOGLE, AND MICROSOFT):
+  // if (signIns) signIns.hasPassword = true;
   form.reset();
   renderAccount();
+  // renderSignIns(); (On standby)
   const noted = account.email && account.canEmail ? " We emailed you a note about it." : "";
-  BudgetUI.showToast(`Password changed. Your other devices were signed out${hadIcons ? ", and your Quick Entry icons were turned off" : ""}.${noted}`);
+  BudgetUI.showToast(`${first ? "Password set" : "Password changed"}. Your other devices were signed out${hadIcons ? ", and your Quick Entry icons were turned off" : ""}.${noted}`);
 }
 
 // Change Email (needs the password): the new one gets a link to verify it
@@ -637,10 +651,50 @@ async function deleteAccount(event) {
   transitionTo("/login.html?deleted=1", true, "right");
 }
 
-// The API's message, or a fallback (401: signed out, like after a password reset on another device)
+// An account without a password (only signing in with Apple, Google, or Microsoft makes one, and that's on standby):
+// its password boxes hide, Password sets one, and Confirm It's You shows once this session's sign-in is more than a few
+// minutes old (and again the moment it gets there)
+let confirmTimer = 0;
+function renderPasswordless() {
+  if (!account) return;
+  const noPassword = account.hasPassword === false;
+  for (const id of ["emailPassword", "currentPassword", "passkeyPassword", "deletePassword"]) {
+    const input = document.getElementById(id);
+    input.required = !noPassword;
+    input.closest(".settingsField").hidden = noPassword;
+  }
+  const passwordButton = document.querySelector("#passwordForm button[type=submit]");
+  passwordButton.textContent = noPassword ? "Set Password" : "Change Password";
+  document.querySelector("#passwordForm .panelHint").textContent = noPassword
+    ? "Your account doesn't have a password yet. Set one to sign in with your username or email too. It signs out your other devices and turns off your Quick Entry icons."
+    : "A new password signs out your other devices and turns off your Quick Entry icons. This device stays signed in.";
+
+  clearTimeout(confirmTimer);
+  const card = document.getElementById("confirmYou");
+  const until = noPassword ? Number(account.recentUntil) || 0 : 0;
+  card.hidden = !noPassword || Date.now() < until;
+  if (noPassword && Date.now() < until) confirmTimer = setTimeout(renderPasswordless, until - Date.now() + 500);
+  if (card.hidden) return;
+  document.getElementById("confirmYouStatus").textContent = "Changing your email, setting a password, adding a passkey, or deleting your account needs a sign-in from the last 10 minutes. Sign out and sign in again, then do it here.";
+  // On standby (APPLE, GOOGLE, AND MICROSOFT): with one connected, the words end "Sign in again to confirm it's you, then
+  // do it here." over a Confirm With button for each
+  // const connected = signIns ? signIns.connected : [];
+  // document.getElementById("confirmYouButtons").replaceChildren(...connected.map(link => {
+  //   const provider = { id: link.provider, name: link.name };
+  //   return settingsButton(`Confirm With ${link.name}`, "primary", (event) => startProvider(provider, "confirm", event.currentTarget));
+  // }));
+}
+
+// The API's message, or a fallback (401: signed out, like after a password reset on another device). One that needs a
+// recent sign-in first (an account without a password) brings up Confirm It's You too.
 function accountError(result, fallback) {
   if (result.status === 401) return "You've been signed out. Please log in again.";
   if (result.status === 0) return "Couldn't reach the server. Please try again.";
+  if (result.data && result.data.confirm) {
+    account.recentUntil = 0;
+    renderPasswordless();
+    document.getElementById("confirmYou").scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
   return (result.data && result.data.error) || fallback;
 }
 
@@ -1071,9 +1125,13 @@ function renderPasskeys() {
       : "This browser can't make passkeys. Try a newer browser, or add one from another device.";
     return;
   }
+  // (An account without a password doesn't type one: Confirm It's You covers it)
+  const steps = account && account.hasPassword === false
+    ? "confirm with your face, fingerprint, or PIN when your device asks"
+    : "enter your password, then confirm with your face, fingerprint, or PIN when your device asks";
   hint.textContent = count === 0
-    ? "Turning it on makes a passkey for this device: enter your password, then confirm with your face, fingerprint, or PIN when your device asks."
-    : "Add a passkey for another device or password manager: enter your password, then confirm with your face, fingerprint, or PIN when your device asks.";
+    ? `Turning it on makes a passkey for this device: ${steps}.`
+    : `Add a passkey for another device or password manager: ${steps}.`;
   document.getElementById("passkeyAddButton").textContent = count === 0 ? "Turn On" : "Add Passkey";
   const nameInput = document.getElementById("passkeyName");
   if (!nameInput.value) nameInput.value = Passkeys.deviceName();
@@ -1178,6 +1236,115 @@ async function removePasskey(passkey) {
 function formatDay(time) {
   return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+
+//#endregion
+
+// =====================================================================
+// #region APPLE, GOOGLE, AND MICROSOFT (on standby; see signin.js in the API)
+// =====================================================================
+// Each provider the server has set up: Connect (its sign-in page, which sends the person back here connected, with
+// #signin-linked=<provider>) or, once connected, Disconnect (only while the account keeps another way to sign in). An
+// account made with one has no password until one is set (see renderPasswordless), and Confirm It's You signs in with
+// the provider again (back here with #signin=<code> for a fresh session).
+// It's on standby until each provider is set up (its secrets, and its official button and logo): this code and every
+// line that uses it (marked "On standby") are commented out, and so is the card in settings.html.
+
+/*
+// What a provider sign-in that came back with a problem says here
+const SETTINGS_SIGNIN_ERRORS = {
+  cancelled: "Connecting was cancelled.",
+  expired: "That took too long. Please try again.",
+  failed: "That didn't go through. Please try again.",
+  taken: "That account already signs in to another Prismal Budget account, so it can't be connected here too.",
+  other: "That isn't the account connected here. Confirm with the one that's connected."
+};
+
+// The providers, connected or not
+function renderSignIns() {
+  const card = document.getElementById("signInWith");
+  if (!signIns || (signIns.providers.length === 0 && signIns.connected.length === 0)) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  document.getElementById("signInWithStatus").textContent = signIns.hasPassword
+    ? "Sign in with any of these too. Your password keeps working."
+    : "Your account signs in with these (it doesn't have a password). Keep at least one connected, or set a password.";
+  const list = document.getElementById("signInWithList");
+  const rows = signIns.providers.map(provider => ({ provider, link: signIns.connected.find(item => item.provider === provider.id) || null }));
+  // (One connected that the server doesn't offer anymore still shows, to take off)
+  for (const link of signIns.connected) if (!rows.some(row => row.provider.id === link.provider)) rows.push({ provider: { id: link.provider, name: link.name }, link });
+  list.replaceChildren(...rows.map(({ provider, link }) => {
+    const item = BudgetUI.element("li", "passkeyItem");
+    const about = BudgetUI.element("div", "passkeyAbout");
+    about.append(BudgetUI.element("strong", "", provider.name), BudgetUI.element("span", "panelHint", link
+      ? `Connected ${formatDay(link.since)}${link.email ? `, as ${link.email}` : ""}`
+      : "Not connected"));
+    item.append(about, link
+      ? settingsButton("Disconnect", "danger", (event) => disconnectProvider(provider, event.currentTarget))
+      : settingsButton("Connect", "primary", (event) => startProvider(provider, "link", event.currentTarget)));
+    return item;
+  }));
+}
+
+// Off to a provider's sign-in page: to connect it (intent "link"), or to confirm it's you ("confirm")
+async function startProvider(provider, intent, button) {
+  button.disabled = true;
+  const result = await budgetApi("/api/oauth/start", { provider: provider.id, intent, browser: signInBrowser() });
+  if (result.ok && result.data && result.data.url) {
+    workspaceLoaded = false; // (Leaving for the provider's page: nothing more to save)
+    window.location.assign(result.data.url);
+    return;
+  }
+  button.disabled = false;
+  BudgetUI.showToast(accountError(result, "Couldn't open it. Please try again."), true);
+}
+
+// Take a provider off the account
+async function disconnectProvider(provider, button) {
+  if (!window.confirm(`Disconnect ${provider.name}? It won't sign in to your account anymore.`)) return;
+  button.disabled = true;
+  const result = await budgetApi("/api/oauth/disconnect", { provider: provider.id });
+  button.disabled = false;
+  if (!result.ok || !result.data) {
+    BudgetUI.showToast(accountError(result, "Couldn't disconnect it. Please try again."), true);
+    return;
+  }
+  signIns = result.data;
+  renderSignIns();
+  renderPasswordless();
+  BudgetUI.showToast(`${provider.name} is disconnected.`);
+}
+
+// Back from a provider: connected (#signin-linked=<provider>), confirmed (#signin=<code>, traded for a fresh session),
+// or what went wrong (#signin-error=<reason>). The address loses it right away.
+async function signInReturn() {
+  const back = new URLSearchParams(location.hash.slice(1));
+  if (!back.has("signin") && !back.has("signin-linked") && !back.has("signin-error")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (back.has("signin-error")) {
+    BudgetUI.showToast(SETTINGS_SIGNIN_ERRORS[back.get("signin-error")] || SETTINGS_SIGNIN_ERRORS.failed, true);
+    return;
+  }
+  if (back.has("signin-linked")) {
+    const provider = signIns?.connected.find(item => item.provider === back.get("signin-linked"));
+    BudgetUI.showToast(`${provider ? provider.name : "It"} is connected. You can sign in with it now.`);
+    document.getElementById("signInWith").scrollIntoView({ block: "center" });
+    return;
+  }
+  const result = await budgetApi("/api/oauth/finish", { code: back.get("signin"), browser: signInBrowser() });
+  if (!result.ok || !result.data || !result.data.token) {
+    BudgetUI.showToast(accountError(result, "That didn't go through. Please try again."), true);
+    return;
+  }
+  localStorage.setItem("prismal_jwt", result.data.token);
+  localStorage.setItem("prismal_last_activity", Date.now().toString());
+  const fresh = await budgetApi("/api/account");
+  if (fresh.ok && fresh.data) account = fresh.data;
+  renderAccount();
+  BudgetUI.showToast("Thanks, that's you. For the next 10 minutes, you can change your email, set a password, add a passkey, or delete your account.");
+}
+*/
 
 //#endregion
 

@@ -381,7 +381,7 @@ const SLIDE_OUT_CLASSES = { left: "toLeft", right: "toRight", up: "toTop" };
 // signing out slides right, as if the login page sat to the left of the budget (and to the right of the front page,
 // so Sign In there slides left too). Between the budget's four pages, only what's under their tabs slides. The page
 // that opens slides in the same way the last one slid out (Boot.js reads the note transitionTo leaves).
-const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "logs", "bob"];
+const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "payments", "logs", "bob"];
 const SIDE_PAGES = ["quick", "privacy"];
 const BUDGET_TABS = ["home", "recurring", "history", "accounts"];
 
@@ -469,6 +469,38 @@ function getReferrerInfo() {
 // Storage can be blocked (the browser's cookies and site data setting); these never throw
 function readStored(KEY) {
   try { return localStorage.getItem(KEY); } catch { return null; }
+}
+
+// On standby with signing in with Apple, Google, or Microsoft (Login.js): this tab's own random value for it (the API's
+// signin.js), made once and kept for the tab, so a sign-in it started can only be finished in it
+/*
+function signInBrowser() {
+  let value = null;
+  try { value = sessionStorage.getItem("prismal_signin_browser"); } catch {}
+  if (value && /^[A-Za-z0-9_-]{43}$/.test(value)) return value;
+  const BYTES = crypto.getRandomValues(new Uint8Array(32));
+  value = btoa(String.fromCharCode(...BYTES)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  try { sessionStorage.setItem("prismal_signin_browser", value); } catch {}
+  return value;
+}
+*/
+
+// A sign-in lasts while it's used: 15 minutes without a tap, key, or scroll signs it out (Session.js)
+const IDLE_SIGN_OUT_MS = 15 * 60 * 1000;
+
+// Is this browser signed in right now? A sign-in left idle longer than IDLE_SIGN_OUT_MS signs out as soon as a
+// signed-in page opens, so it doesn't count, and neither does one past the end its token gives (like Boot.js's
+// signInOver).
+function signedInNow() {
+  const TOKEN = readStored("prismal_jwt");
+  const LAST = Number(readStored("prismal_last_activity") || 0);
+  if (!TOKEN || (LAST && Date.now() - LAST >= IDLE_SIGN_OUT_MS)) return false;
+  try {
+    const CLAIMS = JSON.parse(atob(TOKEN.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof CLAIMS.exp !== "number" || CLAIMS.exp * 1000 > Date.now();
+  } catch {
+    return true;
+  }
 }
 
 // Save a value (null removes it)

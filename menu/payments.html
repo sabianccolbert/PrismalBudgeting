@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css?v=54eceeb070">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=acb1e6bb4e">
+    <title>Prismal Budget - Payment Calculator</title>
+    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal Payments" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Budget - Payment Calculator">
+    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://prismalbudget.org">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <div class="brandText stacked">
+            <h1>Payment Calculator</h1>
+            <h2 translate="no">Prismal Budget</h2>
+          </div>
+        </div>
+        <nav class="navButtons" aria-label="Pages">
+          <a id="menuBack" class="navButton" href="/menu/">
+            <img class="navIcon" src="/Resources/Icons/BackNav.webp?v=5fc649006a" alt="">
+            <span>Back</span>
+          </a>
+          <a class="navButton" href="/">
+            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
+            <span>Home</span>
+          </a>
+          <a id="logoutButton" class="navButton logoutButton" href="logout">
+            <img class="navIcon" src="/Resources/Icons/Logout.webp?v=38a63f5bfb" alt="">
+            <span>Logout</span>
+          </a>
+        </nav>
+      </header>
+      <main>
+        <div id="pageToolbar" class="tableToolbar"></div>
+        <div id="panelSlot"></div>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <!-- The form, its results, and an Other Account's own pace and entries (Budget Pages.js paymentCalculator) -->
+        <div id="dataView"></div>
+
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Payment Calculator Help</h3>
+          <p>The Payment Calculator works out when a balance you owe (a loan or a credit card) is paid off, how much interest it costs on the way, and what paying more each time saves. Its results change as you type, and nothing on it is saved. They're estimates: a lender's own figures can differ (its fees, how it counts days, and rounding).</p>
+
+          <h4>The Balance</h4>
+          <ul>
+            <li><strong>Other Account</strong> fills in what one of your Other Accounts owes today (its balance below $0) and its interest. Pick None to type your own.</li>
+            <li><strong>Interest rate</strong> is the APR, a yearly percent. Leave it blank for none.</li>
+            <li><strong>Compounds</strong> is how often interest starts earning interest of its own: daily (most credit cards), monthly, every 3 months, yearly, or not at all (only the balance earns it). <strong>Interest added</strong> and <strong>On day</strong> are when it's added to what's owed, like a statement's day.</li>
+          </ul>
+
+          <h4>Payments</h4>
+          <ul>
+            <li><strong>Payment</strong>, every week, every 2 weeks, or every month, starting on the <strong>First payment</strong> day. The last one is only what's left.</li>
+            <li><strong>Extra each payment</strong> shows what paying that much more each time does: how much sooner it's paid off, and the interest saved.</li>
+            <li><strong>Pay it off by</strong> works out the payment it takes to be done by that day (up to 50 years ahead).</li>
+            <li><strong>Each Payment</strong> lists every payment with the interest added since the one before and what's owed after it.</li>
+          </ul>
+
+          <h4>With An Other Account</h4>
+          <ul>
+            <li>Its own pace comes from your budget: its entries, the ones still to come (like a recurring payment, Upcoming, or a connected spreadsheet's), and its own interest. It says when the account is back to $0 (looking up to 10 years ahead) and the interest until then, and what the extra each payment would change.</li>
+            <li><strong>Its Entries</strong> lists what's coming up (on the calendar, in Upcoming, and from your recurring entries for the next year, with its interest) and what came before. Tap one to change it, like on a zoomed day.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

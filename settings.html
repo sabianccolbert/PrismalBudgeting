@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=96ddaa69eb">
+    <link rel="stylesheet" href="/stylesheet.css?v=54eceeb070">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=d5b3872db7">
+    <link rel="stylesheet" href="/budgetStyle.css?v=acb1e6bb4e">
     <title>Prismal Budget - Settings</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -129,6 +129,13 @@
         </section>
 
         <div id="accountView" hidden>
+          <!-- An account without a password: what needs one takes a sign-in from the last few minutes instead (Settings Page.js) -->
+          <section id="confirmYou" class="budgetCard settingsCard" aria-labelledby="confirmYouHeading" hidden>
+            <h3 id="confirmYouHeading">Confirm It's You</h3>
+            <p id="confirmYouStatus"></p>
+            <div id="confirmYouButtons" class="panelButtons"></div>
+          </section>
+
           <section id="email" class="budgetCard settingsCard" aria-labelledby="emailHeading">
             <h3 id="emailHeading">Email</h3>
             <p id="emailStatus"></p>
@@ -221,6 +228,13 @@
               </div>
             </form>
           </section>
+
+          <!-- On standby: Apple, Google, and Microsoft, each one the server has set up, connected to this account or not (Settings Page.js)
+          <section id="signInWith" class="budgetCard settingsCard" aria-labelledby="signInWithHeading" hidden>
+            <h3 id="signInWithHeading">Apple, Google, And Microsoft</h3>
+            <p id="signInWithStatus"></p>
+            <ul id="signInWithList" class="passkeyList"></ul>
+          </section> -->
 
           <section class="budgetCard settingsCard" aria-labelledby="devicesHeading">
             <h3 id="devicesHeading">Signed-In Devices</h3>

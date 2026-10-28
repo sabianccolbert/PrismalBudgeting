@@ -1165,9 +1165,8 @@ body.datePicking .elastic-table td {
   box-shadow: 0 0 10px rgba(200, 0, 0, 0.6);
 }
 
-/* A choice list (Budget UI.js choiceList: an Other Account to pick, or what a goal is for): buttons that wrap, each
-   with its name and, under it, a second line (an account's balance, smaller and dimmer, red below $0). A long name
-   wraps inside its button. */
+/* A choice list (Budget UI.js choiceList: what a goal is for): buttons that wrap, each with its name and, under it, a
+   second line (an account's balance, smaller and dimmer, red below $0). A long name wraps inside its button. */
 .choiceList {
   display: flex;
   flex-wrap: wrap;
@@ -1198,6 +1197,90 @@ body.datePicking .elastic-table td {
 }
 
 .choiceList .budgetButton[aria-checked="true"] .choiceDetail:not(.negative) {
+  color: var(--BASE_COLOR);
+}
+
+/* A dropdown (Budget UI.js dropdownList: an entry's Other Account): a box like the other boxes, with the picked one in
+   it and a ▾, and the list that drops down under it (stylesheet.css .pickerList), each one its name over its balance
+   (smaller and dimmer, red below $0). The picked one has a faint red-orange tint, and the one the pointer or the keys
+   are on the full red-orange. */
+.dropdown {
+  position: relative;
+  min-width: 0;
+}
+
+button.dropdownBox {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.45em 0.8em;
+  font-size: var(--UI_TEXT);
+  line-height: 1.25;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: rgba(8, 10, 32, 0.6);
+  border: 1.5px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+button.dropdownBox:hover,
+button.dropdownBox[aria-expanded="true"] {
+  transform: none;
+  color: var(--TEXT_BRIGHT);
+  border-color: var(--GLASS_LINE_BRIGHT);
+  box-shadow: none;
+}
+
+button.dropdownBox:focus-visible {
+  outline: none;
+  border-color: var(--GLOW_EDGE);
+}
+
+.dropdownPicked,
+.dropdownOption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  min-width: 0;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.dropdownPicked {
+  flex: 1 1 auto;
+}
+
+.dropdownArrow {
+  flex: none;
+  color: var(--TEXT_DIM);
+  font-size: 0.9em;
+}
+
+.dropdownList .dropdownOption {
+  padding: 0.4em 0.8em;
+}
+
+.dropdownList .dropdownOption[aria-selected="true"]:not(.isActive):not(:hover) {
+  background: rgba(255, 90, 60, 0.14);
+}
+
+.dropdown .choiceDetail {
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+  font-variant-numeric: tabular-nums;
+}
+
+.dropdown .choiceDetail.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.dropdownOption:hover .choiceDetail:not(.negative),
+.dropdownOption.isActive .choiceDetail:not(.negative) {
   color: var(--BASE_COLOR);
 }
 
@@ -3711,20 +3794,50 @@ footer.hasHelp > hr {
   }
 }
 
+/* Payment Calculator (menu/payments.html): the form, its results, and an Other Account's own pace with its entries, one
+   card over another */
+.paymentsPage {
+  display: flex;
+  flex-direction: column;
+  gap: 2vmin;
+}
+
+.paymentsResults,
+.paymentsAccount {
+  text-align: left;
+}
+
+.paymentsLine {
+  margin: 0 0 0.6em;
+  line-height: 1.45;
+}
+
+/* Each payment, in a box that scrolls */
+.paymentsSchedule {
+  max-height: min(22em, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.scheduleTable {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Coming up" and "Today and before" in an account's entries */
+.accountEntriesHeading {
+  padding: 0.6em 0.35em 0.25em;
+  font-size: 0.9em;
+  color: var(--TEXT_DIM);
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
 /*========================================*
  *  BOB'S PAGE (menu/bob.html, Bob Page.js)
  *========================================*
  *  A column of glass cards: his highlights (with his picture) at the top, then each card with its title, a ? after it,
  *  and its switch at the right. A card that's off is only its title row, dimmed.
  */
-
-:root {
-  /* Needs, Wants, and Future in the pie chart: three hues kept apart for every kind of color blindness on the cards' dark
-     glass, each one named beside its amount, so the color never has to say it alone */
-  --PURPOSE_NEEDS: #3987e5;
-  --PURPOSE_WANTS: #d95926;
-  --PURPOSE_FUTURE: #199e70;
-}
 
 .budgetCard.bobTop {
   display: flex;
@@ -4019,7 +4132,26 @@ button.bobDataRow:focus-visible {
   white-space: nowrap;
 }
 
-/* Needs, Wants, And Future: the days, then the chart beside its legend (the legend under it on phones) */
+/* Wavelength Planning: the days and the Wavelengths button, then the spectrum, what it says, and its legend under it */
+.wavelengthControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6em 1em;
+  margin: 0 0 0.8em;
+}
+
+.wavelengthControls .purposeDates {
+  flex: 1 1 26em;
+  margin: 0;
+}
+
+.budgetButton.wavelengthsButton {
+  margin: 0;
+  padding: 0.4em 1em;
+  font-size: 0.9em;
+}
+
 .purposeDates {
   display: flex;
   flex-wrap: wrap;
@@ -4035,71 +4167,107 @@ button.bobDataRow:focus-visible {
   min-width: 0;
 }
 
-.purposeChartBox {
+/* The spectrum: a glowing bar with each wavelength's stretch of the wave in its color (wavelengthSpectrum in
+   Bob Page.js) */
+.spectrumBox {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1em 1.6em;
+  flex-direction: column;
+  gap: 0.5em;
 }
 
-.purposeChart {
-  flex-shrink: 0;
-  width: clamp(170px, 38vmin, 230px);
-  height: clamp(170px, 38vmin, 230px);
+.spectrum {
+  display: block;
+  width: 100%;
+  height: clamp(72px, 16vmin, 120px);
   overflow: visible;
 }
 
-.purposeSlice {
+.spectrumBand {
+  opacity: 0.16;
+}
+
+.spectrumStretch {
   cursor: pointer;
   outline: none;
-  transition: opacity 0.15s ease-out, filter 0.15s ease-out;
+  transition: opacity 0.15s ease-out;
 }
 
-.purposeSlice.needs,
-.purposeSwatch.needs {
-  fill: var(--PURPOSE_NEEDS);
-  background: var(--PURPOSE_NEEDS);
+.spectrumHit {
+  opacity: 0.1;
+  transition: opacity 0.15s ease-out;
 }
 
-.purposeSlice.wants,
-.purposeSwatch.wants {
-  fill: var(--PURPOSE_WANTS);
-  background: var(--PURPOSE_WANTS);
+.spectrumWave {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px currentColor);
 }
 
-.purposeSlice.future,
-.purposeSwatch.future {
-  fill: var(--PURPOSE_FUTURE);
-  background: var(--PURPOSE_FUTURE);
+/* The stretch pointed at (or tabbed to) lights up, and the others step back */
+.spectrum:hover .spectrumStretch:not(:hover),
+.spectrum:focus-within .spectrumStretch:not(:focus) {
+  opacity: 0.45;
 }
 
-/* The slice pointed at (or tabbed to) lifts, and the others step back */
-.purposeChart:hover .purposeSlice:not(:hover),
-.purposeChart:focus-within .purposeSlice:not(:focus) {
-  opacity: 0.55;
+.spectrumStretch:hover .spectrumHit,
+.spectrumStretch:focus-visible .spectrumHit {
+  opacity: 0.28;
 }
 
-.purposeSlice:hover,
-.purposeSlice:focus-visible {
-  filter: brightness(1.2);
-}
-
-.purposeCenterAmount {
-  fill: var(--TEXT_BRIGHT);
-  font-size: 20px;
-}
-
-.purposeCenterLabel {
-  fill: var(--TEXT_DIM);
-  font-size: 13px;
+.spectrumCaption {
+  margin: 0;
+  font-size: 0.9em;
+  text-align: center;
+  color: var(--TEXT_DIM);
 }
 
 .purposeLegend {
-  flex: 1 1 14em;
   min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* Wavelengths' window: each one's color, its name, up, down, and × */
+.wavelengthEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin: 0.4em 0 0.8em;
+  padding: 0;
+  list-style: none;
+}
+
+.wavelengthRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.wavelengthRow .purposeSwatch {
+  width: 1em;
+  height: 1em;
+}
+
+.wavelengthRow input.wavelengthName {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.budgetButton.wavelengthMove {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.3em 0.7em;
+}
+
+.budgetButton.wavelengthAdd {
+  align-self: flex-start;
+  margin: 0 0 0.8em;
+  padding: 0.35em 1em;
+  font-size: 0.9em;
 }
 
 .purposeLegendButton {
@@ -4496,6 +4664,17 @@ html:not(.frontPage) .frontSignIn,
 
 .frontView {
   font-size: clamp(15px, 3vmin, 19px);
+}
+
+/* The note at the very top: Prismal Budget isn't any other company with a similar name */
+.frontView .frontDisclaimer {
+  max-width: 46em;
+  margin: 0 auto 0.4em;
+  padding: 0 1em;
+  font-size: 0.8em;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--TEXT_DIM);
 }
 
 .frontHero {

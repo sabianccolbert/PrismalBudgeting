@@ -3,7 +3,7 @@
 // server's session ends too) and the login page says why; the last minute shows a countdown first. Signing
 // out in another tab signs this one out the next time it checks.
 
-const TIMEOUT_DURATION = 15 * 60 * 1000; // 15 minutes in milliseconds
+const TIMEOUT_DURATION = IDLE_SIGN_OUT_MS; // 15 minutes (Layout.js)
 const WARNING_SECONDS = 60;               // The idle warning shows for the last minute
 let lastThrottleTime = 0;
 let idleWarning = null;

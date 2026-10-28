@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=96ddaa69eb">
+    <link rel="stylesheet" href="/stylesheet.css?v=54eceeb070">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=d5b3872db7">
+    <link rel="stylesheet" href="/budgetStyle.css?v=acb1e6bb4e">
     <title>Prismal Budget - Other Accounts</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -94,7 +94,7 @@
 
           <h4>Moving Money In And Out</h4>
           <ul>
-            <li>When you add a Hidden or Transfer entry (on the calendar, in Recurring Entries, or with the Quick Entry icon), pick the account under Other Account (before the amount). Each account is a button with its balance today under its name. The entry keeps its own title, and the account shows after it, like "Payday → Savings".</li>
+            <li>When you add a Hidden or Transfer entry (on the calendar, in Recurring Entries, or with the Quick Entry icon), pick the account under Other Account (before the amount): tap its box for the list, where each account has its balance today under its name. The entry keeps its own title, and the account shows after it, like "Payday → Savings".</li>
             <li>⭕️ <strong>Transfer</strong> moves money between your budget's account and this one, so In Bank changes and the account gets the opposite amount. Moving $100 into savings is a $100 Transfer cost: In Bank goes down $100, and Savings goes up $100.</li>
             <li>✖️ <strong>Hidden</strong> happens in the account itself, so In Bank stays the same and the account changes by the same amount. Putting $50 in cash into savings is a $50 Hidden gain (Savings goes up $50); paying $30 straight out of savings is a $30 Hidden cost (Savings goes down $30).</li>
             <li>Only entries with the account picked under Other Account count. An entry titled with an account's name, with no account picked, is an ordinary entry and doesn't change the account. Changing, moving, or deleting an entry for an account changes the account too.</li>
@@ -113,9 +113,12 @@
 
           <h4>Interest</h4>
           <ul>
-            <li>For a credit card (or savings that earn interest), tap the account, turn on <strong>Add interest each month</strong>, and type its yearly rate (its APR, like 24.99).</li>
-            <li>Once a month, on the day of the month you turned it on (or last typed its balance), the balance changes by a twelfth of the rate: one below $0 goes further below, and one above $0 grows. Each month's interest shows in the account's entries as % Interest, and counts in its balance and In 6 Months.</li>
-            <li>Typing a new balance or a new rate starts the monthly count again from that day, with the interest so far kept in the balance. Turn the switch off to stop it.</li>
+            <li>For a credit card, a loan, or savings that earn interest, tap the account, turn on <strong>Add interest</strong>, and type its yearly rate (its APR, like 24.99 or 6.125, decimals and all).</li>
+            <li><strong>Compounds</strong> is how often interest starts earning interest of its own: <strong>Daily</strong> (most credit cards and savings: each day earns a 365th of the rate on the balance and the interest so far), <strong>Monthly</strong>, <strong>Every 3 months</strong>, or <strong>Yearly</strong> (on its day of the month, that often: a twelfth of the rate for each month since), or <strong>Doesn't compound</strong> (only the balance earns it, never the interest added to it). Your statement or loan papers say which.</li>
+            <li><strong>Added</strong> is how often it's added to the balance (every month, every 3 months, every 6 months, or every year), and <strong>On day</strong> the day of the month (a shorter month uses its last day), like a statement's closing day.</li>
+            <li>A balance below $0 goes further below, and one above $0 grows. Each time it's added shows in the account's entries as % Interest, and counts in its balance and In 6 Months.</li>
+            <li>Typing a new balance, or changing the rate or any of its choices, starts the count again from that day, with the interest so far kept in the balance. Turn the switch off to stop it. Interest set up before these choices keeps working as it did: monthly, on the day of the month it started.</li>
+            <li>To see when a balance owed is paid off, and what paying extra saves, open the <strong>Payment Calculator</strong> (in the Menu) and pick the account.</li>
           </ul>
 
           <h4>Edit</h4>

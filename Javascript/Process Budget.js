@@ -33,7 +33,7 @@ const TABLE_SHAPES = {
   history:    { cols: 7, minRows: 1 },  // [0] column titles, then one row per week (newest first)
   search:     { cols: 4, minRows: 3 },  // [0]-[2] search summary
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
-  accounts:   { cols: 7, minRows: 1 },  // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest since, max]
+  accounts:   { cols: 10, minRows: 1 }, // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest since, max, compounds, added every, added on]
   account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
   logs:       { cols: 8, minRows: 1 }   // [0] column titles, then [time, duration, action, 4 details, status]
 };
@@ -361,7 +361,7 @@ async function performDailyUpdate() {
   let sheetDays = sheetEntriesByDay(lastDailyUpdate, new Date(Math.min(yesterday.getTime(), lightFromTime - 1)));
   // % entries (see PERCENT_MARK) on the days that scrolled in while away are worked out one day at a time, from the Other
   // Accounts' balances when the budget was last worked out (a saved day's already were)
-  let percents = hasPercentEntries() ? percentRunner(accountBalancesToday()) : null;
+  let percents = hasPercentEntries() ? percentRunner(accountBalancesToday(), addDays(lastDailyUpdate, 1), accountSummaries(lastDailyUpdate, oldGridStart)) : null;
 
   // 4. One pass over the timeline in date order, stopping at today
   timelineLoop:
@@ -696,9 +696,9 @@ let changeLogStart = 0;
 /* ---------- Actions the page UI calls (each resolves to { ok, saved, notFound, message, ... }) ---------- */
 
 // New calendar entry. entry: { title, sprite, amount (signed number), percent (signed, for a % amount instead; see
-// PERCENT_MARK), date, placeholder, purpose (what its title's money is for: Needs, Wants, or Future, see ENTRY PURPOSES;
-// left out, it stays as it is), note (see ENTRY NOTES: added to the entry's, when it goes into one already there) }. Can
-// be undone.
+// PERCENT_MARK), date, placeholder, purpose (what its title's money is for: one of the wavelengths, see WAVELENGTH
+// PLANNING; left out, it stays as it is), note (see ENTRY NOTES: added to the entry's, when it goes into one already
+// there) }. Can be undone.
 function addCalendarEntry(entry) {
   const hasPercent = typeof entry.percent === "number";
   const signed = hasPercent ? entry.percent : entry.amount;
@@ -726,8 +726,8 @@ function changeCalendarEntry(change) {
   return runBudgetAction("", () => keepEntryDetails(entryChange(change), change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
-// After a change to an entry: its title's purpose as the form says (change.purpose; see ENTRY PURPOSES), on the title it
-// has now, and its note, which goes where it went (see followEntryNote). Nothing, when it couldn't be found.
+// After a change to an entry: its title's purpose as the form says (change.purpose; see WAVELENGTH PLANNING), on the
+// title it has now, and its note, which goes where it went (see followEntryNote). Nothing, when it couldn't be found.
 function keepEntryDetails(result, change) {
   if (notFound) return result;
   const deleted = String(change.action || "").toLowerCase() === "delete";
@@ -2093,11 +2093,12 @@ function describeAliases(text) {
 //     same amount: a $50 Hidden cost takes $50 out of it, and a $3,000 Hidden gain puts $3,000 in.
 // An account's balance is its starting amount plus all of those changes, so changing, moving, or deleting one of
 // its entries changes it too. Typing a balance on the Other Accounts page changes the starting amount (no entry
-// is made). An account can also get interest each month (a credit card, or savings that earn it): see
-// interestCredits. accountsData.list: [0] column titles, then [name, balance today (filled in by
-// updateAccountBalances, so the Quick Entry page can show it), "default" | "", starting amount ("" is $0.00),
-// interest rate (a year, in %; "" for none), the day interest started counting (MM/DD/YYYY)]. accountsData.coming:
-// each account's changes after today, which the Quick Entry page counts once their day comes (see
+// is made). An account can also get interest (a credit card, a loan, or savings that earn it), compounding and added
+// how and when it says: see interestStepper. accountsData.list: [0] column titles, then [name, balance today (filled in
+// by updateAccountBalances, so the Quick Entry page can show it), "default" | "cash" | "", starting amount ("" is
+// $0.00), interest rate (a year, in %; "" for none), the day interest started counting (MM/DD/YYYY), max, how interest
+// compounds, every how many months it's added, the day of the month it's added (see accountInterest)].
+// accountsData.coming: each account's changes after today, which the Quick Entry page counts once their day comes (see
 // accountChangesAhead). accountsData.inBank: In Bank from today through the 28 days after the calendar, for the Quick
 // Entry page (see inBankAhead). The default account, Savings, is always there and can't be deleted.
 
@@ -2286,10 +2287,11 @@ function isTransferEntry(sprite) {
 }
 
 // Each account's balance today, with the entries that changed it (and the ones on the calendar that will), newest
-// first, and its interest (through interestUntil): [{ index, name, isDefault, start, interest ({ rate, since } or null),
-// entriesToday (its entries through today, added up), today, entries: [{ date, change, sprite, title (its own, "" without
-// one) }], interestCredits: [{ date, change }] oldest first }]
-function accountSummaries(interestUntil = gridEndDate) {
+// first, and its interest (through interestUntil): [{ index, name, isDefault, start, interest (see accountInterest, or
+// null), entriesToday (its entries through today, added up), today, entries: [{ date, change, sprite, title (its own,
+// "" without one) }], interestCredits: [{ date, change }] oldest first }]. calendarStart: the calendar's first day (the
+// daily update's is still the saved one's).
+function accountSummaries(interestUntil = gridEndDate, calendarStart = gridStartDate) {
   let accounts = accountTitleMap();
   let summaries = new Map(accountRows().map(account => [account.index, {
     index: account.index,
@@ -2314,7 +2316,7 @@ function accountSummaries(interestUntil = gridEndDate) {
     }
   };
   for (let r = 3; r >= 0; r--) {
-    for (let c = 6; c >= 0; c--) addCell(calendarData[r][c], () => gridDates[r][c]);
+    for (let c = 6; c >= 0; c--) addCell(calendarData[r][c], () => addDays(calendarStart, r * 7 + c));
   }
   const historyDay = (lines) => createSafeMidnight(lines[0].trim(), true);
   for (let r = 1; r < historyData.length; r++) {
@@ -2367,7 +2369,7 @@ function projectBudget(until, summaries = accountSummaries()) {
     const text = dayAfterCalendar(day, recurringRows, futureByDate, sheetDays);
     balance = Math.round((balance + dayMath(text.split("\n")).bankChange) * 100) / 100;
     inBank.push({ date: day, amount: balance });
-    for (const { account, change } of accountLineChanges(text, accounts)) coming.get(account.index)?.push({ date: day, change });
+    for (const { account, change, sprite, title } of accountLineChanges(text, accounts)) coming.get(account.index)?.push({ date: day, change, sprite, title, coming: true });
   }
   const byIndex = new Map(summaries.map(summary => {
     const entries = [...summary.entries, ...(coming.get(summary.index) || [])];
@@ -2405,46 +2407,253 @@ function accountStart(row) {
   return text ? Math.round(parseAmount(text) * 100) / 100 : 0;
 }
 
-// An account's interest: { rate (a year, in %), since (the day it started counting) }, or null when it has none (its
-// row's [4] and [5])
+// An account's interest: { rate (a year, in %), since (the day it started counting), compound (how often it earns
+// interest of its own: a key of INTEREST_COMPOUNDING), every (months between the days it's added: INTEREST_EVERY), day
+// (the day of the month it's added, 1 to 31: a shorter month's last day for one past it) }, or null when it has none.
+// Its row's [4], [5], [7], [8], and [9]; blank ones are monthly, every month, and the day of the month it started
+// counting.
 const MAX_INTEREST_RATE = 1000;
+// How often interest earns interest: every day, every 1, 3, or 12 months, or never ("simple": only the balance without
+// the interest added to it earns any)
+const INTEREST_COMPOUNDING = { daily: 0, monthly: 1, quarterly: 3, yearly: 12, simple: null };
+const INTEREST_EVERY = [1, 3, 6, 12];
 function accountInterest(row) {
   const rateText = String(row?.[4] ?? "").trim();
   const sinceText = String(row?.[5] ?? "").trim();
   const rate = Number(rateText);
   const since = sinceText ? createSafeMidnight(sinceText, true) : null;
   if (!rateText || !Number.isFinite(rate) || rate <= 0 || rate > MAX_INTEREST_RATE || !since || isNaN(since.getTime())) return null;
-  return { rate, since };
+  const compoundText = String(row?.[7] ?? "").trim();
+  const every = Number(row?.[8]);
+  const day = Number(row?.[9]);
+  return {
+    rate,
+    since,
+    compound: Object.prototype.hasOwnProperty.call(INTEREST_COMPOUNDING, compoundText) ? compoundText : "monthly",
+    every: INTEREST_EVERY.includes(every) ? every : 1,
+    day: Number.isInteger(day) && day >= 1 && day <= 31 ? day : since.getDate()
+  };
 }
 
-// The interest an account gets, once a month on the day of the month it started counting (interest.since), from a
-// month after that day through until: [{ date, change }], oldest first. Each one is the balance that morning (its
-// starting amount, its entries before that day, and the interest before it) times a twelfth of the yearly rate, to the
-// cent, so a balance below $0 (like a credit card's) goes further below, and one above $0 grows. Typing the account's
-// balance or changing its interest starts it counting again from that day (accountEntry), so interest never counts
-// twice.
-function interestCredits(start, entries, interest, until) {
+// Interest's settings as a form gives them ({ compound, every, day }, each left out for its default: monthly, every
+// month, and fallbackDay), checked: { compound, every, day, columns (its row's [7], [8], and [9]: blank for monthly and
+// for every month) }
+function interestSettings(fields, fallbackDay) {
+  const compound = fields?.compound ?? "monthly";
+  const every = fields?.every ?? 1;
+  const day = fields?.day ?? fallbackDay;
+  if (!Object.prototype.hasOwnProperty.call(INTEREST_COMPOUNDING, compound) || !INTEREST_EVERY.includes(every) || !Number.isInteger(day) || day < 1 || day > 31) {
+    throw new BudgetInputError("Pick how the interest compounds, how often it's added, and the day of the month it's added.");
+  }
+  return { compound, every, day, columns: [compound === "monthly" ? "" : compound, every === 1 ? "" : String(every), String(day)] };
+}
+
+// An account's interest in words, for Change Logs: "24.99% a year, compounding daily, added every month on day 15"
+function describeInterest(interest) {
+  const compounding = interest.compound === "simple" ? "not compounding" : `compounding ${interest.compound}`;
+  const every = interest.every === 1 ? "every month" : interest.every === 12 ? "every year" : `every ${interest.every} months`;
+  return `${interest.rate}% a year, ${compounding}, added ${every} on day ${interest.day}`;
+}
+
+// An account's interest, worked out a day at a time from the day after it started counting (interest.since). step(day,
+// balance) takes each day in order with the account's balance at its start (its starting amount, its entries before
+// that day, and the interest added before it), and gives back the interest added to it that day, to the cent (0 on most
+// days):
+//   - It's added on interest.day every interest.every months, counting that day of the month from the first one after
+//     it started counting: first on the interest.every-th of them (every month: the first one itself, every 3 months:
+//     the third), then every interest.every months
+//   - "daily": every day earns a 365th of the yearly rate, on the balance and the interest earned since it was last
+//     added
+//   - "simple": every day earns a 365th of the yearly rate, on the balance without any interest added to it
+//   - "monthly", "quarterly", "yearly": every 1, 3, or 12 months on that day of the month (counted the same way), the
+//     balance that morning and the interest earned since it was last added earn that many twelfths of the yearly rate
+//     (a first stretch shorter than that earns a 365th a day)
+// So a balance below $0 (money owed, like a credit card's) goes further below, and one above $0 grows.
+function interestStepper(interest) {
+  const rate = interest.rate; // (% a year: a dollar earns rate cents a year)
+  const months = INTEREST_COMPOUNDING[interest.compound];
+  // The day it's added in a month (counted in months from the year 0)
+  const dayIn = (month) => {
+    const year = Math.floor(month / 12);
+    const last = new Date(year, month % 12 + 1, 0).getDate();
+    return new Date(year, month % 12, Math.min(interest.day, last));
+  };
+  const sinceMonth = interest.since.getFullYear() * 12 + interest.since.getMonth();
+  const firstMonth = dayIn(sinceMonth) > interest.since ? sinceMonth : sinceMonth + 1;
+  // Is day one of the days every `step` months, from the first one?
+  const isEvery = (day, step) => {
+    const month = day.getFullYear() * 12 + day.getMonth() - (firstMonth + step - 1);
+    return month >= 0 && month % step === 0 && day.getTime() === dayIn(day.getFullYear() * 12 + day.getMonth()).getTime();
+  };
+  let earned = 0;                     // Interest earned and not added yet, in cents
+  let added = 0;                      // Interest added so far
+  let lastWorkedOut = interest.since; // ("monthly", "quarterly", "yearly") The day interest was last worked out
+  return {
+    step(day, balance) {
+      if (day <= interest.since) return 0;
+      if (months === 0) earned += (balance + earned / 100) * rate / 365;
+      else if (months === null) earned += (balance - added) * rate / 365;
+      else if (isEvery(day, months)) {
+        const full = day >= addMonths(lastWorkedOut, months);
+        earned += (balance + earned / 100) * rate * (full ? months : Math.round((day - lastWorkedOut) / 86400000) * 12 / 365) / 12;
+        lastWorkedOut = day;
+      }
+      if (!isEvery(day, interest.every)) return 0;
+      const change = Math.round(earned) / 100;
+      earned = 0;
+      added += change;
+      return change;
+    }
+  };
+}
+
+// An account's interest from the day after it started counting through until, with its starting amount and its entries
+// ([{ date, change }]): { credits: [{ date, change }] oldest first, stepper (see interestStepper, ready for the day
+// after until) }. Typing the account's balance or changing its interest starts it counting again from that day
+// (accountEntry), so interest never counts twice.
+function runInterest(start, entries, interest, until) {
   const ordered = [...entries].sort((a, b) => a.date - b.date);
+  const stepper = interestStepper(interest);
   const credits = [];
   let balance = start;
   let counted = 0; // Entries added into balance so far
-  for (let month = 1; month <= 1200; month++) {
-    const day = addMonths(interest.since, month);
-    if (day > until) break;
+  for (let day = addDays(interest.since, 1); day <= until; day = addDays(day, 1)) {
     while (counted < ordered.length && ordered[counted].date < day) balance += ordered[counted++].change;
-    const change = Math.round(balance * interest.rate / 12) / 100;
-    if (change !== 0) credits.push({ date: day, change });
+    const change = stepper.step(day, balance);
+    if (change === 0) continue;
+    credits.push({ date: day, change });
     balance += change;
   }
-  return credits;
+  return { credits, stepper };
+}
+
+// The interest an account gets through until (see runInterest): [{ date, change }], oldest first
+function interestCredits(start, entries, interest, until) {
+  return runInterest(start, entries, interest, until).credits;
+}
+
+/* ---------- Paying a balance off (the Payment Calculator) ---------- */
+// How long paying off a balance owed takes (a loan, a credit card), with interest worked out the way an Other Account's
+// is (interestStepper): the same payment on a schedule from a first payment day, and what paying more does. For an
+// Other Account, its own pace too, from the budget (accountPayoff).
+
+// How often payments come: days apart, or null for every month (on the first payment's day of the month)
+const PAYMENT_FREQUENCIES = { weekly: 7, biweekly: 14, monthly: null };
+const PAYOFF_YEARS = 50;         // The longest a payoff is worked out for
+const ACCOUNT_PAYOFF_YEARS = 10; // How far ahead an account's own pace is looked at (like Bob's Accounts card)
+
+// The payment days from first, every `frequency` (a key of PAYMENT_FREQUENCIES), through until
+function paymentDays(first, frequency, until) {
+  const apart = PAYMENT_FREQUENCIES[frequency];
+  const days = [];
+  for (let k = 0; ; k++) {
+    const day = apart ? addDays(first, k * apart) : addMonths(first, k);
+    if (day > until) return days;
+    days.push(day);
+  }
+}
+
+// Paying off `owed` (above $0) with `payment` on each payment day from `first` (the last one only what's left), and
+// interest ({ rate, compound, every, day }, or null for none) counting from the day after `from`, through until (at
+// most PAYOFF_YEARS): { schedule: [{ date, payment, interest (added since the payment before), owed (after it) }],
+// paidOff (the last payment's day, or null: not by until, or never, when a year of payments still owes as much as at
+// the start), interest (all of it), paid (all of it) }
+function payOff({ owed, interest, payment, frequency, first, from, until = addMonths(from, PAYOFF_YEARS * 12) }) {
+  const round = (amount) => Math.round(amount * 100) / 100;
+  const stepper = interest ? interestStepper({ ...interest, since: from }) : null;
+  const days = new Set(paymentDays(first, frequency, until).map(day => day.getTime()));
+  const yearIn = addMonths(first, 12);
+  const schedule = [];
+  let balance = -owed; // (Money owed is below $0, like an Other Account's)
+  let addedSince = 0;
+  let addedAll = 0;
+  let paid = 0;
+  for (let day = addDays(from, 1); day <= until; day = addDays(day, 1)) {
+    if (stepper) {
+      const change = stepper.step(day, balance);
+      balance = round(balance + change);
+      addedSince += change;
+      addedAll += change;
+    }
+    if (!days.has(day.getTime())) continue;
+    const amount = Math.min(payment, round(-balance));
+    balance = round(balance + amount);
+    paid += amount;
+    schedule.push({ date: day, payment: amount, interest: round(-addedSince), owed: round(-balance) });
+    addedSince = 0;
+    if (balance >= 0) return { schedule, paidOff: day, interest: round(-addedAll), paid: round(paid) };
+    if (day >= yearIn && -balance >= owed) break;
+  }
+  return { schedule, paidOff: null, interest: round(-addedAll), paid: round(paid) };
+}
+
+// The smallest payment (to the cent) that pays off `owed` by the day `by` (options: as payOff takes them, without a
+// payment), or null when none can: a day before the first payment, one more than PAYOFF_YEARS away, or interest that
+// adds up faster than MAX_AMOUNT a payment pays
+function paymentToPayOffBy(options, by) {
+  if (by < options.first || by > addMonths(options.from, PAYOFF_YEARS * 12)) return null;
+  const works = (cents) => {
+    const result = payOff({ ...options, payment: cents / 100, until: by });
+    return result.paidOff !== null;
+  };
+  const years = Math.max(1, getDayDifference(by, options.from) / 365);
+  let high = Math.ceil(options.owed * (1 + (options.interest ? options.interest.rate / 100 : 0) * (years + 1)) * 100) + 100;
+  // (Interest compounding for years before the first payment can outgrow that guess)
+  while (!works(high)) {
+    if (high > MAX_AMOUNT * 100) return null;
+    high *= 2;
+  }
+  let low = 0;
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+    if (works(middle)) high = middle;
+    else low = middle;
+  }
+  return high / 100;
+}
+
+// An Other Account's own pace back up to $0 from below (its row index), from today: its entries, the ones the budget
+// still has coming for ACCOUNT_PAYOFF_YEARS (projection: projectBudget, to that day), and its interest, and the same
+// with `extra` more on each payment day (paymentDays from first, every frequency). { owed (today, above $0 when it's
+// below), now: { paidOff, interest }, withExtra: { paidOff, interest } } (paidOff: the day it's back to $0, or null
+// when it isn't in the years looked at; interest: what it pays from today until then), or null for an account it
+// doesn't know.
+function accountPayoff(index, projection, { extra = 0, frequency = "monthly", first = addDays(today, 1) } = {}) {
+  const parts = projection.accountParts(index);
+  if (!parts) return null;
+  const until = projection.until;
+  const round = (amount) => Math.round(amount * 100) / 100;
+  const run = (more) => {
+    const entries = [...parts.entries, ...more];
+    const credits = parts.interest ? interestCredits(parts.start, entries, parts.interest, until) : [];
+    const events = [...entries, ...credits.map(credit => ({ ...credit, interest: true }))].sort((a, b) => a.date - b.date);
+    let balance = parts.start;
+    let at = 0;
+    while (at < events.length && events[at].date <= today) balance += events[at++].change;
+    const owed = round(-balance);
+    let interest = 0;
+    while (at < events.length && balance < 0) {
+      const date = events[at].date;
+      while (at < events.length && events[at].date.getTime() === date.getTime()) {
+        balance += events[at].change;
+        if (events[at].interest) interest += events[at].change;
+        at++;
+      }
+      if (round(balance) >= 0) return { owed, paidOff: date, interest: round(-interest) };
+    }
+    return { owed, paidOff: owed <= 0 ? today : null, interest: round(-interest) };
+  };
+  const now = run([]);
+  const extras = extra > 0 ? paymentDays(first, frequency, until).filter(day => day > today).map(date => ({ date, change: extra })) : [];
+  return { owed: now.owed, now: { paidOff: now.paidOff, interest: now.interest }, withExtra: extra > 0 ? run(extras) : null };
 }
 
 // New account (index null) or change the tapped one. fields: { name, balance (today's, a number; leave it out
-// to keep it), interest ({ rate } a year in %, or null for none; leave it out to keep it), max (the most it can hold,
-// like a credit card's limit: a number, or null for none; leave it out to keep it) }. A new name goes on its
-// entries and tracker aliases too, so they stay with it. A balance sets the starting amount so today's balance comes
-// out to it (the entries stay as they are). A new balance or a new rate starts interest counting from today, with
-// the interest so far kept in today's balance.
+// to keep it), interest ({ rate (a year in %), compound, every, day (see accountInterest; each left out is the
+// default) }, or null for none; leave it out to keep it), max (the most it can hold, like a credit card's limit: a
+// number, or null for none; leave it out to keep it) }. A new name goes on its entries and tracker aliases too, so they
+// stay with it. A balance sets the starting amount so today's balance comes out to it (the entries stay as they are). A
+// new balance or new interest starts interest counting from today, with the interest so far kept in today's balance.
 function accountEntry(fields, index) {
   let name = capitalize(String(fields.name || "").replace(/\s+/g, " ").trim());
   let clean = cleanString(name);
@@ -2469,6 +2678,9 @@ function accountEntry(fields, index) {
     throw new BudgetInputError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}).`);
   }
   if (rate !== undefined) rate = Math.round(rate * 1000) / 1000;
+  // How it compounds, how often it's added, and on what day (see interestSettings)
+  const oldInterest = row ? accountInterest(row) : null;
+  const settings = rate ? interestSettings(fields.interest, oldInterest ? oldInterest.day : today.getDate()) : null;
   let max = fields.max === undefined ? undefined : (fields.max === null ? 0 : Number(fields.max));
   if (max !== undefined && (!Number.isFinite(max) || max < 0 || max > MAX_AMOUNT)) {
     throw new BudgetInputError("Enter the most it can hold, like 2000.00 (up to $1,000,000,000), or leave Max blank.");
@@ -2479,10 +2691,11 @@ function accountEntry(fields, index) {
   formEntryRow[4] = "";
   formEntryRow[5] = "";
   if (isNew) {
-    list.push([name, formatMoney(balance || 0), "", balance ? formatMoney(balance) : "", rate ? String(rate) : "", rate ? formatToMMDDYYYY(today) : "", maxText]);
+    const row = [name, formatMoney(balance || 0), "", balance ? formatMoney(balance) : "", rate ? String(rate) : "", rate ? formatToMMDDYYYY(today) : "", maxText, ...(settings ? settings.columns : ["", "", ""])];
+    list.push(row);
     formEntryRow[2] = "🏦 New Account";
     if (balance) formEntryRow[5] = "Balance: " + formatMoney(balance);
-    if (rate) formEntryRow[6] = `Interest: ${rate}% a year`;
+    if (rate) formEntryRow[6] = `Interest: ${describeInterest(accountInterest(row))}`;
     if (maxText) formEntryRow[6] = [formEntryRow[6], `Max: ${maxText}`].filter(Boolean).join(", ");
     return {};
   }
@@ -2496,18 +2709,23 @@ function accountEntry(fields, index) {
   formEntryRow[2] = "🏦 Change Account";
   const summary = accountSummaries().find(account => account.index === index);
   const now = summary ? summary.today : 0;
-  const oldRate = summary && summary.interest ? summary.interest.rate : 0;
+  const oldRate = oldInterest ? oldInterest.rate : 0;
   const newRate = rate === undefined ? oldRate : rate;
+  const interestChanged = newRate !== oldRate || (!!settings && !!oldInterest && ["compound", "every", "day"].some(key => settings[key] !== oldInterest[key]));
   const balanceChanged = balance !== null && Math.abs(now - balance) >= 0.005;
-  if (balanceChanged || newRate !== oldRate) {
+  // (Its settings written out in full: the day it's added stays put when interest starts counting again from today)
+  if (oldInterest) [row[7], row[8], row[9]] = interestSettings(oldInterest, oldInterest.day).columns;
+  if (newRate && settings) [row[7], row[8], row[9]] = settings.columns;
+  if (balanceChanged || interestChanged) {
     // Today's balance is the one typed (or stays what it is, interest so far and all), and interest counts from today
     const target = balanceChanged ? balance : now;
     const start = Math.round((target - (summary ? summary.entriesToday : 0)) * 100) / 100;
     row[3] = start ? formatMoney(start) : "";
     row[4] = newRate ? String(newRate) : "";
     row[5] = newRate ? formatToMMDDYYYY(today) : "";
+    if (!newRate) [row[7], row[8], row[9]] = ["", "", ""];
     if (balanceChanged) formEntryRow[5] = `Balance: ${formatMoney(balance)} (was ${formatMoney(now)})`;
-    if (newRate !== oldRate) formEntryRow[6] = newRate ? `Interest: ${newRate}% a year` : "Interest: Off";
+    if (interestChanged) formEntryRow[6] = newRate ? `Interest: ${describeInterest(accountInterest(row))}` : "Interest: Off";
   }
   if (max !== undefined && maxText !== String(row[6] ?? "").trim()) {
     row[6] = maxText;
@@ -2801,13 +3019,13 @@ function removeGoal(index) {
 // Bob's page is a column of cards. Data and Accounts always show; each of the rest has its own on/off switch, and
 // starts off (a budget that had goals before the page did starts with Goals on, so they don't go missing). Which ones
 // are on is kept with the budget, so every device, and anyone sharing the budget, sees the same page:
-// accountsData.bob = { cards: [the ids of the cards that are on], purposes: (see ENTRY PURPOSES) }. It's left out
-// until something's been set, so loading a budget alone never counts as a change.
+// accountsData.bob = { cards: [the ids of the cards that are on], purposes, wavelengths (see WAVELENGTH PLANNING) }.
+// It's left out until something's been set, so loading a budget alone never counts as a change.
 
 // Each switchable card's id and its name (for Change Logs; the page has its own words)
 const BOB_CARDS = new Map([
   ["goals", "Goals"],
-  ["purposes", "Needs, Wants, And Future"],
+  ["purposes", "Wavelength Planning"],
   ["payday", "Payday"],
   ["pace", "Spending Pace"],
   ["bills", "Big Bills"],
@@ -2816,17 +3034,20 @@ const BOB_CARDS = new Map([
   ["refund", "Refunds"]
 ]);
 
-// The stored settings, checked: { cards, purposes }, or null with nothing stored (and no goals)
+// The stored settings, checked: { cards, purposes, wavelengths (only when they aren't the defaults) }, or null with
+// nothing stored (and no goals)
 function normalizeBob(stored, hasGoals) {
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return hasGoals ? { cards: ["goals"], purposes: {} } : null;
   const cards = Array.isArray(stored.cards) ? [...BOB_CARDS.keys()].filter(id => stored.cards.includes(id)) : [];
+  const wavelengths = normalizeWavelengths(stored.wavelengths);
+  const known = new Set((wavelengths || DEFAULT_WAVELENGTHS).map(wave => wave.id));
   const purposes = {};
   const kept = stored.purposes && typeof stored.purposes === "object" && !Array.isArray(stored.purposes) ? stored.purposes : {};
   for (const [key, purpose] of Object.entries(kept).slice(0, MAX_PURPOSES)) {
     // (A "__proto__" key would replace the object's prototype instead of adding a title)
-    if (key !== "__proto__" && key.length <= MAX_ENTRY_TITLE && ENTRY_PURPOSES.includes(purpose)) purposes[key] = purpose;
+    if (key !== "__proto__" && key.length <= MAX_ENTRY_TITLE && known.has(purpose)) purposes[key] = purpose;
   }
-  return { cards, purposes };
+  return wavelengths ? { cards, purposes, wavelengths } : { cards, purposes };
 }
 
 // The settings to change, made when there are none yet
@@ -2852,30 +3073,63 @@ function turnBobCard(id, on) {
   });
 }
 
-/* ---------- Entry purposes (Bob's Needs, Wants, And Future card) ---------- */
-// What an entry's money is for: Needs (rent, groceries, bills), Wants (eating out, fun), or Future (savings, paying down
-// debt), or none. It's kept for each title (as the tracker compares them, titleKey: "Groceries → Cash" is Groceries), so
-// every entry with a title shares it, on every day: accountsData.bob.purposes: { title -> "needs" | "wants" |
-// "future" } (a title with none isn't kept). Once that card is on, every form that makes or changes an entry asks for it
-// at the bottom, and the card's pie chart adds up what each one cost.
+/* ---------- Wavelength Planning (Bob's card for it) ---------- */
+// What an entry's money is for (its purpose): one of the budget's wavelengths, or none. There are 1 to MAX_WAVELENGTHS
+// of them, each named as the person likes, in order from the longest wavelength to the shortest, like light's spectrum
+// (DEFAULT_WAVELENGTHS until they're changed). A purpose is kept for each title (as the tracker compares them,
+// titleKey: "Groceries → Cash" is Groceries), so every entry with the title shares it, on every day:
+// accountsData.bob.purposes: { title -> a wavelength's id } (a title with none isn't kept), and
+// accountsData.bob.wavelengths: [{ id, name }] (left out while they're the defaults). Once the card is on, every form
+// that makes or changes an entry asks for it at the bottom, with a button for each wavelength, and the card's spectrum
+// adds up what each one cost.
 
-const ENTRY_PURPOSES = ["needs", "wants", "future"];
-const PURPOSE_NAMES = new Map([["none", "None"], ["needs", "Needs"], ["wants", "Wants"], ["future", "Future"]]);
+const DEFAULT_WAVELENGTHS = [{ id: "needs", name: "Needs" }, { id: "wants", name: "Wants" }, { id: "future", name: "Future" }];
+const MAX_WAVELENGTHS = 10;
+const MAX_WAVELENGTH_NAME = 30;
+const WAVELENGTH_ID = /^[a-z0-9]{1,24}$/;
 const MAX_PURPOSES = 2000;
 
-// A title's purpose: "needs", "wants", "future", or "none"
+// The budget's wavelengths, in order: [{ id, name }]
+function wavelengthList() {
+  return accountsData?.bob?.wavelengths || DEFAULT_WAVELENGTHS;
+}
+
+// A wavelength's name ("None" for none, or one that's been taken out)
+function wavelengthName(id) {
+  return wavelengthList().find(wave => wave.id === id)?.name ?? "None";
+}
+
+// Stored wavelengths, checked: [{ id, name }] (1 to MAX_WAVELENGTHS, each id and name once), or null for the defaults
+function normalizeWavelengths(stored) {
+  if (!Array.isArray(stored)) return null;
+  const list = [];
+  const ids = new Set();
+  const names = new Set();
+  for (const wave of stored) {
+    const id = String(wave?.id ?? "");
+    const name = String(wave?.name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_WAVELENGTH_NAME);
+    if (!WAVELENGTH_ID.test(id) || !name || ids.has(id) || names.has(name.toLowerCase())) continue;
+    ids.add(id);
+    names.add(name.toLowerCase());
+    list.push({ id, name });
+    if (list.length === MAX_WAVELENGTHS) break;
+  }
+  return list.length > 0 ? list : null;
+}
+
+// A title's purpose: one of the wavelengths' ids, or "none"
 function purposeOf(title) {
   const key = titleKey(String(title ?? ""));
   const purposes = accountsData?.bob?.purposes;
   if (!key || !purposes || !Object.prototype.hasOwnProperty.call(purposes, key)) return "none";
-  return ENTRY_PURPOSES.includes(purposes[key]) ? purposes[key] : "none";
+  return wavelengthList().some(wave => wave.id === purposes[key]) ? purposes[key] : "none";
 }
 
-// Within a change: a title gets this purpose ("needs", "wants", "future", or "none"; anything else, like a form
-// without the question, leaves it as it is). Change Logs say so. A title new to the list when MAX_PURPOSES titles
-// already have one is refused, or with skipWhenFull just left without one (a quick entry still joins the budget).
+// Within a change: a title gets this purpose (a wavelength's id, or "none"; anything else, like a form without the
+// question, leaves it as it is). Change Logs say so. A title new to the list when MAX_PURPOSES titles already have one
+// is refused, or with skipWhenFull just left without one (a quick entry still joins the budget).
 function noteEntryPurpose(title, purpose, skipWhenFull = false) {
-  if (purpose !== "none" && !ENTRY_PURPOSES.includes(purpose)) return;
+  if (purpose !== "none" && !wavelengthList().some(wave => wave.id === purpose)) return;
   const key = titleKey(String(title ?? ""));
   if (!key || purposeOf(title) === purpose) return;
   const bob = bobSettings();
@@ -2885,18 +3139,56 @@ function noteEntryPurpose(title, purpose, skipWhenFull = false) {
     const isNew = !Object.prototype.hasOwnProperty.call(bob.purposes, key);
     if (isNew && Object.keys(bob.purposes).length >= MAX_PURPOSES) {
       if (skipWhenFull) return;
-      throw new BudgetInputError(`Up to ${MAX_PURPOSES} titles can have Needs, Wants, or Future. Set some you don't use anymore to None first.`);
+      throw new BudgetInputError(`Up to ${MAX_PURPOSES} titles can be on a wavelength. Set some you don't use anymore to None first.`);
     }
     bob.purposes[key] = purpose;
   }
-  formEntryRow[3] = `${formEntryRow[3]} (${PURPOSE_NAMES.get(purpose)})`.trim();
+  formEntryRow[3] = `${formEntryRow[3]} (${wavelengthName(purpose)})`.trim();
 }
 
 // Only a title's purpose changed (an entry's options with nothing else changed)
 function saveEntryPurpose(title, purpose) {
-  return runBudgetAction("🏷️ Entry Purpose", () => {
+  return runBudgetAction("🏷️ Entry Wavelength", () => {
     formEntryRow[3] = capitalize(String(title || "").trim());
     noteEntryPurpose(title, purpose);
+    return {};
+  });
+}
+
+// The wavelengths as Bob's card's window leaves them: [{ id (one that's there now, or null for a new one), name }], in
+// order. A new one gets an id no other one has; titles on one that was taken out have none after. Back to Needs, Wants,
+// and Future, they're left out of the budget again.
+function saveWavelengths(list) {
+  return runBudgetAction("🌈 Wavelengths", () => {
+    if (!Array.isArray(list) || list.length < 1 || list.length > MAX_WAVELENGTHS) throw new BudgetInputError(`Keep 1 to ${MAX_WAVELENGTHS} wavelengths.`);
+    const current = wavelengthList();
+    const taken = new Set(current.map(wave => wave.id));
+    const kept = new Set();
+    const names = new Set();
+    const next = list.map(item => {
+      const name = String(item?.name ?? "").replace(/\s+/g, " ").trim();
+      if (!name) throw new BudgetInputError("Give every wavelength a name.");
+      if (name.length > MAX_WAVELENGTH_NAME) throw new BudgetInputError(`A wavelength's name can be up to ${MAX_WAVELENGTH_NAME} characters.`);
+      if (names.has(name.toLowerCase())) throw new BudgetInputError(`Two wavelengths can't both be called ${name}.`);
+      names.add(name.toLowerCase());
+      const id = current.some(wave => wave.id === item.id) && !kept.has(item.id) ? item.id : null;
+      if (id) kept.add(id);
+      return { id, name };
+    });
+    for (const wave of next) {
+      if (wave.id) continue;
+      let n = 1;
+      while (taken.has(`w${n}`)) n++;
+      wave.id = `w${n}`;
+      taken.add(wave.id);
+    }
+    const bob = bobSettings();
+    const gone = current.filter(wave => !kept.has(wave.id));
+    for (const [title, id] of Object.entries(bob.purposes)) if (gone.some(wave => wave.id === id)) delete bob.purposes[title];
+    if (JSON.stringify(next) === JSON.stringify(DEFAULT_WAVELENGTHS)) delete bob.wavelengths;
+    else bob.wavelengths = next;
+    formEntryRow[3] = next.map(wave => wave.name).join(", ");
+    if (gone.length > 0) formEntryRow[4] = `Taken Out: ${gone.map(wave => wave.name).join(", ")}`;
     return {};
   });
 }
@@ -3402,11 +3694,14 @@ function backupPlans(backup) {
       const mine = Object.entries(mineBob.purposes);
       const theirs = Object.entries(theirBob.purposes);
       const countPurposes = (choice) => mergeKeyed(keyed(mine, ([key]) => key), keyed(theirs, ([key]) => key), choice);
-      // (Which of his cards are on goes with the side that wins)
-      plan("bob", "Bob's Page", "titles with Needs, Wants, or Future", mine.length, theirs.length, countPurposes(null).clashes, (choice) => {
+      // (Which of his cards are on, and the wavelengths, go with the side that wins; a title on a wavelength that side
+      // doesn't have has none)
+      plan("bob", "Bob's Page", "titles on a wavelength", mine.length, theirs.length, countPurposes(null).clashes, (choice) => {
+        const winner = choice === "current" && accountsData.bob ? mineBob : theirBob;
+        const known = new Set((winner.wavelengths || DEFAULT_WAVELENGTHS).map(wave => wave.id));
         const purposes = {};
-        for (const [key, purpose] of countPurposes(choice).items.slice(0, MAX_PURPOSES)) purposes[key] = purpose;
-        accountsData.bob = { cards: [...(choice === "current" && accountsData.bob ? mineBob.cards : theirBob.cards)], purposes };
+        for (const [key, purpose] of countPurposes(choice).items.slice(0, MAX_PURPOSES)) if (known.has(purpose)) purposes[key] = purpose;
+        accountsData.bob = { cards: [...winner.cards], purposes, ...(winner.wavelengths ? { wavelengths: winner.wavelengths.map(wave => ({ ...wave })) } : {}) };
       });
     }
   }
@@ -5268,7 +5563,7 @@ function normalizeApiAccounts(rawData) {
 
   let list = normalizeApiTable(isCurrent ? parsed.list : [], TABLE_SHAPES.accounts);
   if (parsed.version === 2) list.forEach((row, i) => { if (i > 0) row[1] = formatMoney(0); });
-  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since", "Max"];
+  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since", "Max", "Compounds", "Added Every", "Added On"];
   // Each mandatory account: the one marked as it, or one with its name that isn't marked, or a new one after the one
   // before it (a budget whose Savings was renamed to Cash keeps that one, and gets no second Cash)
   let after = 0;
@@ -5279,7 +5574,7 @@ function normalizeApiAccounts(rawData) {
     if (at !== -1) list[at][2] = kind;
     else if (!list.some((row, i) => i > 0 && cleanString(row[0]) === cleanString(name))) {
       at = after + 1;
-      list.splice(at, 0, [name, formatMoney(0), kind, "", "", "", ""]);
+      list.splice(at, 0, [name, formatMoney(0), kind, ...new Array(TABLE_SHAPES.accounts.cols - 3).fill("")]);
     }
     if (at !== -1) after = at;
   }
@@ -5618,25 +5913,25 @@ function landingAmount(entry, date) {
   return entry.percent === null || entry.percent === undefined ? entry.amount : percentAmount(entry.percent, date, entry.sprite, entry.title) ?? entry.amount;
 }
 
-// Walks days in order with each Other Account's balance (balances: Map(account row index -> its balance at the start of
-// the first day)): each day's % entries are worked out from the balances that morning, then the day's entries (and
-// interest) go into them. day(text, date) returns the day's text with its % entries' amounts.
-function percentRunner(balances) {
+// Walks days in order, from firstDay, with each Other Account's balance (balances: Map(account row index -> its balance
+// at the start of firstDay)): each day's % entries are worked out from the balances that morning, then the day's
+// entries (and interest) go into them. day(text, date) returns the day's text with its % entries' amounts. summaries:
+// accountSummaries(), for the entries before firstDay.
+function percentRunner(balances, firstDay, summaries = accountSummaries()) {
   const accounts = accountTitleMap();
-  const interest = new Map(accountRows().map(account => [account.index, accountInterest(account.row)]).filter(([, rate]) => rate));
+  // Each account's interest (the way interestCredits works it out), caught up through the day before firstDay
+  const interest = new Map();
+  for (const summary of summaries) {
+    if (summary.interest && balances.has(summary.index)) {
+      interest.set(summary.index, runInterest(summary.start, summary.entries.filter(entry => entry.date < firstDay), summary.interest, addDays(firstDay, -1)).stepper);
+    }
+  }
   const round = (amount) => Math.round(amount * 100) / 100;
-  const creditDay = (rate, date) => {
-    const months = (date.getFullYear() - rate.since.getFullYear()) * 12 + date.getMonth() - rate.since.getMonth();
-    return months >= 1 && addMonths(rate.since, months).getTime() === date.getTime();
-  };
   return {
     balances,
     day(text, date) {
       const morning = new Map(balances);
-      // (Interest the way interestCredits works it out)
-      for (const [index, rate] of interest) {
-        if (balances.has(index) && creditDay(rate, date)) balances.set(index, round(balances.get(index) + Math.round(balances.get(index) * rate.rate / 12) / 100));
-      }
+      for (const [index, stepper] of interest) balances.set(index, round(balances.get(index) + stepper.step(date, balances.get(index))));
       const lines = String(text ?? "").split("\n");
       let changed = false;
       for (let l = 1; l < lines.length; l++) {
@@ -5688,7 +5983,7 @@ function resolvePercentEntries() {
     const before = [...summary.entries, ...summary.interestCredits].filter(item => item.date < today);
     start.set(summary.index, Math.round((summary.start + before.reduce((total, item) => total + item.change, 0)) * 100) / 100);
   }
-  const runner = percentRunner(start);
+  const runner = percentRunner(start, today);
   const byDay = new Map();
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
