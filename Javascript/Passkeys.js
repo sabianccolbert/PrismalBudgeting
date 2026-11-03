@@ -57,18 +57,25 @@ window.Passkeys = (() => {
 
   // ---------- The passkey this device last signed in with ----------
   // Kept on this device (it's the device's, not an account's, so signing out keeps it: Layout.js DEVICE_SETTINGS), so the
-  // login page can try it by itself as soon as it shows. Only its ID, which isn't a secret, and "|declined" after it when
-  // the last try by itself was cancelled (a passkey ID never has a |).
+  // login page can try it by itself as soon as it shows. Only its ID, which isn't a secret, with "|declined" after it when
+  // the last try by itself was cancelled, and "|paused" after a second cancel in a row: then it isn't tried by itself
+  // until this device signs in again, any way (a passkey taken off the device would otherwise ask on every visit). A
+  // passkey ID never has a |.
   const LAST_KEY = "prismal_last_passkey";
   const DECLINED = "|declined";
+  const PAUSED = "|paused";
 
   function storedLast() {
     try { return localStorage.getItem(LAST_KEY) || ""; } catch { return ""; }
   }
 
-  // The ID of the passkey this device last signed in with (or made), or ""
+  // The ID of the passkey this device last signed in with (or made), or "" (one that's paused too)
+  const lastId = () => storedLast().split("|")[0];
+
+  // The passkey to try by itself: the one this device last signed in with, or "" (none, or paused)
   function lastUsed() {
-    return storedLast().split("|")[0];
+    const stored = storedLast();
+    return stored.endsWith(PAUSED) ? "" : stored.split("|")[0];
   }
 
   // This passkey signed in (or was just made), when it's on this device. One on another device (a phone reached by its QR
@@ -79,19 +86,22 @@ window.Passkeys = (() => {
   }
 
   // Its try by itself was cancelled (or the device doesn't have it anymore, and the person closed the browser's window
-  // asking for another device): the first time, that's noted; the second time in a row, it's forgotten
+  // asking for another device): the first time, that's noted; the second time in a row, it's paused
   function declinedLast(credentialId) {
     const stored = storedLast();
     if (!credentialId || stored.split("|")[0] !== credentialId) return;
-    try {
-      if (stored.endsWith(DECLINED)) localStorage.removeItem(LAST_KEY);
-      else localStorage.setItem(LAST_KEY, credentialId + DECLINED);
-    } catch {}
+    try { localStorage.setItem(LAST_KEY, credentialId + (stored.endsWith(DECLINED) ? PAUSED : DECLINED)); } catch {}
+  }
+
+  // This device signed in another way (a password): the last passkey is tried by itself again, its cancels forgotten
+  function resumeLast() {
+    const id = lastId();
+    try { if (id && storedLast() !== id) localStorage.setItem(LAST_KEY, id); } catch {}
   }
 
   // Forget it (only when it's this one, if one is named): it can't sign in anymore, or the account is gone
   function forgetLast(credentialId = "") {
-    try { if (!credentialId || lastUsed() === credentialId) localStorage.removeItem(LAST_KEY); } catch {}
+    try { if (!credentialId || lastId() === credentialId) localStorage.removeItem(LAST_KEY); } catch {}
   }
 
   // ---------- The API's options -> what the browser takes ----------
@@ -215,6 +225,7 @@ window.Passkeys = (() => {
     lastUsed,
     rememberLast,
     declinedLast,
+    resumeLast,
     forgetLast,
     signInRequest,
     addRequest,
