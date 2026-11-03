@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.03.2026.A";
+  const SITE_VERSION = "11.03.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -37,8 +37,8 @@
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
     "/Javascript/Layout.js": "04622646fe",
-    "/Javascript/Login.js": "d8695eb281",
-    "/Javascript/Passkeys.js": "2403cf6847",
+    "/Javascript/Login.js": "c506a7ae6a",
+    "/Javascript/Passkeys.js": "e67395c634",
     "/Javascript/Process Budget.js": "f6dcdc6eda",
     "/Javascript/Quick Entry.js": "df58d4c240",
     "/Javascript/Session.js": "988bbb66b5",
@@ -46,7 +46,7 @@
     "/Javascript/Sounds.js": "4cfba7dffa",
     "/Javascript/Spreadsheets Page.js": "5e5152eca6",
     "/Javascript/Spreadsheets.js": "13d46a59b4",
-    "/Javascript/Sprites.js": "13f4299e80",
+    "/Javascript/Sprites.js": "c6c86160d9",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
     "/Resources/Sounds/Ambient2.mp3": "aab38039a1",
@@ -66,7 +66,7 @@
     "/Resources/Sprites/Hidden.webp": "cb92741fc5",
     "/Resources/Sprites/InBank.webp": "40a6bd5f60",
     "/Resources/Sprites/Negative.webp": "4f6dda7720",
-    "/Resources/Sprites/Recurring.webp": "6b1b7560bb",
+    "/Resources/Sprites/Recurring.webp": "6cb875e72a",
     "/Resources/Sprites/Regular.webp": "660dede305",
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",

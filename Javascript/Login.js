@@ -657,8 +657,9 @@ passkeyBtn.addEventListener('click', async () => {
 // While it's asking, the device doesn't offer its own sign-in help too (its saved passwords under the passkey's sheet):
 // the username and password boxes wait (holdSignInBoxes), and so does passkey autofill. Some browsers (like Safari) only
 // open a passkey request right in a tap, and say no at once otherwise; then, or when it's cancelled, the page carries on
-// as usual (the boxes with the device's own help, the button, and the passkeys under the username box). Cancelled twice
-// in a row (or the device doesn't have that passkey anymore), it isn't tried by itself again until a passkey signs in.
+// as usual (the boxes with the device's own help, the button, and the passkeys under the username box), and a page that
+// wasn't in front yet tries it again once it is. Cancelled twice in a row (or the device doesn't have that passkey
+// anymore), it isn't tried by itself again until this device signs in again (with a password too).
 const lastPasskeyToTry = () => (Passkeys.usable ? Passkeys.lastUsed() : null);
 let holdingSignIn = false; // The last passkey is being tried (holdSignInBoxes)
 async function tryLastPasskey() {
@@ -679,15 +680,28 @@ async function tryLastPasskey() {
   try {
     credential = await navigator.credentials.get({ publicKey: Passkeys.signInRequest(signInReady.options, only) });
   } catch (error) {
-    // (A no that came at once is the browser's own, not the person's)
-    if (error.name === 'NotAllowedError' && Date.now() - started >= Passkeys.INSTANT_MS) Passkeys.declinedLast(only);
+    // (A no that came at once is the browser's own, not the person's. One while the page wasn't in front, like a window
+    // that opened behind another, is tried again once it is.)
+    const atOnce = Date.now() - started < Passkeys.INSTANT_MS;
+    if (error.name === 'NotAllowedError' && !atOnce) Passkeys.declinedLast(only);
     else if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') console.warn("The passkey wasn't tried by itself:", error);
     holdSignInBoxes(false);
     if (mode === 'login') startPasskeyAutofill();
+    if (error.name === 'NotAllowedError' && atOnce && !document.hasFocus()) tryOnceInFront();
     return;
   }
   holdSignInBoxes(false);
   await finishPasskeySignIn(credential);
+}
+
+// The last passkey's try by itself, again when the page comes in front (once per visit)
+let waitedForFront = false;
+function tryOnceInFront() {
+  if (waitedForFront) return;
+  waitedForFront = true;
+  window.addEventListener('focus', () => {
+    if (mode === 'login' && !holdingSignIn) tryLastPasskey();
+  }, { once: true });
 }
 
 // The username and password boxes wait (disabled, and their autocomplete off) while the last passkey is tried by itself,
@@ -747,6 +761,7 @@ let addPreparing = null;
 // to the budget (nothing about passkeys changes).
 function signedIn(data, password) {
   saveSession(data);
+  Passkeys.resumeLast(); // (A passkey whose tries by itself were cancelled is tried again next time)
   if (Passkeys.usable && passkeyInput.checked) {
     offerPassword = password;
     setMode('offer');
