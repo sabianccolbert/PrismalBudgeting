@@ -705,7 +705,9 @@ const Spreadsheets = (() => {
       }
 
       if (date < keepFrom || date > keepTo) continue;
-      const ownTitle = capitalize(splitAccount(title.replace(/\s+/g, " ").trim()).title).slice(0, MAX_TITLE);
+      // (Its own title without the arrows that mark an Other Account, like a typed one, see TITLE_ARROW: "Refund ← Store"
+      // would otherwise read as a Transfer from an account called Store)
+      const ownTitle = capitalize(splitAccount(title.replace(/\s+/g, " ").trim()).title.replace(/\s*[←→]\s*/g, " ").trim()).slice(0, MAX_TITLE);
       const fullTitle = withAccount(ownTitle, account);
       // (A % entry's amount is about what it comes to; each day it lands works out its own)
       if (percent !== null && percent !== 0) {

@@ -246,8 +246,8 @@ function trackerCells(tr, row) {
   tr.appendChild(noTranslate(cell(row[3], "amountCell")));
   const aliases = cell("", "aliasCell");
   aliases.appendChild(aliasBox(trackerAliasText(row)));
-  // (Undefined and Transfers list entry titles, which are the person's words)
-  tr.appendChild(isAuto && !["undefined", "transfers"].includes(cleanString(row[0])) ? aliases : noTranslate(aliases));
+  // (Undefined and Transfers list entry titles, and Interest accounts' names, which are the person's words)
+  tr.appendChild(isAuto && !["undefined", "transfers", "interest"].includes(cleanString(row[0])) ? aliases : noTranslate(aliases));
 }
 
 // A row's aliases scroll in a short box, so a long list doesn't make its row tall. Tapping a box with more in it than
@@ -337,7 +337,7 @@ function renderAccountsPage(view) {
     renderEntry(tr, row, index) {
       const summary = summaries.get(index);
       tr.appendChild(noTranslate(cell(row[0], "titleCell")));
-      tr.appendChild(noTranslate(balanceCell(summary ? summary.today : 0, row)));
+      tr.appendChild(noTranslate(balanceCell(summary ? summary.today : 0, row, summary?.interest?.separate ? summary.owed ?? 0 : null)));
       tr.appendChild(noTranslate(cell(formatMoney(ahead.accounts.get(index) ?? 0), "amountCell")));
     },
     onEntryClick: (index, origin) => openAccountPanel(origin, index)
@@ -347,13 +347,20 @@ function renderAccountsPage(view) {
 }
 
 // An account's balance today, with its max after it when it has one ("$500.00/$2000.00"). On a narrow screen the max can
-// go under the balance, each staying whole.
-function balanceCell(balance, row) {
-  const td = cell(formatMoney(balance), "amountCell");
+// go under the balance, each staying whole. owed: with Separate Interest, the part that's interest, which shows under the
+// rest on a line of its own (null without it).
+function balanceCell(balance, row, owed = null) {
+  const rest = owed === null ? balance : Math.round((balance - owed) * 100) / 100;
+  const td = cell(formatMoney(rest), "amountCell");
   const max = accountMax(row);
-  if (max === null) return td;
-  td.classList.add("withMax");
-  td.replaceChildren(BudgetUI.element("span", "", formatMoney(balance)), document.createElement("wbr"), BudgetUI.element("span", "", `/${formatMoney(max)}`));
+  if (max !== null) {
+    td.classList.add("withMax");
+    td.replaceChildren(BudgetUI.element("span", "", formatMoney(rest)), document.createElement("wbr"), BudgetUI.element("span", "", `/${formatMoney(max)}`));
+  }
+  if (owed !== null) {
+    td.classList.add("withInterest");
+    td.append(BudgetUI.element("span", "interestLine", `Interest ${formatMoney(owed)}`));
+  }
   return td;
 }
 
@@ -416,7 +423,8 @@ function accountsTotal(summaries, ahead) {
 }
 
 // Change Logs (the spreadsheet's "Form Entries" tab), newest first:
-// [time, duration, action, detail, detail, detail, detail, status]
+// [time, duration, action, detail, detail, detail, detail, status, what it changed (for its Undo, see CHANGE LOG UNDO in
+// Process Budget.js)]
 function renderLogsPage(view) {
   renderSearchToolbar();
   view.replaceChildren();
@@ -437,9 +445,10 @@ function renderLogsPage(view) {
   markClipped(tableEl);
 }
 
-const LOG_COLUMNS = ["Time", "Took", { label: "Action", className: "actionHead" }, "Details"];
+const LOG_COLUMNS = ["Time", "Took", { label: "Action", className: "actionHead" }, "Details", { label: "Undo", className: "undoHead" }];
 
-// One Change Logs row (the page's table, and its Search results)
+// One Change Logs row (the page's table, and its Search results), with Undo at its right while its change can be taken
+// back ("Undone" once it was)
 function logRow(row) {
   const tr = document.createElement("tr");
   if (row[7] === "Error") tr.className = "errorRow";
@@ -452,12 +461,40 @@ function logRow(row) {
   const detailsCell = cell("", "detailsCell");
   detailsCell.appendChild(aliasBox(details.join("\n"), "detailsBox"));
   tr.appendChild(noTranslate(detailsCell)); // Titles, amounts, and dates
+  const undoCell = cell("", "undoCell");
+  const record = logRecord(row);
+  if (record && !record.undone) {
+    const button = BudgetUI.element("button", "budgetButton logUndo", "Undo");
+    button.type = "button";
+    button.setAttribute("aria-label", `Undo ${String(row[2]).trim()} (${String(row[0]).trim()})`);
+    button.addEventListener("click", () => undoFromLogs(row, record, button));
+    undoCell.appendChild(button);
+  } else if (record) {
+    undoCell.appendChild(BudgetUI.element("span", "logUndone", "Undone"));
+  }
+  tr.appendChild(undoCell);
   return tr;
 }
 
-// Paycheck Calculator: the last calculation's results and how they add up, then the inputs
-// (filled in with the last calculation's values) to calculate again
+// A row's Undo was tapped: after asking, its change is taken back (and logged), or a note says why it can't be
+async function undoFromLogs(row, record, button) {
+  const what = `${String(row[2]).trim()} (${String(row[0]).trim()})`;
+  if (!window.confirm(`Undo this change? ${what}`)) return;
+  button.disabled = true;
+  const result = await undoLogRow(record.id);
+  if (button.isConnected) button.disabled = false;
+  // (Its own row is written once the page has drawn the change, so it's drawn again to show it)
+  renderCurrentPage();
+  if (!result.ok) return BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+  if (result.saved === false) return BudgetUI.warnIfUnsaved(result);
+  BudgetUI.showToast(`Undone: ${result.undoneLog}. It's in the Change Logs too, with an Undo of its own.`);
+}
+
+// Paycheck Calculator: the last calculation's results and how they add up, its crystals (see CRYSTALS AND GEMS), then the
+// inputs (filled in with the last calculation's values) to calculate again. A form being typed in (or made into a
+// crystal) stays as it is when the page draws again.
 function renderCalculatorPage(view) {
+  const typing = view.querySelector("form.calculatorForm[data-typing]");
   view.replaceChildren();
   const inputs = readCalculatorInputs();
   const saved = readCalculatorResults();
@@ -476,7 +513,8 @@ function renderCalculatorPage(view) {
 
   if (saved) view.appendChild(paycheckBreakdown(computePaycheck(inputs), inputs));
   else view.appendChild(emptyMessage("Fill in your pay below, then tap Calculate."));
-  view.appendChild(calculatorForm(inputs));
+  const form = typing || calculatorForm(inputs);
+  view.append(crystalShelf(form), form);
 }
 
 // How the take-home pay adds up ($0 lines are left out)
@@ -552,6 +590,7 @@ function calculatorForm(inputs) {
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (form.classList.contains("presetDraft")) return; // (Making a crystal: its own Save keeps it)
     error.hidden = true;
     const values = {};
     for (const field of CALCULATOR_INPUTS) {
@@ -569,6 +608,7 @@ function calculatorForm(inputs) {
 
     const button = form.querySelector("button[type=submit]");
     button.disabled = true;
+    delete form.dataset.typing; // (Calculated: the page draws the form again from what was saved)
     const result = await savePaycheck(values);
     button.disabled = false;
     if (!result.ok) {
@@ -584,12 +624,54 @@ function calculatorForm(inputs) {
   return form;
 }
 
-// Payment Calculator (menu/payments.html): how long paying off a balance owed takes (a loan, a credit card), with
+// The Paycheck Calculator's boxes as they're filled in now: { box: number } for each one that isn't blank ("$25",
+// "7.65%", and "1.5×" read as numbers), or { error } for one that isn't a number
+function calculatorBoxes(form) {
+  const values = {};
+  for (const field of CALCULATOR_INPUTS) {
+    const text = String(form.elements[field.key]?.value ?? "").replace(/%/g, "").replace(/[x×]\s*$/i, "").trim();
+    if (!text) continue;
+    const number = readMoneyInput(text);
+    if (!Number.isFinite(number) || number < 0 || number > MAX_AMOUNT) return { error: `${field.label} needs to be a number (0 or more).` };
+    values[field.key] = number;
+  }
+  return { values };
+}
+
+// The Paycheck Calculator's crystals, over its form
+function crystalShelf(form) {
+  const field = (key) => CALCULATOR_INPUTS.find(input => input.key === key);
+  const shown = (key, value) => (field(key).unit.startsWith("$") ? formatMoney(value) : `${value}${field(key).unit === "%" ? "%" : field(key).unit === "×" ? "×" : ""}`);
+  return presetShelf({
+    store: "crystals",
+    noun: "Crystal",
+    form,
+    help: [
+      "Crystals are paychecks you calculate often, like a regular week and one with overtime, saved so you don't have to type them each time. A crystal keeps the boxes that are filled in when it's saved.",
+      "Add Crystal turns the calculator into a new crystal: fill in only what it should keep (what's already filled in counts too), give it a name if you like, then tap Save Crystal.",
+      "Tap a crystal to put what it keeps into the calculator, then fill in the rest, or just tap Calculate.",
+      "Edit Crystals lets you drag crystals into order by their ≡, or delete them with ×. They're saved with your budget, so every device has the same ones."
+    ],
+    read: () => calculatorBoxes(form),
+    fill(values) {
+      for (const [key, value] of Object.entries(values)) {
+        const input = form.elements[key];
+        if (!input || !field(key) || typeof value !== "number") continue;
+        input.value = value ? (field(key).unit.startsWith("$") ? value.toFixed(2) : String(value)) : "";
+      }
+      form.dataset.typing = "1";
+    },
+    describe: (values) => Object.entries(values).filter(([key]) => field(key)).map(([key, value]) => `${field(key).label} ${shown(key, value)}`)
+  });
+}
+
+// Debt Calculator (menu/payments.html): how long paying off a balance owed takes (a loan, a credit card), with
 // interest worked out like an Other Account's, and what paying more each time does (payOff in Process Budget.js).
 // Picking an Other Account fills in its balance and interest, works out its own pace from the budget (accountPayoff),
-// and lists its entries before and after today, each one tapped to change it. Nothing on it is saved: it's worked out
-// again as anything is typed, and a change to the budget (another device's too) only works the account's part out
-// again.
+// and lists its entries before and after today, each one tapped to change it. It's worked out again as anything is
+// typed, and a change to the budget (another device's too) only works the account's part out again. Its boxes are kept
+// as they're left (a moment after the typing stops: saveDebtFields), and start it the next time, and its gems fill them
+// in (see CRYSTALS AND GEMS).
 let paymentsPage = null; // { el, refresh } while the page shows
 
 function renderPaymentsPage(view) {
@@ -630,7 +712,7 @@ function howLong(from, to) {
   return parts.filter(Boolean).join(", ");
 }
 
-// The Payment Calculator's form, results, and (for an Other Account) its own pace and entries: { el, refresh }
+// The Debt Calculator's form, results, and (for an Other Account) its own pace and entries: { el, refresh }
 function paymentCalculator() {
   const el = BudgetUI.element("div", "paymentsPage");
   const form = BudgetUI.element("form", "budgetCard calculatorForm paymentsForm");
@@ -662,12 +744,29 @@ function paymentCalculator() {
   results.setAttribute("aria-live", "polite");
   const pace = BudgetUI.element("section", "budgetCard paymentsAccount");
   pace.hidden = true;
-  el.append(form, results, pace);
+  const gems = presetShelf({
+    store: "gems",
+    noun: "Gem",
+    form,
+    help: [
+      "Gems are debts you look at often, like a car loan or a credit card's payoff, saved so you don't have to type them each time. A gem keeps the boxes that are filled in when it's saved (never the days).",
+      "Add Gem turns the calculator into a new gem: fill in only what it should keep (what's already filled in counts too), give it a name if you like, then tap Save Gem. With an Other Account picked, it keeps the account, and its balance and interest come from the account each time.",
+      "Tap a gem to put what it keeps into the calculator.",
+      "Edit Gems lets you drag gems into order by their ≡, or delete them with ×. They're saved with your budget, so every device has the same ones."
+    ],
+    read: () => ({ values: debtBoxes(true) }),
+    fill: (values) => fillDebt(values),
+    describe: describeDebt
+  });
+  el.append(gems, form, results, pace);
 
   // The Other Accounts to pick from, each with its balance today (the one picked stays picked while it's there)
   const fillAccounts = () => {
     const picked = account.input.value;
-    const choices = [{ value: "", label: "None (type it in)" }, ...accountSummaries().map(summary => ({ value: String(summary.index), label: `${summary.name} (${formatMoney(summary.today)})` }))];
+    const choices = [{ value: "", label: "None (type it in)" }, ...accountSummaries().map(summary => {
+      const max = accountMax(accountsData.list[summary.index]);
+      return { value: String(summary.index), label: `${summary.name} (${formatMoney(summary.today)}${max ? `/${formatMoney(max)}` : ""})` };
+    })];
     account.input.replaceChildren(...choices.map(choice => {
       const option = BudgetUI.element("option", "", choice.label);
       option.value = choice.value;
@@ -790,18 +889,111 @@ function paymentCalculator() {
       showPace(typed);
     });
   };
+  // The boxes as they are now: { box: value }, with an Other Account picked, the account instead of its balance and
+  // interest (they come from it each time). For a gem (forGem), only the ones filled in, and never the days; otherwise
+  // (to start the calculator next time) every box, days too.
+  function debtBoxes(forGem = false) {
+    const values = {};
+    const summary = accountSummaries().find(item => String(item.index) === account.input.value);
+    if (summary) values.account = summary.name;
+    const rateText = rate.value().replace(/%/g, "");
+    const rateNumber = rateText ? readMoneyInput(rateText) : NaN;
+    if (!summary) {
+      if (owed.value() > 0) values.owed = owed.value();
+      if (Number.isFinite(rateNumber) && rateNumber > 0) values.rate = rateNumber;
+      if (!forGem || values.rate) Object.assign(values, { compound: compound.value(), every: Number(every.value()), day: Number(day.value()) });
+    }
+    if (payment.value() > 0) values.payment = payment.value();
+    if (!forGem || values.payment) values.frequency = frequency.value();
+    if (extra.value() > 0) values.extra = extra.value();
+    if (!forGem) {
+      const firstDay = first.value();
+      const byDay = payBy.value();
+      if (firstDay instanceof Date) values.first = formatToMMDDYYYY(firstDay);
+      if (byDay instanceof Date) values.payBy = formatToMMDDYYYY(byDay);
+    }
+    return values;
+  }
+
+  // Put boxes in (a gem's, or the ones kept from last time): an account picked fills in its balance and interest, like
+  // picking it does; a day that's passed is left as it is
+  function fillDebt(values) {
+    const choose = (select, value, choices) => {
+      if (choices.some(choice => String(choice.value) === String(value))) select.input.value = String(value);
+    };
+    if (typeof values.account === "string") {
+      const summary = accountSummaries().find(item => cleanString(item.name) === cleanString(values.account));
+      if (summary) {
+        account.input.value = String(summary.index);
+        account.input.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        BudgetUI.showToast(`${values.account} isn't one of your Other Accounts anymore, so pick one, or type what's owed.`, true);
+      }
+    } else if ("owed" in values) {
+      account.input.value = "";
+    }
+    if (typeof values.owed === "number") owed.set(values.owed);
+    if (typeof values.rate === "number") rate.input.value = String(values.rate);
+    choose(compound, values.compound, COMPOUNDING_CHOICES);
+    choose(every, values.every, ADDED_CHOICES);
+    choose(day, values.day, DAY_CHOICES);
+    if (typeof values.payment === "number") payment.set(values.payment);
+    choose(frequency, values.frequency, PAYMENT_CHOICES);
+    if (typeof values.extra === "number") extra.set(values.extra);
+    for (const [key, box] of [["first", first], ["payBy", payBy]]) {
+      const date = typeof values[key] === "string" ? createSafeMidnight(values[key], true) : null;
+      if (date && !isNaN(date.getTime()) && date >= today) box.input.value = showDate(date);
+    }
+    projection = null;
+    update();
+  }
+
+  // The boxes are kept a moment after they stop changing (when they changed), and start it the next time
+  let kept = JSON.stringify(calculatorStore("debt"));
+  let keeping = 0;
+  const keepBoxes = () => {
+    clearTimeout(keeping);
+    keeping = setTimeout(async () => {
+      if (form.classList.contains("presetDraft")) return;
+      const values = debtBoxes();
+      if (JSON.stringify(values) === kept) return;
+      kept = JSON.stringify(values);
+      const result = await saveDebtFields(values);
+      if (!result.ok) kept = null;
+    }, DEBT_KEEP_MS);
+  };
+
   form.addEventListener("input", update);
   form.addEventListener("change", update);
+  form.addEventListener("input", keepBoxes);
+  form.addEventListener("change", keepBoxes);
   fillAccounts();
+  const last = calculatorStore("debt");
+  if (last) fillDebt(last);
   update();
   return {
     el,
     refresh() {
       fillAccounts();
+      gems.refresh();
       projection = null;
       update();
     }
   };
+}
+
+// How long the Debt Calculator's boxes stay as they are before they're kept
+const DEBT_KEEP_MS = 2500;
+
+// What a gem keeps, in words, for one without a name: ["Car Loan", "Owed $12000.00", "Payment $350.00"]
+function describeDebt(values) {
+  const words = [];
+  if (values.account) words.push(values.account);
+  if (typeof values.owed === "number") words.push(`Owed ${formatMoney(values.owed)}`);
+  if (typeof values.rate === "number") words.push(`${values.rate}% APR`);
+  if (typeof values.payment === "number") words.push(`Payment ${formatMoney(values.payment)}`);
+  if (typeof values.extra === "number") words.push(`Extra ${formatMoney(values.extra)}`);
+  return words;
 }
 
 // A payoff in words: "Paid off on 03/01/2029: 28 payments (2 years, 4 months), $812.40 in interest, $10,812.40 paid in
@@ -832,7 +1024,7 @@ function scheduleTable(schedule, withExtra) {
   return BudgetUI.field(withExtra ? "Each Payment (with the extra)" : "Each Payment", box);
 }
 
-// An account's entries for the Payment Calculator, in a box that scrolls: the ones coming up (soonest first: on the
+// An account's entries for the Debt Calculator, in a box that scrolls: the ones coming up (soonest first: on the
 // calendar, in Upcoming, and the budget's still to come for a year, with its interest), then today and before (newest
 // first). Each one opens its options when tapped, like in the account's own window.
 function paymentsEntries(summary, projection) {
@@ -845,7 +1037,7 @@ function paymentsEntries(summary, projection) {
   const projected = (parts ? parts.entries : []).filter(entry => entry.coming && entry.date <= yearOut && !listed.has(sameEntry(entry.date, entry.change, entry.title)));
   const coming = projected.map(entry => ({
     date: entry.date,
-    line: `${entry.sprite} ${formatMoney(accountChange(entry.sprite, entry.change))} ${entry.title}`,
+    line: `${entry.sprite} ${formatMoney(entry.amount ?? accountChange(entry.sprite, entry.change))} ${entry.title}`,
     change: entry.change,
     place: "upcoming"
   }));
@@ -860,6 +1052,215 @@ function paymentsEntries(summary, projection) {
   if (before.length) list.append(heading("Today and before"), ...before.map(row));
   if (!ahead.length && !before.length) list.append(heading("No entries yet."));
   return BudgetUI.field("Its Entries", list, { hint: "Tap one to change it. At the right: what it put in or took out." });
+}
+
+//#endregion
+
+// =====================================================================
+// #region CRYSTALS AND GEMS (presets for the calculators' boxes)
+// =====================================================================
+// A calculator's presets, like Quick Entry's prisms are for its form: the Paycheck Calculator's crystals and the Debt
+// Calculator's gems (kept in the calculator table, see CALCULATOR_STORES in Process Budget.js). Each keeps the boxes that
+// were filled in when it was saved, and a name if it was given one, and tapping it puts those in (the rest stay as they
+// are, and nothing is worked out or saved until it's calculated). Add turns the calculator into a new one (it glows, and
+// what's filled in already counts), and Save keeps it; Edit drags them into order (≡) and deletes them (×).
+
+const presetEditing = { crystals: false, gems: false }; // Edit is on (kept while the page draws again)
+
+// store: "crystals" or "gems"; noun: "Crystal" or "Gem"; form: the calculator's form (it glows while one is being made);
+// help: the lines its ? shows; read(): { values } (the boxes filled in now) or { error }; fill(values): puts a preset's
+// boxes in; describe(values): words for each box it keeps, for one without a name. Returns the shelf (a card) with
+// refresh() (its presets as the budget has them now).
+function presetShelf({ store, noun, form, help, read, fill, describe }) {
+  const plural = `${noun}s`;
+  const shelf = BudgetUI.element("section", "budgetCard presetShelf");
+  shelf.setAttribute("aria-label", plural);
+  const title = BudgetUI.element("h3", "", plural);
+  const add = BudgetUI.element("button", "budgetButton primary", `Add ${noun}`);
+  add.type = "button";
+  const helpBox = BudgetUI.element("div", "fieldHelp prismHelp");
+  helpBox.id = `${store}Help`;
+  helpBox.hidden = true;
+  const helpList = BudgetUI.element("ul");
+  helpList.append(...help.map(line => BudgetUI.element("li", "", line)));
+  helpBox.append(helpList);
+  const helpButton = BudgetUI.element("button", "fieldHelpButton", "?");
+  helpButton.type = "button";
+  helpButton.title = `What are ${plural.toLowerCase()}?`;
+  helpButton.setAttribute("aria-label", helpButton.title);
+  helpButton.setAttribute("aria-controls", helpBox.id);
+  helpButton.setAttribute("aria-expanded", "false");
+  helpButton.addEventListener("click", () => {
+    helpBox.hidden = !helpBox.hidden;
+    helpButton.setAttribute("aria-expanded", String(!helpBox.hidden));
+  });
+  const edit = BudgetUI.element("button", "budgetButton presetEdit", `Edit ${plural}`);
+  edit.type = "button";
+  const toolbar = BudgetUI.element("div", "prismToolbar");
+  toolbar.append(add, helpButton, edit);
+
+  // Making one: its name, what to do, and Save or Cancel (the form glows meanwhile)
+  const draft = BudgetUI.element("div", "presetDraftBox");
+  draft.hidden = true;
+  const name = BudgetUI.textField({ label: "Name", placeholder: noun === "Crystal" ? "Regular week, overtime week..." : "Car loan, card payoff...", optional: true, maxLength: MAX_PRESET_NAME });
+  const error = BudgetUI.element("p", "panelError");
+  error.hidden = true;
+  draft.append(name.el, BudgetUI.element("p", "panelHint", `Fill in only the boxes this ${noun.toLowerCase()} should keep, then tap Save ${noun}.`), error,
+    BudgetUI.buttonRow([{ label: `Save ${noun}`, kind: "primary", onClick: () => saveDraft() }, { label: "Cancel", onClick: () => endDraft() }]));
+  const list = BudgetUI.element("ul", "prismList");
+  const empty = BudgetUI.element("p", "panelHint prismEmpty", `No ${plural.toLowerCase()} yet. Fill in the calculator, then tap Add ${noun} to keep it.`);
+  shelf.append(title, toolbar, helpBox, draft, list, empty);
+
+  // A preset's words: its name, or what it keeps
+  const label = (preset) => {
+    if (preset.name) return preset.name;
+    const words = describe(preset.values);
+    return words.length > 2 ? `${words.slice(0, 2).join(", ")}, and ${words.length - 2} more` : words.join(", ") || noun;
+  };
+  const setError = (message) => {
+    error.textContent = message || "";
+    error.hidden = !message;
+  };
+
+  // Making one: the form glows, and it isn't drawn again under it (data-typing) while it's being made
+  let wasTyping = false;
+  let typed = false;
+  const noteTyping = () => { typed = true; };
+  function startDraft() {
+    if (!draft.hidden) return;
+    wasTyping = "typing" in form.dataset;
+    typed = false;
+    form.dataset.typing = "1";
+    form.addEventListener("input", noteTyping);
+    form.classList.add("presetDraft");
+    draft.hidden = false;
+    add.disabled = true;
+    setError("");
+    if (window.matchMedia("(pointer: fine)").matches) name.input.focus({ preventScroll: true });
+  }
+  function endDraft() {
+    form.removeEventListener("input", noteTyping);
+    form.classList.remove("presetDraft");
+    if (!wasTyping && !typed) delete form.dataset.typing;
+    draft.hidden = true;
+    add.disabled = false;
+    name.input.value = "";
+    setError("");
+  }
+  async function saveDraft() {
+    const { values, error: problem } = read();
+    if (problem) return setError(problem);
+    if (Object.keys(values).length === 0) return setError(`Fill in at least one box for this ${noun.toLowerCase()} to keep.`);
+    const presets = calculatorStore(store);
+    if (presets.length >= MAX_PRESETS) return setError(`You can have up to ${MAX_PRESETS} ${plural.toLowerCase()}. Delete one in Edit ${plural} first.`);
+    const preset = { name: name.value(), values };
+    draft.querySelectorAll("button, input").forEach(control => { control.disabled = true; });
+    const result = await saveCalculatorPresets(store, [...presets, preset]);
+    draft.querySelectorAll("button, input").forEach(control => { control.disabled = false; });
+    if (!result.ok) return setError(result.message || "That didn't work. Please try again.");
+    endDraft();
+    if (result.saved === false) BudgetUI.warnIfUnsaved(result);
+    else BudgetUI.showToast(`${noun} saved: ${label(preset)}.`);
+    refresh();
+  }
+
+  // Tapping one puts what it keeps in the calculator, which comes into view with a short glow
+  function apply(preset) {
+    fill(preset.values);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    form.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+    form.classList.remove("prismFlash");
+    void form.offsetWidth; // Restart the glow
+    form.classList.add("prismFlash");
+    setTimeout(() => form.classList.remove("prismFlash"), 1200);
+  }
+
+  async function savePresets(next) {
+    const result = await saveCalculatorPresets(store, next);
+    if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+    else BudgetUI.warnIfUnsaved(result);
+    refresh();
+    return result.ok;
+  }
+
+  // Each one a button; in Edit, a row with ≡ to drag it and × to delete it
+  function refresh() {
+    const presets = calculatorStore(store);
+    if (presets.length === 0) presetEditing[store] = false;
+    const editing = presetEditing[store];
+    list.classList.toggle("isEditing", editing);
+    list.replaceChildren(...presets.map((preset, index) => {
+      const item = BudgetUI.element("li", "prismItem");
+      if (!editing) {
+        const button = BudgetUI.noTranslate(BudgetUI.element("button", "budgetButton prismButton", label(preset)));
+        button.type = "button";
+        button.title = describe(preset.values).join(", ");
+        button.addEventListener("click", () => apply(preset));
+        item.append(button);
+        return item;
+      }
+      item.classList.add("prismEditRow");
+      item.dataset.index = index;
+      const handle = BudgetUI.element("span", "prismHandle", "≡");
+      handle.title = "Hold and drag to move";
+      handle.setAttribute("aria-label", `Move ${label(preset)}`);
+      handle.addEventListener("pointerdown", (event) => startPresetDrag(event, item, (order) => savePresets(order.map(i => presets[i]))));
+      const remove = BudgetUI.element("button", "panelClose prismDelete", "×");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Delete ${label(preset)}`);
+      remove.addEventListener("click", () => {
+        if (!window.confirm(`Delete the ${noun.toLowerCase()} ${label(preset)}?`)) return;
+        savePresets(presets.filter((_, i) => i !== index));
+      });
+      item.append(handle, BudgetUI.noTranslate(BudgetUI.element("span", "prismLabel", label(preset))), remove);
+      return item;
+    }));
+    empty.hidden = presets.length > 0;
+    edit.hidden = presets.length === 0;
+    edit.textContent = editing ? "Done" : `Edit ${plural}`;
+    edit.classList.toggle("primary", editing);
+  }
+
+  add.addEventListener("click", () => {
+    presetEditing[store] = false;
+    refresh();
+    startDraft();
+  });
+  edit.addEventListener("click", () => {
+    presetEditing[store] = !presetEditing[store];
+    refresh();
+  });
+  refresh();
+  shelf.refresh = refresh;
+  return shelf;
+}
+
+// Hold a preset's ≡ and drag it up or down; save(order) runs with the new order (the presets' indexes) when it's let go.
+// The pointer is followed on the whole page: moving the row in the list makes the browser let go of a pointer capture.
+function startPresetDrag(event, item, save) {
+  event.preventDefault();
+  const pointerId = event.pointerId;
+  const list = item.parentElement;
+  const order = () => [...list.children].map(row => Number(row.dataset.index));
+  const startOrder = order().join();
+  item.classList.add("dragging");
+  const onMove = (moveEvent) => {
+    if (moveEvent.pointerId !== pointerId) return;
+    const before = [...list.children].find(row => row !== item && moveEvent.clientY < row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2);
+    if (before && item.nextElementSibling !== before) list.insertBefore(item, before);
+    if (!before && list.lastElementChild !== item) list.appendChild(item);
+  };
+  const onEnd = (endEvent) => {
+    if (endEvent.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onEnd);
+    document.removeEventListener("pointercancel", onEnd);
+    item.classList.remove("dragging");
+    if (order().join() !== startOrder) save(order());
+  };
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onEnd);
+  document.addEventListener("pointercancel", onEnd);
 }
 
 //#endregion
@@ -892,7 +1293,7 @@ const PAGE_SEARCHES = {
     tableClass: "logsTable",
     columns: LOG_COLUMNS,
     rows: () => logsData.map((row, index) => ({ index, row })).slice(1).filter(({ row }) => !isBlankRow(row)),
-    text: (row) => row.join(" "),
+    text: (row) => row.slice(0, LOG_UNDO_COLUMN).join(" "),
     render: logRow,
     open: null
   }
@@ -1361,17 +1762,21 @@ function openRecurringPanel(origin, index) {
       const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : null, optional: true });
       // Hidden and Transfer entries can move money into or out of an Other Account (like a savings transfer). The type and
       // account come before the amount, which can be a % of the account picked.
-      const account = BudgetUI.accountField({ accounts: otherAccounts(), amount, type: () => refraction.value(), account: existingTitle.account });
+      const account = BudgetUI.accountField({ accounts: otherAccounts(), amount, type: () => refraction.value(), account: existingTitle.account, from: existingTitle.from });
       const refraction = BudgetUI.refractionField({
         value: existing ? getSpecialType(existing[5]) : "❗️",
         allowAuto: false,
         onChange: (key) => account.setVisible(BudgetUI.isAccountType(key))
       });
       account.setVisible(BudgetUI.isAccountType(refraction.value()));
-      // Every day it lands on gets a placeholder (offered while it can still land: no End Date, or one from today on)
+      // Every day it lands on gets a placeholder (offered while it can still land: no End Date, or one from today on), each
+      // deleted once its day passes, or that many days before or after it
+      const keeps = existing ? placeholderKeeps(existing[5]) : null;
       const placeholder = BudgetUI.placeholderField({
         checked: !!existing && isPlaceholder(existing[5]),
-        hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes."
+        until: typeof keeps === "number" ? keeps : null,
+        days: true,
+        hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes (or as many days before or after it as you pick under it)."
       });
       const showPlaceholder = () => placeholder.setDate(end.value() ?? null);
       end.input.addEventListener("input", showPlaceholder);
@@ -1379,7 +1784,7 @@ function openRecurringPanel(origin, index) {
       showPlaceholder();
       // Its Wavelength (once Bob's card for it is on): its title's, following a new title as it's typed
       const purpose = BudgetUI.purposeField({ shown: bobCardOn("purposes"), title: existing ? String(existing[0]) : "" });
-      const followTitle = () => purpose.follow(withAccount(title.value(), account.value()));
+      const followTitle = () => purpose.follow(withAccount(title.value(), account.value(), account.from()));
       title.input.addEventListener("input", followTitle);
       account.el.addEventListener("pick", followTitle);
       // Its own note, under the buttons (each day it lands on can have one of its own too)
@@ -1393,12 +1798,13 @@ function openRecurringPanel(origin, index) {
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        if (title.value().includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
+        if (hasTitleArrow(title.value())) return panel.setError(TITLE_ARROW);
         // (A blank amount is $0.00)
         const { percent, error: percentError } = BudgetUI.readPercentField(amount);
         if (percentError) return panel.setError(percentError);
-        const fields = { title: withAccount(title.value(), account.value()), amount: percent !== null ? undefined : amount.value() ?? 0, percent, startDate: start.value(), endDate: end.value() };
+        const fields = { title: withAccount(title.value(), account.value(), account.from()), amount: percent !== null ? undefined : amount.value() ?? 0, percent, startDate: start.value(), endDate: end.value() };
         if (!fields.title) return panel.setError("Give the recurring entry a title.");
+        if (account.from() && cleanString(account.from()) === cleanString(account.value())) return panel.setError(SAME_ACCOUNT);
         if (percent === null && Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
         if (percent === null && Math.abs(fields.amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
@@ -1408,6 +1814,10 @@ function openRecurringPanel(origin, index) {
         fields.endDate = fields.endDate || "None";
         // (Left as it was when the switch isn't there: an End Date before today)
         if (!placeholder.el.hidden) fields.placeholder = placeholder.value();
+        if (fields.placeholder) {
+          fields.until = placeholder.until();
+          if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return panel.setError(`Enter how many days before or after its day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
+        }
         fields.purpose = purpose.value();
         if (note.value() !== currentNote) fields.note = note.value();
         BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
@@ -1485,14 +1895,23 @@ function openAccountPanel(origin, index) {
     title: existing ? "Change Account" : "New Account",
     build(form, panel) {
       const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Investments, HSA, a credit card...", maxLength: MAX_ACCOUNT_NAME });
+      // With Separate Interest, the interest owed (or earned) is a balance of its own, beside the rest (Balance today)
+      const owedNow = summary?.interest?.separate ? summary.owed ?? 0 : 0;
       // Negative: money owed, like on a credit card
       const balance = BudgetUI.amountField({
         label: "Balance today",
-        amount: summary ? summary.today : null,
+        amount: summary ? Math.round((summary.today - owedNow) * 100) / 100 : null,
         signs: BudgetUI.BALANCE_SIGNS,
         hint: "What's in the account today (Negative for money owed, like a credit card's). Changing it doesn't add an entry: Hidden and Transfer entries with this account picked add to it from here."
       });
       const interest = interestFields(summary ? summary.interest : null);
+      const owedBox = BudgetUI.amountField({
+        label: "Interest today",
+        amount: owedNow,
+        signs: BudgetUI.BALANCE_SIGNS,
+        hint: "The interest owed (Negative) or earned, kept apart from the balance. A payment toward the account pays it first."
+      });
+      owedBox.el.classList.add("owedField");
       // Max: typed like a cash register (blank for none)
       const currentMax = existing ? accountMax(existing) : null;
       const max = BudgetUI.textField({
@@ -1503,24 +1922,52 @@ function openAccountPanel(origin, index) {
         hint: "The most it can hold, like a credit card's limit. Its balance then shows over it, like $500.00/$2000.00."
       });
       BudgetUI.cashRegister(max.input);
-      const fields = [name.el, balance.el, interest.el, max.el];
+      const fields = [name.el, balance.el, owedBox.el, interest.el, max.el];
       if (isMandatory) fields.push(BudgetUI.element("p", "panelHint", mandatoryAccountNote(existing[0])));
       const entries = summary ? accountEntriesField(index, existing[0]) : null;
       if (entries) fields.push(entries.el);
-      // The balance shown, to tell a typed one from one that only followed its entries
-      let shownBalance = summary ? summary.today : null;
-      const showBalance = (amount) => {
-        shownBalance = amount;
-        balance.input.value = Math.round(amount * 100) !== 0 ? Math.abs(amount).toFixed(2) : "";
-        balance.setSign(amount < 0 ? -1 : 1);
+      // The balances shown (with Separate Interest, the rest and the interest), to tell typed ones from ones that only
+      // followed its entries
+      let shownBalance = summary ? summary.today - owedNow : null;
+      let shownOwed = owedNow;
+      const showAmount = (box, amount) => {
+        box.input.value = Math.round(amount * 100) !== 0 ? Math.abs(amount).toFixed(2) : "";
+        box.setSign(amount < 0 ? -1 : 1);
       };
+      const showBalance = (amount, owed = 0) => {
+        shownBalance = Math.round((amount - owed) * 100) / 100;
+        shownOwed = owed;
+        showAmount(balance, shownBalance);
+        showAmount(owedBox, owed);
+      };
+      // The Interest today box shows while Separate Interest is on. Turned on, the balance stays as it shows (and the
+      // interest starts at $0.00); turned off, the interest goes back into it (still counting as typed, if either was).
+      const showOwed = () => { owedBox.el.hidden = !interest.separate(); };
+      showOwed();
+      interest.onSeparate((on) => {
+        const typed = balance.value() ?? 0;
+        const owed = owedBox.value() ?? 0;
+        if (on) {
+          showAmount(owedBox, 0);
+        } else {
+          const untouched = typed === Math.round((shownBalance ?? 0) * 100) / 100 && owed === shownOwed;
+          const together = Math.round((typed + owed) * 100) / 100;
+          showAmount(balance, together);
+          showAmount(owedBox, 0);
+          if (untouched) shownBalance = together;
+          shownOwed = 0;
+        }
+        showOwed();
+      });
       // (Its entries and balance are drawn again after each change while it's open)
       const follow = () => {
         if (!panel.panel.isConnected || panel.panel.classList.contains("isClosing")) return document.removeEventListener("budget:updated", follow);
         entries?.draw();
         const now = accountSummaries().find(account => account.index === index);
         const typed = balance.value();
-        if (now && (typed === null ? 0 : typed) === Math.round((shownBalance ?? 0) * 100) / 100) showBalance(now.today);
+        const typedOwed = owedBox.value();
+        const untouched = (typed === null ? 0 : typed) === Math.round((shownBalance ?? 0) * 100) / 100 && (typedOwed === null ? 0 : typedOwed) === shownOwed;
+        if (now && untouched) showBalance(now.today, interest.separate() && now.interest?.separate ? now.owed ?? 0 : 0);
       };
       if (summary) document.addEventListener("budget:updated", follow);
       const buttons = existing
@@ -1538,9 +1985,12 @@ function openAccountPanel(origin, index) {
         if (Number.isNaN(interestSet)) return panel.setError(`Enter the interest rate for a year, like 24.99 (up to ${MAX_INTEREST_RATE}), or turn Interest off.`);
         const most = max.value() ? readMoneyInput(max.value()) : null;
         if (most !== null && (!Number.isFinite(most) || most > MAX_AMOUNT)) return panel.setError("Enter the most it can hold, like 2000.00, or leave Max blank.");
+        const owed = interestSet && interestSet.separate ? owedBox.value() ?? 0 : null;
+        if (owed !== null && (!Number.isFinite(owed) || Math.abs(owed) > MAX_AMOUNT)) return panel.setError("Enter the interest, like 512.40 (Negative for interest owed).");
         // (A balance that wasn't typed is left out, so it keeps whatever its entries make it)
         const typedBalance = !existing || Math.round(amount * 100) !== Math.round((shownBalance ?? 0) * 100);
-        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), ...(typedBalance ? { balance: amount } : {}), interest: interestSet || null, max: most || null }, index));
+        const typedOwed = owed !== null && (!existing || Math.round(owed * 100) !== Math.round(shownOwed * 100));
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), ...(typedBalance ? { balance: amount } : {}), interest: interestSet || null, ...(typedOwed ? { owed } : {}), max: most || null }, index));
       });
 
       // Delete: the account goes, and its entries stay where they are
@@ -1553,7 +2003,7 @@ function openAccountPanel(origin, index) {
 }
 
 // The choices for how interest compounds and how often it's added (INTEREST_COMPOUNDING and INTEREST_EVERY in Process
-// Budget.js), shared by an account's Interest and the Payment Calculator
+// Budget.js), shared by an account's Interest and the Debt Calculator
 const COMPOUNDING_CHOICES = [
   { value: "daily", label: "Daily" },
   { value: "monthly", label: "Monthly" },
@@ -1571,8 +2021,11 @@ const COMPOUNDING_HINT = "How often interest starts earning interest of its own.
 const DAY_CHOICES = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
 
 // An account's Interest: a pill switch, and while it's on, the rate for a year (APR), how it compounds, how often it's
-// added, and the day of the month it's added (see interestStepper in Process Budget.js; a new one starts on today's
-// day). value(): { rate (above 0), compound, every, day }, 0 when it's off, NaN when the rate can't be read.
+// added, the day of the month it's added (see interestStepper in Process Budget.js; a new one starts on today's day), and
+// Separate Interest (a pill switch: off, interest is added to the balance, like a credit card's; on, it's a balance of
+// its own, like a mortgage's, see interestBalance). value(): { rate (above 0), compound, every, day, separate }, 0 when
+// it's off, NaN when the rate can't be read. separate(): Separate Interest is on (and Interest is). onSeparate(listener):
+// listener(on) runs when that changes.
 function interestFields(current) {
   const toggle = BudgetUI.checkboxField({ label: "Add interest", checked: !!current });
   const rate = BudgetUI.textField({
@@ -1585,13 +2038,25 @@ function interestFields(current) {
   const compound = BudgetUI.selectField({ label: "Compounds", options: COMPOUNDING_CHOICES, value: current ? current.compound : "monthly", hint: COMPOUNDING_HINT });
   const every = BudgetUI.selectField({ label: "Added", options: ADDED_CHOICES, value: current ? current.every : 1 });
   const day = BudgetUI.selectField({ label: "On day", options: DAY_CHOICES, value: current ? current.day : today.getDate(), hint: "The day of the month it's added (a shorter month uses its last day)." });
+  const separateSwitch = BudgetUI.checkboxField({ label: "Separate Interest", checked: !!current?.separate });
+  const separate = BudgetUI.field("Kept apart", separateSwitch.el, { hint: "Off: interest is added to the balance, like a credit card's. On: it's a balance of its own (Interest today), like a mortgage's: payments pay it first, and only the rest earns interest." });
   const details = BudgetUI.element("div", "interestDetails");
-  details.append(rate.el, compound.el, every.el, day.el);
+  details.append(rate.el, compound.el, every.el, day.el, separate);
   details.hidden = !current;
+  const listeners = [];
+  const isSeparate = () => toggle.value() && separateSwitch.value();
+  let wasSeparate = isSeparate();
+  const told = () => {
+    if (isSeparate() === wasSeparate) return;
+    wasSeparate = isSeparate();
+    listeners.forEach(listener => listener(wasSeparate));
+  };
   toggle.input.addEventListener("change", () => {
     details.hidden = !toggle.value();
-    if (toggle.value() && window.matchMedia("(pointer: fine)").matches) rate.input.focus();
+    if (toggle.value() && window.matchMedia("(pointer: fine)").matches) rate.input.focus({ preventScroll: true });
+    told();
   });
+  separateSwitch.input.addEventListener("change", told);
   const el = BudgetUI.element("div", "interestFields");
   el.append(BudgetUI.field("Interest", toggle.el), details);
   return {
@@ -1600,8 +2065,10 @@ function interestFields(current) {
       if (!toggle.value()) return 0;
       const number = readMoneyInput(rate.value().replace(/%/g, ""));
       if (!Number.isFinite(number) || number <= 0 || number > MAX_INTEREST_RATE) return NaN;
-      return { rate: number, compound: compound.value(), every: Number(every.value()), day: Number(day.value()) };
-    }
+      return { rate: number, compound: compound.value(), every: Number(every.value()), day: Number(day.value()), separate: separateSwitch.value() };
+    },
+    separate: isSeparate,
+    onSeparate: (listener) => listeners.push(listener)
   };
 }
 
@@ -1737,14 +2204,16 @@ function trackerAliasText(row) {
   if (rowType === "costs") return "Every cost";
   if (rowType === "gains") return "Every gain";
   if (rowType === "transfers") return String(row[4] ?? "").trim() ? `Every transfer: ${describeAliases(row[4])}` : "Every transfer";
+  if (rowType === "interest") return String(row[4] ?? "").trim() ? `Other Accounts' interest: ${String(row[4]).trim()}` : "Other Accounts' interest";
   return describeAliases(row[4]);
 }
 
-// What Costs, Gains, or Undefined counts, for its panel
+// What Costs, Gains, Transfers, Interest, or Undefined counts, for its panel
 function autoRowNote(row) {
   const rowType = cleanString(row[0]);
   if (rowType === "costs") return "Every cost (✖️ Hidden ones too), except transfers. This row fills in by itself.";
   if (rowType === "gains") return "Every gain (✖️ Hidden ones too), except transfers. This row fills in by itself.";
+  if (rowType === "interest") return `The interest your Other Accounts get (below $0 is interest paid, like a credit card's)${String(row[4] ?? "").trim() ? ", from " + String(row[4]).trim() : " (none in the last 365 days)"}. It isn't an entry, so no other row counts it. This row fills in by itself.`;
   if (rowType === "transfers") return `Every ⭕️ Transfer${String(row[4] ?? "").trim() ? ": " + describeAliases(row[4]) : " (there aren't any right now)"}, so they never land in Undefined. This row fills in by itself.`;
   const titles = trackerAliasText(row);
   return `Entries that no other row counts${titles ? ": " + titles : " (there aren't any right now)"}. This row fills in by itself.`;

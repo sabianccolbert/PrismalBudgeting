@@ -129,9 +129,10 @@
 /* Phones: a tapped day is as wide as most of the screen and as tall as its lines (Process Budget.js works out where and
    how big), over a dimmed page. It's laid out at that size (its spacing and corners times --zoom, its text times
    --zoomText) instead of scaled up from the tiny day, so its text is sharp. Its content is as big as the screen (--viewW
-   by --viewH, moved to the screen's top left corner) and scrolls up and down, and draws the day itself (::before) at
-   --dayX, --dayY, --dayW by --dayH, with its lines starting inside it: a line too long for the screen ends in "..." at
-   the screen's edge (tapping it shows it whole). Only Process Budget.js's grow and shrink animations scale it. */
+   by --viewH, moved to the screen's top left corner; taller, for a day taller than the screen, which the page scrolls to,
+   since it's part of the page), and draws the day itself (::before) at --dayX, --dayY, --dayW by --dayH, with its lines
+   starting inside it: a line too long for the screen ends in "..." at the screen's edge (tapping it shows it whole).
+   Only Process Budget.js's grow and shrink animations scale it. */
 .elastic-table td.is-editing.is-fullZoom {
   transform: none;
   z-index: 60;
@@ -152,9 +153,7 @@
     calc(var(--viewH, 100vh) - var(--dayY, 0px) - var(--dayH, 0px))
     calc(var(--dayX, 0px) + 4px * var(--zoomText, 1));
   font-size: calc(1em * var(--zoomText, var(--zoom, 1)));
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: auto; /* (A finger scrolls its lines, then the page, which it's part of) */
+  overflow: visible; /* (It doesn't scroll: the page does, which it's part of) */
   pointer-events: auto; /* It covers the screen now, so taps land on it (Process Budget.js closes it for ones beside the day) */
   background: none;
   box-shadow: none;
@@ -740,6 +739,36 @@
   overflow-wrap: anywhere;
 }
 
+/* An Other Account's balance with Separate Interest: the rest, and its interest on a line of its own */
+.accountsTable td.withInterest .interestLine {
+  display: block;
+  font-size: 0.85em;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+/* Search's Go To Accounts, under its results when it looks past today */
+.searchAccountsRow {
+  justify-content: center;
+  margin-top: 0.8em;
+}
+
+/* Each change's Undo, at the right ("Undone" once it was) */
+.logsTable .undoCell {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.logsTable .logUndo {
+  padding: 0.3em 0.7em;
+  font-size: 0.85em;
+}
+
+.logsTable .logUndone {
+  font-size: 0.85em;
+  opacity: 0.65;
+}
+
 .logsTable tr.errorRow td {
   background: rgba(120, 0, 20, 0.6);
 }
@@ -896,9 +925,10 @@ body.datePicking .elastic-table td {
   margin: 2vmin auto 3vmin;
 }
 
-/* Large panels float over the top of the screen (the page under them doesn't move). A tall one scrolls inside itself.
-   They're in the screen layer (stylesheet.css), so they're placed on the visible screen, and 100% is its height (which
-   leaves out a phone's keyboard). */
+/* Large panels float over the top of the screen (the page under them doesn't move). They're in the screen layer
+   (stylesheet.css), so they're placed on the visible screen, and they're part of the page once they're open: a tall one
+   doesn't scroll inside itself, it runs past the screen's bottom, and the page scrolls to the rest of it (boxes in it
+   that scroll, like an account's entries, still do). */
 .budgetPanel.large.floating {
   position: fixed;
   z-index: 1300;
@@ -906,21 +936,15 @@ body.datePicking .elastic-table td {
   left: 0;
   right: 0;
   margin: 0 auto;
-  max-height: 96%;
-  max-height: calc(100% - 2 * max(2vh, env(safe-area-inset-top, 0px)));
-  overflow-y: auto;
-  overscroll-behavior: contain;
   background: var(--HOVER_GRADIENT);
 }
 
-/* Small panels sit by what opened them (Budget UI.js positionNear), on the visible screen; a tall one scrolls */
+/* Small panels sit by what opened them (Budget UI.js positionNear), on the visible screen; a tall one runs past its
+   bottom, like a large one */
 .budgetPanel.small {
   position: absolute;
   z-index: 1300;
   width: min(88vw, 340px);
-  max-height: calc(100% - 16px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
   background: var(--HOVER_GRADIENT);
 }
 
@@ -1493,7 +1517,8 @@ button.dropdownBox:focus-visible {
 }
 
 /* Search: the Search button above the calendar opens it, floating over the page like a large panel (it
-   lives in the screen layer, see wireSearch in Budget Search.js). Its results show under its form. */
+   lives in the screen layer, see wireSearch in Budget Search.js). Its results show under its form (in a box that
+   scrolls); a tall one runs past the screen's bottom, and the page scrolls to the rest. */
 .searchBar {
   position: fixed;
   z-index: 1300;
@@ -1502,12 +1527,8 @@ button.dropdownBox:focus-visible {
   right: 0;
   box-sizing: border-box;
   width: min(94vw, 760px);
-  max-height: 96%;
-  max-height: calc(100% - 2 * max(2vh, env(safe-area-inset-top, 0px)));
   margin: 0 auto;
   padding: 0 1em 1em;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   font-size: var(--UI_TEXT);
   text-align: left;
   color: var(--BASE_COLOR);
@@ -2197,22 +2218,31 @@ button.dropdownBox:focus-visible {
   }
 }
 
-/* Bob's card: his picture and message, and the whole card opens his page (it lights up like the Menu's links) */
+/* Bob's card: his picture and message, which open his page (it lights up like the Menu's links), and under them, while
+   he has any, his warnings and Okay */
 .infoCard.bobCard {
   grid-area: bob;
   display: flex;
-  align-items: flex-start;
-  gap: 0.9em;
+  flex-direction: column;
+  gap: 0.8em;
   margin: 0;
   font-size: 1em;
   text-align: left;
-  text-decoration: none;
   color: var(--BASE_COLOR);
   transition: transform var(--SLOW_TRANSFORM), box-shadow var(--SLOW_SHADOW), border-color var(--SLOW_BORDER);
 }
 
-.infoCard.bobCard:hover,
-.infoCard.bobCard:focus-visible {
+.bobLink {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9em;
+  text-decoration: none;
+  color: inherit;
+  outline: none;
+}
+
+.infoCard.bobCard:has(.bobLink:hover),
+.infoCard.bobCard:has(.bobLink:focus-visible) {
   transform: scale(1.02);
   text-shadow: none;
   outline: none;
@@ -2262,9 +2292,52 @@ button.dropdownBox:focus-visible {
   color: var(--TEXT_DIM);
 }
 
-.infoCard.bobCard:hover .bobMore,
-.infoCard.bobCard:focus-visible .bobMore {
+.bobLink:hover .bobMore,
+.bobLink:focus-visible .bobMore {
   color: var(--TEXT_BRIGHT);
+}
+
+/* His warnings (Bob's page, a card's Warnings switch): his card moves over the calendar (.bobAbove) with a red-orange
+   edge, until Okay */
+.bobAbove {
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2.2vmin, 22px);
+  font-size: clamp(12px, 2.3vmin, 17px);
+}
+
+.bobAbove:empty {
+  display: none;
+}
+
+.infoCard.bobCard.isWarning {
+  border-color: #ff6a1a;
+  box-shadow: var(--GLASS_SHADOW), 0 0 16px rgba(255, 106, 26, 0.35);
+}
+
+.bobWarnings {
+  padding-top: 0.6em;
+  border-top: 1px solid var(--PANEL_LINE);
+}
+
+.bobWarningsTitle {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+.bobWarnings .panelButtons {
+  margin-top: 0.7em;
+}
+
+.bobWarnings .panelHint {
+  margin: 0.4em 0 0;
+}
+
+/* With his card over the calendar, Upcoming takes its place's room too */
+.infoRow.bobAway {
+  grid-template-areas:
+    "lowest lowest"
+    "upcoming upcoming";
 }
 
 /* Goals, on Bob's page (Bob Page.js renderGoalsCard): each one a button that opens it, with a thin bar for how
@@ -2586,6 +2659,12 @@ button.dropdownBox:focus-visible {
     grid-template-areas:
       "lowest"
       "bob"
+      "upcoming";
+  }
+
+  .infoRow.bobAway {
+    grid-template-areas:
+      "lowest"
       "upcoming";
   }
 }
@@ -3646,6 +3725,8 @@ footer.hasHelp > hr {
   margin-bottom: max(8px, 1.5vmin);
 }
 
+/* Help floats over the page like a large panel: a long one runs past the screen's bottom, and the page scrolls to the
+   rest of it */
 .budgetCard.helpView {
   position: fixed;
   z-index: 1500;
@@ -3653,10 +3734,6 @@ footer.hasHelp > hr {
   left: 0;
   right: 0;
   margin: 0 auto;
-  max-height: 94%;
-  max-height: calc(100% - 2 * max(3vh, env(safe-area-inset-top, 0px)));
-  overflow-y: auto;
-  overscroll-behavior: contain;
   line-height: 1.45;
   background: var(--HOVER_GRADIENT);
   border-color: var(--PANEL_BORDER);
@@ -3794,8 +3871,55 @@ footer.hasHelp > hr {
   }
 }
 
-/* Payment Calculator (menu/payments.html): the form, its results, and an Other Account's own pace with its entries, one
-   card over another */
+/* The calculators' crystals and gems (Budget Pages.js presetShelf): like Quick Entry's prisms, in a card over the form.
+   Add, its ?, and Edit, then the presets as buttons (or, in Edit, rows to drag and delete) */
+.presetShelf {
+  text-align: left;
+}
+
+.presetShelf h3 {
+  margin: 0 0 0.6em;
+}
+
+.presetShelf .presetEdit {
+  margin-left: auto;
+}
+
+/* Making one: its name, what to do, and Save or Cancel, while the calculator under it glows */
+.presetDraftBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin-top: 0.8em;
+  padding: 0.7em 0.8em;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.presetDraftBox .panelHint,
+.presetDraftBox .panelError {
+  margin: 0;
+}
+
+.calculatorForm.presetDraft {
+  position: relative;
+  box-shadow: var(--GLASS_SHADOW), 0 0 22px rgba(200, 0, 0, 0.7);
+}
+
+/* A short glow when a crystal or gem fills it */
+.calculatorForm.prismFlash {
+  animation: prismFlash 1.1s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calculatorForm.prismFlash {
+    animation: none;
+  }
+}
+
+/* Debt Calculator (menu/payments.html): its gems, the form, its results, and an Other Account's own pace with its
+   entries, one card over another */
 .paymentsPage {
   display: flex;
   flex-direction: column;
@@ -3921,6 +4045,16 @@ footer.hasHelp > hr {
 .sectionState {
   font-size: 0.85em;
   color: var(--TEXT_DIM);
+}
+
+/* A card's Warnings switch comes just before its On/Off one (and the two go under the title when they don't fit) */
+.sectionHead {
+  flex-wrap: wrap;
+  row-gap: 0.4em;
+}
+
+.sectionSwitch + .sectionSwitch {
+  margin-left: 0;
 }
 
 .sectionHelp {

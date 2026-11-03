@@ -2,22 +2,22 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=54eceeb070">
+    <link rel="stylesheet" href="/stylesheet.css?v=11459720ff">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=acb1e6bb4e">
-    <title>Prismal Budget - Payment Calculator</title>
+    <link rel="stylesheet" href="/budgetStyle.css?v=26a3bd733a">
+    <title>Prismal Budget - Debt Calculator</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Prismal Payments" />
+    <meta name="apple-mobile-web-app-title" content="Prismal Debt" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Budget - Payment Calculator">
+    <meta property="og:title" content="Prismal Budget - Debt Calculator">
     <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
@@ -41,7 +41,7 @@
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <div class="brandText stacked">
-            <h1>Payment Calculator</h1>
+            <h1>Debt Calculator</h1>
             <h2 translate="no">Prismal Budget</h2>
           </div>
         </div>
@@ -70,8 +70,8 @@
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
-          <h3 id="helpTitle">Payment Calculator Help</h3>
-          <p>The Payment Calculator works out when a balance you owe (a loan or a credit card) is paid off, how much interest it costs on the way, and what paying more each time saves. Its results change as you type, and nothing on it is saved. They're estimates: a lender's own figures can differ (its fees, how it counts days, and rounding).</p>
+          <h3 id="helpTitle">Debt Calculator Help</h3>
+          <p>The Debt Calculator works out when a balance you owe (a loan or a credit card) is paid off, how much interest it costs on the way, and what paying more each time saves. Its results change as you type, and what you typed is kept (a moment after you stop), so it's there the next time you open it, on any device. They're estimates: a lender's own figures can differ (its fees, how it counts days, and rounding).</p>
 
           <h4>The Balance</h4>
           <ul>
@@ -86,6 +86,13 @@
             <li><strong>Extra each payment</strong> shows what paying that much more each time does: how much sooner it's paid off, and the interest saved.</li>
             <li><strong>Pay it off by</strong> works out the payment it takes to be done by that day (up to 50 years ahead).</li>
             <li><strong>Each Payment</strong> lists every payment with the interest added since the one before and what's owed after it.</li>
+          </ul>
+
+          <h4>Gems</h4>
+          <ul>
+            <li><strong>Gems</strong> are debts you look at often, like a car loan or a credit card's payoff, saved over the calculator so you don't have to type them each time. A gem keeps the boxes that are filled in when it's saved (never the days). With an Other Account picked, it keeps the account, and the balance and interest come from the account each time.</li>
+            <li><strong>Add Gem</strong> makes the calculator glow: fill in only what it should keep (what's already filled in counts), give it a name if you like, then tap <strong>Save Gem</strong>. Tap a gem to put what it keeps back in.</li>
+            <li><strong>Edit Gems</strong> drags gems into order by their ≡, or deletes them with ×. They're saved with your budget, so every device has the same ones.</li>
           </ul>
 
           <h4>With An Other Account</h4>

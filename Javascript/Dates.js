@@ -262,6 +262,15 @@ function namedDate(text) {
 // starts on the date typed in the box (or this month), and lives in the screen layer (Layout.js), so it stays in view
 // however the page is zoomed or scrolled.
 
+// Scroll a list (a picker's, or a dropdown's) just enough to show one of its items. (scrollIntoView would move the page
+// too, when the list isn't all on the screen.)
+function showInList(list, item) {
+  const listBox = list.getBoundingClientRect();
+  const itemBox = item.getBoundingClientRect();
+  if (itemBox.top < listBox.top) list.scrollTop -= listBox.top - itemBox.top;
+  else if (itemBox.bottom > listBox.bottom) list.scrollTop += itemBox.bottom - listBox.bottom;
+}
+
 const DatePicker = (() => {
   const MONTH_LABELS = MONTH_NAMES.map(name => name[0].toUpperCase() + name.slice(1));
   const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -449,7 +458,7 @@ const DatePicker = (() => {
     const target = shown.days.find(day => day.date.getTime() === to.getTime());
     if (!target) return;
     shown.days.forEach(day => { day.tabIndex = day === target ? 0 : -1; });
-    target.focus();
+    target.focus({ preventScroll: true });
   }
 
   // The months that match what's typed: by name ("oc" is October) or number ("10")
@@ -529,7 +538,7 @@ const DatePicker = (() => {
     const mark = () => {
       [...list.children].forEach((item, i) => item.classList.toggle("isActive", i === active));
       const item = list.children[active];
-      if (item) item.scrollIntoView({ block: "nearest" });
+      if (item) showInList(list, item);
     };
     const fill = (typed) => {
       options = items(typed);

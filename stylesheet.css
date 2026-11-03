@@ -1248,6 +1248,7 @@ a.budgetButton {
 .fieldHelpButton[aria-expanded="true"],
 button.pickDay[aria-expanded="true"],
 .budgetPanel.prismDraft,
+.calculatorForm.presetDraft,
 .idleWarning {
   border-color: transparent;
 }
@@ -1265,6 +1266,7 @@ button.pickDay[aria-expanded="true"] {
 .fieldHelpButton[aria-expanded="true"]::before,
 button.pickDay[aria-expanded="true"]::before,
 .budgetPanel.prismDraft::before,
+.calculatorForm.presetDraft::before,
 .idleWarning::before {
   content: "";
   position: absolute;

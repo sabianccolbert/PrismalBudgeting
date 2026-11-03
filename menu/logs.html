@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=54eceeb070">
+    <link rel="stylesheet" href="/stylesheet.css?v=11459720ff">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=acb1e6bb4e">
+    <link rel="stylesheet" href="/budgetStyle.css?v=26a3bd733a">
     <title>Prismal Budget - Change Logs</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -66,6 +66,25 @@
         <section class="budgetCard pageCard" aria-label="Changes">
           <p id="dataStatus" class="dataStatus">Loading...</p>
           <div id="dataView"></div>
+        </section>
+
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Change Logs Help</h3>
+          <p>Change Logs is a record of every change to your budget, newest first: when it was made (Time), how long it took (Took), what it was (Action), and what it changed (Details). The newest 1,000 are kept.</p>
+
+          <h4>Undo</h4>
+          <ul>
+            <li>A change that can be taken back has an <strong>Undo</strong> at its right. Tap it (and say yes) to put back what was there before that change, on every device: the entries it changed (on the calendar, in History, and in Upcoming), the recurring entries, tracker rows, and Other Accounts it added, changed, or deleted, your goals, Bob's page, connected spreadsheets, the calculators, and notes. In Bank, the balances, and the tracker's sums are worked out again.</li>
+            <li>It only works while everything that change touched is still as the change left it, so it never erases anything you changed since. Otherwise it says what changed (like a day), and nothing is undone.</li>
+            <li>The Undo is a change of its own, with its own Undo, which puts the change back. A change that was undone says Undone.</li>
+            <li>Searches, Upload A Backup, the daily update, the Debt Calculator keeping its boxes, and very big changes (like renaming an account across years of History) have no Undo, and only the newest changes keep theirs.</li>
+            <li>Home's Undo and Redo (beside New Entry) take back your newest changes there, one at a time, in the tab they were made in.</li>
+          </ul>
+
+          <h4>Search</h4>
+          <p>Search (at the top) looks through the changes: as you type, it lists the ones with every word you typed in them. × or Escape closes it.</p>
         </section>
       </main>
     </div>
