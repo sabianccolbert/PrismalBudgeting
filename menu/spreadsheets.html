@@ -2,22 +2,22 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=11459720ff">
+    <link rel="stylesheet" href="/stylesheet.css?v=268cd22569">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=26a3bd733a">
-    <title>Prismal Budget - Spreadsheets</title>
+    <link rel="stylesheet" href="/budgetStyle.css?v=c6e3f94769">
+    <title>Prismal Budget - Spreadsheets &amp; Calendars</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Prismal Spreadsheets" />
+    <meta name="apple-mobile-web-app-title" content="Prismal Sheets &amp; Calendars" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Budget - Spreadsheets">
+    <meta property="og:title" content="Prismal Budget - Spreadsheets &amp; Calendars">
     <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
@@ -41,7 +41,7 @@
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <div class="brandText stacked">
-            <h1>Spreadsheets</h1>
+            <h1>Spreadsheets &amp; Calendars</h1>
             <h2 translate="no">Prismal Budget</h2>
           </div>
         </div>
@@ -83,10 +83,23 @@
           <p class="panelHint sheetsOtherEmails">Share spreadsheets with admin@prismalbudget.org from a Google account with another email? Add that email in <a href="/settings.html#email">Settings, under Email</a> (Other Emails), and open the link we send it. Then the spreadsheets it shares can be connected too.</p>
         </section>
 
+        <!-- Connected calendars: each one's button (change it), On/Off, Delete, and its paychecks and shifts, with what's
+             wrong under it (Calendars Page.js; reading them and working out their pay is Calendars.js) -->
+        <section id="calendarsView" class="budgetCard settingsCard" aria-labelledby="calendarsHeading" hidden>
+          <h3 id="calendarsHeading">Connected Calendars</h3>
+          <p>Keep your work shifts on a calendar (Apple, Google, Outlook, or a work scheduling app)? Connect it with your pay, and every paycheck its shifts come to lands on your calendar on its payday, behind a ➕, worked out like a paystub (overtime, night rates, deductions, and taxes), and following the calendar as shifts are added, moved, or deleted.</p>
+          <!-- Like spreadsheets, connecting one needs a verified email (the note above has the button) -->
+          <p id="calendarsVerify" class="panelHint calendarsVerify" role="status" hidden>Connecting a calendar needs a verified email too: see the note under Connected Spreadsheets.</p>
+          <ul id="calendarList" class="sheetList"></ul>
+          <div class="panelButtons">
+            <button id="addCalendarButton" type="button" class="budgetButton primary">Add Calendar</button>
+          </div>
+        </section>
+
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
-          <h3 id="helpTitle">Spreadsheets Help</h3>
+          <h3 id="helpTitle">Spreadsheets &amp; Calendars Help</h3>
           <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
           <ol>
             <li>Verify your email first. We email a link when you make your account (it works for 24 hours), and Send Verification Email (on this page, or in Settings under Email) sends a new one. If it isn't in your inbox, check your spam folder.</li>
@@ -123,6 +136,30 @@
 
           <h4>Problems</h4>
           <p>When a cell can't be read (like a date that isn't a date, or an Other Account you don't have), the box under that spreadsheet says which cell and how to fix it. The other entries still land.</p>
+
+          <h4>Calendars</h4>
+          <p>Connect the calendar your work shifts are on and fill in your pay, and each paycheck lands on your calendar on its payday, behind a ➕ (like ➕❗️ $950.00 Paycheck), at what it comes to after deductions and taxes.</p>
+          <ol>
+            <li>Verify your email first, like for a spreadsheet.</li>
+            <li>Copy the calendar's subscription link. The ? next to Calendar link says where each calendar app keeps it: Apple's starts with webcal://, Google's is the Secret address in iCal format, and Outlook's is a published calendar's ICS link. Most work scheduling apps have one too.</li>
+            <li>Tap Add Calendar, paste the link, and tap Open Calendar.</li>
+            <li>Under Pay, pick the first paycheck to count and how often you're paid, then fill in your pay, deductions, and taxes. A crystal from the Paycheck Calculator fills in the boxes it has.</li>
+            <li>Check the paychecks it finds under the form, then tap Save Calendar.</li>
+          </ol>
+          <ul>
+            <li><strong>Shifts:</strong> every event with a time is a shift (all-day events aren't, except bonuses), unless Only events with or Leave out events with says otherwise. Events that overlap count once. A shift counts on the day it starts, and one over 24 hours is a piece on each day (so each can be in a different paycheck). Or a shift past midnight can be split at midnight instead, so it can be in two paychecks.</li>
+            <li><strong>Paydays:</strong> every week, every other week, twice a month, or once a month, and a payday on a weekend can be paid the Friday before or the Monday after. Each paycheck pays the full workweeks before its payday's week, or the days up to a few days before its payday.</li>
+            <li><strong>Overtime:</strong> hours past the weekly limit (and a daily limit and double time, for places that have them), paid on the week's blended rate (the law's regular rate) or on each hour's own rate.</li>
+            <li><strong>Pay By Event Title:</strong> a shift whose title has a rule's words in it is paid the rule's way: its own hourly and night rates, an extra per hour, a multiplier, a stipend for each shift (taxed, or tax-free like a per diem), its own unpaid break, or as paid time off (paid, but not counted toward overtime), on the days you pick.</li>
+            <li><strong>Unpaid breaks</strong> come out of each shift that's long enough, and <strong>night pay</strong> is paid in the night hours you pick.</li>
+            <li><strong>Bonuses:</strong> an all-day event with the bonus word and an amount, like Bonus $25, is paid in that week's paycheck.</li>
+            <li><strong>Pay changes:</strong> a raise, a new deduction, or anything else that changes from one paycheck on. Tap Pay Change, pick the day it starts, and fill in only what's new. Paychecks before it stay as they were.</li>
+            <li><strong>Taxes:</strong> FICA, then federal and state tax as a percentage, or worked out from your W-4 (federal) and from Oklahoma's withholding tables. Overtime can be left out of federal or state tax, all of it or just its extra over straight time. These are estimates: your employer's payroll decides your real paycheck.</li>
+            <li><strong>Look ahead:</strong> paychecks paid further past today aren't added yet, since a schedule that far out may not be done.</li>
+            <li><strong>Paychecks And Shifts</strong> (under each calendar) shows this year's take home, gross, taxes, and hours, the next paycheck, four weeks of shifts with their paydays, and every paycheck with hours. Tap a paycheck to see how it adds up, shift by shift.</li>
+            <li>Calendars are read again when you open Home (at most every 15 minutes on each device) or this page, so added, moved, or deleted shifts change your paychecks from today on. Like a spreadsheet's entries, a paycheck stays as it was once its day passes, one you change for its day keeps your change, and Placeholder makes them all placeholders.</li>
+            <li>Anyone with a calendar's link can see its events, so a calendar with just your shifts keeps the rest of your days private.</li>
+          </ul>
 
         </section>
       </main>

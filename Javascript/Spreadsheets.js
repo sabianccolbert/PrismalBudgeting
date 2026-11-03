@@ -1,11 +1,12 @@
-// Spreadsheets: reading connected spreadsheets (set up on the Spreadsheets page, in the menu; CONNECTED SPREADSHEETS in Process Budget.js
-// says what happens to their entries). The API downloads one by its link (its sheets.js), and it's read here:
+// Spreadsheets: reading connected spreadsheets (set up on the Spreadsheets & Calendars page, in the menu; CONNECTED SPREADSHEETS in
+// Process Budget.js says what happens to their entries, and Calendars.js reads the calendars kept with them). The API downloads one by
+// its link (its sheets.js), and it's read here:
 // Excel's .xlsx (Google Sheets downloads as one too), OpenDocument's .ods (LibreOffice), or .csv.
 //   - readSheetFile(link): the file's tabs and cells, its name, and how it's shared
 //   - readConnection(fields, workbook): the entries its cells make, and what's wrong with any of them
 //   - Cells are picked as columns and rows ("column B row 2 to column B row 50"), kept as "B2:B50"
-//   - Home and the Spreadsheets page read every spreadsheet that's on again when they open (Home at most every minute and
-//     a half per spreadsheet, on this device), and the budget only changes when something in them did
+//   - Home and the Spreadsheets & Calendars page read every spreadsheet that's on again when they open (Home at most every
+//     minute and a half per spreadsheet, on this device), and the budget only changes when something in them did
 
 const Spreadsheets = (() => {
 
@@ -21,7 +22,8 @@ const Spreadsheets = (() => {
   const TOO_BIG_TO_READ = "That spreadsheet is too big to read. Connect a smaller one, like a new spreadsheet with just the cells for Prismal Budget.";
 
   // A problem reading a spreadsheet. lasting: the server answered (like "not shared", or the account's email
-  // isn't verified yet), so it's worth showing on the Spreadsheets page; a dropped connection isn't (the next read tries again).
+  // isn't verified yet), so it's worth showing on the Spreadsheets & Calendars page; a dropped connection isn't (the next read
+  // tries again).
   class SheetReadError extends Error {
     constructor(message, lasting = false) {
       super(message);
@@ -755,24 +757,26 @@ const Spreadsheets = (() => {
     if (typeof workspaceLoaded === "undefined" || !workspaceLoaded || !sheetsData) return null;
     const reads = lastReads();
     const now = Date.now();
-    const due = sheetsData.list.filter(connection => connection.on && (force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
+    const due = sheetsData.list.filter(connection => connection.kind !== "calendar" && connection.on && (force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
     if (due.length === 0) return null;
+    // (basis: the link and cells each one was read with, see connectionBasis)
     const results = await Promise.all(due.map(async (connection) => {
+      const basis = connectionBasis(connection);
       try {
         const file = await readSheetFile(connection.link);
-        return { id: connection.id, ...readConnection(connection.fields, file.workbook), access: file.access };
+        return { id: connection.id, basis, ...readConnection(connection.fields, file.workbook), access: file.access };
       } catch (err) {
-        return err instanceof SheetReadError && err.lasting ? { id: connection.id, failed: err.message } : null;
+        return err instanceof SheetReadError && err.lasting ? { id: connection.id, basis, failed: err.message } : null;
       }
     }));
     const kept = lastReads();
     for (const connection of due) kept[connection.id] = now;
     try { localStorage.setItem(READS_KEY, JSON.stringify(kept)); } catch (e) {}
 
-    // Only what's different changes the budget
+    // Only what's different changes the budget (and not a read of a connection changed since it started)
     const changed = results.filter(Boolean).filter(result => {
       const connection = sheetConnectionById(result.id);
-      if (!connection) return false;
+      if (!connection || connectionBasis(connection) !== result.basis) return false;
       if (result.failed) return !(connection.problems.length === 1 && connection.problems[0] === result.failed);
       const updated = normalizeSheetConnection({ ...connection, entries: result.entries, problems: result.problems, tabs: result.tabs, access: result.access });
       return JSON.stringify(updated) !== JSON.stringify(connection);
@@ -781,7 +785,7 @@ const Spreadsheets = (() => {
     return updateSheetReads(changed);
   }
 
-  // Home and the Spreadsheets page keep them up to date: when they open, and when they come back into view
+  // Home and the Spreadsheets & Calendars page keep them up to date: when they open, and when they come back into view
   const KEEPS_UP = ["home", "spreadsheets"];
   if (KEEPS_UP.includes(window.PAGE) && window.workspaceReady) {
     window.workspaceReady.then((loaded) => {

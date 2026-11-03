@@ -1,8 +1,8 @@
-// Spreadsheets Page (Menu > Spreadsheets): connected spreadsheets, whose entries land on the calendar. Add one,
-// change it, turn it on or off, delete it, and see what's wrong with any of its cells (see CONNECTED SPREADSHEETS
+// Spreadsheets Page (Menu > Spreadsheets & Calendars): connected spreadsheets, whose entries land on the calendar. Add
+// one, change it, turn it on or off, delete it, and see what's wrong with any of its cells (see CONNECTED SPREADSHEETS
 // in Process Budget.js, and Spreadsheets.js for the reading). Connecting one needs a verified email, so until it
 // is, the page says so and can email a new link. (Other emails, for spreadsheets shared from a Google account with
-// another email, are added in Settings, under Email.)
+// another email, are added in Settings, under Email.) The page's calendars are Calendars Page.js's.
 
 // =====================================================================
 // #region SETUP
@@ -58,19 +58,22 @@ function renderSheets() {
   view.hidden = false;
   const list = document.getElementById("sheetList");
   list.replaceChildren();
-  if (sheetsData.list.length === 0) list.append(BudgetUI.element("li", "sheetEmpty panelHint", "No spreadsheets connected yet."));
-  for (const connection of sheetsData.list) list.append(sheetItem(connection));
+  const sheets = sheetsData.list.filter(connection => connection.kind !== "calendar");
+  if (sheets.length === 0) list.append(BudgetUI.element("li", "sheetEmpty panelHint", "No spreadsheets connected yet."));
+  for (const connection of sheets) list.append(sheetItem(connection));
   // Connecting one needs a verified email (until the account loads, the server says so if it isn't)
   const unverified = !!account && !account.emailVerified;
   const note = document.getElementById("sheetsVerify");
   note.hidden = !unverified;
   if (unverified) {
     document.getElementById("sheetsVerifyText").textContent = !account.email
-      ? "Connecting a spreadsheet needs a verified email. Add your email in Settings, then open the link we send it (check your spam folder too)."
-      : `Connecting a spreadsheet needs a verified email. Open the link we emailed to ${account.email} (check your spam folder too), or send a new one.`;
+      ? "Connecting a spreadsheet or a calendar needs a verified email. Add your email in Settings, then open the link we send it (check your spam folder too)."
+      : `Connecting a spreadsheet or a calendar needs a verified email. Open the link we emailed to ${account.email} (check your spam folder too), or send a new one.`;
     document.getElementById("sheetsVerifyButton").hidden = !account.email || !account.canEmail;
   }
   document.getElementById("addSheetButton").disabled = unverified || sheetsData.list.length >= MAX_SHEETS;
+  // (The calendars' part of the page follows the same account)
+  if (typeof renderCalendars === "function") renderCalendars();
 }
 
 // One spreadsheet: its button, On/Off, Delete, and its problems
@@ -607,7 +610,7 @@ document.addEventListener("visibilitychange", async () => {
   if (!result.ok || !result.data || !result.data.emailVerified) return;
   account = result.data;
   renderSheets();
-  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets now.");
+  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets and calendars now.");
 });
 
 //#endregion

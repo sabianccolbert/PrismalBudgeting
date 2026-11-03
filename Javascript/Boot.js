@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.02.2026.A";
+  const SITE_VERSION = "11.03.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -30,20 +30,22 @@
     "/Javascript/Budget Pages.js": "bce7117702",
     "/Javascript/Budget Search.js": "ac9e964a18",
     "/Javascript/Budget UI.js": "9552af87df",
-    "/Javascript/Calendar Page.js": "f90d208df8",
+    "/Javascript/Calendar Page.js": "ca8cc93b2a",
+    "/Javascript/Calendars Page.js": "5ee574fc39",
+    "/Javascript/Calendars.js": "32491b7b4a",
     "/Javascript/Dates.js": "4d24ab7d01",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
     "/Javascript/Layout.js": "04622646fe",
-    "/Javascript/Login.js": "9c83142ea4",
+    "/Javascript/Login.js": "d8695eb281",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "3fc336926c",
+    "/Javascript/Process Budget.js": "f6dcdc6eda",
     "/Javascript/Quick Entry.js": "df58d4c240",
     "/Javascript/Session.js": "988bbb66b5",
-    "/Javascript/Settings Page.js": "61793e4cdd",
+    "/Javascript/Settings Page.js": "2f6d7b675e",
     "/Javascript/Sounds.js": "4cfba7dffa",
-    "/Javascript/Spreadsheets Page.js": "0c5bfc8f58",
-    "/Javascript/Spreadsheets.js": "dbff5030e0",
+    "/Javascript/Spreadsheets Page.js": "5e5152eca6",
+    "/Javascript/Spreadsheets.js": "13d46a59b4",
     "/Javascript/Sprites.js": "13f4299e80",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
@@ -301,11 +303,15 @@
       scripts.push("/Javascript/Budget UI.js");
       // Connected spreadsheets' reading (Quick Entry never reads them)
       if (page !== "quick") scripts.push("/Javascript/Spreadsheets.js");
+      // Connected calendars' reading and pay, on the pages that keep them up to date
+      if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Calendars.js");
       // Search (Home's and History's): before the page script, which opens it
       if (page === "home" || page === "history") scripts.push("/Javascript/Budget Search.js");
       // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings)
       if (page === "home") scripts.push("/Javascript/Bob Page.js");
       scripts.push(PAGE_SCRIPTS[page] || "/Javascript/Budget Pages.js");
+      // The Spreadsheets & Calendars page's calendars
+      if (page === "spreadsheets") scripts.push("/Javascript/Calendars Page.js");
     }
     return scripts;
   }
