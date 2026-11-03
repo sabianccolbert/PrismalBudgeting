@@ -393,7 +393,7 @@ function openSheetPanel(id, origin) {
         const fields = currentFields();
         if (!name.value()) return panel.setError("Give the spreadsheet a name.");
         if (!Spreadsheets.isLinked(fields.date)) return panel.setError("Tap ➕ next to Date to pick the cells with the dates.");
-        if (!Spreadsheets.isLinked(fields.title) && String(fields.title.value || "").includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
+        if (!Spreadsheets.isLinked(fields.title) && hasTitleArrow(fields.title.value)) return panel.setError(TITLE_ARROW);
         if (!Spreadsheets.isLinked(fields.title) && !fields.title.value && !fields.account.value) return panel.setError("Type a title, or tap ➕ next to Title to pick its cells.");
         if (!Spreadsheets.isLinked(fields.amount) && amount.isPercent()) {
           const { error } = BudgetUI.readPercentField(amount);

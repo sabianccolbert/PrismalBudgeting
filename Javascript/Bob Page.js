@@ -8,6 +8,9 @@
 //     card is for (its help, see CARDS). A new card needs one too.
 //   - Data and Accounts always run. Every other card has an on/off switch, starts off, and works nothing out while it's
 //     off. Which are on is kept with the budget (Bob's page in Process Budget.js), so every device shows the same.
+//   - A card that's on (but Wavelength Planning) has a Warnings switch beside its own: with it on, the card's highlight,
+//     when it needs a look, shows on Bob's card on Home (bobWarnings), which moves over the calendar until it's okayed.
+//     A new card that can need a look gets one too (BOB_WARNING_CARDS in Process Budget.js).
 //   - Anything that shows from a tap (a table, a list) opens in a floating window (BudgetUI.openPanel), not in the page.
 //
 // The cards, top to bottom: Bob's highlights; Data (what every card below works from); Accounts (each account now and
@@ -105,20 +108,47 @@ const CARDS = [
 
 const TOP_HELP = "A quick look at what every card that's on has to say, one line each. Turn a card on or off with the switch at its right.";
 
-let pageCards = [];    // The cards as made: [{ def, el, toggle, state, body, results, highlight }] (see buildCard)
+let pageCards = [];    // The cards as made: [{ def, el, toggle, state, warning, body, results, highlight }] (see buildCard)
 let highlightList = null;
 let switching = false; // A card's switch is being saved
 
-window.workspaceReady.then((loaded) => {
-  const status = document.getElementById("dataStatus");
-  if (!loaded) {
-    if (status) status.textContent = "Couldn't load your budget data. Please refresh to try again.";
-    return;
-  }
-  if (status) status.hidden = true;
-  buildPage();
-  renderPage();
-});
+// (Home loads this page's script too, for Bob's warnings: see bobWarnings)
+if (window.PAGE === "bob") {
+  window.workspaceReady.then((loaded) => {
+    const status = document.getElementById("dataStatus");
+    if (!loaded) {
+      if (status) status.textContent = "Couldn't load your budget data. Please refresh to try again.";
+      return;
+    }
+    if (status) status.hidden = true;
+    takeLinkedDay();
+    buildPage();
+    renderPage();
+    showLinkedCard();
+  });
+}
+
+// A link here with a day (Search's Go To Accounts: /menu/bob.html?day=YYYY-MM-DD#accountsCard) shows the Accounts card on
+// that day: it's the day this device remembers for it from then on (ACCOUNTS_DAY_KEY)
+function takeLinkedDay() {
+  const text = new URLSearchParams(location.search).get("day");
+  const day = text ? createSafeMidnight(text, true) : null;
+  if (!day || isNaN(day.getTime()) || day <= today || day > aheadLimit()) return;
+  try { localStorage.setItem(ACCOUNTS_DAY_KEY, formatToMMDDYYYY(day)); } catch (e) {}
+}
+
+// The card a link's #spot names comes into view once the page has slid in (its cards are made after the budget loads,
+// so Layout.js may not have found it)
+function showLinkedCard() {
+  const spot = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+  if (!spot) return;
+  const started = Date.now();
+  const tryScroll = () => {
+    if (document.documentElement.style.overflowY === "hidden" && Date.now() - started < 3000) return requestAnimationFrame(tryScroll);
+    spot.scrollIntoView({ block: "start" });
+  };
+  tryScroll();
+}
 
 document.addEventListener("budget:updated", () => {
   if (workspaceLoaded && pageCards.length > 0) renderPage();
@@ -148,7 +178,20 @@ function buildCard(def) {
   el.id = `${def.id}Card`;
   const { head, help, title } = cardHead(def.title, def.help, def.id);
   el.setAttribute("aria-labelledby", title.id);
-  const card = { def, el, toggle: null, state: null, body: BudgetUI.element("div", "sectionBody"), results: BudgetUI.element("div", "sectionResults"), highlight: null };
+  const card = { def, el, toggle: null, state: null, warning: null, body: BudgetUI.element("div", "sectionBody"), results: BudgetUI.element("div", "sectionResults"), highlight: null };
+  // Its Warnings switch, shown while the card is on
+  if (BOB_WARNING_CARDS.includes(def.id)) {
+    const label = BudgetUI.element("label", "sectionSwitch warningSwitch");
+    const toggle = BudgetUI.element("input", "pillSwitch");
+    toggle.type = "checkbox";
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-label", `${def.title} warnings on Home on or off`);
+    toggle.title = "Warnings: when this card needs a look, Bob says so on Home, over the calendar";
+    toggle.addEventListener("change", () => switchWarning(card, toggle.checked));
+    label.append(BudgetUI.element("span", "sectionState", "Warnings"), toggle);
+    head.append(label);
+    card.warning = toggle;
+  }
   if (BOB_CARDS.has(def.id)) {
     const label = BudgetUI.element("label", "sectionSwitch");
     const toggle = BudgetUI.element("input", "pillSwitch");
@@ -215,8 +258,13 @@ function drawCard(card, shared = sharedFigures()) {
   }
 }
 
-// A card's switch as the budget has it (off while one is saving)
+// A card's switches as the budget has them (off while one is saving): On or Off, and its Warnings (only while it's on)
 function showSwitch(card, on) {
+  if (card.warning) {
+    card.warning.closest("label").hidden = !on;
+    card.warning.checked = bobWarningOn(card.def.id);
+    card.warning.disabled = switching;
+  }
   if (!card.toggle) return;
   card.toggle.checked = on;
   card.toggle.disabled = switching;
@@ -234,6 +282,42 @@ async function switchCard(card, on) {
   for (const other of pageCards) showSwitch(other, bobCardOn(other.def.id));
   if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
   else BudgetUI.warnIfUnsaved(result);
+}
+
+// A card's Warnings switch was tapped: saved with the budget, like its own switch
+async function switchWarning(card, on) {
+  if (switching) return;
+  switching = true;
+  for (const other of pageCards) {
+    if (other.toggle) other.toggle.disabled = true;
+    if (other.warning) other.warning.disabled = true;
+  }
+  const result = await turnBobWarning(card.def.id, on);
+  switching = false;
+  for (const other of pageCards) showSwitch(other, bobCardOn(other.def.id));
+  if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+  else if (result.saved === false) BudgetUI.warnIfUnsaved(result);
+  else if (on) BudgetUI.showToast(`${card.def.title} warnings are on: when it needs a look, Bob says so on Home, over the calendar.`);
+}
+
+// Bob's warnings for Home: what each card that's on with its Warnings on says when it needs a look (its highlight, when
+// it warns), worked out the way this page does it, without drawing the page. [{ title, text }]
+function bobWarnings() {
+  const defs = CARDS.filter(def => BOB_WARNING_CARDS.includes(def.id) && bobWarningOn(def.id));
+  if (defs.length === 0) return [];
+  const shared = sharedFigures();
+  const found = [];
+  for (const def of defs) {
+    const card = { def, el: BudgetUI.element("section"), toggle: null, state: null, warning: null, body: BudgetUI.element("div"), results: BudgetUI.element("div"), highlight: null };
+    try {
+      if (def.setup) def.setup(card);
+      const highlight = def.render(card, shared);
+      if (highlight && highlight.warn) found.push({ title: def.title, text: highlight.text });
+    } catch (error) {
+      console.error(`Bob's ${def.title} card couldn't be worked out:`, error);
+    }
+  }
+  return found;
 }
 
 // The top card: a line from each card that's on (red-orange for one that needs a look), and how many are off
@@ -538,14 +622,14 @@ function catchupEntries() {
 }
 
 // Purchases from `from` through `to`: Regular costs added by hand or with a Quick Entry icon (not from a recurring entry or
-// a connected spreadsheet, and not placeholders), on History's days, the calendar's, and in Upcoming. [{ date, title,
-// amount }], newest first.
+// a connected spreadsheet, not placeholders, and not Catchup entries, which only make In Bank match the bank), on History's
+// days, the calendar's, and in Upcoming. [{ date, title, amount }], newest first.
 function purchasesBetween(from, to) {
   const found = [];
   const add = (date, text) => {
     const line = readLine(text);
     if (line.blank || line.system || !line.title || line.amount >= 0) return;
-    if (getSpecialType(line.sprite) !== "❗️" || entryMark(line.sprite) || isPlaceholder(line.sprite)) return;
+    if (getSpecialType(line.sprite) !== "❗️" || entryMark(line.sprite) || isPlaceholder(line.sprite) || /^catch ?up$/.test(line.clean)) return;
     found.push({ date, title: line.title, amount: line.amount });
   };
   eachDay(from, to, (date, lines) => lines.forEach(text => add(date, text)));
@@ -954,7 +1038,7 @@ function goalPlan(goal, shared) {
     const per = neededEachPayday(goal, short, paydays, date, projection);
     const months = Math.max(1, getDayDifference(date, today) / (365.25 / 12));
     const danger = goalDanger(goal, per, paydays, date, projection, shared);
-    const note = `As your budget stands, it's ${formatMoney(short)} short on ${showDate(date)}. ${setAsideWords(goal, per, paydays.length)} until then (about ${formatMoney(per * paydays.length / months)} a month).${danger ? " " + danger : ""}`;
+    const note = `As your budget stands, it's ${formatMoney(short)} short on ${showDate(date)}. ${setAsideWords(goal, per, paydays.length)} until then (about ${formatMoney(per * paydays.length / months)} a month). ${GOAL_RECURRING_TIP}${danger ? " " + danger : ""}`;
     return { tone: danger ? "danger" : "short", status: danger ? "In danger" : "", balance, note };
   }
 
@@ -967,8 +1051,11 @@ function goalPlan(goal, shared) {
   const notThere = `As your budget stands, it doesn't get there in the next ${AHEAD_YEARS} years.`;
   if (paydays.length === 0) return { tone: "short", status: "", balance, note: notThere };
   const per = neededEachPayday(goal, short, paydays, yearOut, projection);
-  return { tone: "short", status: "", balance, note: `${notThere} ${setAsideWords(goal, per, paydays.length)} would get it there in a year (by ${showDate(yearOut)}).` };
+  return { tone: "short", status: "", balance, note: `${notThere} ${setAsideWords(goal, per, paydays.length)} would get it there in a year (by ${showDate(yearOut)}). ${GOAL_RECURRING_TIP}` };
 }
+
+// Said after what reaching a goal takes from each payday
+const GOAL_RECURRING_TIP = "It's helpful to put these payments in as a recurring entry, so they are accounted for in your budget.";
 
 // "Setting aside about $45.00 from each of your 12 paydays": what reaching a goal takes, in words for what it's for (more
 // toward a credit card below $0, spending less for In Bank or the Total)

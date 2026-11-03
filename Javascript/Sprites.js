@@ -6,8 +6,8 @@
 // text is its emoji).
 //
 // The images are Resources/Sprites/*.webp. The entry types are round: Regular a red circle with a !, Hidden a
-// purple circle with an X, Transfer a green dot in a white ring in a green circle, Recurring an orange check, and
-// Spreadsheet a yellow plus. The budget's own lines are triangles: In Bank a green one with a check, below $0 a red
+// purple circle with an X, Transfer a green circle with an =, Recurring a blue dot in a white ring in a blue circle,
+// and Spreadsheet a yellow plus. The budget's own lines are triangles: In Bank a green one with a check, below $0 a red
 // one with a no sign, Gains a blue one with a plus, and Costs an orange one with a minus. To change one, replace its
 // file (any square image with a transparent background works; around 90x90 is plenty), then stamp the site
 // (node _tools/stamp.mjs) so browsers get the new one.

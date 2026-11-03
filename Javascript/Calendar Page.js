@@ -1,5 +1,6 @@
-// Calendar Page: the home page. "Lowest in bank after today", Bob's message (his card opens his page),
-// Upcoming, the calendar's day cells, and the new-entry / entry-options panels.
+// Calendar Page: the home page. "Lowest in bank after today", Bob's message (his card opens his page, and shows his
+// warnings over the calendar, see BOB'S WARNINGS), Upcoming, the calendar's day cells, and the new-entry / entry-options
+// panels.
 // Zooming a day is handled in Process Budget.js (LAYOUT FUNCTIONS); tapping an entry inside a
 // zoomed day opens its options here.
 
@@ -21,6 +22,7 @@ window.workspaceReady.then((loaded) => {
   wireGettingStarted();
   wireUndoButtons();
   wireQuickWaiting();
+  wireBobWarnings();
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
 });
@@ -374,9 +376,10 @@ function wireCalendar() {
 // as "catch up" in any spelling)
 const CATCHUP_TITLE = "Catchup";
 
-// In Bank tapped on a zoomed day: type what the bank says, and the difference goes on that day as a Transfer
-// titled Catchup, with no Other Account (adding into one that's already there), so that day and the ones after
-// it follow. A Transfer changes In Bank without being a cost or gain, so the fix isn't counted as spending.
+// In Bank tapped on a zoomed day: type what the bank says, and the difference goes on that day as a Regular entry
+// titled Catchup (adding into one that's already there), so that day and the ones after it follow. It's the purchases
+// (or gains) that slipped by, so it counts as a cost or gain like they would have: in the day's Gains and Costs, and in
+// the tracker.
 function openInBankOptions(lineEl, r, c) {
   const date = gridDates[r][c];
   const current = readInBank(calendarData[r][c]);
@@ -391,7 +394,7 @@ function openInBankOptions(lineEl, r, c) {
         label: "In Bank",
         amount: current,
         signs: BudgetUI.BALANCE_SIGNS,
-        hint: `What your bank says for this day. The difference goes on it as a ⭕️ Transfer titled ${CATCHUP_TITLE} (with no Other Account), and the days after it follow.`
+        hint: `What your bank says for this day. The difference goes on it as a ❗️ Regular entry titled ${CATCHUP_TITLE}, and the days after it follow.`
       });
       form.append(balance.el, BudgetUI.buttonRow([
         { label: "Save", kind: "primary", type: "submit" },
@@ -404,7 +407,7 @@ function openInBankOptions(lineEl, r, c) {
         if (Math.abs(typed) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         const difference = Math.round((typed - current) * 100) / 100;
         if (difference === 0) return panel.close(); // Already right
-        BudgetUI.submit(panel, () => addCalendarEntry({ title: CATCHUP_TITLE, sprite: "⭕️", amount: difference, date }));
+        BudgetUI.submit(panel, () => addCalendarEntry({ title: CATCHUP_TITLE, sprite: "❗️", amount: difference, date }));
       });
     }
   });
@@ -426,6 +429,7 @@ function renderInfoRow() {
 
   const bob = document.getElementById("bobMessage");
   if (bob) bob.textContent = bobMessage;
+  queueBobWarnings();
 
   const list = document.getElementById("upcomingList");
   if (!list) return;
@@ -473,6 +477,56 @@ function renderAfterCalendar() {
   document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${showStoredDate(found.lowest.date)}` : "Lowest is on --";
   show("afterLowest", found.lowest);
   show("afterDay28", found.day28);
+}
+
+//#endregion
+
+// =====================================================================
+// #region BOB'S WARNINGS (his cards with their Warnings switch on, from Bob Page.js)
+// =====================================================================
+// What Bob's cards say when they need a look (bobWarnings in Bob Page.js, for each card that's on with its Warnings on)
+// shows on his card, which moves over the calendar while there's one. Okay puts them away (and the card back under the
+// calendar) until tomorrow, on every device (okayBobWarnings). They're worked out a moment after the page draws, so the
+// calendar never waits on them.
+
+let bobWarningsQueued = 0;
+
+function wireBobWarnings() {
+  document.getElementById("bobOkay")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    const result = await okayBobWarnings();
+    button.disabled = false;
+    if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+    else BudgetUI.warnIfUnsaved(result);
+  });
+}
+
+// Work them out once the page has drawn (again after each change)
+function queueBobWarnings() {
+  clearTimeout(bobWarningsQueued);
+  bobWarningsQueued = setTimeout(renderBobWarnings, 50);
+}
+
+function renderBobWarnings() {
+  const card = document.getElementById("bobCard");
+  const box = document.getElementById("bobWarnings");
+  const above = document.getElementById("bobAbove");
+  const row = document.querySelector(".infoRow");
+  if (!card || !box || !above || !row || !workspaceLoaded) return;
+  const warnings = typeof bobWarnings === "function" && !bobWarningsOkayed() ? bobWarnings() : [];
+  const list = document.getElementById("bobWarningList");
+  list.replaceChildren(...warnings.map(warning => {
+    const item = BudgetUI.element("li", "bobHighlight isWarning");
+    item.append(BudgetUI.element("strong", "", `${warning.title}: `), warning.text);
+    return item;
+  }));
+  box.hidden = warnings.length === 0;
+  card.classList.toggle("isWarning", warnings.length > 0);
+  row.classList.toggle("bobAway", warnings.length > 0);
+  // Over the calendar while there's one, and back in its place (before Upcoming) after
+  if (warnings.length > 0 && card.parentElement !== above) above.appendChild(card);
+  if (warnings.length === 0 && card.parentElement !== row) row.insertBefore(card, row.querySelector(".upcomingCard"));
 }
 
 //#endregion

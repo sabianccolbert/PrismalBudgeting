@@ -19,7 +19,7 @@ const quickKey = quickParams.get("key") || "";
 // The API stores refraction types by name: "✖️" -> "hidden"
 const QUICK_TYPE_NAMES = Object.fromEntries(Object.entries(QUICK_ENTRY_TYPES).map(([name, sprite]) => [sprite, name]));
 let quickUsername = null;
-let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance }] (see showQuickAccounts)
+let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance, max }] (see showQuickAccounts)
 let quickPrisms = [];   // The account's prisms, in order: [{ title, amount, type }] (see PRISMS)
 let quickWavelengths = null; // The budget's wavelengths ([{ id, name }]) when the form asks for one (Bob's card for it is on; the API's check says)
 const QUICK_NOTE_MAX = 20000; // The longest note an entry from here can have (the API keeps the same limit)
@@ -46,10 +46,20 @@ if (quickKey && quickParams.has("setup")) {
 // Home (and Back) go on when this browser is signed in, and straight to the login page when it isn't: not to the front
 // page, and not to a signed-in page that would sign out the moment it opens (a sign-in left idle too long, see
 // signedInNow in Layout.js). Worked out as they're tapped, since this page can stay open for days.
+// Opened from the home screen as an app (RUNNING_AS_APP, Layout.js), Home opens the site in the phone's browser instead,
+// and the app stays on Quick Entry: the browser keeps its own sign-in, so it goes to its login page, which goes on to
+// Home when the browser is signed in.
 const quickHomeLink = document.querySelector('.navButtons a[href="/"]:not(#quickBack)');
 const quickBackLink = document.getElementById("quickBack");
-if (quickHomeLink && !signedInNow()) quickHomeLink.setAttribute("href", "/login.html");
-quickHomeLink?.addEventListener("click", () => quickHomeLink.setAttribute("href", signedInNow() ? "/" : "/login.html"));
+if (quickHomeLink && RUNNING_AS_APP) {
+  quickHomeLink.target = "_blank";
+  quickHomeLink.rel = "noopener";
+  quickHomeLink.setAttribute("href", "/login.html");
+}
+if (quickHomeLink && !RUNNING_AS_APP && !signedInNow()) quickHomeLink.setAttribute("href", "/login.html");
+quickHomeLink?.addEventListener("click", () => {
+  if (!RUNNING_AS_APP) quickHomeLink.setAttribute("href", signedInNow() ? "/" : "/login.html");
+});
 quickBackLink?.addEventListener("click", () => {
   if (!signedInNow()) quickBackLink.setAttribute("href", "/login.html");
 });
@@ -164,8 +174,9 @@ async function addQuickEntry(panel, fields) {
   openQuickEntryForm(); // A fresh form for the next one
 }
 
-// The form's entry as the API keeps it: { title (with its Other Account), type, amount, date: "YYYY-MM-DD", and
-// placeholder: true for a placeholder, percent for a % amount (see PERCENT_MARK in Process Budget.js), whose amount is
+// The form's entry as the API keeps it: { title (with its Other Account, and the one a Transfer comes from), type, amount,
+// date: "YYYY-MM-DD", and placeholder: true for a placeholder (until: the day it's deleted after, "YYYY-MM-DD", when one
+// was picked), percent for a % amount (see PERCENT_MARK in Process Budget.js), whose amount is
 // what it comes to with the account's balance today; the budget works it out again for its day, purpose: its title's
 // wavelength, when one was picked (see WAVELENGTH PLANNING), which the budget gives the title as it's added, and note:
 // its note, when it has one (see ENTRY NOTES) }
@@ -173,7 +184,7 @@ function toQueued(entry) {
   const hasPercent = typeof entry.percent === "number";
   const account = quickAccounts.find(known => cleanString(known.name) === cleanString(splitAccount(entry.title).account));
   const amount = hasPercent ? percentValue(entry.percent, account?.balance ?? 0) : entry.amount;
-  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}), ...(hasPercent ? { percent: entry.percent } : {}), ...(entry.purpose ? { purpose: entry.purpose } : {}), ...(entry.note && entry.note.trim() ? { note: entry.note } : {}) };
+  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}), ...(entry.placeholder && entry.until instanceof Date ? { until: formatToYMD(entry.until) } : {}), ...(hasPercent ? { percent: entry.percent } : {}), ...(entry.purpose ? { purpose: entry.purpose } : {}), ...(entry.note && entry.note.trim() ? { note: entry.note } : {}) };
 }
 
 // A home screen icon's page often stays open in the background for days. Looked at again on a later day, New
@@ -322,7 +333,7 @@ function highlightForm() {
 // doesn't count: it goes with what the prism fills in)
 async function savePrismFromForm(panel, fields) {
   const { title, amount: typedAmount, percent, sprite, account, placeholder } = fields.values();
-  if (title.includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
+  if (hasTitleArrow(title)) return panel.setError(TITLE_ARROW);
   // (A % box left empty keeps no amount, like an empty amount box)
   if (Number.isNaN(percent)) return panel.setError("Enter the percent as a number, like 3 or 12.5, or leave it blank.");
   if (percent !== null && Math.abs(percent) > MAX_PERCENT) return panel.setError(`A percent can be up to ${MAX_PERCENT}%.`);
@@ -565,8 +576,9 @@ function waitingRow(item) {
 // Change: the waiting entry goes into the form (Change Entry), which comes into view
 function changeWaiting(item) {
   if (quickForm && quickForm.mode === "entry") stashedEntry = quickForm.fields.values();
-  const { title, account } = splitAccount(item.title);
-  openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, placeholder: !!item.placeholder, purpose: item.purpose, note: typeof item.note === "string" ? item.note : "" }, item);
+  const { title, account, from } = splitAccount(item.title);
+  const until = typeof item.until === "string" ? createSafeMidnight(item.until, true) : null;
+  openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, from, placeholder: !!item.placeholder, until: until && !isNaN(until.getTime()) ? until : null, purpose: item.purpose, note: typeof item.note === "string" ? item.note : "" }, item);
   // An account renamed or deleted since isn't in the list, so it says to pick one
   if (account && !quickAccounts.some(known => cleanString(known.name) === cleanString(account))) {
     BudgetUI.showToast(`${account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
@@ -668,14 +680,15 @@ function quickProblem(result) {
     (result.status === 0 ? "Couldn't reach Prismal Budget. Check your connection and try again." : "That didn't work. Please try again.");
 }
 
-// The account picker's accounts as the API sent them, each with its balance (null when it isn't known). The API
+// The account picker's accounts as the API sent them, each with its balance (null when it isn't known) and the most it
+// can hold (null for none), which shows after it ("$500.00/$2000.00"). The API
 // counts a waiting entry for an account from its day on, so they come back after every entry added or taken back,
 // and the open form's list follows.
 function showQuickAccounts(accounts) {
   if (!Array.isArray(accounts)) return;
   quickAccounts = accounts
     .filter(account => account && typeof account.name === "string" && account.name.trim())
-    .map(account => ({ name: account.name, balance: typeof account.balance === "number" ? account.balance : null }));
+    .map(account => ({ name: account.name, balance: typeof account.balance === "number" ? account.balance : null, max: typeof account.max === "number" && account.max > 0 ? account.max : null }));
   if (quickForm) quickForm.fields.setAccounts(quickAccounts);
 }
 

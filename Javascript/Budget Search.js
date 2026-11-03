@@ -202,8 +202,9 @@ function fillTrackerRowTitles() {
 // Results: newest first, each with a checkbox and a running total of the checked amounts. Transfers start unchecked,
 // unless a tracker row that counts transfers found them. Tapping a result (anywhere but its checkbox) opens its options,
 // the same as on a zoomed day: one in History keeps the balances, and one that would land by itself after the calendar
-// (a recurring entry's or a connected spreadsheet's, still to come) goes into Upcoming for its day once it's changed.
-function renderSearchResults({ results, from, to, searchingFor }) {
+// (a recurring entry's or a connected spreadsheet's, still to come) goes into Upcoming for its day once it's changed. A
+// search that looks past today ends with Go To Accounts (goToAccounts).
+function renderSearchResults({ results, from, to, searchingFor, toDay }) {
   const container = document.getElementById("searchResults");
   container.replaceChildren();
   container.hidden = false;
@@ -223,6 +224,7 @@ function renderSearchResults({ results, from, to, searchingFor }) {
 
   if (results.length === 0) {
     container.appendChild(BudgetUI.element("p", "searchMessage", "No entries found."));
+    goToAccounts(container, toDay);
     return;
   }
 
@@ -307,5 +309,19 @@ function renderSearchResults({ results, from, to, searchingFor }) {
   const scroll = BudgetUI.element("div", "dataScroll searchScroll");
   scroll.appendChild(tableEl);
   container.appendChild(scroll);
+  goToAccounts(container, toDay);
+}
+
+// A search that looks past today ends with Go To Accounts: Bob's Accounts card (on his page), with every balance on the
+// search's To day (up to the 10 years it looks ahead)
+function goToAccounts(container, toDay) {
+  if (!(toDay instanceof Date) || isNaN(toDay.getTime()) || toDay <= today) return;
+  const furthest = addMonths(today, 120);
+  const link = BudgetUI.element("a", "budgetButton searchAccounts", "Go To Accounts");
+  link.href = `/menu/bob.html?day=${formatToYMD(toDay > furthest ? furthest : toDay)}#accountsCard`;
+  link.title = `Every account's balance on ${showDate(toDay > furthest ? furthest : toDay)}, on Bob's Accounts card`;
+  const row = BudgetUI.element("div", "panelButtons searchAccountsRow");
+  row.append(link);
+  container.append(row);
 }
 

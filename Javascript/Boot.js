@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "10.27.2026.C";
+  const SITE_VERSION = "11.02.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,25 +26,25 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "9436a62ce0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "5928db6ad9",
-    "/Javascript/Budget Pages.js": "18b47f3a0e",
-    "/Javascript/Budget Search.js": "3bc37d7928",
-    "/Javascript/Budget UI.js": "df1b675d3c",
-    "/Javascript/Calendar Page.js": "c536948fab",
-    "/Javascript/Dates.js": "78e76345c5",
+    "/Javascript/Bob Page.js": "56c365b7c9",
+    "/Javascript/Budget Pages.js": "bce7117702",
+    "/Javascript/Budget Search.js": "ac9e964a18",
+    "/Javascript/Budget UI.js": "9552af87df",
+    "/Javascript/Calendar Page.js": "f90d208df8",
+    "/Javascript/Dates.js": "4d24ab7d01",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
     "/Javascript/Layout.js": "04622646fe",
     "/Javascript/Login.js": "9c83142ea4",
     "/Javascript/Passkeys.js": "2403cf6847",
-    "/Javascript/Process Budget.js": "ddf8a1798f",
-    "/Javascript/Quick Entry.js": "fc9efcaeff",
+    "/Javascript/Process Budget.js": "3fc336926c",
+    "/Javascript/Quick Entry.js": "df58d4c240",
     "/Javascript/Session.js": "988bbb66b5",
     "/Javascript/Settings Page.js": "61793e4cdd",
     "/Javascript/Sounds.js": "4cfba7dffa",
-    "/Javascript/Spreadsheets Page.js": "1d4c741d9b",
-    "/Javascript/Spreadsheets.js": "24e47ca597",
-    "/Javascript/Sprites.js": "5b494b26db",
+    "/Javascript/Spreadsheets Page.js": "0c5bfc8f58",
+    "/Javascript/Spreadsheets.js": "dbff5030e0",
+    "/Javascript/Sprites.js": "13f4299e80",
     "/Javascript/Starfield Setup.js": "70e7fd08cb",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
     "/Resources/Sounds/Ambient2.mp3": "aab38039a1",
@@ -64,10 +64,10 @@
     "/Resources/Sprites/Hidden.webp": "cb92741fc5",
     "/Resources/Sprites/InBank.webp": "40a6bd5f60",
     "/Resources/Sprites/Negative.webp": "4f6dda7720",
-    "/Resources/Sprites/Recurring.webp": "f35a230cbd",
+    "/Resources/Sprites/Recurring.webp": "6b1b7560bb",
     "/Resources/Sprites/Regular.webp": "660dede305",
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
-    "/Resources/Sprites/Transfer.webp": "4387708852",
+    "/Resources/Sprites/Transfer.webp": "e62e14338d",
     "/Resources/Star.webp": "f2d3021d0b"
   };
   // </stamp:files>
@@ -303,6 +303,8 @@
       if (page !== "quick") scripts.push("/Javascript/Spreadsheets.js");
       // Search (Home's and History's): before the page script, which opens it
       if (page === "home" || page === "history") scripts.push("/Javascript/Budget Search.js");
+      // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings)
+      if (page === "home") scripts.push("/Javascript/Bob Page.js");
       scripts.push(PAGE_SCRIPTS[page] || "/Javascript/Budget Pages.js");
     }
     return scripts;

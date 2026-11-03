@@ -549,7 +549,7 @@ const BudgetUI = (() => {
       const item = list.children[active];
       if (item) box.setAttribute("aria-activedescendant", item.id);
       else box.removeAttribute("aria-activedescendant");
-      if (item) item.scrollIntoView({ block: "nearest" });
+      if (item) showInList(list, item);
     };
     const outside = (event) => {
       if (!wrap.contains(event.target)) close();
@@ -654,59 +654,85 @@ const BudgetUI = (() => {
   // Only a picked account links the entry: a title that's an account's name doesn't pick it. A Transfer changes the
   // account by the opposite of its amount (the money moved from or to In Bank), a Hidden entry by its own amount
   // (accountChange). It's a dropdown of the accounts, each with its balance today on a second line (accountChoice).
-  // accounts: in order, [{ name, balance, max }], or just names.
-  // amount: the form's amountField. type(): the picked refraction type. account: picked to start.
-  function accountField({ accounts = [], amount, type = () => "⭕️", account = "" }) {
+  // A Transfer with an account picked can come From another Other Account instead of In Bank (a second dropdown, In Bank
+  // to start): then that account plays In Bank's part ("Move ← Savings → HSA", see fromAccount), and In Bank doesn't
+  // change. accounts: in order, [{ name, balance, max }], or just names.
+  // amount: the form's amountField. type(): the picked refraction type. account and from: picked to start.
+  // value(): the account picked ("" for none); from(): the account it comes from ("" for In Bank, and for anything but a
+  // Transfer).
+  function accountField({ accounts = [], amount, type = () => "⭕️", account = "", from = "" }) {
     let list = [];
     let shown = false; // Hidden or Transfer is picked (see setVisible)
     const choices = dropdownList([], "", () => describe(), "Other Account");
     choices.el.classList.add("accountDropdown");
     const wrapper = field("Other Account", choices.el, { optional: true });
+    const fromChoices = dropdownList([], "", () => describe(), "From");
+    fromChoices.el.classList.add("accountDropdown");
+    const fromField = field("From", fromChoices.el);
+    fromField.classList.add("fromField");
     const hint = element("span", "panelHint");
-    wrapper.appendChild(hint);
+    wrapper.append(fromField, hint);
     wrapper.hidden = true;
 
     const accountTitled = (text) => list.find(account => cleanString(account.name) === cleanString(text))?.name || "";
 
-    // The accounts to pick from, each with its balance; the one picked stays picked while it's still there
+    // The accounts to pick from, each with its balance; the ones picked stay picked while they're still there
     function setAccounts(accounts) {
       const picked = choices.value();
+      const pickedFrom = fromChoices.value();
       list = accounts.map(account => (typeof account === "string" ? { name: account, balance: null } : account));
       choices.setOptions([{ key: "", label: "None" }, ...list.map(account => accountChoice(account))]);
       choices.set(accountTitled(picked));
+      fromChoices.setOptions([{ key: "", label: "In Bank" }, ...list.map(account => accountChoice(account))]);
+      fromChoices.set(accountTitled(pickedFrom));
       wrapper.hidden = !shown || list.length === 0;
       if (shown) describe();
     }
     setAccounts(accounts);
 
-    // The hint under the picker: what the entry does to the account. With an account picked, the amount can be a % of
-    // its balance instead.
+    // The account a Transfer comes from: one picked under From, while it's a Transfer with an account to go to
+    const fromName = () => (!wrapper.hidden && type() === "⭕️" && choices.value() ? fromChoices.value() : "");
+
+    // The hint under the pickers: what the entry does to the account (and, from another account, to that one). With an
+    // account picked, the amount can be a % of its balance instead.
     function describe() {
       const name = choices.value();
+      const isTransfer = type() === "⭕️";
+      fromField.hidden = !isTransfer || !name;
+      if (fromField.hidden) fromChoices.close();
+      const source = fromName() || "In Bank";
       amount.setPercentAllowed?.(shown && !wrapper.hidden && !!name);
       const value = amount.value();
-      const isTransfer = type() === "⭕️";
       const percent = amount.isPercent?.() ? amount.percent() : null;
       if (!name) hint.textContent = "Pick an account if this money moves into or out of it.";
+      else if (isTransfer && cleanString(source) === cleanString(name)) hint.textContent = "Pick another account to move it from, or In Bank.";
       else if (amount.isPercent?.()) {
         const share = `${Math.abs(percent)}% of what's in ${name} as that day starts`;
         if (!percent || Number.isNaN(percent)) hint.textContent = `A percent of what's in ${name} as that day starts, worked out again whenever it changes. Once the day passes, it stays what it came to.`;
-        else if (isTransfer) hint.textContent = percent < 0 ? `Moves ${share}, from In Bank into ${name}.` : `Moves ${share}, from ${name} into In Bank.`;
+        else if (isTransfer) hint.textContent = percent < 0 ? `Moves ${share}, from ${source} into ${name}.` : `Moves ${share}, from ${name} into ${source}.`;
         else hint.textContent = percent < 0 ? `Takes ${share}, out of ${name}.` : `Adds ${share}, to ${name}.`;
       } else if (value === null || Number.isNaN(value) || value === 0) {
         hint.textContent = isTransfer
-          ? `A cost moves money from In Bank into ${name}, and a gain moves it back.`
+          ? `A cost moves money from ${source} into ${name}, and a gain moves it back.${fromName() ? " In Bank stays the same." : ""}`
           : `A cost takes from ${name}, and a gain adds to it (In Bank stays the same).`;
       } else if (isTransfer) {
-        hint.textContent = value < 0 ? `Moves ${formatMoney(-value)} from In Bank into ${name}.` : `Moves ${formatMoney(value)} from ${name} into In Bank.`;
+        hint.textContent = value < 0 ? `Moves ${formatMoney(-value)} from ${source} into ${name}.` : `Moves ${formatMoney(value)} from ${name} into ${source}.`;
       } else {
         hint.textContent = value < 0 ? `Takes ${formatMoney(-value)} out of ${name}.` : `Adds ${formatMoney(value)} to ${name}.`;
       }
     }
 
-    // Pick an account by name (any capitals), or none
-    const pick = (name) => choices.set(accountTitled(name));
-    pick(account);
+    // Pick an account by name (any capitals), or none; and the one a Transfer comes from ("" for In Bank)
+    const pick = (name) => {
+      choices.set(accountTitled(name));
+      describe();
+    };
+    const pickFrom = (name) => {
+      fromChoices.set(accountTitled(name));
+      describe();
+    };
+    choices.set(accountTitled(account));
+    fromChoices.set(accountTitled(from));
 
     amount.el.addEventListener("input", describe);
     amount.el.addEventListener("click", describe); // The Cost / Gain and $ / % buttons
@@ -714,15 +740,20 @@ const BudgetUI = (() => {
     return {
       el: wrapper,
       pick,
+      pickFrom,
       setAccounts,
       // Shown for Hidden and Transfer (when there are accounts to pick)
       setVisible(visible) {
         shown = visible;
         wrapper.hidden = !visible || list.length === 0;
-        if (wrapper.hidden) choices.close();
+        if (wrapper.hidden) {
+          choices.close();
+          fromChoices.close();
+        }
         describe();
       },
-      value: () => (wrapper.hidden ? "" : choices.value())
+      value: () => (wrapper.hidden ? "" : choices.value()),
+      from: fromName
     };
   }
 
@@ -815,21 +846,81 @@ const BudgetUI = (() => {
   }
 
   // The Placeholder switch: a placeholder stands in for an entry that's expected (like an estimate). It counts like any
-  // entry and shows in yellow, and the daily update deletes it once its day has passed (see PLACEHOLDER_MARK in Process
-  // Budget.js), so it's only offered for a day from today on: setDate(date) hides it for a day before today (date: a
-  // Date, or null for today). value(): on and shown.
-  const PLACEHOLDER_HINT = "A stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes.";
-  function placeholderField({ checked = false, hint = PLACEHOLDER_HINT } = {}) {
+  // entry and shows in yellow, and the budget deletes it once its last day has passed (see PLACEHOLDER_MARK in Process
+  // Budget.js): its own day, or while the switch is on, a day picked under it (Delete it after: any day, before or after
+  // its own), or for a recurring entry (days: true), how many days before or after each day it lands on. It's offered for
+  // a day from today on (and for an entry that's a placeholder already: keepShown): setDate(date) hides it for a day
+  // before today (date: a Date, or null for today). until: the last day to start with (a Date, or with days, a number,
+  // below 0 for days before; null for its own day). value(): on and shown. until(): the last day picked (a Date, or null
+  // for its own day; undefined when it isn't a real day), or with days, how many after (below 0 for before; NaN when it
+  // isn't a whole number).
+  const PLACEHOLDER_HINT = "A stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes (or the day you pick under it).";
+  function placeholderField({ checked = false, until = null, days = false, keepShown = false, hint = PLACEHOLDER_HINT } = {}) {
     const toggle = checkboxField({ label: "Placeholder", checked });
     const el = element("div", "panelField placeholderField");
-    el.append(toggle.el, element("span", "panelHint", hint));
+    let untilBox;
+    if (days) {
+      // Delete each one [3] [days after its day / days before its day], laid out like Frequency
+      const count = element("input", "frequencyCount placeholderDays");
+      count.type = "text";
+      count.inputMode = "numeric";
+      count.placeholder = "0";
+      count.maxLength = 3;
+      count.setAttribute("aria-label", "How many days");
+      const side = element("select", "selectInput frequencyUnit");
+      side.append(new Option("days after its day", "after"), new Option("days before its day", "before"));
+      side.setAttribute("aria-label", "After or before its day");
+      const show = (value) => {
+        count.value = typeof value === "number" && value !== 0 ? String(Math.abs(value)) : "";
+        side.value = typeof value === "number" && value < 0 ? "before" : "after";
+      };
+      show(until);
+      const row = element("div", "frequencyRow");
+      row.append(count, side);
+      untilBox = {
+        el: field("Delete each one", row, { optional: true, hint: "Blank or 0: once its own day passes. Before its day: each one is deleted that many days ahead of it, so the days just ahead don't have it." }),
+        set: show,
+        value() {
+          const text = count.value.trim();
+          const number = text === "" ? 0 : Number(text);
+          if (!Number.isInteger(number) || number < 0) return NaN;
+          return side.value === "before" ? -number : number;
+        }
+      };
+    } else {
+      const box = dateField({ label: "Delete it after", date: until instanceof Date ? until : null, optional: true, hint: "Blank: once its own day passes. Or pick any day, before or after its own: it's deleted once that day passes." });
+      untilBox = {
+        el: box.el,
+        set(value) { box.input.value = value instanceof Date ? showDate(value) : ""; },
+        value: () => box.value()
+      };
+    }
+    untilBox.el.classList.add("placeholderUntil");
+    const showUntil = () => { untilBox.el.hidden = !toggle.input.checked; };
+    toggle.input.addEventListener("change", showUntil);
+    showUntil();
+    el.append(toggle.el, element("span", "panelHint", hint), untilBox.el);
     return {
       el,
       input: toggle.input,
-      setDate(date) { el.hidden = date instanceof Date && !isNaN(date.getTime()) && date < today; },
-      set(on) { toggle.input.checked = !!on; },
-      value: () => !el.hidden && toggle.input.checked
+      setDate(date) { el.hidden = !keepShown && date instanceof Date && !isNaN(date.getTime()) && date < today; },
+      // On or off, and (when it's given) the last day to show
+      set(on, newUntil) {
+        toggle.input.checked = !!on;
+        if (newUntil !== undefined) untilBox.set(newUntil);
+        showUntil();
+      },
+      value: () => !el.hidden && toggle.input.checked,
+      until: () => untilBox.value()
     };
+  }
+
+  // A placeholder's last day as a form gives it (placeholderField's until()), checked: { until } (a Date, or null for its
+  // own day), or { error }
+  function readPlaceholderUntil(placeholder) {
+    const until = placeholder.until();
+    if (until === undefined) return { error: `That Delete it after date isn't a real day. Use ${datePattern()}.` };
+    return { until };
   }
 
   // Wavelength: what an entry's money is for (its purpose, one of the budget's wavelengths: see WAVELENGTH PLANNING in
@@ -1129,7 +1220,7 @@ const BudgetUI = (() => {
     dateInput.input.addEventListener("change", showPlaceholder);
     showPlaceholder();
     // The purpose shown is the title's (one with no title of its own goes by its account's name)
-    const followTitle = () => purpose.follow(withAccount(title.value(), account.value()));
+    const followTitle = () => purpose.follow(withAccount(title.value(), account.value(), account.from()));
     title.input.addEventListener("input", followTitle);
     account.el.addEventListener("pick", followTitle);
     return {
@@ -1138,9 +1229,9 @@ const BudgetUI = (() => {
       purposeEl: purpose.el,
       noteEl: note.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), date: dateInput.value(), placeholder: placeholder.value(), purpose: purpose.value(), note: note.value() }),
+      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), from: account.from(), date: dateInput.value(), placeholder: placeholder.value(), until: placeholder.until(), purpose: purpose.value(), note: note.value() }),
       setAccounts: account.setAccounts,
-      fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", placeholder: newPlaceholder = false, purpose: newPurpose, note: newNote } = {}) {
+      fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", from: newFrom = "", placeholder: newPlaceholder = false, until: newUntil = null, purpose: newPurpose, note: newNote } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
           amount.input.value = Math.round(newAmount * 100) !== 0 ? Math.abs(newAmount).toFixed(2) : "";
@@ -1148,7 +1239,8 @@ const BudgetUI = (() => {
         }
         if (sprite) refraction.set(sprite);
         if (newAccount) account.pick(newAccount);
-        if (newPlaceholder) placeholder.set(true);
+        if (newFrom) account.pickFrom(newFrom);
+        if (newPlaceholder) placeholder.set(true, newUntil);
         title.input.dispatchEvent(new Event("input", { bubbles: true }));
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
         if (typeof percent === "number" && percent !== 0) amount.setPercent(percent);
@@ -1156,9 +1248,10 @@ const BudgetUI = (() => {
         if (typeof newNote === "string") note.set(newNote);
       },
       read() {
-        if (title.value().includes(ACCOUNT_ARROW)) return { error: TITLE_ARROW };
-        const entry = { title: withAccount(title.value(), account.value()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value(), purpose: purpose.value(), note: note.value() };
+        if (hasTitleArrow(title.value())) return { error: TITLE_ARROW };
+        const entry = { title: withAccount(title.value(), account.value(), account.from()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value(), purpose: purpose.value(), note: note.value() };
         if (!entry.title) return { error: "Give the entry a title." };
+        if (account.from() && cleanString(account.from()) === cleanString(account.value())) return { error: SAME_ACCOUNT };
         const { percent, error } = readPercentField(amount);
         if (error) return { error };
         if (percent !== null) {
@@ -1171,6 +1264,11 @@ const BudgetUI = (() => {
         entry.date = entry.date || date;
         if (percent !== null && entry.date < today) return { error: PERCENT_PAST_DAY };
         entry.placeholder = placeholder.value() && entry.date >= today;
+        if (entry.placeholder) {
+          const { until, error: untilError } = readPlaceholderUntil(placeholder);
+          if (untilError) return { error: untilError };
+          if (until) entry.until = until;
+        }
         return { entry };
       }
     };
@@ -1207,11 +1305,15 @@ const BudgetUI = (() => {
       build(form, panel) {
         const display = renderEntryLine(line, lineIndex, date);
         display.classList.add("panelEntry");
-        // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own
+        // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own (and a
+        // Transfer from another Other Account changes that one by its amount, and In Bank not at all)
         const account = linkedAccount(parts[0], title);
-        const accountNote = account ? element("p", "panelHint", refraction === "⭕️"
-          ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
-          : `${account.name} (Other Accounts) changes by this entry's amount, and In Bank doesn't.`) : null;
+        const source = account ? fromAccount(parts[0], title) : null;
+        const accountNote = !account ? null : element("p", "panelHint", source
+          ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, and ${source.name} gets its amount, since the money moves between them. In Bank doesn't change.`
+          : refraction === "⭕️"
+            ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
+            : `${account.name} (Other Accounts) changes by this entry's amount, and In Bank doesn't.`);
         const historyNote = inHistory
           ? element("p", "panelHint", "This day is in History, so changing this entry doesn't change In Bank or your Other Accounts' balances. The tracker and Search count the change.")
           : null;
@@ -1243,22 +1345,26 @@ const BudgetUI = (() => {
         // Its refraction type and Other Account can change too. Then it comes off as it is and goes on as the new
         // one, adding into an entry already on that day with the same title and type.
         const type = refractionField({ value: refraction, allowAuto: false, onChange: (key) => accountPicker.setVisible(isAccountType(key)) });
-        const accountPicker = accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "" });
+        const accountPicker = accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "", from: source ? source.name : "" });
         accountPicker.setVisible(isAccountType(refraction));
         const startAccount = accountPicker.value();
-        // A placeholder (only for a day from today on, so never in History): it follows Move to's day
-        const placeholder = placeholderField({ checked: wasPlaceholder });
+        const startFrom = accountPicker.from();
+        // A placeholder (for a day from today on, and one that's a placeholder already, kept past its day): it follows Move
+        // to's day. Its last day shows under it when one was picked.
+        const ends = placeholderEnds(parts[0], date);
+        const startUntil = ends && ends.getTime() !== date.getTime() ? ends : null;
+        const placeholder = placeholderField({ checked: wasPlaceholder, until: startUntil, keepShown: wasPlaceholder });
         const showPlaceholder = () => {
           const move = moveTo.value();
           placeholder.setDate(move instanceof Date ? move : date);
-          if (inHistory) placeholder.el.hidden = true;
+          if (inHistory && !wasPlaceholder) placeholder.el.hidden = true;
         };
         moveTo.input.addEventListener("input", showPlaceholder);
         moveTo.input.addEventListener("change", showPlaceholder);
         showPlaceholder();
         // Its Wavelength (once Bob's card for it is on): its title's, following a new title as it's typed
         const purpose = purposeField({ shown: bobCardOn("purposes"), title });
-        const newTitleNow = () => withAccount(titleBox ? titleBox.value() : ownTitle, accountPicker.value());
+        const newTitleNow = () => withAccount(titleBox ? titleBox.value() : ownTitle, accountPicker.value(), accountPicker.from());
         titleBox?.input.addEventListener("input", () => purpose.follow(newTitleNow()));
         accountPicker.el.addEventListener("pick", () => purpose.follow(newTitleNow()));
         // Its note, under the buttons (it goes wherever the entry goes)
@@ -1274,7 +1380,7 @@ const BudgetUI = (() => {
         form.addEventListener("submit", (event) => {
           event.preventDefault();
           const newOwn = titleBox ? titleBox.value() : ownTitle;
-          if (newOwn.includes(ACCOUNT_ARROW)) return panel.setError(TITLE_ARROW);
+          if (hasTitleArrow(newOwn)) return panel.setError(TITLE_ARROW);
           const renamed = newOwn !== ownTitle;
           const { percent: newPercent, error: percentError } = readPercentField(amount);
           if (percentError) return panel.setError(percentError);
@@ -1284,22 +1390,31 @@ const BudgetUI = (() => {
           if (Math.abs(newAmount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
           if (move === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
           if (newPercent !== null && (move instanceof Date ? move : date) < today) return panel.setError(PERCENT_PAST_DAY);
-          // (Left as it is when the switch isn't there: a day before today never has one)
+          // (Left as it is when the switch isn't there: a day before today never has one, unless it was kept past its day)
           const newPlaceholder = placeholder.el.hidden ? undefined : placeholder.value();
+          // Its last day, when that changed (a Date, or null for its own day)
+          let newUntil;
+          if (newPlaceholder) {
+            const { until, error: untilError } = readPlaceholderUntil(placeholder);
+            if (untilError) return panel.setError(untilError);
+            if ((until ? until.getTime() : null) !== (startUntil ? startUntil.getTime() : null)) newUntil = until;
+          }
           const newPurpose = purpose.value();
           // (Left out when it didn't change, so the entry keeps its own wherever it goes)
           const newNote = note.value() !== currentNote ? note.value() : undefined;
 
           const newSprite = type.value();
           const newAccount = accountPicker.value();
-          if (newSprite !== refraction || newAccount !== startAccount) {
+          const newFrom = accountPicker.from();
+          if (newFrom && cleanString(newFrom) === cleanString(newAccount)) return panel.setError(SAME_ACCOUNT);
+          if (newSprite !== refraction || newAccount !== startAccount || newFrom !== startFrom) {
             if (newPercent !== null && mode === "add") return panel.setError("To add a percent to it, save its new type or account first.");
             const total = mode === "set" ? newAmount : currentAmount + newAmount;
             if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-            const newTitle = withAccount(newOwn, newAccount);
+            const newTitle = withAccount(newOwn, newAccount, newFrom);
             // "→ Savings" has no title of its own, so it can't leave its account without one
             if (!newTitle) return panel.setError(titleBox ? "Give the entry a title, or keep its Other Account." : "This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
-            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, purpose: newPurpose, note: newNote };
+            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, ...(newUntil !== undefined ? { until: newUntil } : {}), purpose: newPurpose, note: newNote };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
             return submit(panel, () => changeKind(kind));
           }
@@ -1316,7 +1431,8 @@ const BudgetUI = (() => {
             change.percent = newPercent;
           }
           if (move && move.getTime() !== date.getTime()) change.moveDate = move;
-          const placeholderChanged = newPlaceholder !== undefined && newPlaceholder !== wasPlaceholder;
+          if (newUntil !== undefined) change.until = newUntil;
+          const placeholderChanged = (newPlaceholder !== undefined && newPlaceholder !== wasPlaceholder) || newUntil !== undefined;
           if (renamed) {
             if (!withAccount(newOwn, ownAccount)) return panel.setError("Give the entry a title.");
             change.renameTo = newOwn;
@@ -1372,14 +1488,14 @@ const BudgetUI = (() => {
         let match = null;
         const findMatch = () => {
           if (panel.panel.classList.contains("isBusy")) return;
-          const { title, sprite, account, date: picked } = fields.values();
+          const { title, sprite, account, from, date: picked } = fields.values();
           const day = picked || date;
-          match = title && !title.includes(ACCOUNT_ARROW) ? entryOnDay(withAccount(title, account), sprite, day) : null;
+          match = title && !hasTitleArrow(title) ? entryOnDay(withAccount(title, account, from), sprite, day) : null;
           matchField.hidden = !match;
           if (!match) return;
           const mark = entryMark(match.sprite);
-          const from = mark === RECURRING_MARK ? " (a recurring entry)" : mark === SHEET_MARK ? " (from a connected spreadsheet)" : "";
-          matchNote.replaceChildren(renderEntryLine(`${match.sprite} ${formatMoney(match.amount)} ${capitalize(withAccount(title, account))}`, 1, day), ` is already on ${showDay(day)}${from}. Add this amount to it, or set it to this amount?`);
+          const landed = mark === RECURRING_MARK ? " (a recurring entry)" : mark === SHEET_MARK ? " (from a connected spreadsheet)" : "";
+          matchNote.replaceChildren(renderEntryLine(`${match.sprite} ${formatMoney(match.amount)} ${capitalize(withAccount(title, account, from))}`, 1, day), ` is already on ${showDay(day)}${landed}. Add this amount to it, or set it to this amount?`);
         };
         let pending = 0;
         const queueFind = () => {
@@ -1401,7 +1517,7 @@ const BudgetUI = (() => {
             const amount = typeof entry.percent === "number" ? { amount: "", percent: entry.percent } : { amount: String(entry.amount) };
             // (A note goes after the one the entry has, like adding to it does)
             const note = entry.note.trim() ? joinNotes(entryNote(entry.date, entry.title, sprite), entry.note) : undefined;
-            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, purpose: entry.purpose, note }));
+            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, ...(entry.until ? { until: entry.until } : {}), purpose: entry.purpose, note }));
           }
           submit(panel, () => addCalendarEntry(entry));
         });
