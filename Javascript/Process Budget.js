@@ -836,12 +836,12 @@ function entryChange(change) {
 }
 
 // An entry gets a new title of its own (change.renameTo; its Other Account stays after it). On a day from today on, an
-// entry that lands by itself (a recurring entry's or a connected spreadsheet's, or a temp of one) keeps its title: it's
-// changed on the Recurring Entries or Spreadsheets page instead. Any entry on a day before today can be renamed (in
-// History too). It stays what it was (its type, mark, %, and placeholder), unless an entry with the new title and type
-// is already on that day: then the two become one (a day has one of each), their amounts added, a placeholder only if
-// both were, and a plain amount. Returns { title, sprite }: the entry as it is now.
-const RENAME_LANDED = "This entry comes from a recurring entry or a connected spreadsheet, so from today on its title is changed there (on the Recurring Entries or Spreadsheets page).";
+// entry that lands by itself (a recurring entry's or a connected spreadsheet's or calendar's, or a temp of one) keeps its
+// title: it's changed on the Recurring Entries or Spreadsheets & Calendars page instead. Any entry on a day before today
+// can be renamed (in History too). It stays what it was (its type, mark, %, and placeholder), unless an entry with the
+// new title and type is already on that day: then the two become one (a day has one of each), their amounts added, a
+// placeholder only if both were, and a plain amount. Returns { title, sprite }: the entry as it is now.
+const RENAME_LANDED = "This entry comes from a recurring entry or a connected spreadsheet or calendar, so from today on its title is changed there (on the Recurring Entries or Spreadsheets & Calendars page).";
 function renameEntry(change) {
   const date = createSafeMidnight(change.date || today);
   const { account, from: fromName } = splitAccount(String(change.title || "").trim());
@@ -3769,7 +3769,7 @@ function saveEntryExtras(date, title, sprite, { purpose, note } = {}) {
 const BACKUP_MAX_BYTES = 25 * 1024 * 1024; // The biggest file read (every part of a budget, with room to spare)
 const BACKUP_CHOICES = ["current", "uploaded", "remove"];
 // The tables a backup can fill, by the names its window gives them (Change Logs keep only their newest rows anyway)
-const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Other Accounts", tracker: "Tracker", sheets: "Connected Spreadsheets", calculator: "Paycheck Calculator", notes: "Notes" };
+const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Other Accounts", tracker: "Tracker", sheets: "Connected Spreadsheets And Calendars", calculator: "Paycheck Calculator", notes: "Notes" };
 
 // A Download My Data file's text, read and checked: { from: { username, downloaded (a Date, or null) }, days: Map(day's
 // time -> { lines, inBank }) from its History and calendar, upcoming (rows), recurring (rows), accounts (like
@@ -4001,7 +4001,7 @@ function backupPlans(backup) {
   if (backup.sheets && backup.sheets.length > 0) {
     const mine = sheetsData.list;
     const count = (choice) => mergeKeyed(keyed(mine, sheet => sheet.id), keyed(backup.sheets, sheet => sheet.id), choice);
-    plan("sheets", "Connected Spreadsheets", "spreadsheets", mine.length, backup.sheets.length, count(null).clashes, (choice) => {
+    plan("sheets", "Connected Spreadsheets And Calendars", "spreadsheets and calendars", mine.length, backup.sheets.length, count(null).clashes, (choice) => {
       sheetsData.list = count(choice).items.slice(0, MAX_SHEETS);
     });
   }
@@ -4149,7 +4149,7 @@ function uploadBackup(backup, choices) {
 }
 
 /* ---------- Connected spreadsheets ---------- */
-// Entries from the person's own spreadsheets (Google Sheets, Excel, ...), set up on the Spreadsheets page. Each one says
+// Entries from the person's own spreadsheets (Google Sheets, Excel, ...), set up on the Spreadsheets & Calendars page. Each one says
 // which cells hold the dates (always from the spreadsheet), and where the titles, amounts, refraction types,
 // and Other Accounts come from: cells too, or one typed in for all of them. Spreadsheets.js reads them (each
 // time Home or Settings opens) into entries kept here, and the budget writes those onto the calendar the same
@@ -4162,15 +4162,21 @@ function uploadBackup(backup, choices) {
 //   - Once a day passes its entries stay as they were (they turn into temps, see performDailyUpdate)
 //   - The next 28 days after the calendar, Lowest, Search, reminders, and Bob count them too
 // A day has one entry per title and type, so an entry with the title and type of a recurring entry that lands
-// the same day is left out (the Spreadsheets page says so). A spreadsheet that's off keeps its entries (it's read again
-// when it's turned back on) and its temps; deleting one turns its temps from today on into unique entries.
+// the same day is left out (the Spreadsheets & Calendars page says so). A spreadsheet that's off keeps its entries (it's
+// read again when it's turned back on) and its temps; deleting one turns its temps from today on into unique entries.
+// Connected calendars are kept in the same list and land the same way: their entries are the paychecks their shifts
+// come to (Calendars.js works them out, with the connection's pay settings).
 // sheetsData.list: [{ id, name, link, on, fields, entries: [[MM/DD/YYYY, type, amount, title]], problems: [text],
 // tabs: [tab names], access: "public" | "shared" }]. fields: { date, title, amount, type, account }, each
 // { tab, range: "B2:B50" } (cells; amount adds sign: "written" | "costs" | "gains") or { value } (typed).
+// A calendar also has kind: "calendar", pay (its pay settings, see PAY SETTINGS in Calendars.js), paychecks (what each
+// paycheck came to the last time it was read), and checked ({ shifts, paychecks, from }: what that read found);
+// its fields are only typed: title, type, and account.
 
 const SHEETS_VERSION = 1;
-const MAX_SHEETS = 10;
+const MAX_SHEETS = 10; // Spreadsheets and calendars, together
 const MAX_SHEET_NAME = 60;
+const MAX_KEPT_PAYCHECKS = 120;
 
 // The stored connected spreadsheets, checked and tidied: { version, list }
 function normalizeApiSheets(rawData) {
@@ -4182,13 +4188,16 @@ function normalizeApiSheets(rawData) {
   return { version: SHEETS_VERSION, list: list.filter(item => item && typeof item === "object" && typeof item.id === "string" && item.id).map(normalizeSheetConnection) };
 }
 
-// One connection, with only what it should have (and always in the same order, so comparing copies works)
+// One connection, with only what it should have (and always in the same order, so comparing copies works). A
+// calendar's pay settings and paychecks are kept as they are here (Calendars.js checks them as it reads them).
 function normalizeSheetConnection(item) {
   const text = (value, max) => String(value ?? "").slice(0, max);
   const isObject = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+  const isCalendar = item.kind === "calendar";
+  const count = (value) => (Number.isInteger(value) && value >= 0 ? value : 0);
   return {
     id: text(item.id, 40),
-    name: text(item.name, MAX_SHEET_NAME).trim() || "Spreadsheet",
+    name: text(item.name, MAX_SHEET_NAME).trim() || (isCalendar ? "Calendar" : "Spreadsheet"),
     link: text(item.link, 2000).trim(),
     on: item.on !== false,
     fields: isObject(item.fields) ? JSON.parse(JSON.stringify(item.fields)) : {},
@@ -4199,7 +4208,15 @@ function normalizeSheetConnection(item) {
     problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
     tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
     access: item.access === "shared" ? "shared" : "public",
-    ...(item.placeholder === true ? { placeholder: true } : {}) // Its entries are placeholders
+    ...(item.placeholder === true ? { placeholder: true } : {}), // Its entries are placeholders
+    ...(isCalendar ? {
+      kind: "calendar",
+      pay: isObject(item.pay) ? JSON.parse(JSON.stringify(item.pay)) : {},
+      paychecks: (Array.isArray(item.paychecks) ? item.paychecks : []).filter(isObject).slice(-MAX_KEPT_PAYCHECKS).map(paycheck => JSON.parse(JSON.stringify(paycheck))),
+      checked: isObject(item.checked)
+        ? { shifts: count(item.checked.shifts), paychecks: count(item.checked.paychecks), from: text(item.checked.from, 10) }
+        : null
+    } : {})
   };
 }
 
@@ -4214,17 +4231,27 @@ function sheetConnectionById(id) {
   return (sheetsData?.list || []).find(connection => connection.id === id) || null;
 }
 
-// New (id null) or changed connection. config: { name, link, fields, placeholder (its entries are placeholders) };
-// read: { entries, problems, tabs, access }, what reading it just now found (Spreadsheets.js readConnection)
+// "Spreadsheet" or "Calendar", for a connection's messages and Change Logs rows
+const connectionNoun = (connection) => (connection?.kind === "calendar" ? "Calendar" : "Spreadsheet");
+
+// What a connection's entries are worked out from (its link, cells or typed parts, and a calendar's pay settings). A
+// read made from anything else, like one that started before the connection was changed, is out of date.
+const connectionBasis = (connection) => JSON.stringify([connection.link, connection.fields, connection.pay ?? null]);
+
+// New (id null) or changed connection. config: { name, link, fields, placeholder (its entries are placeholders), and
+// for a calendar, kind: "calendar" and pay }; read: what reading it just now found ({ entries, problems, tabs, access }
+// from Spreadsheets.js readConnection, or a calendar's { entries, problems, paychecks, checked } from Calendars.js
+// workOut)
 function sheetConnection(config, read, id) {
   const list = sheetsData.list;
+  const noun = connectionNoun(config);
   const name = String(config.name || "").replace(/\s+/g, " ").trim();
-  if (!name) throw new BudgetInputError("Give the spreadsheet a name.");
-  if (name.length > MAX_SHEET_NAME) throw new BudgetInputError(`Spreadsheet names can be up to ${MAX_SHEET_NAME} characters.`);
-  if (!String(config.link || "").trim()) throw new BudgetInputError("Paste the spreadsheet's link.");
+  if (!name) throw new BudgetInputError(`Give the ${noun.toLowerCase()} a name.`);
+  if (name.length > MAX_SHEET_NAME) throw new BudgetInputError(`${noun} names can be up to ${MAX_SHEET_NAME} characters.`);
+  if (!String(config.link || "").trim()) throw new BudgetInputError(`Paste the ${noun.toLowerCase()}'s link.`);
   let index = id ? list.findIndex(connection => connection.id === id) : -1;
-  if (id && index === -1) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
-  if (!id && list.length >= MAX_SHEETS) throw new BudgetInputError(`You can connect up to ${MAX_SHEETS} spreadsheets.`);
+  if (id && (index === -1 || connectionNoun(list[index]) !== noun)) throw new BudgetInputError(`That ${noun.toLowerCase()} couldn't be found. Please try again.`);
+  if (!id && list.length >= MAX_SHEETS) throw new BudgetInputError(`You can connect up to ${MAX_SHEETS} spreadsheets and calendars, all together.`);
   const old = index === -1 ? null : list[index];
   const connection = normalizeSheetConnection({
     id: old ? old.id : newSheetId(),
@@ -4236,14 +4263,15 @@ function sheetConnection(config, read, id) {
     problems: read.problems,
     tabs: read.tabs,
     access: read.access,
-    placeholder: config.placeholder === undefined ? !!old?.placeholder : config.placeholder === true
+    placeholder: config.placeholder === undefined ? !!old?.placeholder : config.placeholder === true,
+    ...(noun === "Calendar" ? { kind: "calendar", pay: config.pay, paychecks: read.paychecks, checked: read.checked } : {})
   });
   if (old) list[index] = connection;
   else list.push(connection);
 
-  formEntryRow[2] = old ? "➕ Change Spreadsheet" : "➕ Connect Spreadsheet";
-  formEntryRow[3] = "Spreadsheet: " + name + (connection.placeholder ? " (Placeholders)" : "");
-  formEntryRow[4] = "Entries: " + connection.entries.length;
+  formEntryRow[2] = old ? `➕ Change ${noun}` : `➕ Connect ${noun}`;
+  formEntryRow[3] = `${noun}: ` + name + (connection.placeholder ? " (Placeholders)" : "");
+  formEntryRow[4] = (noun === "Calendar" ? "Paychecks: " : "Entries: ") + connection.entries.length;
   formEntryRow[5] = "Problems: " + connection.problems.length;
   return { sheetId: connection.id };
 }
@@ -4251,38 +4279,46 @@ function sheetConnection(config, read, id) {
 // A connection on or off (off takes its entries off the calendar)
 function switchSheet(id, on) {
   const connection = sheetConnectionById(id);
-  if (!connection) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
+  if (!connection) throw new BudgetInputError("That couldn't be found. Please try again.");
+  const noun = connectionNoun(connection);
   connection.on = !!on;
-  formEntryRow[2] = on ? "➕ Spreadsheet On" : "➕ Spreadsheet Off";
-  formEntryRow[3] = "Spreadsheet: " + connection.name;
+  formEntryRow[2] = on ? `➕ ${noun} On` : `➕ ${noun} Off`;
+  formEntryRow[3] = `${noun}: ` + connection.name;
   return {};
 }
 
 // Delete a connection (releaseSheetTemps then lets go of its temps from today on)
 function removeSheet(id) {
   const connection = sheetConnectionById(id);
-  if (!connection) throw new BudgetInputError("That spreadsheet couldn't be found. Please try again.");
+  if (!connection) throw new BudgetInputError("That couldn't be found. Please try again.");
+  const noun = connectionNoun(connection);
   sheetsData.list = sheetsData.list.filter(item => item !== connection);
-  formEntryRow[2] = "➕ Delete Spreadsheet";
-  formEntryRow[3] = "Spreadsheet: " + connection.name;
+  formEntryRow[2] = `➕ Delete ${noun}`;
+  formEntryRow[3] = `${noun}: ` + connection.name;
   return {};
 }
 
-// What reading the spreadsheets just now found: [{ id, entries, problems, tabs, access }], or { id, failed }
-// (couldn't read it: it keeps its entries, and says why)
+// What reading the spreadsheets (or the calendars) just now found: [{ id, basis, entries, problems, tabs, access }] (a
+// calendar's: { id, basis, entries, problems, paychecks, checked }), or { id, basis, failed } (couldn't read it: it keeps
+// its entries, and says why). A read of a connection that changed since it started (its basis) is left out.
 function applySheetReads(reads) {
   const names = [];
+  let calendars = 0;
   for (const read of Array.isArray(reads) ? reads : []) {
     const connection = sheetConnectionById(read.id);
-    if (!connection) continue;
+    if (!connection || (read.basis !== undefined && read.basis !== connectionBasis(connection))) continue;
+    const found = connection.kind === "calendar"
+      ? { entries: read.entries, problems: read.problems, paychecks: read.paychecks, checked: read.checked }
+      : { entries: read.entries, problems: read.problems, tabs: read.tabs, access: read.access };
     const updated = read.failed
       ? normalizeSheetConnection({ ...connection, problems: [read.failed] })
-      : normalizeSheetConnection({ ...connection, entries: read.entries, problems: read.problems, tabs: read.tabs, access: read.access });
+      : normalizeSheetConnection({ ...connection, ...found });
     if (JSON.stringify(updated) === JSON.stringify(connection)) continue;
     sheetsData.list[sheetsData.list.indexOf(connection)] = updated;
     names.push(connection.name);
+    if (connection.kind === "calendar") calendars++;
   }
-  formEntryRow[2] = "➕ Spreadsheet Update";
+  formEntryRow[2] = calendars > 0 && calendars === names.length ? "➕ Calendar Update" : "➕ Spreadsheet Update";
   formEntryRow[3] = "Updated: " + (names.join(", ") || "None");
   return {};
 }
@@ -7613,19 +7649,20 @@ function historySpot(date, history = historyData) {
 // Every change made through runBudgetAction keeps what it did with its Change Logs row ([8], as JSON), so the row's Undo
 // can take it back later, from any device: each day whose own entries it changed (on the calendar, in History, or in
 // Upcoming), the recurring entries, tracker rows, and Other Accounts it added or took off (a changed one is the old one
-// off and the new one on) or put in another order, the goals, Bob's settings, connected spreadsheets, and calculators it
-// changed, and the notes. Undo puts back what was there before, but only while everything the change touched is still
-// as it left it, so it never erases anything changed since (it says what changed instead), the same as Home's Undo.
-// What's worked out from those (In Bank, balances, the tracker's sums) is worked out again, like after any change.
-// The Undo is a change of its own, logged with what it did, so it can be undone too (that's a Redo, and the change it
-// undid can be undone again). A change too big to keep (like Upload A Backup, or an account rename across years of
-// History) has no Undo, and neither do a Search and the Debt Calculator's boxes being kept (saveDebtFields). The records
-// are measured as they're saved (the Change Logs table has to stay under MAX_TABLE_BYTES), so the newest rows keep theirs.
+// off and the new one on) or put in another order, the goals, Bob's settings, connected spreadsheets and calendars, and
+// calculators it changed, and the notes. Undo puts back what was there before, but only while everything the change
+// touched is still as it left it, so it never erases anything changed since (it says what changed instead), the same as
+// Home's Undo. What's worked out from those (In Bank, balances, the tracker's sums) is worked out again, like after any
+// change. The Undo is a change of its own, logged with what it did, so it can be undone too (that's a Redo, and the
+// change it undid can be undone again). A change too big to keep (like Upload A Backup, or an account rename across years
+// of History) has no Undo, and neither do a Search, the Debt Calculator's boxes being kept (saveDebtFields), and what
+// reading the connected spreadsheets and calendars again finds (the next read would only bring it back). The records are
+// measured as they're saved (the Change Logs table has to stay under MAX_TABLE_BYTES), so the newest rows keep theirs.
 
 const LOG_UNDO_COLUMN = 8;          // A Change Logs row's [8]: what its change did (see changeRecord)
 const MAX_LOG_UNDO_BYTES = 60000;   // One change's record, at most, as it's saved
 const MAX_LOG_UNDO_TOTAL = 800000;  // Every row's together, as they're saved: the oldest rows' Undo goes first past this
-const NO_LOG_UNDO = ["🔎 Search", "📥 Upload Backup", "🧮 Debt Calculator"];
+const NO_LOG_UNDO = ["🔎 Search", "📥 Upload Backup", "🧮 Debt Calculator", "➕ Spreadsheet Update", "➕ Calendar Update"];
 
 // A row table's rows as a change compares them: what's the person's own in each (the rest is worked out every time; a
 // tracker section is its title)
@@ -7843,7 +7880,7 @@ function staleRecordPart(record) {
       counts.set(key, counts.get(key) - 1);
     }
   }
-  const parts = { goals: "your Goals", bob: "Bob's page", equity: "your Other Accounts", sheets: "your connected spreadsheets", calculator: "the calculators" };
+  const parts = { goals: "your Goals", bob: "Bob's page", equity: "your Other Accounts", sheets: "your connected spreadsheets and calendars", calculator: "the calculators" };
   for (const value of record.values) {
     if (JSON.stringify(RECORD_VALUES[value.part][0]()) !== JSON.stringify(value.after)) return parts[value.part];
   }

@@ -491,6 +491,7 @@ function renderAfterCalendar() {
 
 let bobWarningsQueued = 0;
 
+// Okay on his card
 function wireBobWarnings() {
   document.getElementById("bobOkay")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
@@ -508,6 +509,7 @@ function queueBobWarnings() {
   bobWarningsQueued = setTimeout(renderBobWarnings, 50);
 }
 
+// His card's warnings, and where the card goes (over the calendar while there's one)
 function renderBobWarnings() {
   const card = document.getElementById("bobCard");
   const box = document.getElementById("bobWarnings");

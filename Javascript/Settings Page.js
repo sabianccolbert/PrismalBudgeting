@@ -572,7 +572,7 @@ document.addEventListener("visibilitychange", async () => {
   account = result.data;
   renderVerification();
   renderOtherEmails();
-  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets (Menu, then Spreadsheets) and add other emails now.");
+  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets and calendars (Menu, then Spreadsheets & Calendars) and add other emails now.");
 });
 
 // Prismal Budget is for people 18 and older. The birth date given when signing up can be fixed here (like a

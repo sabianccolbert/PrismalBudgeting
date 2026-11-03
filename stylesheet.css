@@ -573,8 +573,8 @@ header .stacked h2 {
   color: var(--TEXT_DIM);
 }
 
-/* The narrowest phones have no room for the tagline beside the buttons, and a page's one-word name (like
-   Spreadsheets) is a little smaller there, so it fits */
+/* The narrowest phones have no room for the tagline beside the buttons, and a page's long name (like
+   Spreadsheets & Calendars) is a little smaller there, so it fits */
 @media (max-width: 339px) {
   .tagline {
     display: none;

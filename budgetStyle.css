@@ -3348,7 +3348,7 @@ a.budgetButton:hover {
   margin: 1em 0 0.3em;
 }
 
-/* The Spreadsheets page's note that other emails are added in Settings */
+/* The Spreadsheets & Calendars page's note that other emails are added in Settings */
 .budgetCard .sheetsOtherEmails {
   margin: 1em 0 0;
 }
@@ -3405,8 +3405,8 @@ a.budgetButton:hover {
   gap: 0.5em;
 }
 
-/* Connected spreadsheets (the Spreadsheets page): each one's button, On/Off switch, and Delete, with a box under it when
-   something needs a look */
+/* Connected spreadsheets (the Spreadsheets & Calendars page): each one's button, On/Off switch, and Delete, with a box
+   under it when something needs a look */
 .sheetList {
   margin: 0.8em 0 1em;
   padding: 0;
@@ -3689,6 +3689,416 @@ a.budgetButton:hover {
 
 .sheetRangeFound.isProblem {
   color: var(--NEGATIVE_TEXT);
+}
+
+/* Connected calendars (Calendars Page.js): like spreadsheets, with Paychecks And Shifts and what the last read found
+   under each one */
+.calendarsVerify {
+  margin: 0.6em 0 0;
+}
+
+/* (Its count names the next paycheck too, so it wraps instead of running under the switch) */
+.calendarItem .budgetButton.sheetButton {
+  white-space: normal;
+}
+
+.calendarMore {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3em 0.8em;
+  margin-top: 0.45em;
+}
+
+.budgetButton.calendarPayButton {
+  margin: 0;
+  padding: 0.35em 0.9em;
+  font-size: 0.9em;
+}
+
+.calendarStatus {
+  overflow-wrap: anywhere;
+}
+
+/* Its panel: parts in boxes, the pay's versions as tabs over their boxes, and title rules as cards */
+.calendarPart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  margin: 0;
+}
+
+.calendarVersions,
+.calendarCrystalButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.calendarVersions .budgetButton,
+.calendarCrystalButtons .budgetButton,
+.budgetButton.calendarAddRule {
+  margin: 0;
+  padding: 0.35em 0.9em;
+  font-size: 0.9em;
+}
+
+.budgetButton.calendarVersionTab.isPicked {
+  color: #fff;
+  border-color: rgb(255, 205, 40);
+  box-shadow: 0 0 10px rgba(255, 205, 40, 0.5);
+}
+
+.budgetButton.calendarVersionAdd {
+  border-style: dashed;
+}
+
+.calendarCrystals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.calendarCrystals:empty {
+  display: none;
+}
+
+.calendarVersion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+}
+
+/* A section of the pay's boxes (like the Paycheck Calculator's), and a title rule: each opens and closes by its name */
+.calendarGroup,
+.calendarRule {
+  margin: 0;
+  padding: 0.35em 0.8em;
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.calendarRule {
+  border-color: var(--PANEL_BORDER);
+}
+
+.calendarGroup > summary,
+.calendarRule > summary {
+  padding: 0.3em 0;
+  font-size: 0.95em;
+  color: var(--TEXT_BRIGHT);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.calendarGroup[open] > summary,
+.calendarRule[open] > summary {
+  margin-bottom: 0.45em;
+}
+
+.calendarGroup[open],
+.calendarRule[open] {
+  padding-bottom: 0.8em;
+}
+
+.calendarGroupNote {
+  font-size: 0.85em;
+  color: rgb(255, 205, 40);
+}
+
+.calendarGroupBoxes,
+.calendarRuleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15em), 1fr));
+  gap: 0.6em 1em;
+  align-items: start;
+}
+
+.budgetPanel input.calendarNumber {
+  font-variant-numeric: tabular-nums;
+}
+
+.budgetPanel .unitInput input.calendarNumber {
+  padding-right: 3.6em;
+}
+
+/* A box that can't be read (it isn't a number or a day) */
+.budgetPanel input.isWrong {
+  border-color: var(--NEGATIVE_TEXT);
+  box-shadow: 0 0 8px rgba(255, 60, 60, 0.45);
+}
+
+/* Two boxes on a line, with words between them (night hours, an unpaid break, paydays) */
+.calendarPair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.calendarPair > select,
+.calendarPair > .unitInput {
+  flex: 1 1 6em;
+  min-width: 0;
+}
+
+.budgetPanel input[type="time"] {
+  box-sizing: border-box;
+  flex: 1 1 7em;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45em 0.6em;
+  font-family: 'Main Font', sans-serif;
+  font-size: var(--UI_TEXT);
+  color: var(--TEXT_BRIGHT);
+  color-scheme: dark;
+  background: rgba(8, 10, 32, 0.6);
+  border: 1.5px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+}
+
+@media (pointer: coarse) {
+  .budgetPanel input[type="time"] {
+    font-size: max(16px, var(--UI_TEXT));
+  }
+}
+
+.calendarRules {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+}
+
+.calendarRule .panelButtons {
+  justify-content: flex-start;
+  margin-top: 0.6em;
+}
+
+/* Paychecks And Shifts: this year's totals, the schedule, and every paycheck */
+.calendarPayView {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+  text-align: left;
+}
+
+.paycheckResults.calendarTotals {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5em), 1fr));
+  width: 100%;
+  margin: 0;
+  font-size: 0.9em;
+}
+
+.calendarTotals .paycheckAmount {
+  font-size: 1.35em;
+}
+
+.calendarTotals .takeHome .paycheckAmount {
+  font-size: 1.6em;
+}
+
+/* (Sized here: the site's own p and h4 are the front page's big ones) */
+.calendarNext {
+  margin: 0;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.calendarSchedule h4,
+.calendarPaychecks h4,
+.calendarPaycheckShifts h4 {
+  margin: 0 0 0.4em;
+  font-size: 1.05em;
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+}
+
+.calendarScheduleNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6em;
+  margin-bottom: 0.4em;
+}
+
+.budgetButton.calendarScheduleMove {
+  margin: 0;
+  padding: 0.15em 0.8em;
+  font-size: 1.2em;
+}
+
+.calendarScheduleRange {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.calendarScheduleGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78em;
+}
+
+.calendarScheduleRow {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) 3.2em;
+  gap: 2px;
+}
+
+.calendarScheduleHead {
+  padding: 0.2em;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.calendarScheduleDay {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  min-height: 3.6em;
+  min-width: 0;
+  padding: 0.25em;
+  background: rgba(8, 10, 32, 0.55);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 6px;
+}
+
+.calendarScheduleDay.isToday {
+  border-color: rgb(0, 230, 255);
+  box-shadow: 0 0 8px rgba(0, 230, 255, 0.45);
+}
+
+.calendarScheduleDate {
+  opacity: 0.75;
+}
+
+.calendarScheduleWeekday {
+  display: none;
+}
+
+.calendarShift {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.calendarShift.isLong {
+  padding-left: 0.3em;
+  border-left: 2px solid rgba(0, 220, 120, 0.8);
+}
+
+.calendarShift.isPremium .calendarShiftTime {
+  color: rgb(255, 205, 40);
+}
+
+.calendarShiftTitle {
+  opacity: 0.8;
+}
+
+.calendarPayday {
+  color: var(--POSITIVE_TEXT);
+  overflow-wrap: anywhere;
+}
+
+.calendarScheduleHours {
+  align-self: center;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phones: each week is a list of its days, each day's shifts beside it */
+@media (max-width: 560px) {
+  .calendarScheduleRow {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0.5em;
+  }
+
+  .calendarScheduleRow.isHead {
+    display: none;
+  }
+
+  .calendarScheduleDay {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2em 0.7em;
+    min-height: 0;
+  }
+
+  .calendarScheduleWeekday {
+    display: inline;
+    opacity: 0.75;
+  }
+
+  .calendarScheduleHours::before {
+    content: "Week's hours: ";
+    opacity: 0.75;
+  }
+
+  .calendarScheduleHours {
+    text-align: right;
+  }
+}
+
+.calendarPaycheckList,
+.calendarShiftList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.budgetButton.calendarPaycheck {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2em;
+  width: 100%;
+  margin: 0;
+  padding: 0.5em 0.9em;
+  text-align: left;
+  border-radius: 12px;
+}
+
+.calendarPaycheckTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2em 0.8em;
+}
+
+.calendarPaycheckStatus {
+  margin-left: auto;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.calendarPaycheckStatus.isUpcoming {
+  color: rgb(0, 230, 255);
+  opacity: 1;
+}
+
+.calendarPaycheckHours,
+.calendarPaycheckMoney,
+.calendarShiftKind {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.calendarPaycheckTake {
+  font-variant-numeric: tabular-nums;
+}
+
+.calendarShiftList li {
+  padding: 0.35em 0.6em;
+  overflow-wrap: anywhere;
+  background: rgba(8, 10, 32, 0.45);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 8px;
 }
 
 /* A panel opened over another one: the one under it waits, dimmed */
