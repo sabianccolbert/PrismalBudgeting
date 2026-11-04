@@ -48,8 +48,9 @@
  *
  * 15) FLOATING CARDS
  *
- *  Themes (Settings: Prismal, Professional, Dark, Spooky, Elements, Poison, Blue) are in themes.css: each one sets the
- *  tokens in section 1 again, and changes a few rules of its own.
+ *  Themes (Settings: Prismal, Professional, Dark, Spooky, Elements, Poison, Blue, Fall, Winter, Festive, Floral, Digital)
+ *  are in themes.css: each one sets the tokens in section 1 again, and changes a few rules of its own (its header lists
+ *  everything a new theme needs).
  *
  *  NOTE: Sections use /* #region ... *\/ for editor folding.
  *==============================================================*/
