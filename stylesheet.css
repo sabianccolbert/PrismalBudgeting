@@ -46,6 +46,11 @@
  *
  * 14) DATE BOXES AND THE CALENDAR THAT PICKS A DAY
  *
+ * 15) FLOATING CARDS
+ *
+ *  Themes (Settings: Prismal, Professional, Dark, Spooky, Elements, Poison, Blue) are in themes.css: each one sets the
+ *  tokens in section 1 again, and changes a few rules of its own.
+ *
  *  NOTE: Sections use /* #region ... *\/ for editor folding.
  *==============================================================*/
 
@@ -64,10 +69,10 @@
   --SLIDE_DURATION: 0.6s;
 
   /* The red glow on chosen controls */
-  --SHADOW: 0 0 20px rgba(200, 0, 0, 1);
-  --PICK_SHADOW: 0 0 16px rgba(230, 30, 0, 0.75);
+  --SHADOW: 0 0 20px rgba(var(--PICK_RGB), 1);
+  --PICK_SHADOW: 0 0 16px rgba(var(--PICK_RGB), 0.75);
   /* A button under the pointer: a soft blue-violet glow around its brighter edge */
-  --HOVER_SHADOW: 0 0 12px rgba(110, 125, 255, 0.55);
+  --HOVER_SHADOW: 0 0 12px rgba(var(--GLOW_RGB), 0.55);
 
   /* Brand colors: links, and text (body text, titles and dates, and labels and hints) */
   --LINK_LIGHT: #ee0000;
@@ -81,7 +86,7 @@
   --NEON_VIOLET: #8d5cff;
   --NEON_CYAN: #46c8ff;
   --NEON_PINK: #e050ff;
-  --TITLE_GLOW: 0 0 14px rgba(110, 120, 255, 0.45);
+  --TITLE_GLOW: 0 0 14px rgba(var(--GLOW_RGB), 0.45);
 
   /* Glass: the cards, tabs, and buttons the page sits on, over the starfield (see-through enough for the stars, dark
      enough to read on). Its edge is a faint blue line. */
@@ -96,7 +101,7 @@
      their center, a bright edge, and a glow around them */
   --GLOW_FILL: radial-gradient(ellipse at center, rgba(104, 124, 255, 0.55) 0%, rgba(92, 64, 235, 0.3) 45%, rgba(40, 24, 130, 0.12) 75%, rgba(20, 16, 70, 0.05) 100%);
   --GLOW_EDGE: rgba(150, 165, 255, 0.9);
-  --GLOW_SHADOW: 0 0 16px rgba(96, 112, 255, 0.55), inset 0 0 12px rgba(120, 140, 255, 0.25);
+  --GLOW_SHADOW: 0 0 16px rgba(var(--GLOW_RGB), 0.55), inset 0 0 12px rgba(var(--GLOW_RGB), 0.25);
 
   /* What a recommended button (Save, Add Entry, Sign In) is filled with, under --GLOW_FILL: it glows like Quick Entry */
   --RECOMMENDED_FILL: linear-gradient(90deg, rgba(40, 70, 210, 0.55), rgba(130, 50, 220, 0.55));
@@ -126,7 +131,7 @@
 
   /* Floating windows (panels, Search, Help, the date picker): deep violet to navy glass */
   --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 26, 108, 0.98) 0%, rgba(24, 20, 84, 0.98) 48%, rgba(12, 18, 64, 0.98) 100%);
-  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 26px rgba(100, 90, 255, 0.28);
+  --FLOAT_SHADOW: 0 16px 40px rgba(var(--SHADE_RGB), 0.7), 0 0 26px rgba(var(--GLOW_RGB), 0.28);
 
   /* How a day looks (Home's calendar, History, and the date picker): a glass tile whose fill fades from its top to clear
      by its middle (the stars show through it; its words and sprites don't), and its edge. A day below $0 is red. A zoomed
@@ -139,6 +144,32 @@
   --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(112, 12, 44), rgb(42, 6, 24));
   --NEGATIVE_DAY_EDGE: rgba(255, 80, 100, 0.6);
   --NEGATIVE_GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 70, 90, 0.5) 0%, rgba(200, 20, 50, 0.28) 50%, rgba(90, 0, 30, 0.1) 85%, transparent 100%);
+
+  /* What a theme (themes.css) changes besides the colors above. The font. Then colors given as "red, green, blue", used
+     as rgba(var(--GLOW_RGB), 0.5): the blue-violet glows and soft edges are made of (and a lighter one, for small glows
+     and scroll bars), the red of a chosen control's glow, the dark shadows and dimmed pages are made of, the dark halo
+     that keeps words readable over a busy spot, the navy of boxes to type in, the dark of other wells (hints, previews,
+     a search's results), the white of faint tints, and the yellow of placeholders and connected spreadsheets. Then the
+     orange edge of a picked day, a list that drops down, the words under the pointer or being typed, a recommended
+     button's words, the line hr draws, a progress bar, and a page's icon tile. */
+  --FONT: 'Main Font', sans-serif;
+  --GLOW_RGB: 96, 112, 255;
+  --GLOW_LIGHT_RGB: 150, 165, 255;
+  --PICK_RGB: 200, 0, 0;
+  --SHADE_RGB: 0, 0, 0;
+  --HALO_RGB: 0, 0, 0;
+  --WELL_RGB: 8, 10, 32;
+  --INSET_RGB: 0, 0, 0;
+  --TINT_RGB: 255, 255, 255;
+  --YELLOW_RGB: 255, 205, 40;
+  --BOX_FILL: rgba(var(--WELL_RGB), 0.6);
+  --PICK_EDGE: #ff4500;
+  --LIST_FILL: rgb(20, 17, 62);
+  --TEXT_HOT: #fff;
+  --PRIMARY_TEXT: var(--TEXT_BRIGHT);
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(110, 125, 255, 0.65) 25%, rgba(170, 95, 255, 0.65) 75%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #6a5cff, #c14dff);
+  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(70, 90, 230, 0.35), rgba(12, 14, 44, 0.92));
 }
 
 /* #endregion 1) DESIGN TOKENS (ROOT VARIABLES) */
@@ -215,7 +246,7 @@ body {
 
   /* Base typography */
   text-align: center;
-  font-family: 'Main Font', sans-serif; /* Letters the font doesn't have (like ñ) use a plain sans-serif */
+  font-family: var(--FONT); /* Letters the font doesn't have (like ñ) use a plain sans-serif */
   font-size: 7vmin;
   color: var(--BASE_COLOR);
   user-select: none;
@@ -306,8 +337,8 @@ hr {
   width: min(75vw, 900px);
   height: 1px;
   border: none;
-  background: linear-gradient(90deg, transparent, rgba(110, 125, 255, 0.65) 25%, rgba(170, 95, 255, 0.65) 75%, transparent);
-  box-shadow: 0 0 8px rgba(120, 110, 255, 0.45);
+  background: var(--LINE_GRADIENT);
+  box-shadow: 0 0 8px rgba(var(--GLOW_RGB), 0.45);
 }
 
 /* Smaller divider variant */
@@ -420,10 +451,10 @@ button {
   border: 1.5px solid var(--GLASS_LINE_BRIGHT);
   border-radius: 9999px;
   background: var(--GLASS_BUTTON);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(var(--TINT_RGB), 0.06);
 
   color: var(--TEXT_BRIGHT);
-  font-family: 'Main Font', sans-serif;
+  font-family: var(--FONT);
   font-size: 5vmin;
 
   transition:
@@ -436,7 +467,7 @@ button {
 button:hover {
   /* It grows, and its edge brightens and glows */
   transform: scale(1.05);
-  color: #fff;
+  color: var(--TEXT_HOT);
   border-color: var(--GLOW_EDGE);
   box-shadow: var(--HOVER_SHADOW);
 }
@@ -515,7 +546,7 @@ header .brand-icon {
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
-  filter: drop-shadow(0 0 10px rgba(130, 100, 255, 0.45));
+  filter: drop-shadow(0 0 10px rgba(var(--GLOW_RGB), 0.45));
 }
 
 .brandText {
@@ -621,7 +652,7 @@ header .stacked h2 {
 .navButtons a.navButton:hover,
 .navButtons a.navButton:focus-visible {
   transform: scale(1.05);
-  color: #fff;
+  color: var(--TEXT_HOT);
   text-shadow: none;
   outline: none;
   border-color: var(--GLOW_EDGE);
@@ -633,6 +664,70 @@ header .stacked h2 {
   height: clamp(22px, 6vw, 36px);
   border-radius: 0;
   object-fit: contain;
+}
+
+/* Signed in, the budget picker sits above the buttons (Budgets.js), exactly as wide as they are together (its width of 0
+   and min-width of 100% keep a long name from widening it): the budget that's open, cut short with "..." when it's long,
+   a ▾, and a pink dot while invitations wait */
+.headerSide {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex-shrink: 0;
+  gap: clamp(4px, 1vmin, 8px);
+}
+
+.headerSide button.budgetPicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 0.4em 0.9em;
+  font-size: clamp(11px, 2.8vw, 14px);
+  line-height: 1.2;
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  box-shadow: var(--GLASS_SHADOW);
+}
+
+.headerSide button.budgetPicker:hover,
+.headerSide button.budgetPicker:focus-visible,
+.headerSide button.budgetPicker[aria-expanded="true"] {
+  transform: none;
+  outline: none;
+  color: var(--TEXT_HOT);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+}
+
+.budgetPickerName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.budgetPickerArrow {
+  flex-shrink: 0;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.budgetPickerDot {
+  flex-shrink: 0;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: var(--NEON_PINK);
+  box-shadow: 0 0 8px var(--NEON_PINK);
+}
+
+.budgetPickerDot[hidden] {
+  display: none;
 }
 
 /* Each icon glows in its own color (the colored ones are dark on their own, so they're lifted a little). Home's is green
@@ -822,6 +917,41 @@ html.tabSlide #transitionContainer:not(.ready) > footer {
   }
 }
 
+/* Settings' Reduced Motion, on this device (Boot.js gives html .lessMotion when its animations switch is on, or the
+   device asks for less motion): the same, with the starfield left as it is (its own switch holds it still instead,
+   Active Starfield.js) */
+html.lessMotion.homeJs #transitionContainer,
+html.lessMotion.otherJs #transitionContainer,
+html.lessMotion.fromRight #transitionContainer,
+html.lessMotion.fromLeft #transitionContainer,
+html.lessMotion.fromTop #transitionContainer,
+html.lessMotion.homeJs #transitionContainer.ready,
+html.lessMotion.otherJs #transitionContainer.ready,
+html.lessMotion.homeJs #transitionContainer.slide-out,
+html.lessMotion.otherJs #transitionContainer.slide-out,
+html.lessMotion.homeJs #transitionContainer.slide-out.toTop,
+html.lessMotion.otherJs #transitionContainer.slide-out.toTop,
+html.lessMotion.homeJs #transitionContainer.slide-out.toLeft,
+html.lessMotion.otherJs #transitionContainer.slide-out.toLeft,
+html.lessMotion.homeJs #transitionContainer.slide-out.toRight,
+html.lessMotion.otherJs #transitionContainer.slide-out.toRight,
+html.lessMotion #transitionContainer.tab-slide-out > main > :not(.pageTop),
+html.lessMotion #transitionContainer.tab-slide-out .pageTop > :not(.pageTabs),
+html.lessMotion #transitionContainer.tab-slide-out > footer,
+html.lessMotion.tabSlide #transitionContainer > main > :not(.pageTop),
+html.lessMotion.tabSlide #transitionContainer .pageTop > :not(.pageTabs),
+html.lessMotion.tabSlide #transitionContainer > footer,
+html.lessMotion.tabSlide #transitionContainer:not(.ready) > main > :not(.pageTop),
+html.lessMotion.tabSlide #transitionContainer:not(.ready) .pageTop > :not(.pageTabs),
+html.lessMotion.tabSlide #transitionContainer:not(.ready) > footer {
+  transform: none;
+  transition: none;
+}
+
+html.lessMotion.fromTop #transitionContainer {
+  clip-path: none;
+}
+
 /* #endregion 11) REDUCED-MOTION ACCESSIBILITY */
 
 /* An image that couldn't load (Layout.js) shows its words instead, in the same spot and size */
@@ -929,14 +1059,14 @@ input {
   max-width: 400px;
 
   /* A glass pill, like the buttons */
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1.5px solid var(--GLASS_LINE_BRIGHT);
   border-radius: 9999px;
 
   /* Match typography. A steady size (one that grows with the screen gets huge on wide ones); 16px at
      least, so phones don't zoom in when a box is tapped. */
   color: var(--TEXT_BRIGHT);
-  font-family: 'Main Font', sans-serif;
+  font-family: var(--FONT);
   font-size: clamp(16px, 3.4vmin, 21px);
   text-align: center;
 
@@ -958,7 +1088,7 @@ input[type="password"] {
 /* The box being typed in has a bright edge (GRADIENT BORDERS' boxes, at the end), and nothing else moves or glows */
 input:focus {
   outline: none;
-  color: #fff;
+  color: var(--TEXT_HOT);
 }
 .hidden {
   display: none !important;
@@ -980,10 +1110,10 @@ input:focus {
   line-height: 1.4;
   text-align: center;
   color: var(--BASE_COLOR);
-  background: linear-gradient(160deg, rgba(36, 26, 100, 0.98), rgba(14, 16, 56, 0.98));
+  background: var(--HOVER_GRADIENT);
   border: 2px solid transparent; /* The gradient border: GRADIENT BORDERS */
   border-radius: 14px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 14px rgba(200, 0, 0, 0.35);
+  box-shadow: 0 10px 25px rgba(var(--SHADE_RGB), 0.6), 0 0 14px rgba(var(--PICK_RGB), 0.35);
 }
 
 /* Checkboxes (the input style above hides native controls). A set size: em would follow the input
@@ -1025,7 +1155,7 @@ input[type="checkbox"].pillSwitch {
   border-radius: 9999px;
   background:
     radial-gradient(circle closest-side, var(--BASE_COLOR) 90%, transparent 100%) left 2px center / var(--KNOB) var(--KNOB) no-repeat,
-    rgba(8, 10, 32, 0.6);
+    var(--BOX_FILL);
   transition: background-position 0.2s ease, border-color 0.2s ease, box-shadow var(--SLOW_SHADOW);
 }
 
@@ -1050,6 +1180,10 @@ input[type="checkbox"].pillSwitch:disabled {
   input[type="checkbox"].pillSwitch {
     transition: none;
   }
+}
+
+html.lessMotion input[type="checkbox"].pillSwitch {
+  transition: none;
 }
 
 /* Create account: agree to the Privacy Policy & Terms of Use */
@@ -1110,7 +1244,7 @@ input[type="checkbox"].pillSwitch:disabled {
   background: var(--GLASS);
   border: 1px solid var(--GLASS_LINE);
   border-radius: 20px;
-  box-shadow: var(--GLASS_SHADOW), 0 0 30px rgba(90, 90, 255, 0.15);
+  box-shadow: var(--GLASS_SHADOW), 0 0 30px rgba(var(--GLOW_RGB), 0.15);
 }
 
 .authCard form {
@@ -1144,14 +1278,14 @@ input[type="checkbox"].pillSwitch:disabled {
 
 /* Its main button (Sign In, Create Account, Send Reset Link...) is the recommended one: it glows like Quick Entry */
 .authCard #primary-action-btn {
-  color: var(--TEXT_BRIGHT);
+  color: var(--PRIMARY_TEXT);
   background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
   border-color: var(--GLOW_EDGE);
   box-shadow: var(--GLOW_SHADOW);
 }
 
 .authCard #primary-action-btn:hover {
-  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(110, 125, 255, 0.6);
+  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(var(--GLOW_RGB), 0.6);
 }
 
 .authCard .textButton {
@@ -1163,7 +1297,7 @@ input[type="checkbox"].pillSwitch:disabled {
 }
 
 .authCard .textButton:hover {
-  color: #fff;
+  color: var(--TEXT_HOT);
 }
 
 /* On standby with signing in with Apple, Google, or Microsoft (Login.js): their buttons, under a line, plain white with
@@ -1282,14 +1416,14 @@ button.pickDay[aria-expanded="true"]::before,
 
 /* Recommended (Save, Add Entry, Set It Up): it glows like Home's Quick Entry, and a little more under the pointer */
 .budgetButton.primary {
-  color: var(--TEXT_BRIGHT);
+  color: var(--PRIMARY_TEXT);
   background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
   border-color: var(--GLOW_EDGE);
   box-shadow: var(--GLOW_SHADOW);
 }
 
 .budgetButton.primary:not(:disabled):hover {
-  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(110, 125, 255, 0.6);
+  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(var(--GLOW_RGB), 0.6);
 }
 
 /* Not recommended (Delete, Sign Out Everywhere, Delete Account): darker, its words a muted red */
@@ -1464,10 +1598,10 @@ button.pickDay[aria-expanded="true"] {
   overflow-y: auto;
   overscroll-behavior: contain;
   list-style: none;
-  background: rgb(20, 17, 62);
+  background: var(--LIST_FILL);
   border: 1px solid var(--GLASS_LINE_BRIGHT);
   border-radius: 10px;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.65);
+  box-shadow: 0 12px 26px rgba(var(--SHADE_RGB), 0.65);
 }
 
 .pickerOption {
@@ -1477,8 +1611,8 @@ button.pickDay[aria-expanded="true"] {
 
 .pickerOption:hover,
 .pickerOption.isActive {
-  color: #fff;
-  background: var(--PICK_FILL), rgba(120, 0, 20, 0.35);
+  color: var(--TEXT_HOT);
+  background: var(--PICK_FILL), rgba(var(--PICK_RGB), 0.22);
 }
 
 /* The weekdays over the days, like Home's calendar */
@@ -1525,7 +1659,7 @@ button.pickDay[aria-expanded="true"] {
 
 .datePicker .pickerDay.isToday {
   background: var(--GLOW_FILL), var(--DAY_FILL);
-  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 10px rgba(96, 112, 255, 0.6);
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 10px rgba(var(--GLOW_RGB), 0.6);
 }
 
 .datePicker .pickerDay:hover,
@@ -1533,14 +1667,14 @@ button.pickDay[aria-expanded="true"] {
   transform: none;
   outline: none;
   text-shadow: none;
-  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 10px rgba(96, 112, 255, 0.55);
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 10px rgba(var(--GLOW_RGB), 0.55);
 }
 
 /* The picked day: red, like a chosen button */
 .datePicker .pickerDay.isPicked {
-  color: #fff;
-  background: var(--PICK_FILL), rgba(120, 0, 20, 0.4);
-  box-shadow: inset 0 0 0 2px #ff4500, 0 0 10px rgba(200, 0, 0, 0.6);
+  color: var(--TEXT_HOT);
+  background: var(--PICK_FILL), rgba(var(--PICK_RGB), 0.25);
+  box-shadow: inset 0 0 0 2px var(--PICK_EDGE), 0 0 10px rgba(var(--PICK_RGB), 0.6);
 }
 
 .datePicker .pickerDay:disabled {
@@ -1564,4 +1698,51 @@ button.pickDay[aria-expanded="true"] {
 
 .pickerFoot button:first-child:not(:last-child) {
   margin-right: auto;
+}
+
+/*========================================*
+ *  15) FLOATING CARDS
+ *========================================*
+ *  The page's cards hover in place: each one on the screen (Layout.js gives it .isFloating while it is) drifts a few
+ *  pixels around its spot in a slow loop, on its own timing (Layout.js sets how far it goes each way, --FLOAT_X and
+ *  --FLOAT_Y; how long a loop takes, --FLOAT_TIME; and when it starts, --FLOAT_DELAY). The loop moves the translate
+ *  property, so a card's own transform (growing under the pointer) still works with it. A card holds still while a day
+ *  in it is zoomed or held bigger: moving, it would keep the day under the dimmed page and the cards after it. Nothing
+ *  floats with Reduced Motion's animations switch on, or for a device that asks for less motion.
+ */
+@keyframes cardFloat {
+  0%    { translate: 0 0; }
+  12.5% { translate: calc(var(--FLOAT_X) * 0.71) calc(var(--FLOAT_Y) * -0.15); }
+  25%   { translate: var(--FLOAT_X) calc(var(--FLOAT_Y) * -0.5); }
+  37.5% { translate: calc(var(--FLOAT_X) * 0.71) calc(var(--FLOAT_Y) * -0.85); }
+  50%   { translate: 0 calc(var(--FLOAT_Y) * -1); }
+  62.5% { translate: calc(var(--FLOAT_X) * -0.71) calc(var(--FLOAT_Y) * -0.85); }
+  75%   { translate: calc(var(--FLOAT_X) * -1) calc(var(--FLOAT_Y) * -0.5); }
+  87.5% { translate: calc(var(--FLOAT_X) * -0.71) calc(var(--FLOAT_Y) * -0.15); }
+  100%  { translate: 0 0; }
+}
+
+.isFloating {
+  animation: cardFloat var(--FLOAT_TIME, 9s) linear var(--FLOAT_DELAY, 0s) infinite;
+}
+
+/* (Process Budget.js gives html .dayZoomed while a day is zoomed; :has() also catches a day shrinking back, and one held
+   bigger on a computer) */
+html.dayZoomed .isFloating.calendarCard,
+html.dayZoomed .isFloating.pageCard {
+  animation: none;
+}
+
+.isFloating:has(td.is-editing, td.is-magnified) {
+  animation: none;
+}
+
+html.lessMotion .isFloating {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .isFloating {
+    animation: none;
+  }
 }

@@ -1,14 +1,16 @@
-// Settings Page: the daily "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification). Turn on push
+// Settings Page: the account's budgets (Budgets.js draws the card: open, share, rename, delete, leave, and invitations).
+// The daily "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification): turn on push
 // notifications (per device) and/or a calendar link for Google or Apple Calendar, both optional; while either is on,
-// the Daily Reminder card picks the reminder time. Which days get a reminder comes from the budget (buildReminderPlan
-// in Process Budget.js); the API sends and serves them.
+// the Daily Reminder card picks the reminder time, and with more than one budget, which one they're about. Which days
+// get a reminder comes from that budget (buildReminderPlan in Process Budget.js); the API sends and serves them.
 // Then the account: the email (change it, which needs the password, and verify it) and other emails (each confirmed by
 // a link; they sign in too, and their spreadsheets can be connected), the birth date (18 or older: fix one typed
 // wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID, Windows Hello: add or
 // remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices (turn off Quick Entry icons, or
 // their balances, and Sign Out Everywhere); your data and privacy (Download My Data, analytics on or off for this
 // device); and deleting the account (needs the password). Emails go out through Resend (see account.js in the API).
-// This device's own choices (the date format, and music and sound effects) work without the server. Connecting Apple,
+// This device's own choices (the theme, with Custom's window to make one's own; the date format; music and sound effects;
+// and Reduced Motion) work without the server. Connecting Apple,
 // Google, or Microsoft is on standby (see APPLE, GOOGLE, AND MICROSOFT).
 
 // =====================================================================
@@ -27,10 +29,38 @@ let passkeyAdd = null;       // { options, at }: a password-checked challenge, k
 // let signIns = null;       // From the API: { providers: [{ id, name }], connected: [{ provider, name, email, since }], hasPassword, passkeys }
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// The themes (THEME), each with a few words about it, and Custom's five colors and its other choices
+const THEME_INFO = [
+  { key: "prismal", name: "Prismal", about: "The neon starfield" },
+  { key: "professional", name: "Professional", about: "Light and plain" },
+  { key: "dark", name: "Dark", about: "Professional, dark" },
+  { key: "spooky", name: "Spooky", about: "Sharp, dark, and red" },
+  { key: "elements", name: "Elements", about: "Fire, water, air, and earth" },
+  { key: "poison", name: "Poison", about: "Purple and green" },
+  { key: "blue", name: "Blue", about: "A medium blue" },
+  { key: "custom", name: "Custom", about: "Your own" }
+];
+const CUSTOM_COLORS = [
+  { part: "background", label: "Background" },
+  { part: "cards", label: "Cards" },
+  { part: "words", label: "Words" },
+  { part: "glow", label: "Glow" },
+  { part: "chosen", label: "Chosen" }
+];
+const CUSTOM_PARTS = [
+  { part: "corners", label: "Corners", options: [["theme", "The theme's"], ["small", "Small"], ["sharp", "Sharp"]] },
+  { part: "font", label: "Font", options: [["theme", "The theme's"], ["prismal", "Prismal's"], ["plain", "Plain"], ["sharp", "Sharp"]] },
+  { part: "stars", label: "Stars", options: [["theme", "The theme's"], ["stars", "Stars"], ["dots", "Dots"], ["embers", "Embers and bats"], ["elements", "Elements"], ["bubbles", "Bubbles"]] },
+  { part: "icons", label: "Icons", options: [["theme", "The theme's"], ["gray", "Gray"], ["glowing", "Glowing"]] }
+];
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";
 
 wireDateFormat(); // This device's choices, so they work before (and without) the server
+wireThemes();
 wireSounds();
+wireMotion();
+showBudgets();
 
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
@@ -73,10 +103,75 @@ window.workspaceReady.then(async (loaded) => {
 
   wireReminderTime();
   renderReminderTime();
+  renderReminderBudget();
   renderCalendarLink();
   renderPush();
   await refreshPushState();
 });
+
+//#endregion
+
+// =====================================================================
+// #region BUDGETS
+// =====================================================================
+
+let budgetList = null; // Budgets.js's list ({ current, budgets, invitations }), once it's in
+
+// The Budgets card (it needs the server, so it shows once the list is in)
+async function showBudgets() {
+  budgetList = await Budgets.list();
+  Budgets.renderManager(document.getElementById("budgetManager"));
+  document.getElementById("newBudgetButton").addEventListener("click", (event) => Budgets.openNewBudget(event.currentTarget));
+  document.getElementById("budgets").hidden = false;
+  if (location.hash === "#budgets") document.getElementById("budgets").scrollIntoView();
+  document.addEventListener("budgets:changed", async () => {
+    budgetList = await Budgets.list();
+    renderReminderBudget();
+  });
+  renderReminderBudget();
+}
+
+// With more than one budget, which one the reminders are about (the account's first, until another is picked)
+function renderReminderBudget() {
+  const field = document.getElementById("reminderBudgetField");
+  const select = document.getElementById("reminderBudget");
+  if (!reminderSettings || !budgetList || budgetList.budgets.length < 2) {
+    field.hidden = true;
+    return;
+  }
+  const first = budgetList.budgets.find(budget => budget.owned && budget.first);
+  const chosen = budgetList.budgets.find(budget => budget.id === reminderSettings.budget) || first;
+  select.replaceChildren(...budgetList.budgets.map(budget => new Option(budget.owned ? budget.name : `${budget.name} (from ${budget.owner})`, String(budget.id))));
+  if (chosen) select.value = String(chosen.id);
+  if (!select.dataset.wired) {
+    select.dataset.wired = "1";
+    select.addEventListener("change", () => saveReminderBudget(Number(select.value)));
+  }
+  field.hidden = false;
+}
+
+// The reminders are about another budget now. Its days come from it: right away when it's the one open here, and
+// otherwise the next time it's open (here, or anywhere it's shared).
+async function saveReminderBudget(budgetId) {
+  const select = document.getElementById("reminderBudget");
+  const budget = budgetList && budgetList.budgets.find(item => item.id === budgetId);
+  if (!budget) return renderReminderBudget();
+  select.disabled = true;
+  const result = await budgetApi("/api/notify/budget", { budget: budgetId });
+  select.disabled = false;
+  if (!result.ok || !result.data) {
+    BudgetUI.showToast(accountError(result, "Couldn't change which budget the reminders are about. Please try again."), true);
+    return renderReminderBudget();
+  }
+  reminderSettings = result.data;
+  renderReminderBudget();
+  if (budgetId === Budgets.id()) {
+    queueReminderPlanSync(true);
+    BudgetUI.showToast(`Reminders are about ${budget.name} now.`);
+  } else {
+    BudgetUI.showToast(`Reminders are about ${budget.name} now. They start the next time it's open, here or on any device.`);
+  }
+}
 
 //#endregion
 
@@ -200,6 +295,197 @@ function wireSounds() {
     if (effects.checked) Sounds.play("ding");
   });
   document.getElementById("soundNote").textContent = "They mix with your own music or podcasts instead of stopping them (on an iPhone, the silent switch silences them).";
+}
+
+//#endregion
+
+// =====================================================================
+// #region REDUCED MOTION (this device)
+// =====================================================================
+// The starfield holding still, and the other animations off, each kept on this device (Boot.js Motion). A device that
+// asks for less motion in its own settings has both already (and no starfield at all), so the switches show that.
+
+function wireMotion() {
+  const stars = document.getElementById("stillStarsSwitch");
+  const animations = document.getElementById("lessMotionSwitch");
+  if (!stars || !animations || !window.Motion) {
+    document.getElementById("motionView")?.setAttribute("hidden", "");
+    return;
+  }
+  const deviceAsks = Motion.deviceAsks();
+  stars.checked = deviceAsks || Motion.isOn("stars");
+  animations.checked = deviceAsks || Motion.isOn("animations");
+  stars.disabled = animations.disabled = deviceAsks;
+  document.getElementById("motionNote").textContent = deviceAsks
+    ? "This device asks for less motion in its own settings, so the starfield is off, and so are the other animations."
+    : "Other animations are pages sliding in, windows growing out of their buttons, days zooming in, and cards floating.";
+  for (const [input, which] of [[stars, "stars"], [animations, "animations"]]) {
+    input.addEventListener("change", () => {
+      if (Motion.set(which, input.checked)) return;
+      input.checked = !input.checked;
+      BudgetUI.showToast("This browser isn't keeping site data, so this can't be saved.", true);
+    });
+  }
+}
+
+//#endregion
+
+// =====================================================================
+// #region THEME (this device)
+// =====================================================================
+// A button for each theme (its swatch, its name, and a few words), and Custom at the end, which opens a window to make
+// one's own (openCustomTheme). Picking one shows it right away and keeps it on this device (Boot.js Themes).
+
+function wireThemes() {
+  const holder = document.getElementById("themeChoices");
+  if (!holder || !window.Themes) {
+    document.getElementById("themeView")?.setAttribute("hidden", "");
+    return;
+  }
+  holder.replaceChildren(...THEME_INFO.map(theme => {
+    const button = BudgetUI.element("button", "budgetButton choice themeChoice");
+    button.type = "button";
+    button.setAttribute("role", "radio");
+    button.dataset.theme = theme.key;
+    const swatch = BudgetUI.element("span", "themeSwatch");
+    swatch.dataset.swatch = theme.key;
+    button.append(swatch, BudgetUI.element("span", "choiceName", theme.name), BudgetUI.element("span", "choiceDetail", theme.about));
+    button.addEventListener("click", () => {
+      if (theme.key === "custom") openCustomTheme(button);
+      else pickTheme(theme);
+    });
+    return button;
+  }));
+  renderThemes();
+}
+
+// Which one is picked, and Custom's swatch in its own colors once there is one
+function renderThemes() {
+  const saved = Themes.saved();
+  const custom = Themes.custom();
+  document.querySelectorAll("#themeChoices .themeChoice").forEach((button) => {
+    button.setAttribute("aria-checked", String(button.dataset.theme === saved));
+    if (button.dataset.theme !== "custom") return;
+    const swatch = button.querySelector(".themeSwatch");
+    swatch.style.background = custom
+      ? `linear-gradient(135deg, ${custom.background} 0%, ${custom.cards} 40%, ${custom.glow} 75%, ${custom.chosen} 100%)`
+      : "";
+  });
+}
+
+// A theme's button tapped: it shows right away, and this device keeps it
+function pickTheme(theme) {
+  if (!Themes.set(theme.key)) {
+    BudgetUI.showToast("This browser isn't keeping site data, so the theme can't be saved.", true);
+    return;
+  }
+  renderThemes();
+}
+
+// The Custom window: a theme to start from, five colors (the page behind the cards, the cards, the words, the glow, and
+// what's chosen), and corners, font, stars, and icons (each the starting theme's own, or another). It all shows behind
+// the window as it changes (Themes.preview); Save keeps it on this device, and Cancel (or ×) puts back the theme that was
+// on. Starting from another theme fills in its colors. (Its colors and choices: CUSTOM_COLORS and CUSTOM_PARTS, at the
+// top.)
+function openCustomTheme(origin) {
+  const saved = Themes.saved();
+  let draft = Themes.custom() || Themes.tidyCustom({ base: saved === "custom" ? "prismal" : saved });
+  let kept = false;
+  BudgetUI.openPanel({
+    origin,
+    title: "Custom Theme",
+    build(form, panel) {
+      form.append(BudgetUI.element("p", "panelHint", "Start from any theme, then make it your own. It shows behind this window as you change it, and Save keeps it on this device."));
+
+      const base = BudgetUI.segmented(THEME_INFO.filter(theme => theme.key !== "custom").map(theme => ({ key: theme.key, label: theme.name })), draft.base, (key) => {
+        draft = Themes.tidyCustom({ base: key });
+        fill();
+        Themes.preview(draft);
+      });
+      form.append(BudgetUI.field("Start from", base.el));
+
+      // The draft shown behind the window, once a frame at most (a color box being dragged changes many times a second)
+      let previewFrame = 0;
+      const previewSoon = () => {
+        if (!previewFrame) previewFrame = requestAnimationFrame(() => {
+          previewFrame = 0;
+          if (!kept) Themes.preview(draft);
+        });
+      };
+
+      const colors = BudgetUI.element("div", "customColors");
+      const inputs = CUSTOM_COLORS.map(({ part, label }) => {
+        const row = BudgetUI.element("label", "customColor");
+        const input = BudgetUI.element("input", "colorInput");
+        input.type = "color";
+        input.setAttribute("aria-label", label);
+        // (A browser with no color box shows a text box instead: wide enough for a typed #rrggbb, which counts once it's whole)
+        if (input.type !== "color") {
+          input.classList.add("colorText");
+          input.placeholder = "#rrggbb";
+          input.maxLength = 7;
+          input.spellcheck = false;
+          input.setAttribute("autocapitalize", "none");
+        }
+        input.addEventListener("input", () => {
+          if (!/^#[0-9a-f]{6}$/i.test(input.value)) return;
+          draft[part] = input.value.toLowerCase();
+          previewSoon();
+        });
+        row.append(BudgetUI.element("span", "", label), input);
+        colors.append(row);
+        return [part, input];
+      });
+      form.append(BudgetUI.field("Colors", colors, { hint: "Glow is today, the page that's showing, and recommended buttons. Chosen is what's picked, like Cost or Gain." }));
+
+      const choices = CUSTOM_PARTS.map(({ part, label, options }) => {
+        const group = BudgetUI.segmented(options.map(([key, name]) => ({ key, label: name })), draft[part], (key) => {
+          draft[part] = key;
+          Themes.preview(draft);
+        });
+        form.append(BudgetUI.field(label, group.el));
+        return [part, group];
+      });
+
+      // The colors and choices as the draft has them
+      function fill() {
+        base.set(draft.base);
+        for (const [part, input] of inputs) input.value = draft[part];
+        for (const [part, group] of choices) group.set(draft[part]);
+      }
+      fill();
+
+      const cancel = BudgetUI.element("button", "budgetButton", "Cancel");
+      cancel.type = "button";
+      cancel.addEventListener("click", () => panel.close());
+      const save = BudgetUI.element("button", "budgetButton primary", "Save Theme");
+      save.type = "submit";
+      const buttons = BudgetUI.element("div", "panelButtons");
+      buttons.append(cancel, save);
+      form.append(buttons);
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!Themes.saveCustom(draft)) {
+          panel.setError("This browser isn't keeping site data, so the theme can't be saved.");
+          return;
+        }
+        kept = true;
+        renderThemes();
+        panel.close();
+        BudgetUI.showToast("Your Custom theme is on, on this device.");
+      });
+
+      // Closed without Save (Cancel, ×, Escape, or leaving the page): the theme that was on comes back
+      new MutationObserver(() => {
+        if (!kept && panel.panel.classList.contains("isClosing")) {
+          kept = true;
+          Themes.endPreview();
+        }
+      }).observe(panel.panel, { attributes: true, attributeFilter: ["class"] });
+
+      Themes.preview(draft);
+    }
+  });
 }
 
 //#endregion
@@ -633,7 +919,9 @@ async function sendResetLink(event) {
 async function deleteAccount(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  if (!window.confirm("Delete your account and everything in your budget? This can't be undone.")) return;
+  const sharedOut = budgetList ? budgetList.budgets.filter(budget => budget.owned && budget.people.some(person => person.joined)).length : 0;
+  const alsoShared = sharedOut > 0 ? ` ${sharedOut === 1 ? "One of your budgets is" : `${sharedOut} of your budgets are`} shared, and ${sharedOut === 1 ? "it goes" : "they go"} for everyone ${sharedOut === 1 ? "it's" : "they're"} shared with too.` : "";
+  if (!window.confirm(`Delete your account and everything in your budgets? This can't be undone.${alsoShared}`)) return;
   setFormBusy(form, true);
   const result = await budgetApi("/api/account/delete", { password: document.getElementById("deletePassword").value });
   if (!result.ok) {
@@ -693,7 +981,7 @@ function accountError(result, fallback) {
   if (result.data && result.data.confirm) {
     account.recentUntil = 0;
     renderPasswordless();
-    document.getElementById("confirmYou").scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    document.getElementById("confirmYou").scrollIntoView({ block: "center", behavior: window.lessMotion() ? "auto" : "smooth" });
   }
   return (result.data && result.data.error) || fallback;
 }
@@ -874,6 +1162,7 @@ async function setQuickBalances(toggle) {
   renderQuickBalances();
 }
 
+// How many Quick Entry icons work, with Turn Off Icons while there are any
 function renderQuickIcons() {
   const status = document.getElementById("quickIconStatus");
   const buttons = document.getElementById("quickIconButtons");
@@ -955,13 +1244,16 @@ async function readBackupFile(event) {
   if (!workspaceLoaded) return BudgetUI.showToast("Your budget is still loading. Try again in a moment.", true);
   if (file.size > BACKUP_MAX_BYTES) return BudgetUI.showToast("That file is too big to be one Download My Data saved.", true);
   let backup;
+  let text = "";
   try {
-    backup = readBackup(await file.text());
+    text = await file.text();
+    backup = readBackup(text);
   } catch (error) {
     if (!(error instanceof BudgetInputError)) console.error("Couldn't read the backup:", error);
     return BudgetUI.showToast(error instanceof BudgetInputError ? error.message : "That file couldn't be read.", true);
   }
-  openBackupPanel(document.getElementById("uploadBackupButton"), backup);
+  // (A file with more than one budget reads another one when it's picked)
+  openBackupPanel(document.getElementById("uploadBackupButton"), backup, (which) => readBackup(text, which));
 }
 
 // What each choice does, for Upload A Backup's window
@@ -971,10 +1263,11 @@ const BACKUP_CHOICE_WORDS = [
   { key: "remove", label: "Remove Current Data", help: "puts the backup's in place of yours" }
 ];
 
-// Upload A Backup's window: whose backup it is, then each part of the budget it has (what the backup and the budget each
-// have, and how many clash), each with its three choices (Set All picks one for every part). A part the budget has none
-// of yet just takes the backup's. Undo can't take an upload back, so it offers Download My Data first.
-function openBackupPanel(origin, backup) {
+// Upload A Backup's window: whose backup it is, which of its budgets (when it has more than one; reread(which) reads
+// another), then each part of that budget it has (what the backup and the open budget each have, and how many clash), each
+// with its three choices (Set All picks one for every part). A part the budget has none of yet just takes the backup's.
+// It goes into the budget that's open. Undo can't take an upload back, so it offers Download My Data first.
+function openBackupPanel(origin, backup, reread) {
   const plans = backupPlans(backup);
   BudgetUI.openPanel({
     origin,
@@ -983,7 +1276,18 @@ function openBackupPanel(origin, backup) {
     build(form, panel) {
       const { username, downloaded } = backup.from;
       const when = downloaded ? ` from ${showDate(createSafeMidnight(downloaded))}` : "";
-      form.append(BudgetUI.element("p", "panelText", `This is ${username ? `${username}'s` : "a"} Download My Data file${when}.`));
+      form.append(BudgetUI.element("p", "panelText", `This is ${username ? `${username}'s` : "a"} Download My Data file${when}. It goes into the budget that's open here${budgetInfo ? `, ${budgetInfo.name}` : ""}.`));
+      if (backup.budgets.length > 1) {
+        const pick = BudgetUI.selectField({ label: "Budget from the file", options: backup.budgets.map((name, index) => ({ value: String(index), label: name })), value: String(backup.which) });
+        pick.input.addEventListener("change", () => {
+          try {
+            openBackupPanel(origin, reread(Number(pick.input.value)), reread);
+          } catch (error) {
+            panel.setError(error instanceof BudgetInputError ? error.message : "That budget couldn't be read from the file.");
+          }
+        });
+        form.append(pick.el);
+      }
       if (plans.length === 0) {
         form.append(BudgetUI.element("p", "panelText", "It has nothing to bring back."), BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
         return;

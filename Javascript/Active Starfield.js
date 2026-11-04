@@ -7,7 +7,7 @@
  *  MENU
  *----------------------------------------------------------------------
  *  0) ENGINE STATE + HELPERS
- *     - State, keyboard impulses, utilities, sprite
+ *     - State, keyboard impulses, utilities, sprites, themes, holding still
  *  1) PHYSICS
  *     - Forces + movement
  *  2) RENDERING
@@ -283,6 +283,246 @@ function loadStarSprite(URL) {
       console.warn("Could not load star sprite:", ERROR);                 // Say why stars aren't drawing
     });
 }
+
+/* GROUP: Themes */
+// Each theme (Settings, Boot.js: the page sends its name) has its own stars and colors: which sprites the stars are
+// (each star keeps one, picked by its own random "kind", so a theme's mix stays put as the stars move), and the colors of
+// the lines between stars, the ring around the pointer, and the keyboard's paddles ("r, g, b"). Prismal and Blue use the
+// star image; the rest are drawn here, once, on a small canvas each (SPRITE_KINDS).
+const THEME_LOOKS = {
+  prismal:      { sprites: ["star"], link: "100, 100, 100", ring: "189, 189, 189", paddle: "255, 255, 255" },
+  professional: { sprites: [["dot", "100, 116, 139"]], link: "148, 163, 184", ring: "100, 116, 139", paddle: "71, 85, 105" },
+  dark:         { sprites: [["dot", "200, 208, 218"]], link: "75, 85, 99", ring: "156, 163, 175", paddle: "229, 231, 235" },
+  spooky:       { sprites: ["ember", "ember", "ember", "bat"], link: "110, 16, 20", ring: "190, 30, 30", paddle: "230, 210, 200" },
+  elements:     { sprites: ["flame", "drop", "leaf", "wind"], link: "110, 98, 84", ring: "214, 196, 160", paddle: "240, 230, 210" },
+  poison:       { sprites: ["bubble", "spore", "bubble"], link: "84, 52, 120", ring: "140, 255, 100", paddle: "200, 255, 180" },
+  blue:         { sprites: ["star"], link: "160, 195, 240", ring: "225, 238, 255", paddle: "255, 255, 255" }
+};
+
+// How each drawn sprite looks (on a SPRITE_PX square, centered), how big it is next to a star its size (scale), and
+// whether it stays upright (a flame, a drop, or a bat only tilts a little) instead of turning with its star
+const SPRITE_PX = 64;
+const SPRITE_KINDS = {
+  // A soft round dot, in COLOR
+  dot: { scale: 0.75, draw(C, COLOR) {
+    const GLOW = C.createRadialGradient(32, 32, 0, 32, 32, 30);
+    GLOW.addColorStop(0, `rgba(${COLOR}, 1)`);
+    GLOW.addColorStop(0.35, `rgba(${COLOR}, 0.75)`);
+    GLOW.addColorStop(1, `rgba(${COLOR}, 0)`);
+    C.fillStyle = GLOW;
+    C.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+  } },
+  // A glowing ember: white-hot, then orange, then red
+  ember: { scale: 0.9, draw(C) {
+    const GLOW = C.createRadialGradient(32, 32, 0, 32, 32, 30);
+    GLOW.addColorStop(0, "rgba(255, 244, 200, 1)");
+    GLOW.addColorStop(0.2, "rgba(255, 170, 60, 0.95)");
+    GLOW.addColorStop(0.5, "rgba(220, 40, 20, 0.5)");
+    GLOW.addColorStop(1, "rgba(120, 0, 0, 0)");
+    C.fillStyle = GLOW;
+    C.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+  } },
+  // A bat: a dark shape with a red glow around its edge, and red eyes
+  bat: { scale: 2.4, upright: true, draw(C) {
+    C.beginPath();
+    C.moveTo(4, 26);
+    C.quadraticCurveTo(12, 18, 22, 24);
+    C.lineTo(27, 22);
+    C.lineTo(28.5, 16);
+    C.lineTo(30.5, 22.5);
+    C.lineTo(33.5, 22.5);
+    C.lineTo(35.5, 16);
+    C.lineTo(37, 22);
+    C.lineTo(42, 24);
+    C.quadraticCurveTo(52, 18, 60, 26);
+    C.quadraticCurveTo(58, 32, 53, 33);
+    C.quadraticCurveTo(50, 30, 45, 35);
+    C.quadraticCurveTo(41, 34, 37, 40);
+    C.lineTo(32, 45);
+    C.lineTo(27, 40);
+    C.quadraticCurveTo(23, 34, 19, 35);
+    C.quadraticCurveTo(14, 30, 11, 33);
+    C.quadraticCurveTo(6, 32, 4, 26);
+    C.closePath();
+    C.shadowColor = "rgba(255, 40, 40, 0.9)";
+    C.shadowBlur = 5;
+    C.fillStyle = "#16030a";
+    C.fill();
+    C.fill(); // (Twice, for a stronger glow)
+    C.shadowBlur = 0;
+    C.fillStyle = "#ff3030";
+    C.fillRect(29.6, 25, 1.8, 1.6);
+    C.fillRect(32.6, 25, 1.8, 1.6);
+  } },
+  // A flame, flat and matte: gold at its base to red at its tip, with a paler core
+  flame: { scale: 1.7, upright: true, draw(C) {
+    C.beginPath();
+    C.moveTo(32, 6);
+    C.bezierCurveTo(40, 20, 50, 30, 46, 44);
+    C.bezierCurveTo(43, 54, 36, 58, 32, 58);
+    C.bezierCurveTo(28, 58, 21, 54, 18, 44);
+    C.bezierCurveTo(14, 30, 24, 20, 32, 6);
+    C.closePath();
+    const FILL = C.createLinearGradient(0, 58, 0, 6);
+    FILL.addColorStop(0, "#f0b24a");
+    FILL.addColorStop(0.45, "#e0703a");
+    FILL.addColorStop(1, "#b5432a");
+    C.fillStyle = FILL;
+    C.fill();
+    C.beginPath();
+    C.moveTo(32, 28);
+    C.bezierCurveTo(37, 36, 40, 44, 37, 50);
+    C.bezierCurveTo(35, 54, 29, 54, 27, 50);
+    C.bezierCurveTo(24, 44, 27, 36, 32, 28);
+    C.closePath();
+    C.fillStyle = "#f6d27a";
+    C.fill();
+  } },
+  // A drop of water, with a little shine
+  drop: { scale: 1.4, upright: true, draw(C) {
+    C.beginPath();
+    C.moveTo(32, 6);
+    C.bezierCurveTo(36, 18, 48, 30, 48, 40);
+    C.arc(32, 40, 16, 0, Math.PI, false);
+    C.bezierCurveTo(16, 30, 28, 18, 32, 6);
+    C.closePath();
+    const FILL = C.createLinearGradient(0, 6, 0, 56);
+    FILL.addColorStop(0, "#9fd3e3");
+    FILL.addColorStop(0.6, "#3a87a8");
+    FILL.addColorStop(1, "#2a5f7a");
+    C.fillStyle = FILL;
+    C.fill();
+    C.fillStyle = "rgba(255, 255, 255, 0.45)";
+    C.beginPath();
+    C.ellipse(26, 40, 3, 6, -0.3, 0, Math.PI * 2);
+    C.fill();
+  } },
+  // A leaf, moss green, with its vein
+  leaf: { scale: 1.6, draw(C) {
+    C.beginPath();
+    C.moveTo(10, 54);
+    C.bezierCurveTo(10, 24, 30, 8, 56, 8);
+    C.bezierCurveTo(56, 34, 40, 54, 10, 54);
+    C.closePath();
+    const FILL = C.createLinearGradient(10, 54, 56, 8);
+    FILL.addColorStop(0, "#5f6d34");
+    FILL.addColorStop(1, "#8a9a4e");
+    C.fillStyle = FILL;
+    C.fill();
+    C.strokeStyle = "rgba(230, 225, 190, 0.55)";
+    C.lineWidth = 2;
+    C.beginPath();
+    C.moveTo(13, 51);
+    C.lineTo(50, 14);
+    C.stroke();
+  } },
+  // A gust of air: two pale curls
+  wind: { scale: 1.8, draw(C) {
+    C.strokeStyle = "rgba(205, 225, 232, 0.9)";
+    C.lineWidth = 3.5;
+    C.lineCap = "round";
+    C.beginPath();
+    C.moveTo(8, 26);
+    C.bezierCurveTo(24, 20, 40, 32, 50, 24);
+    C.bezierCurveTo(58, 18, 52, 8, 44, 12);
+    C.stroke();
+    C.beginPath();
+    C.moveTo(14, 40);
+    C.bezierCurveTo(28, 34, 42, 46, 54, 40);
+    C.stroke();
+  } },
+  // A toxic green bubble, with a shine
+  bubble: { scale: 1.3, draw(C) {
+    const FILL = C.createRadialGradient(28, 26, 2, 32, 32, 26);
+    FILL.addColorStop(0, "rgba(190, 255, 160, 0.35)");
+    FILL.addColorStop(0.8, "rgba(90, 230, 60, 0.18)");
+    FILL.addColorStop(1, "rgba(90, 230, 60, 0)");
+    C.fillStyle = FILL;
+    C.beginPath();
+    C.arc(32, 32, 26, 0, Math.PI * 2);
+    C.fill();
+    C.strokeStyle = "rgba(140, 255, 100, 0.95)";
+    C.lineWidth = 2.5;
+    C.beginPath();
+    C.arc(32, 32, 24, 0, Math.PI * 2);
+    C.stroke();
+    C.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    C.beginPath();
+    C.arc(32, 32, 17, 3.6, 4.6);
+    C.stroke();
+  } },
+  // A purple spore
+  spore: { scale: 0.9, draw(C) {
+    const GLOW = C.createRadialGradient(32, 32, 0, 32, 32, 30);
+    GLOW.addColorStop(0, "rgba(240, 200, 255, 1)");
+    GLOW.addColorStop(0.3, "rgba(170, 80, 240, 0.8)");
+    GLOW.addColorStop(1, "rgba(100, 20, 160, 0)");
+    C.fillStyle = GLOW;
+    C.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+  } }
+};
+
+// Drawn sprites, by kind and color, so each is drawn once
+const DRAWN_SPRITES = new Map();
+
+// A sprite of KIND (with COLOR, for a dot), drawn on its own canvas: { image, scale, upright }, or null when this
+// browser has no canvas to draw it on
+function drawnSprite(KIND, COLOR) {
+  const KEY = `${KIND}:${COLOR || ""}`;
+  if (DRAWN_SPRITES.has(KEY)) return DRAWN_SPRITES.get(KEY);
+  let SPRITE = null;
+  try {
+    const CANVAS = typeof OffscreenCanvas === "function"
+      ? new OffscreenCanvas(SPRITE_PX, SPRITE_PX)
+      : Object.assign(self.document.createElement("canvas"), { width: SPRITE_PX, height: SPRITE_PX });
+    const KIND_LOOK = SPRITE_KINDS[KIND];
+    KIND_LOOK.draw(CANVAS.getContext("2d"), COLOR);
+    SPRITE = { image: CANVAS, scale: KIND_LOOK.scale, upright: !!KIND_LOOK.upright };
+  } catch (ERROR) {
+    console.warn("Could not draw a star sprite:", ERROR);
+  }
+  DRAWN_SPRITES.set(KEY, SPRITE);
+  return SPRITE;
+}
+
+// The theme in use: its look, and its sprites ("star" for the star image, which may still be loading)
+S.look = THEME_LOOKS.prismal;
+S.sprites = ["star"];
+
+// Use theme NAME's stars (Prismal's for a name it doesn't know), in its colors, or a Custom theme's COLORS ({ link, ring,
+// paddle })
+S.useTheme = function useTheme(NAME, COLORS) {
+  S.look = { ...(THEME_LOOKS[NAME] || THEME_LOOKS.prismal), ...(COLORS || {}) };
+  S.sprites = S.look.sprites
+    .map((KIND) => (KIND === "star" ? "star" : Array.isArray(KIND) ? drawnSprite(KIND[0], KIND[1]) : drawnSprite(KIND)))
+    .filter(Boolean);
+  if (!S.sprites.length) S.sprites = ["star"];
+  S.stillDirty = true;
+};
+
+// The star image as a sprite, made once for each image (every star draws it, every frame)
+let STAR_SPRITE = null;
+
+// The sprite STAR draws as ({ image, scale, upright }), or null while the star image it needs is still loading
+function spriteFor(STAR) {
+  if (typeof STAR.kind !== "number") STAR.kind = Math.random();          // Its own kind, kept as it moves (and saved)
+  const SPRITE = S.sprites[Math.floor(STAR.kind * S.sprites.length) % S.sprites.length];
+  if (SPRITE !== "star") return SPRITE;
+  if (!STAR_SPRITES.ready) return null;
+  if (!STAR_SPRITE || STAR_SPRITE.image !== STAR_SPRITES.img) STAR_SPRITE = { image: STAR_SPRITES.img, scale: 1, upright: false };
+  return STAR_SPRITE;
+}
+
+// Can every star be drawn now? (The star image has loaded, when the theme uses it)
+function spritesReady() {
+  return STAR_SPRITES.ready || !S.sprites.includes("star");
+}
+
+/* GROUP: Holding still */
+// Settings' Reduced Motion can hold the starfield still: it's drawn once (and again when its size, theme, or star image
+// changes), and nothing moves. stillDirty: it needs drawing again.
+S.isStill = false;
+S.stillDirty = true;
 
 /* GROUP: Link throttle state */
 // Count frames so we can rebuild link geometry every N frames.
@@ -975,7 +1215,7 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
     CONTEXT.globalAlpha = ALPHA;                                          // Apply fade
     CONTEXT.lineWidth = Math.max(2, Math.min(S.canvasWidth, S.canvasHeight) * 0.03); // Paddle thickness
     CONTEXT.lineCap = "round";                                            // Rounded ends
-    CONTEXT.strokeStyle = "rgba(255,255,255,1)";                          // Paddle color
+    CONTEXT.strokeStyle = `rgba(${S.look.paddle}, 1)`;                    // Paddle color (the theme's)
 
     CONTEXT.beginPath();                                                  // Begin paddle path
 
@@ -1071,20 +1311,19 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
       const BUCKET_ALPHA = I / (LINK_BUCKET_COUNT - 1);                   // Map bucket index to alpha 0..1
       if (BUCKET_ALPHA <= 0) continue;                                    // Skip fully transparent bucket
 
-      CONTEXT.strokeStyle = `rgba(100, 100, 100, ${BUCKET_ALPHA})`;       // Set stroke alpha for this bucket
+      CONTEXT.strokeStyle = `rgba(${S.look.link}, ${BUCKET_ALPHA})`;      // The theme's line color, at this bucket's alpha
       CONTEXT.stroke(LINK_PATHS_BY_BUCKET[I]);                            // Stroke the bucket path
     }
   }
 
   /* GROUP: Stars */
-  if (!STAR_SPRITES.ready) return;                                        // Bail until sprite image is loaded
-
-  const IMG = STAR_SPRITES.img;                                           // Sprite image alias
-
   for (const STAR of S.starList) {                                        // Draw each star
 
+    const SPRITE = spriteFor(STAR);                                       // The theme's sprite for this star
+    if (!SPRITE) continue;                                                // (The star image is still loading)
+
     const BASE_RADIUS = (STAR.whiteValue * 2 + STAR.size) || 1;           // Base radius influenced by whiteValue
-    const SPRITE_SIZE = Math.max(2, BASE_RADIUS * 2.4);                   // Sprite size in pixels
+    const SPRITE_SIZE = Math.max(2, BASE_RADIUS * 2.4) * SPRITE.scale;    // Sprite size in pixels
 
     const STAR_CENTER_X = STAR.x;                                         // Star center x
     const STAR_CENTER_Y = STAR.y;                                         // Star center y
@@ -1102,8 +1341,9 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
     CONTEXT.globalAlpha = STAR.opacity;                                   // Apply star opacity (twinkle)
 
     CONTEXT.translate(STAR_CENTER_X, STAR_CENTER_Y);                      // Move origin to star center
-    CONTEXT.rotate(STAR.rotation || 0);                                   // Rotate sprite for variation
-    CONTEXT.drawImage(IMG, -SPRITE_SIZE / 2, -SPRITE_SIZE / 2, SPRITE_SIZE, SPRITE_SIZE); // Draw sprite centered
+    const TURN = STAR.rotation || 0;                                      // Rotate sprite for variation
+    CONTEXT.rotate(SPRITE.upright ? (TURN - Math.PI) * 0.06 : TURN);      // (An upright one only tilts a little)
+    CONTEXT.drawImage(SPRITE.image, -SPRITE_SIZE / 2, -SPRITE_SIZE / 2, SPRITE_SIZE, SPRITE_SIZE); // Draw sprite centered
 
     CONTEXT.globalCompositeOperation = "source-atop";                     // Restrict overlay to sprite pixels
     CONTEXT.globalAlpha = STAR.opacity * DARKNESS;                        // Alpha for darkness overlay
@@ -1144,7 +1384,7 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
   if (RING_ALPHA > 0.001) {                                               // Only draw if visible
     CONTEXT.save();                                                       // Save state
     CONTEXT.lineWidth = RING_WIDTH;                                       // Set ring stroke width
-    CONTEXT.strokeStyle = "rgba(189, 189, 189, 1)";                       // Ring color
+    CONTEXT.strokeStyle = `rgba(${S.look.ring}, 1)`;                      // Ring color (the theme's)
     CONTEXT.globalAlpha = RING_ALPHA;                                     // Ring alpha
     CONTEXT.beginPath();                                                  // Begin ring path
     CONTEXT.arc(S.pointerClientX, S.pointerClientY, RING_RADIUS, 0, Math.PI * 2); // Ring centered on pointer
@@ -1476,6 +1716,17 @@ function runAnimationLoop() {
     return;
   }
 
+  // Held still (Settings' Reduced Motion): drawn once its sprites are ready, then only when something changes how it looks
+  if (S.isStill) {
+    if (S.stillDirty && spritesReady()) {
+      S.stillDirty = false;
+      LINKS_DIRTY = true;
+      S.renderStarsAndLinks();
+    }
+    requestFrame(runAnimationLoop);
+    return;
+  }
+
   S.updateStarPhysics();
   S.renderStarsAndLinks();
 
@@ -1551,6 +1802,9 @@ function handleMainMessage(MESSAGE) {
       // The star image: on its way from the page already decoded (STAR_IMAGE), or fetched here
       S.starImageUrl = MESSAGE.starImage;
       if (!MESSAGE.starImagePending) loadStarSprite(S.starImageUrl);
+      // The page's theme, and whether Settings holds the stars still
+      S.useTheme(MESSAGE.theme, MESSAGE.themeColors);
+      S.isStill = !!MESSAGE.still;
 
       S.resizeStarfieldCanvas(width, height);
       startEngineIfReady();
@@ -1558,7 +1812,20 @@ function handleMainMessage(MESSAGE) {
 
     case "RESIZE":
       S.resizeStarfieldCanvas(width, height);
+      S.stillDirty = true;
       startEngineIfReady();
+      break;
+
+    case "THEME":
+      // Settings picked another theme (or another tab did): the stars and colors change right away
+      S.useTheme(MESSAGE.theme, MESSAGE.colors);
+      break;
+
+    case "STILL":
+      // Settings' Reduced Motion switch for the starfield: hold still (drawn as it is, with no pointer ring), or move again
+      S.isStill = !!MESSAGE.still;
+      S.stillDirty = true;
+      if (S.isStill) S.pointerRingTimer = S.pokeImpulseTimer = 0;
       break;
 
     case "POINTER_DOWN":
@@ -1602,6 +1869,7 @@ function handleMainMessage(MESSAGE) {
       if (MESSAGE.bitmap) {
         STAR_SPRITES.img = MESSAGE.bitmap;
         STAR_SPRITES.ready = true;
+        S.stillDirty = true;
       } else {
         loadStarSprite(S.starImageUrl);
       }

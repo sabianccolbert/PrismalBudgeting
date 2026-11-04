@@ -424,7 +424,7 @@ function accountsTotal(summaries, ahead) {
 
 // Change Logs (the spreadsheet's "Form Entries" tab), newest first:
 // [time, duration, action, detail, detail, detail, detail, status, what it changed (for its Undo, see CHANGE LOG UNDO in
-// Process Budget.js)]
+// Process Budget.js), who made it]. In a shared budget, each row's details say who made it.
 function renderLogsPage(view) {
   renderSearchToolbar();
   view.replaceChildren();
@@ -458,6 +458,7 @@ function logRow(row) {
   tr.appendChild(clippedCell(row[2], "actionCell"));
   const details = row.slice(3, 7).filter(detail => String(detail).trim() !== "");
   if (row[7]) details.push("Status: " + row[7]);
+  if (row[9] && budgetIsShared()) details.push("By: " + row[9]);
   const detailsCell = cell("", "detailsCell");
   detailsCell.appendChild(aliasBox(details.join("\n"), "detailsBox"));
   tr.appendChild(noTranslate(detailsCell)); // Titles, amounts, and dates
@@ -618,7 +619,7 @@ function calculatorForm(inputs) {
     }
     BudgetUI.warnIfUnsaved(result);
     // The page has redrawn with the new results; bring them into view
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reducedMotion = window.lessMotion();
     document.querySelector(".paycheckResults")?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
   });
   return form;
@@ -1126,6 +1127,7 @@ function presetShelf({ store, noun, form, help, read, fill, describe }) {
   let wasTyping = false;
   let typed = false;
   const noteTyping = () => { typed = true; };
+  // Add was tapped: the name box shows, and the form glows
   function startDraft() {
     if (!draft.hidden) return;
     wasTyping = "typing" in form.dataset;
@@ -1138,6 +1140,7 @@ function presetShelf({ store, noun, form, help, read, fill, describe }) {
     setError("");
     if (window.matchMedia("(pointer: fine)").matches) name.input.focus({ preventScroll: true });
   }
+  // Saved or cancelled: the form is just the calculator again
   function endDraft() {
     form.removeEventListener("input", noteTyping);
     form.classList.remove("presetDraft");
@@ -1147,6 +1150,7 @@ function presetShelf({ store, noun, form, help, read, fill, describe }) {
     name.input.value = "";
     setError("");
   }
+  // Keep what the boxes hold as a new one, under the name typed
   async function saveDraft() {
     const { values, error: problem } = read();
     if (problem) return setError(problem);
@@ -1167,7 +1171,7 @@ function presetShelf({ store, noun, form, help, read, fill, describe }) {
   // Tapping one puts what it keeps in the calculator, which comes into view with a short glow
   function apply(preset) {
     fill(preset.values);
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reducedMotion = window.lessMotion();
     form.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
     form.classList.remove("prismFlash");
     void form.offsetWidth; // Restart the glow
@@ -1175,6 +1179,7 @@ function presetShelf({ store, noun, form, help, read, fill, describe }) {
     setTimeout(() => form.classList.remove("prismFlash"), 1200);
   }
 
+  // Save the list as it is after a change in Edit (a rename, a new order, or a delete), and draw it again
   async function savePresets(next) {
     const result = await saveCalculatorPresets(store, next);
     if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);

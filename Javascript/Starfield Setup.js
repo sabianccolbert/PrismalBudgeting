@@ -1,6 +1,7 @@
 // Starfield Setup: the main-thread side of the starfield. Builds window.STARFIELD as a small bridge,
 // starts the engine (Active Starfield.js) in a Web Worker on an OffscreenCanvas, and forwards page
-// input to it: pointer, resize, sliders, freeze/unfreeze. Also owns saving to localStorage.
+// input to it: pointer, resize, sliders, freeze/unfreeze, the theme, and Reduced Motion's holding still.
+// Also owns saving to localStorage.
 // The worker can't touch the DOM or localStorage, so everything page-side lives here.
 
 /*======================================================================
@@ -83,6 +84,17 @@ S.sendToEngine = function sendToEngine() {};
 S.setFrozen = function setFrozen(IS_FROZEN) {
   S.isFrozen = !!IS_FROZEN;
   S.sendToEngine({ type: "FREEZE", frozen: S.isFrozen });
+};
+
+// The page's theme changed (Settings, Boot.js): the stars and their colors change with it. THEME: the theme whose stars
+// they are; COLORS: a Custom theme's own colors for the lines, the ring, and the paddles (null for the theme's)
+S.setTheme = function setTheme(THEME, COLORS) {
+  S.sendToEngine({ type: "THEME", theme: THEME, colors: COLORS || null });
+};
+
+// Settings' Reduced Motion switch for the starfield (Boot.js): the stars hold still, or move again
+S.setStill = function setStill(IS_STILL) {
+  S.sendToEngine({ type: "STILL", still: !!IS_STILL });
 };
 
 // Handle messages coming back from the engine.
@@ -568,7 +580,8 @@ S.startEngine = function startEngine() {
   // Bail if this page has no canvas.
   if (!S.isCanvasReady) return;
 
-  // Reduced motion hides the canvas (stylesheet.css), so don't animate what nobody sees.
+  // A device that asks for less motion has no starfield (stylesheet.css hides the canvas), so don't animate what nobody
+  // sees. (Settings' Reduced Motion switch for the starfield holds the stars still instead: the STILL message.)
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   // Read saved stars first (this also restores slider settings before the sliders bind).
@@ -584,7 +597,12 @@ S.startEngine = function startEngine() {
     settings: { ...S.interactionSettings },
     saved: SAVED,
     wantsDebug: Object.values(S.debugReadouts).some(Boolean),
-    starImage: S.getVersionedUrl("/Resources/Star.webp")
+    starImage: S.getVersionedUrl("/Resources/Star.webp"),
+    // The starfield's look on this page (its theme's stars, and a Custom theme's colors), and whether Settings holds the
+    // stars still (Boot.js)
+    theme: window.Themes ? window.Themes.starLook().name : "prismal",
+    themeColors: window.Themes ? window.Themes.starLook().colors : null,
+    still: typeof window.stillStars === "function" ? window.stillStars() : false
   };
 
   /* GROUP: Worker path */

@@ -4,9 +4,10 @@
 <html lang="en" class="noJs frontPage">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=268cd22569">
+    <link rel="stylesheet" href="/stylesheet.css?v=09de32a6ff">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=c6e3f94769">
+    <link rel="stylesheet" href="/budgetStyle.css?v=d9d6d0b82a">
+    <link rel="stylesheet" href="/themes.css?v=c793d940e8">
     <title>Prismal Budget - See Your Bank Balance Four Weeks Ahead</title>
     <meta name="description" content="Prismal Budget is a calendar budget that shows what will be in your bank account at the end of every day for the next four weeks. It fills in your paychecks and bills, and points out low days before they happen.">
     <link rel="canonical" href="https://prismalbudget.org/">
@@ -40,7 +41,7 @@
   <body>
     <canvas id="constellations"></canvas>
     <div id="transitionContainer">
-      
+
       <header>
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
@@ -99,7 +100,8 @@
               <li><strong>Adds entries in seconds.</strong> Put a Quick Entry icon on your phone's home screen that opens a New Entry form with no sign-in, can show what's in the bank today, and saves the entries you add often. It even shows In Bank, and the lowest it gets, on an Apple Watch.</li>
               <li><strong>Reminds you.</strong> A daily "Check Budget" reminder on the days your budget needs a look, as a notification or on Google Calendar, Apple Calendar, or most calendar apps.</li>
               <li><strong>Works out a paycheck.</strong> The Paycheck Calculator figures your take-home pay from your hours, overtime, taxes, and deductions.</li>
-              <li><strong>Stays in sync.</strong> Open your budget on your phone and your computer, or share it with a partner, and each one shows the other's changes within a few seconds, with no reloading.</li>
+              <li><strong>Stays in sync.</strong> Open your budget on your phone and your computer, or share it with a partner's own account, and each one shows the other's changes within a few seconds, with no reloading.</li>
+              <li><strong>Keeps more than one budget.</strong> Make a budget for the household, a trip, or something you're saving up for next to your own, and share any of yours with other accounts, so two people can each have their own budget and share one too.</li>
               <li><strong>Plans paying it off.</strong> The Debt Calculator shows when a loan or a credit card is paid off, the interest on the way, and what paying a little extra each time saves, for any balance or one of your own accounts at your budget's pace.</li>
               <li><strong>Keeps you in control.</strong> Sign in with a passkey (Face ID, Touch ID, or Windows Hello) if you like, download everything in your budget anytime, or delete your account and all of its data.</li>
             </ul>
@@ -333,7 +335,10 @@
           <h3 id="helpTitle">Home Help</h3>
 
           <h4>Getting Started</h4>
-          <p>A new budget starts at $0, so the first time you sign in, the Welcome card at the top asks what's in your bank account now (and, if you like, in savings). Your bank balance goes on today as a ⭕️ Starting Balance entry, which you can change like any entry, and savings becomes your Savings account's balance (on Other Accounts). Then add your paychecks and bills on Recurring Entries. The card goes away once both are done, or tap × to hide it, and it doesn't come back the next time you sign in.</p>
+          <p>A new budget starts at $0, so the first time it opens (your first sign-in, or right after you make a new budget), the Welcome card at the top asks what's in your bank account now (and, if you like, in savings). Your bank balance goes on today as a ⭕️ Starting Balance entry, which you can change like any entry, and savings becomes your Savings account's balance (on Other Accounts). Then add your paychecks and bills on Recurring Entries. The card goes away once both are done, or tap × to hide it, and it doesn't come back the next time you sign in.</p>
+
+          <h4>Your Budgets</h4>
+          <p>The name above Settings, Menu, and Logout is the budget that's open. Tap it to open another one, make a <strong>New Budget</strong>, or <strong>Join</strong> one someone shared with you (a pink dot means an invitation is waiting). Tap <strong>Share</strong> beside a budget of yours and type the other person's username or email: once they join, you each see the other's changes within a few seconds, and you each keep your own budgets too. Only a budget's owner can share it. Settings, under Budgets, renames, deletes, and leaves them.</p>
 
           <h4>Viewing The Calendar</h4>
           <ul>

@@ -1,0 +1,862 @@
+/*==============================================================*
+ *                           THEMES
+ *==============================================================*
+ *
+ *  Settings' Theme, kept on each device (Boot.js gives html its data-theme, and Prismal, the site's own look, has
+ *  none). Each theme sets stylesheet.css's tokens (its section 1) and budgetStyle.css's (the panels' and entries'
+ *  colors) again, then changes what a token can't reach: the background, the icons, edges and corners, and the few
+ *  colors written out where they're used. The starfield's stars and colors are in Active Starfield.js (THEME_LOOKS).
+ *  The login page, the front page, and the pages for anyone (How It Works, the Privacy Policy) keep Prismal's look.
+ *
+ *   1) PROFESSIONAL AND DARK (what they share: a plain font, smaller corners, no glows)
+ *   2) PROFESSIONAL (light)
+ *   3) DARK
+ *   4) SPOOKY (sharp corners, a sharper font, dark with red)
+ *   5) ELEMENTS (fire, water, air, and earth; matte)
+ *   6) POISON (dark, purple and green)
+ *   7) BLUE (a medium blue)
+ *   8) CUSTOM (the person's own: one of the others, with their colors and choices)
+ *   9) WHAT EVERY THEME CHANGES THE SAME WAY
+ *  10) THE THEME PICKER AND THE CUSTOM WINDOW (Settings)
+ *==============================================================*/
+
+
+/* #region 1) PROFESSIONAL AND DARK */
+html:is([data-theme="professional"], [data-theme="dark"]) {
+  --FONT: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --GLASS_RADIUS: 10px;
+  --DAY_RADIUS: 6px;
+  --PANEL_RADIUS: 10px;
+  --TITLE_GLOW: none;
+  --SHADOW: 0 0 0 transparent;
+}
+
+/* Buttons and boxes have small round corners instead of being pills (switches stay pills) */
+html:is([data-theme="professional"], [data-theme="dark"]) :is(button, input:not([type="checkbox"]), select, textarea, a.budgetButton) {
+  border-radius: 8px;
+}
+
+html:is([data-theme="professional"], [data-theme="dark"]) :is(.budgetPanel, .datePicker) {
+  border-radius: 12px;
+}
+
+html:is([data-theme="professional"], [data-theme="dark"]) :is(.navButtons a.navButton, .pageTabs a.pageTab, .tabGlow) {
+  border-radius: 10px;
+}
+
+/* No glow under the line, the logo, or a negative amount */
+html:is([data-theme="professional"], [data-theme="dark"]) hr {
+  box-shadow: none;
+}
+
+html:is([data-theme="professional"], [data-theme="dark"]) header .brand-icon {
+  filter: none;
+}
+/* #endregion 1) PROFESSIONAL AND DARK */
+
+
+/* #region 2) PROFESSIONAL */
+/* Light and plain: white cards with thin gray edges on a pale blue-gray, dark words, one blue for what's chosen,
+   recommended, or showing, and dark gray icons */
+html[data-theme="professional"] {
+  color-scheme: light;
+  background-color: #eef2f7;
+
+  --PICK_SHADOW: 0 0 0 2px rgba(37, 99, 235, 0.35);
+  --HOVER_SHADOW: 0 2px 8px rgba(15, 23, 42, 0.12);
+
+  --LINK_LIGHT: #1d4ed8;
+  --LINK_DARK: #1e3a8a;
+  --BASE_COLOR: #334155;
+  --TEXT_BRIGHT: #0f172a;
+  --TEXT_DIM: #64748b;
+
+  --NEON_BLUE: #2563eb;
+  --NEON_VIOLET: #7c3aed;
+  --NEON_CYAN: #0891b2;
+  --NEON_PINK: #db2777;
+
+  --GLASS: linear-gradient(180deg, #ffffff, #fbfcfe);
+  --GLASS_BUTTON: #ffffff;
+  --GLASS_LINE: rgba(15, 23, 42, 0.12);
+  --GLASS_LINE_BRIGHT: rgba(15, 23, 42, 0.22);
+  --GLASS_SHADOW: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 14px rgba(15, 23, 42, 0.06);
+
+  --GLOW_FILL: linear-gradient(rgba(37, 99, 235, 0.1), rgba(37, 99, 235, 0.1));
+  --GLOW_EDGE: #2563eb;
+  --GLOW_SHADOW: 0 0 0 1px rgba(37, 99, 235, 0.25);
+  --RECOMMENDED_FILL: linear-gradient(#2563eb, #2563eb);
+  --PRIMARY_TEXT: #ffffff;
+  --DARK_BUTTON: #f1f5f9;
+  --DANGER_TEXT: #b91c1c;
+  --PICK_FILL: linear-gradient(rgba(37, 99, 235, 0.12), rgba(37, 99, 235, 0.12));
+  --PLACEHOLDER_COLOR: rgba(100, 116, 139, 0.7);
+  --EDGE_GRADIENT: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  --HOVER_GRADIENT: linear-gradient(180deg, #ffffff, #ffffff);
+  --FLOAT_SHADOW: 0 12px 32px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.06);
+
+  --DAY_FILL: linear-gradient(180deg, #ffffff, #f8fafc);
+  --DAY_SOLID: linear-gradient(180deg, #ffffff, #f8fafc);
+  --DAY_EDGE: rgba(15, 23, 42, 0.12);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, #fee2e2, #fff1f2);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, #fee2e2, #fff1f2);
+  --NEGATIVE_DAY_EDGE: rgba(220, 38, 38, 0.55);
+  --NEGATIVE_GLOW_FILL: linear-gradient(rgba(220, 38, 38, 0.1), rgba(220, 38, 38, 0.1));
+
+  --GLOW_RGB: 37, 99, 235;
+  --GLOW_LIGHT_RGB: 96, 165, 250;
+  --PICK_RGB: 37, 99, 235;
+  --SHADE_RGB: 15, 23, 42;
+  --HALO_RGB: 255, 255, 255;
+  --WELL_RGB: 255, 255, 255;
+  --INSET_RGB: 203, 213, 225;
+  --TINT_RGB: 15, 23, 42;
+  --YELLOW_RGB: 202, 138, 4;
+  --BOX_FILL: #ffffff;
+  --PICK_EDGE: #2563eb;
+  --LIST_FILL: #ffffff;
+  --TEXT_HOT: #0f172a;
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.18) 20%, rgba(15, 23, 42, 0.18) 80%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #2563eb, #3b82f6);
+  --TILE_FILL: #eff6ff;
+
+  --PANEL_DEEP: #f1f5f9;
+  --PANEL_SOFT: rgba(15, 23, 42, 0.03);
+  --PANEL_DARK: #f8fafc;
+  --PANEL_LINE: rgba(15, 23, 42, 0.08);
+  --PANEL_BORDER: rgba(15, 23, 42, 0.14);
+  --NEGATIVE_TEXT: #dc2626;
+  --POSITIVE_TEXT: #059669;
+  --ZERO_TEXT: #94a3b8;
+  --PLACEHOLDER_TEXT: #b45309;
+}
+
+html[data-theme="professional"] #constellations {
+  background-color: #eef2f7;
+  background-image:
+    radial-gradient(ellipse at 15% 0%, rgba(37, 99, 235, 0.08), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, rgba(15, 23, 42, 0.06), transparent 60%),
+    linear-gradient(180deg, #f5f7fb, #e8edf4);
+}
+
+/* Icons: dark gray (each theme's icon colors start by lifting a dark icon, like the calendar's, the way Prismal does:
+   --ICON_LIFT, budgetStyle.css) */
+html[data-theme="professional"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) grayscale(1) brightness(0.32) !important;
+}
+
+html[data-theme="professional"] .logoutButton span {
+  color: #be185d;
+}
+
+/* What's written out light for a dark page, darker here */
+html[data-theme="professional"] .goalItem.isReached .goalStatus {
+  color: var(--POSITIVE_TEXT);
+}
+
+html[data-theme="professional"] .goalItem.isDanger .goalStatus {
+  color: #c2410c;
+}
+
+html[data-theme="professional"] .logsTable tr.errorRow td {
+  background: #fee2e2;
+}
+
+html[data-theme="professional"] .logsTable tr.notFoundRow td {
+  background: #ffedd5;
+}
+
+html[data-theme="professional"] :is(.sheetProblems, .recurringProblems) {
+  background: #fef2f2;
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+html[data-theme="professional"] .calendarScheduleDay.isToday {
+  border-color: #0891b2;
+  box-shadow: 0 0 0 1px rgba(8, 145, 178, 0.35);
+}
+
+html[data-theme="professional"] .calendarPaycheckStatus.isUpcoming {
+  color: #0891b2;
+}
+
+html[data-theme="professional"] .newEntryPrism {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.18);
+}
+/* #endregion 2) PROFESSIONAL */
+
+
+/* #region 3) DARK */
+/* Professional, dark: charcoal cards with faint edges, light gray words, one blue, and light gray icons */
+html[data-theme="dark"] {
+  background-color: #0f1115;
+
+  --PICK_SHADOW: 0 0 0 2px rgba(56, 139, 253, 0.45);
+  --HOVER_SHADOW: 0 2px 10px rgba(0, 0, 0, 0.45);
+
+  --LINK_LIGHT: #58a6ff;
+  --LINK_DARK: #1f4e8c;
+  --BASE_COLOR: #c9d1d9;
+  --TEXT_BRIGHT: #f0f3f6;
+  --TEXT_DIM: #8b949e;
+
+  --NEON_BLUE: #388bfd;
+  --NEON_VIOLET: #8957e5;
+  --NEON_CYAN: #39c5cf;
+  --NEON_PINK: #db61a2;
+
+  --GLASS: linear-gradient(180deg, #1b1f26, #171a20);
+  --GLASS_BUTTON: #21262d;
+  --GLASS_LINE: rgba(240, 246, 252, 0.1);
+  --GLASS_LINE_BRIGHT: rgba(240, 246, 252, 0.2);
+  --GLASS_SHADOW: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 16px rgba(0, 0, 0, 0.3);
+
+  --GLOW_FILL: linear-gradient(rgba(56, 139, 253, 0.14), rgba(56, 139, 253, 0.14));
+  --GLOW_EDGE: #388bfd;
+  --GLOW_SHADOW: 0 0 0 1px rgba(56, 139, 253, 0.35);
+  --RECOMMENDED_FILL: linear-gradient(#1f6feb, #1f6feb);
+  --PRIMARY_TEXT: #ffffff;
+  --DARK_BUTTON: #161b22;
+  --DANGER_TEXT: #ff7b72;
+  --PICK_FILL: linear-gradient(rgba(56, 139, 253, 0.18), rgba(56, 139, 253, 0.18));
+  --PLACEHOLDER_COLOR: rgba(139, 148, 158, 0.6);
+  --EDGE_GRADIENT: linear-gradient(135deg, #1f6feb, #58a6ff);
+  --HOVER_GRADIENT: linear-gradient(180deg, #1c2128, #1c2128);
+  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(240, 246, 252, 0.08);
+
+  --DAY_FILL: linear-gradient(180deg, #1c2129, #171b22);
+  --DAY_SOLID: linear-gradient(180deg, #1c2129, #171b22);
+  --DAY_EDGE: rgba(240, 246, 252, 0.08);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, #3d1519, #2a1014);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, #3d1519, #2a1014);
+  --NEGATIVE_DAY_EDGE: rgba(248, 81, 73, 0.6);
+  --NEGATIVE_GLOW_FILL: linear-gradient(rgba(248, 81, 73, 0.12), rgba(248, 81, 73, 0.12));
+
+  --GLOW_RGB: 56, 139, 253;
+  --GLOW_LIGHT_RGB: 121, 192, 255;
+  --PICK_RGB: 56, 139, 253;
+  --WELL_RGB: 13, 17, 23;
+  --TINT_RGB: 240, 246, 252;
+  --YELLOW_RGB: 210, 153, 34;
+  --BOX_FILL: #0d1117;
+  --PICK_EDGE: #388bfd;
+  --LIST_FILL: #161b22;
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(240, 246, 252, 0.16) 20%, rgba(240, 246, 252, 0.16) 80%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #1f6feb, #58a6ff);
+  --TILE_FILL: #161b22;
+
+  --PANEL_DEEP: #21262d;
+  --PANEL_SOFT: rgba(240, 246, 252, 0.03);
+  --PANEL_DARK: #0d1117;
+  --PANEL_LINE: rgba(240, 246, 252, 0.08);
+  --PANEL_BORDER: rgba(240, 246, 252, 0.14);
+  --NEGATIVE_TEXT: #ff7b72;
+  --POSITIVE_TEXT: #3fb950;
+  --ZERO_TEXT: #6e7681;
+  --PLACEHOLDER_TEXT: #d29922;
+}
+
+html[data-theme="dark"] #constellations {
+  background-color: #0f1115;
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(56, 139, 253, 0.07), transparent 55%),
+    linear-gradient(180deg, #12151b, #0b0d11);
+}
+
+/* Icons: light gray */
+html[data-theme="dark"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) grayscale(1) brightness(1.7) !important;
+}
+
+html[data-theme="dark"] .logoutButton span {
+  color: #f472b6;
+}
+/* #endregion 3) DARK */
+
+
+/* #region 4) SPOOKY */
+/* Sharp corners and a sharper font, near-black with blood red, an ember orange for what's chosen, a moon, red mist,
+   and red icons */
+html[data-theme="spooky"] {
+  background-color: #070405;
+
+  --FONT: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  --SHADOW: 0 0 20px rgba(255, 30, 30, 1);
+  --PICK_SHADOW: 0 0 16px rgba(255, 90, 20, 0.75);
+  --HOVER_SHADOW: 0 0 12px rgba(220, 20, 30, 0.55);
+
+  --LINK_LIGHT: #ff2a2a;
+  --LINK_DARK: #5a0000;
+  --BASE_COLOR: #d8c9c4;
+  --TEXT_BRIGHT: #f5ebe6;
+  --TEXT_DIM: #a08c88;
+
+  --NEON_BLUE: #ff3030;
+  --NEON_VIOLET: #9c0f1f;
+  --NEON_CYAN: #ff7a3c;
+  --NEON_PINK: #ff2a6a;
+  --TITLE_GLOW: 0 0 14px rgba(255, 30, 30, 0.5);
+
+  --GLASS: linear-gradient(180deg, rgba(30, 10, 12, 0.9), rgba(12, 5, 6, 0.94));
+  --GLASS_BUTTON: rgba(32, 9, 11, 0.85);
+  --GLASS_LINE: rgba(190, 25, 35, 0.35);
+  --GLASS_LINE_BRIGHT: rgba(230, 45, 55, 0.55);
+  --GLASS_SHADOW: 0 10px 28px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 60, 60, 0.08);
+  --GLASS_RADIUS: 2px;
+  --DAY_RADIUS: 1px;
+  --PANEL_RADIUS: 2px;
+
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(220, 20, 30, 0.5) 0%, rgba(150, 10, 20, 0.28) 45%, rgba(80, 0, 10, 0.1) 75%, rgba(40, 0, 6, 0.05) 100%);
+  --GLOW_EDGE: rgba(255, 70, 70, 0.9);
+  --GLOW_SHADOW: 0 0 16px rgba(220, 20, 30, 0.55), inset 0 0 12px rgba(220, 20, 30, 0.25);
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(120, 0, 12, 0.8), rgba(180, 10, 24, 0.8));
+  --DARK_BUTTON: rgba(10, 3, 4, 0.9);
+  --DANGER_TEXT: #ff8a7a;
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 120, 40, 0.42) 0%, rgba(220, 50, 10, 0.22) 50%, rgba(120, 20, 0, 0.08) 85%, transparent 100%);
+  --EDGE_GRADIENT: linear-gradient(135deg, #8b0000 0%, #ff2a2a 50%, #ff7a1a 100%);
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 8, 11, 0.98) 0%, rgba(22, 5, 7, 0.98) 50%, rgba(12, 3, 4, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 26px rgba(170, 0, 12, 0.3);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(64, 10, 14, 0.62) 0%, rgba(64, 10, 14, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(44, 9, 11), rgb(14, 3, 4));
+  --DAY_EDGE: rgba(200, 30, 40, 0.25);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(150, 0, 30, 0.78) 0%, rgba(150, 0, 30, 0) 50%);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(130, 0, 26), rgb(48, 0, 10));
+  --NEGATIVE_DAY_EDGE: rgba(255, 50, 60, 0.9);
+
+  --GLOW_RGB: 220, 20, 30;
+  --GLOW_LIGHT_RGB: 255, 90, 80;
+  --PICK_RGB: 255, 90, 20;
+  --WELL_RGB: 14, 4, 5;
+  --YELLOW_RGB: 255, 154, 60;
+  --PICK_EDGE: #ff6a1a;
+  --LIST_FILL: rgb(26, 6, 8);
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(200, 20, 30, 0.7) 25%, rgba(255, 90, 40, 0.6) 75%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #8b0000, #ff2a2a);
+  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(200, 20, 30, 0.35), rgba(16, 4, 5, 0.94));
+
+  --PANEL_DEEP: rgba(90, 10, 16, 0.7);
+  --PANEL_SOFT: rgba(60, 8, 12, 0.35);
+  --PANEL_DARK: rgba(14, 3, 4, 0.7);
+  --PANEL_LINE: rgba(200, 30, 40, 0.18);
+  --PANEL_BORDER: rgba(230, 50, 60, 0.4);
+  --NEGATIVE_TEXT: #ff4d4d;
+  --POSITIVE_TEXT: #b9d98c;
+  --ZERO_TEXT: #7a6464;
+  --PLACEHOLDER_TEXT: #ff9a3c;
+}
+
+/* A moon at the top right, and red mist rising from the bottom */
+html[data-theme="spooky"] #constellations {
+  background-color: #070405;
+  background-image:
+    radial-gradient(circle at 82% 14%, rgba(255, 238, 225, 0.32) 0 28px, rgba(255, 210, 190, 0.1) 34px, transparent 90px),
+    radial-gradient(ellipse at 50% 115%, rgba(150, 0, 14, 0.55), transparent 60%),
+    radial-gradient(ellipse at 0% 0%, rgba(70, 0, 10, 0.4), transparent 50%),
+    linear-gradient(180deg, #0c0607, #050304);
+}
+
+/* Every corner sharp (the logo stays round) */
+html[data-theme="spooky"] *,
+html[data-theme="spooky"] *::before,
+html[data-theme="spooky"] *::after {
+  border-radius: 2px !important;
+}
+
+html[data-theme="spooky"] header .brand-icon {
+  border-radius: 50% !important;
+  filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.5));
+}
+
+/* Icons: blood red */
+html[data-theme="spooky"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) sepia(1) saturate(5) hue-rotate(-40deg) brightness(0.95) drop-shadow(0 0 6px rgba(255, 0, 0, 0.6)) !important;
+}
+
+html[data-theme="spooky"] .logoutButton span {
+  color: #ff6a6a;
+}
+
+html[data-theme="spooky"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(200, 20, 30, 0.16)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(255, 90, 40, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 4) SPOOKY */
+
+
+/* #region 5) ELEMENTS */
+/* Matte: flat earthy cards with no glows or shine, fire (terracotta), water (teal), air (pale sky), and earth (moss) in
+   the corners of a grainy charcoal, and muted icons */
+html[data-theme="elements"] {
+  background-color: #1e1b18;
+
+  --SHADOW: 0 0 0 transparent;
+  --PICK_SHADOW: 0 0 0 2px rgba(208, 100, 59, 0.5);
+  --HOVER_SHADOW: 0 3px 10px rgba(0, 0, 0, 0.4);
+
+  --LINK_LIGHT: #e8865c;
+  --LINK_DARK: #6b2e17;
+  --BASE_COLOR: #e2d9cc;
+  --TEXT_BRIGHT: #f6f0e7;
+  --TEXT_DIM: #a89f92;
+
+  --NEON_BLUE: #3a87a8;
+  --NEON_VIOLET: #7d8b45;
+  --NEON_CYAN: #a7c4cf;
+  --NEON_PINK: #d0643b;
+  --TITLE_GLOW: none;
+
+  --GLASS: linear-gradient(180deg, rgba(46, 41, 36, 0.94), rgba(40, 36, 32, 0.95));
+  --GLASS_BUTTON: rgba(56, 50, 44, 0.96);
+  --GLASS_LINE: rgba(226, 217, 204, 0.12);
+  --GLASS_LINE_BRIGHT: rgba(226, 217, 204, 0.28);
+  --GLASS_SHADOW: 0 6px 16px rgba(0, 0, 0, 0.35);
+  --GLASS_RADIUS: 12px;
+
+  --GLOW_FILL: linear-gradient(rgba(58, 135, 168, 0.3), rgba(58, 135, 168, 0.3));
+  --GLOW_EDGE: #6fa9c0;
+  --GLOW_SHADOW: 0 0 0 1px rgba(58, 135, 168, 0.55);
+  --RECOMMENDED_FILL: linear-gradient(90deg, #b5532f, #c9773e);
+  --PRIMARY_TEXT: #fff8ef;
+  --DARK_BUTTON: rgba(30, 27, 24, 0.95);
+  --DANGER_TEXT: #e7a08a;
+  --PICK_FILL: linear-gradient(rgba(208, 100, 59, 0.28), rgba(208, 100, 59, 0.28));
+  --EDGE_GRADIENT: linear-gradient(135deg, #b5532f, #d0643b 50%, #e0a24f);
+  --HOVER_GRADIENT: linear-gradient(180deg, #2f2a25, #2a2621);
+  --FLOAT_SHADOW: 0 14px 34px rgba(0, 0, 0, 0.55);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(58, 52, 46, 0.85), rgba(50, 45, 40, 0.85));
+  --DAY_SOLID: linear-gradient(180deg, #3a342e, #302b26);
+  --DAY_EDGE: rgba(226, 217, 204, 0.1);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(130, 48, 34, 0.85), rgba(110, 40, 30, 0.85));
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, #82301f, #5e2418);
+  --NEGATIVE_DAY_EDGE: rgba(232, 120, 90, 0.7);
+  --NEGATIVE_GLOW_FILL: linear-gradient(rgba(232, 120, 90, 0.2), rgba(232, 120, 90, 0.2));
+
+  --GLOW_RGB: 58, 135, 168;
+  --GLOW_LIGHT_RGB: 167, 196, 207;
+  --PICK_RGB: 208, 100, 59;
+  --WELL_RGB: 24, 21, 18;
+  --TINT_RGB: 255, 245, 230;
+  --YELLOW_RGB: 231, 194, 106;
+  --BOX_FILL: rgba(24, 21, 18, 0.7);
+  --PICK_EDGE: #d0643b;
+  --LIST_FILL: #2a2621;
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, #d0643b 15%, #3a87a8 40%, #a7c4cf 60%, #7d8b45 85%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #d0643b, #3a87a8, #a7c4cf, #7d8b45);
+  --TILE_FILL: #2a2621;
+
+  --PANEL_DEEP: rgba(70, 62, 54, 0.85);
+  --PANEL_SOFT: rgba(255, 245, 230, 0.03);
+  --PANEL_DARK: rgba(24, 21, 18, 0.7);
+  --PANEL_LINE: rgba(226, 217, 204, 0.1);
+  --PANEL_BORDER: rgba(226, 217, 204, 0.22);
+  --NEGATIVE_TEXT: #ec8f72;
+  --POSITIVE_TEXT: #a8c47a;
+  --ZERO_TEXT: #8a8277;
+  --PLACEHOLDER_TEXT: #e7c26a;
+}
+
+/* The four elements in the corners (fire, water, earth, air), under a fine grain */
+html[data-theme="elements"] #constellations {
+  background-color: #1e1b18;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='grain'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.55  0 0 0 0 0.5  0 0 0 0 0.45  0 0 0 0.07 0'/></filter><rect width='100%' height='100%' filter='url(%23grain)'/></svg>"),
+    radial-gradient(ellipse at 0% 0%, rgba(181, 83, 47, 0.32), transparent 55%),
+    radial-gradient(ellipse at 100% 0%, rgba(58, 135, 168, 0.3), transparent 55%),
+    radial-gradient(ellipse at 0% 100%, rgba(125, 139, 69, 0.3), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, rgba(167, 196, 207, 0.2), transparent 55%),
+    linear-gradient(180deg, #221f1b, #1a1714);
+  background-size: 160px 160px, cover, cover, cover, cover, cover;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+}
+
+html[data-theme="elements"] hr {
+  box-shadow: none;
+}
+
+html[data-theme="elements"] header .brand-icon {
+  filter: saturate(0.6) sepia(0.25);
+}
+
+/* Icons: muted, earthy, and no glow */
+html[data-theme="elements"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) saturate(0.55) sepia(0.3) brightness(1.05) !important;
+}
+
+html[data-theme="elements"] .logoutButton span {
+  color: #e8865c;
+}
+
+html[data-theme="elements"] .newEntryPrism {
+  filter: saturate(0.6) sepia(0.2);
+}
+/* #endregion 5) ELEMENTS */
+
+
+/* #region 6) POISON */
+/* Dark purple glass with a toxic green for what's chosen and for links, purple glows, a green haze rising from the
+   bottom, and green icons with a purple glow */
+html[data-theme="poison"] {
+  background-color: #0d0714;
+
+  --SHADOW: 0 0 20px rgba(80, 255, 60, 1);
+  --PICK_SHADOW: 0 0 16px rgba(80, 255, 60, 0.7);
+  --HOVER_SHADOW: 0 0 12px rgba(150, 60, 230, 0.6);
+
+  --LINK_LIGHT: #7dff5a;
+  --LINK_DARK: #2c5a1e;
+  --BASE_COLOR: #d6cbe4;
+  --TEXT_BRIGHT: #f3ecff;
+  --TEXT_DIM: #9b8cb2;
+
+  --NEON_BLUE: #8f4dff;
+  --NEON_VIOLET: #b04dff;
+  --NEON_CYAN: #7dff5a;
+  --NEON_PINK: #39ff14;
+  --TITLE_GLOW: 0 0 14px rgba(140, 255, 90, 0.35);
+
+  --GLASS: linear-gradient(180deg, rgba(36, 16, 54, 0.86), rgba(17, 8, 28, 0.9));
+  --GLASS_BUTTON: rgba(32, 14, 48, 0.78);
+  --GLASS_LINE: rgba(150, 90, 220, 0.3);
+  --GLASS_LINE_BRIGHT: rgba(170, 120, 240, 0.5);
+
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(160, 70, 240, 0.55) 0%, rgba(120, 40, 200, 0.3) 45%, rgba(60, 20, 110, 0.12) 75%, rgba(30, 10, 60, 0.05) 100%);
+  --GLOW_EDGE: rgba(195, 130, 255, 0.9);
+  --GLOW_SHADOW: 0 0 16px rgba(150, 60, 230, 0.55), inset 0 0 12px rgba(150, 60, 230, 0.25);
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(50, 150, 50, 0.65), rgba(130, 50, 200, 0.65));
+  --DARK_BUTTON: rgba(10, 5, 16, 0.88);
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(120, 255, 80, 0.4) 0%, rgba(60, 200, 40, 0.22) 50%, rgba(20, 100, 10, 0.08) 85%, transparent 100%);
+  --EDGE_GRADIENT: linear-gradient(135deg, #39ff14 0%, #7dff5a 55%, #c6ff3d 100%);
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(46, 18, 72, 0.98) 0%, rgba(28, 12, 48, 0.98) 50%, rgba(16, 8, 30, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 26px rgba(120, 255, 80, 0.15);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(52, 22, 78, 0.62) 0%, rgba(52, 22, 78, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(42, 18, 62), rgb(15, 7, 24));
+  --DAY_EDGE: rgba(150, 90, 220, 0.25);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(140, 10, 70, 0.7) 0%, rgba(140, 10, 70, 0) 50%);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(120, 10, 60), rgb(44, 4, 24));
+  --NEGATIVE_DAY_EDGE: rgba(255, 70, 150, 0.7);
+
+  --GLOW_RGB: 150, 60, 230;
+  --GLOW_LIGHT_RGB: 190, 140, 255;
+  --PICK_RGB: 70, 220, 40;
+  --WELL_RGB: 12, 5, 20;
+  --YELLOW_RGB: 220, 255, 90;
+  --PICK_EDGE: #39ff14;
+  --LIST_FILL: rgb(24, 10, 38);
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(150, 60, 230, 0.7) 25%, rgba(110, 255, 70, 0.6) 75%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #8f4dff, #39ff14);
+  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(120, 255, 80, 0.25), rgba(16, 8, 26, 0.92));
+
+  --PANEL_DEEP: rgba(60, 24, 92, 0.7);
+  --PANEL_SOFT: rgba(36, 14, 56, 0.35);
+  --PANEL_DARK: rgba(10, 4, 18, 0.62);
+  --PANEL_LINE: rgba(150, 90, 220, 0.18);
+  --PANEL_BORDER: rgba(170, 120, 240, 0.38);
+  --NEGATIVE_TEXT: #ff6b9a;
+  --POSITIVE_TEXT: #7dff5a;
+  --ZERO_TEXT: #7a6f8c;
+  --PLACEHOLDER_TEXT: #e8ff5a;
+}
+
+html[data-theme="poison"] #constellations {
+  background-color: #0d0714;
+  background-image:
+    radial-gradient(ellipse at 50% 110%, rgba(70, 255, 60, 0.16), transparent 55%),
+    radial-gradient(ellipse at 10% 0%, rgba(140, 40, 210, 0.35), transparent 55%),
+    radial-gradient(ellipse at 95% 20%, rgba(100, 30, 170, 0.25), transparent 50%),
+    linear-gradient(180deg, #120a1c, #0a050f);
+}
+
+html[data-theme="poison"] header .brand-icon {
+  filter: drop-shadow(0 0 10px rgba(110, 255, 70, 0.45));
+}
+
+/* Icons: toxic green, glowing purple */
+html[data-theme="poison"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) sepia(1) saturate(4) hue-rotate(55deg) brightness(1.05) drop-shadow(0 0 6px rgba(160, 80, 240, 0.7)) !important;
+}
+
+html[data-theme="poison"] .logoutButton span {
+  color: #c98bff;
+}
+
+html[data-theme="poison"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(150, 60, 230, 0.18)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(90, 255, 60, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 6) POISON */
+
+
+/* #region 7) BLUE */
+/* A medium blue: lighter blue glass on blue, white words, pale blue glows, a warm yellow for what's chosen, and white
+   icons */
+html[data-theme="blue"] {
+  background-color: #1f4a85;
+
+  --SHADOW: 0 0 20px rgba(255, 190, 40, 1);
+  --PICK_SHADOW: 0 0 16px rgba(255, 190, 40, 0.75);
+  --HOVER_SHADOW: 0 0 12px rgba(180, 225, 255, 0.6);
+
+  --LINK_LIGHT: #ffd166;
+  --LINK_DARK: #7a5a00;
+  --BASE_COLOR: #e3eeff;
+  --TEXT_BRIGHT: #ffffff;
+  --TEXT_DIM: #b7cbea;
+
+  --NEON_BLUE: #7cc4ff;
+  --NEON_VIOLET: #a5b8ff;
+  --NEON_CYAN: #9be7ff;
+  --NEON_PINK: #ffd166;
+  --TITLE_GLOW: 0 0 14px rgba(170, 215, 255, 0.45);
+
+  --GLASS: linear-gradient(180deg, rgba(36, 82, 150, 0.78), rgba(24, 60, 118, 0.84));
+  --GLASS_BUTTON: rgba(30, 72, 138, 0.82);
+  --GLASS_LINE: rgba(200, 225, 255, 0.3);
+  --GLASS_LINE_BRIGHT: rgba(220, 235, 255, 0.55);
+  --GLASS_SHADOW: 0 10px 26px rgba(6, 22, 52, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(160, 215, 255, 0.5) 0%, rgba(110, 180, 255, 0.28) 45%, rgba(60, 130, 230, 0.12) 75%, rgba(40, 100, 200, 0.05) 100%);
+  --GLOW_EDGE: rgba(215, 238, 255, 0.95);
+  --GLOW_SHADOW: 0 0 16px rgba(150, 210, 255, 0.55), inset 0 0 12px rgba(150, 210, 255, 0.25);
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(40, 140, 230, 0.85), rgba(80, 175, 255, 0.85));
+  --DARK_BUTTON: rgba(14, 38, 80, 0.9);
+  --DANGER_TEXT: #ffb3bd;
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 210, 90, 0.42) 0%, rgba(255, 170, 30, 0.22) 50%, rgba(160, 100, 0, 0.08) 85%, transparent 100%);
+  --PLACEHOLDER_COLOR: rgba(200, 220, 245, 0.55);
+  --EDGE_GRADIENT: linear-gradient(135deg, #ffb703 0%, #ffd166 55%, #fff3b0 100%);
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 90, 162, 0.98) 0%, rgba(30, 72, 138, 0.98) 50%, rgba(22, 58, 116, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(6, 22, 52, 0.6), 0 0 26px rgba(150, 210, 255, 0.25);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(44, 96, 170, 0.62) 0%, rgba(44, 96, 170, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(40, 90, 160), rgb(24, 60, 116));
+  --DAY_EDGE: rgba(200, 225, 255, 0.25);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(160, 30, 70, 0.72) 0%, rgba(160, 30, 70, 0) 50%);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(150, 28, 66), rgb(70, 14, 40));
+  --NEGATIVE_DAY_EDGE: rgba(255, 140, 160, 0.75);
+
+  --GLOW_RGB: 150, 210, 255;
+  --GLOW_LIGHT_RGB: 200, 230, 255;
+  --PICK_RGB: 255, 190, 40;
+  --SHADE_RGB: 6, 22, 52;
+  --HALO_RGB: 8, 28, 64;
+  --WELL_RGB: 14, 40, 84;
+  --INSET_RGB: 8, 28, 64;
+  --YELLOW_RGB: 255, 214, 102;
+  --PICK_EDGE: #ffb703;
+  --LIST_FILL: rgb(26, 62, 120);
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(200, 230, 255, 0.7) 25%, rgba(150, 210, 255, 0.7) 75%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #7cc4ff, #ffd166);
+  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(160, 215, 255, 0.35), rgba(18, 48, 98, 0.92));
+
+  --PANEL_DEEP: rgba(20, 56, 112, 0.75);
+  --PANEL_SOFT: rgba(16, 44, 92, 0.35);
+  --PANEL_DARK: rgba(10, 32, 70, 0.62);
+  --PANEL_LINE: rgba(200, 225, 255, 0.18);
+  --PANEL_BORDER: rgba(215, 235, 255, 0.4);
+  --NEGATIVE_TEXT: #ffa3b1;
+  --POSITIVE_TEXT: #8ff0b4;
+  --ZERO_TEXT: #9fb3d1;
+  --PLACEHOLDER_TEXT: #ffe066;
+}
+
+html[data-theme="blue"] #constellations {
+  background-color: #2457a0;
+  background-image:
+    radial-gradient(ellipse at 15% 0%, rgba(140, 200, 255, 0.35), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, rgba(10, 40, 100, 0.55), transparent 60%),
+    linear-gradient(180deg, #2b62ad, #1d4987);
+}
+
+/* Icons: white, with a pale glow */
+html[data-theme="blue"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) grayscale(1) brightness(2) drop-shadow(0 0 6px rgba(200, 230, 255, 0.75)) !important;
+}
+
+html[data-theme="blue"] .logoutButton span {
+  color: #ffd166;
+}
+
+html[data-theme="blue"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(160, 215, 255, 0.16)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(255, 214, 102, 0.1)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 7) BLUE */
+
+
+/* #region 8) CUSTOM */
+/* A Custom theme (Boot.js customTokens): the theme it starts from (its data-theme), with the tokens its five colors work
+   out to set on html itself. The page behind the cards is its own color, with its glow at the top left and a little
+   darker at the bottom right. */
+html.customTheme {
+  background-color: var(--CUSTOM_BG);
+}
+
+html.customTheme #constellations {
+  background-color: var(--CUSTOM_BG);
+  background-image:
+    radial-gradient(ellipse at 12% 0%, var(--CUSTOM_BG_GLOW), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, var(--CUSTOM_BG_DEEP), transparent 65%),
+    linear-gradient(180deg, var(--CUSTOM_BG), var(--CUSTOM_BG_DEEP));
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* Small corners, like Professional's (a theme with sharp ones keeps them) */
+html[data-corners="small"] {
+  --GLASS_RADIUS: 10px;
+  --DAY_RADIUS: 6px;
+  --PANEL_RADIUS: 10px;
+}
+
+html[data-corners="small"] :is(button, input:not([type="checkbox"]), select, textarea, a.budgetButton) {
+  border-radius: 8px;
+}
+
+html[data-corners="small"] :is(.budgetPanel, .datePicker) {
+  border-radius: 12px;
+}
+
+html[data-corners="small"] :is(.navButtons a.navButton, .pageTabs a.pageTab, .tabGlow) {
+  border-radius: 10px;
+}
+
+/* Sharp corners, like Spooky's (the logo stays round) */
+html[data-corners="sharp"] *,
+html[data-corners="sharp"] *::before,
+html[data-corners="sharp"] *::after {
+  border-radius: 2px !important;
+}
+
+html[data-corners="sharp"] header .brand-icon {
+  border-radius: 50% !important;
+}
+
+/* Gray or glowing icons (Boot.js works out the filter for the cards' lightness and the glow) */
+html[data-icons] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) var(--ICON_FILTER) !important;
+}
+/* #endregion 8) CUSTOM */
+
+
+/* #region 9) WHAT EVERY THEME CHANGES THE SAME WAY */
+/* The middle of the New Entry prism: the theme's recommended fill, on its list color so it's solid */
+html:is([data-theme], .customTheme) .newEntryPrism::before {
+  background: var(--GLOW_FILL), var(--RECOMMENDED_FILL), var(--LIST_FILL);
+}
+
+/* Search's results after today: tinted with the theme's glow */
+html:is([data-theme], .customTheme) .searchTable tr.searchComing td {
+  background: rgba(var(--GLOW_RGB), 0.18);
+}
+
+/* Lowest's wave: plain glass where a theme has none of its own */
+html:is([data-theme="professional"], [data-theme="dark"], [data-theme="elements"], .customTheme) .lowestCard {
+  background: var(--GLASS);
+}
+/* #endregion 9) WHAT EVERY THEME CHANGES THE SAME WAY */
+
+
+/* #region 10) THE THEME PICKER AND THE CUSTOM WINDOW */
+/* Settings' Theme: a button for each, its swatch over its name and a few words about it. The swatches look the same in
+   every theme (they're a preview), so their colors are written out. */
+.choiceList.themeChoices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5em), 1fr));
+  gap: 0.5em;
+  margin: 0.4em 0 0.7em;
+}
+
+.choiceList.themeChoices .budgetButton {
+  justify-content: flex-start;
+  gap: 0.35em;
+  width: 100%;
+  padding: 0.45em 0.45em 0.55em;
+  border-radius: 12px;
+}
+
+.themeSwatch {
+  display: block;
+  width: 100%;
+  height: 2.4em;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.themeSwatch[data-swatch="prismal"]      { background: linear-gradient(135deg, #05041d 0%, #2a1f7a 45%, #4f7bff 75%, #e050ff 100%); }
+.themeSwatch[data-swatch="professional"] { background: linear-gradient(135deg, #ffffff 0%, #eef2f7 55%, #2563eb 100%); }
+.themeSwatch[data-swatch="dark"]         { background: linear-gradient(135deg, #0f1115 0%, #21262d 55%, #388bfd 100%); }
+.themeSwatch[data-swatch="spooky"]       { background: radial-gradient(circle at 78% 30%, rgba(255, 238, 225, 0.6) 0 10%, transparent 13%), linear-gradient(135deg, #050304 0%, #3a0508 55%, #c4161c 100%); }
+.themeSwatch[data-swatch="elements"]     { background: linear-gradient(90deg, #b5532f 0 25%, #3a87a8 25% 50%, #a7c4cf 50% 75%, #7d8b45 75% 100%); }
+.themeSwatch[data-swatch="poison"]       { background: linear-gradient(135deg, #0d0714 0%, #5b1f8f 50%, #39ff14 100%); }
+.themeSwatch[data-swatch="blue"]         { background: linear-gradient(135deg, #1d4987 0%, #2b62ad 55%, #9be7ff 100%); }
+/* Custom, until there's one: every color (once there is, Settings Page.js paints it in its own) */
+.themeSwatch[data-swatch="custom"]       { background: linear-gradient(90deg, #ff4d4d, #ffd166, #7dff5a, #46c8ff, #8d5cff, #e050ff); }
+
+/* The Custom window: its five colors, each a name and a color box, two or three to a row */
+.customColors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5em), 1fr));
+  gap: 0.45em 0.6em;
+}
+
+.customColor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  margin: 0;
+  padding: 0.35em 0.4em 0.35em 0.7em;
+  font-size: 1em;
+  color: var(--BASE_COLOR);
+  background: rgba(var(--INSET_RGB), 0.2);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.budgetPanel input[type="color"].colorInput {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 2.8em;
+  min-width: 0;
+  height: 2em;
+  margin: 0;
+  padding: 2px;
+  background: var(--BOX_FILL);
+  border: 1.5px solid var(--GLASS_LINE_BRIGHT);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* A browser with no color box: a text box for #rrggbb (16px, so phones don't zoom in on it) */
+.budgetPanel input.colorInput.colorText {
+  flex: 0 1 6.5em;
+  box-sizing: border-box;
+  width: 6.5em;
+  min-width: 0;
+  margin: 0;
+  padding: 0.25em 0.4em;
+  font-size: 16px;
+  text-align: center;
+  border-radius: 8px;
+}
+
+.budgetPanel input[type="color"].colorInput::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.budgetPanel input[type="color"].colorInput::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+.budgetPanel input[type="color"].colorInput::-moz-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+/* #endregion 10) THE THEME PICKER AND THE CUSTOM WINDOW */

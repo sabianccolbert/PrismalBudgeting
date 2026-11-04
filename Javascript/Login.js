@@ -100,7 +100,7 @@ const SIGNED_OUT_REASONS = {
   idle: "You were signed out after 15 minutes without activity, to keep your budget safe. Please sign in again.",
   expired: "You've been signed out (your session ended, or it was signed out from another device). Please sign in again.",
   everywhere: "You've been signed out on every device, and your Quick Entry icons were turned off.",
-  quickKey: "That Quick Entry icon doesn't work anymore, because your password changed or the icon was replaced. Delete it, then sign in and tap Quick Entry on Home to make a new one."
+  quickKey: "That Quick Entry icon doesn't work anymore: your password changed, the icon was replaced or turned off, or the budget it adds to was deleted or isn't shared with you anymore. Delete it, then sign in and tap Quick Entry on Home to make a new one."
 };
 
 // What unlocks a passkey on this device, like "Face ID or Touch ID" (see Passkeys.js)

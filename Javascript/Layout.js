@@ -156,7 +156,56 @@ function pinScreenLayer() {
   placeScreenLayer(true);
   if (PIN) coverScreen(SCREEN_LAYER, true);
 }
-new MutationObserver(pinScreenLayer).observe(SCREEN_LAYER, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "class"] });
+
+/* GROUP: A window longer than the page */
+// A window that runs past the page's bottom (a long Help over a short page, or a tall list opened near the end of one)
+// makes the page longer, with a little room under it, so the page scrolls all the way to the window's bottom (a window
+// is part of the page while it's open). It's measured once it has zoomed open (while it grows out of its button, its box
+// is still small) and again whenever its size changes, and the page goes back to its own length once no window is open.
+const WINDOW_ROOM = 16; // Pixels of page under the lowest window
+let PAGE_FIT_FRAME = 0;
+const WINDOW_SIZES = typeof ResizeObserver === "function" ? new ResizeObserver(() => fitPageSoon()) : null;
+const SIZED_WINDOWS = new WeakSet();
+
+// Once per frame, however many changes ask
+function fitPageSoon() {
+  if (!PAGE_FIT_FRAME) PAGE_FIT_FRAME = requestAnimationFrame(fitPageToWindows);
+}
+
+// The page is at least as long as its lowest open window (and its room under it)
+function fitPageToWindows() {
+  PAGE_FIT_FRAME = 0;
+  let LOWEST = 0;
+  if (SCREEN_PINNED) {
+    for (const WINDOW of SCREEN_LAYER.children) {
+      if (WINDOW.hidden || !WINDOW.getClientRects().length) continue;
+      const ZOOM = WINDOW.zoomAnimation;
+      if (ZOOM && ZOOM.playState === "running") {
+        ZOOM.finished.then(fitPageSoon, fitPageSoon); // (Its box is the zoom's until it's done)
+        return;
+      }
+      if (WINDOW_SIZES && !SIZED_WINDOWS.has(WINDOW)) {
+        SIZED_WINDOWS.add(WINDOW);
+        WINDOW_SIZES.observe(WINDOW);
+      }
+      LOWEST = Math.max(LOWEST, WINDOW.getBoundingClientRect().bottom + window.scrollY);
+    }
+  }
+  const HEIGHT = LOWEST ? `max(100vh, ${Math.ceil(LOWEST + WINDOW_ROOM)}px)` : "";
+  if (document.body.style.minHeight !== HEIGHT) document.body.style.minHeight = HEIGHT;
+}
+
+new MutationObserver((RECORDS) => {
+  pinScreenLayer();
+  // (A window that's gone isn't measured anymore)
+  RECORDS.forEach(RECORD => RECORD.removedNodes.forEach((NODE) => {
+    if (WINDOW_SIZES && SIZED_WINDOWS.has(NODE)) {
+      SIZED_WINDOWS.delete(NODE);
+      WINDOW_SIZES.unobserve(NODE);
+    }
+  }));
+  fitPageSoon();
+}).observe(SCREEN_LAYER, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "class"] });
 
 placeScreenLayer(true);
 window.visualViewport?.addEventListener("resize", queueScreenLayer);
@@ -193,9 +242,9 @@ window.ScreenLayer = {
 // bring a page back exactly as it was left) never shows one still open.
 const PAGE_EXIT_CLOSERS = new Set();
 
-// Does the device ask for less motion?
+// Less motion, please? (The device asks, or Settings' Reduced Motion switch for animations is on: Boot.js)
 function prefersReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return window.lessMotion();
 }
 
 // Where the window would sit as its button: its corner on the button's corner, shrunk to the button's size. (A window in
@@ -250,6 +299,55 @@ window.FloatingWindows = {
     PAGE_EXIT_CLOSERS.add(CLOSE);
   }
 };
+
+/* GROUP: Floating cards */
+// The page's cards hover in place (stylesheet.css FLOATING CARDS): the header's buttons and the budget picker, the tabs,
+// the page's buttons, and its cards (the calendar, Bob's, Settings', the Menu's, the login page's). Each one gets its own
+// slow loop (how far it drifts each way, how long a loop takes, and when it starts), so no two move together. A card
+// floats only while it's on the screen or close to it (one that isn't holds still, which spares a phone's memory and
+// battery), and cards a page adds later (Bob's, say) float too. Reduced Motion (the device's, or Settings' animations
+// switch) holds them all still in the CSS, so they start again as soon as it's turned off.
+const FLOAT_CARDS = [
+  "#transitionContainer > header .navButton",
+  "#transitionContainer > header .budgetPicker",
+  ".pageTabs",
+  ".controlsCard",
+  ".infoCard",
+  ".menuLinks .menuLink",
+  ".quickBalance",
+  ".authCard",
+  "#transitionContainer .budgetCard:not(.helpView)"
+].join(", ");
+const FLOATING = new WeakSet();
+const FLOAT_WATCH = typeof IntersectionObserver === "function"
+  ? new IntersectionObserver((ENTRIES) => {
+      ENTRIES.forEach(ENTRY => ENTRY.target.classList.toggle("isFloating", ENTRY.isIntersecting));
+    }, { rootMargin: "200px 0px" })
+  : null;
+
+// Every card on the page floats, each on a loop of its own (cards already floating keep theirs)
+function floatCards() {
+  if (!FLOAT_WATCH) return;
+  document.querySelectorAll(FLOAT_CARDS).forEach((CARD) => {
+    if (FLOATING.has(CARD)) return;
+    FLOATING.add(CARD);
+    const SIDE = Math.random() < 0.5 ? -1 : 1;
+    CARD.style.setProperty("--FLOAT_X", `${(SIDE * (0.8 + Math.random() * 1.2)).toFixed(2)}px`);
+    CARD.style.setProperty("--FLOAT_Y", `${(2 + Math.random() * 1.5).toFixed(2)}px`);
+    CARD.style.setProperty("--FLOAT_TIME", `${(7 + Math.random() * 4).toFixed(2)}s`);
+    CARD.style.setProperty("--FLOAT_DELAY", `${(Math.random() * 1.5).toFixed(2)}s`);
+    FLOAT_WATCH.observe(CARD);
+  });
+}
+
+let FLOAT_FRAME = 0;
+onDOMReady(() => {
+  floatCards();
+  // (Cards a page draws later, once a frame at most)
+  new MutationObserver(() => {
+    if (!FLOAT_FRAME) FLOAT_FRAME = requestAnimationFrame(() => { FLOAT_FRAME = 0; floatCards(); });
+  }).observe(document.getElementById("transitionContainer") || document.body, { childList: true, subtree: true });
+});
 
 /* GROUP: Leave/return lifecycle */
 // pagehide fires for real navigations and for bfcache entries.
@@ -1006,7 +1104,7 @@ document.addEventListener("click", (EVENT) => {
 
 /* GROUP: Signing out */
 // Signing out (or deleting the account) forgets everything this browser kept for the account, including
-// this tab's Undo history, but keeps the device's own choices: whether analytics is off here, its date format,
+// this tab's Undo history and the budget it had open, but keeps the device's own choices: whether analytics is off here, its date format,
 // whether music and sound effects are off (Sounds.js), the kind of phone picked for the Steps for lists, the passkey
 // it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Entry icons it made or used
 // (their entries are added when the budget opens here, see holdQuickEntries), and the day picked for Bob's Accounts
@@ -1015,7 +1113,7 @@ const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_mu
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));
-    Object.keys(sessionStorage).filter(KEY => KEY.startsWith("prismal_undo_")).forEach(KEY => sessionStorage.removeItem(KEY));
+    Object.keys(sessionStorage).filter(KEY => KEY.startsWith("prismal_undo_") || KEY === "prismal_budget").forEach(KEY => sessionStorage.removeItem(KEY));
   } catch {}
 }
 

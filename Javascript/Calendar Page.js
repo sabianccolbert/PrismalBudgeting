@@ -48,8 +48,9 @@ function renderHome() {
 // Each waiting entry with Add (it goes into the budget like a New Entry, and Undo can take it back) and Delete (it's
 // gone, never added), and Add All when there are more than one. The card goes away once none are waiting.
 
-let quickWaitingBusy = false;
+let quickWaitingBusy = false; // Add All is adding them, one at a time
 
+// Add All adds each waiting entry in turn, then says how many went in (and the first that couldn't)
 function wireQuickWaiting() {
   document.getElementById("quickWaitingAll")?.addEventListener("click", async () => {
     if (quickWaitingBusy) return;
@@ -69,6 +70,7 @@ function wireQuickWaiting() {
   });
 }
 
+// The card's list, drawn again whenever what's waiting changes (hidden while nothing is)
 function renderQuickWaiting() {
   const card = document.getElementById("quickWaiting");
   const list = document.getElementById("quickWaitingList");
@@ -180,15 +182,18 @@ async function takeHistoryStep(direction) {
 // =====================================================================
 // A new budget starts at $0, so its first step says what's in the bank: a ⭕️ Transfer titled Starting
 // Balance on today (it changes In Bank, but isn't a gain), and for savings, the default account's balance
-// (like typing it on Other Accounts: no entry, so it isn't counted as a gain). The card only shows on the
-// account's first sign-in (GETTING_STARTED_KEY in Process Budget.js), until the starting balance and a
-// recurring entry are there or it's hidden with ×.
+// (like typing it on Other Accounts: no entry, so it isn't counted as a gain). The card only shows the first time a
+// budget opens (the account's first sign-in, or a new budget: GETTING_STARTED_KEY in Process Budget.js), until the
+// starting balance and a recurring entry are there or it's hidden with ×.
 
 const STARTING_BALANCE = "Starting Balance";
 
-// Is this the account's first sign-in, with the card not done or hidden yet?
+// Is this budget's first time open (the account's first sign-in, or a new budget), with the card not done or hidden yet?
 function isGettingStarted() {
-  try { return localStorage.getItem(GETTING_STARTED_KEY) === "1"; } catch (e) { return false; }
+  let stored = null;
+  try { stored = localStorage.getItem(GETTING_STARTED_KEY); } catch (e) { return false; }
+  if (!stored || !budgetInfo) return false;
+  return stored === String(budgetInfo.id) || (stored === "1" && budgetInfo.first && budgetInfo.owned);
 }
 
 // The card is done for good (both steps are done, or it was hidden)
@@ -550,9 +555,11 @@ function openQuickEntrySetup(origin) {
     title: "Quick Entry Icon",
     build(form, panel) {
       const text = (line) => BudgetUI.element("p", "panelText", line);
+      // (An account with more than one budget hears which one the icon adds to)
+      const named = budgetInfo && (budgetInfo.shared || !budgetInfo.owned || !budgetInfo.first) ? ` It adds to this budget, ${budgetInfo.name}.` : "";
       form.append(
-        text("Put an icon on your phone's home screen that opens a New Entry form, with no login needed."),
-        text("The icon can only add entries. Besides In Bank today and the lowest it gets, it never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, or you turn icons off in Settings, it stops working."),
+        text(`Put an icon on your phone's home screen that opens a New Entry form, with no login needed.${named}`),
+        text("The icon can only add entries. Besides In Bank today and the lowest it gets, it never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, you turn icons off in Settings, or this budget is deleted or stops being shared with you, it stops working."),
         text("The next page shows how to add it to your home screen on your phone (iPhone, Samsung, Pixel, OnePlus, and more), and its Help shows how to open it from an iPhone's Lock Screen or check In Bank on an Apple Watch. Use your browser itself, not Prismal Budget opened inside another app (like Gmail or Instagram)."),
         BudgetUI.buttonRow([
           { label: "Set It Up", kind: "primary", type: "submit" },

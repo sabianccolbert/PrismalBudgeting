@@ -1,5 +1,6 @@
-// Process Budget: the budget itself, for every page that shows one. Loading it from the API and saving what
-// changed, the daily update that brings it up to today, every change (calendar entries, recurring entries, the
+// Process Budget: the budget itself, for every page that shows one. Loading the open budget from the API (an account can
+// have several, and budgets shared with it: Budgets.js says which) and saving what changed to that same one, the daily
+// update that brings it up to today, every change (calendar entries, recurring entries, the
 // tracker, Other Accounts, connected spreadsheets, Quick Entry), the budget math, Bob's message on Home and his page's
 // settings, Search, Undo and Redo, and the helpers the pages share (dates, amounts, titles). Pages draw from it and redraw
 // on its "budget:updated" event.
@@ -35,7 +36,7 @@ const TABLE_SHAPES = {
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
   accounts:   { cols: 12, minRows: 1 }, // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest since, max, compounds, added every, added on, "separate" | "", interest balance when it started counting]
   account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
-  logs:       { cols: 9, minRows: 1 }   // [0] column titles, then [time, duration, action, 4 details, status, what it changed (for its Undo, see CHANGE LOG UNDO)]
+  logs:       { cols: 10, minRows: 1 }  // [0] column titles, then [time, duration, action, 4 details, status, what it changed (for its Undo, see CHANGE LOG UNDO), who made it]
 };
 
 // Limits on what's typed in. Amounts go up to a billion dollars (the API's Quick Entry has the same limit):
@@ -130,8 +131,9 @@ let dataRevision = null;         // The budget's revision this page holds (see s
 let budgetConflict = false;      // A save was refused: the budget was saved somewhere else since this page loaded
 let savingNow = false;
 
-// Set when a budget opens for the first time, which is its account's first sign-in: Home shows its Getting Started
-// card while it's set (Calendar Page.js), and signing out forgets it, so the card never comes back after that
+// Set when a budget opens for the first time (an account's first sign-in, or a new budget), to that budget's number: Home
+// shows its Getting Started card on that budget while it's set (Calendar Page.js), and signing out forgets it, so the card
+// never comes back after that. ("1", from before budgets could be many: the account's first budget.)
 const GETTING_STARTED_KEY = "prismal_getting_started";
 
 // =====================================================================
@@ -168,6 +170,8 @@ async function loadWorkspace() {
       signedOutElsewhere();
       return false;
     }
+    // The budget this tab had open was deleted, or isn't shared with the account anymore
+    if (await budgetIsGone(response)) return false;
 
     if (!response.ok) {
       throw new Error(`Server responded with status: ${response.status}`);
@@ -175,6 +179,7 @@ async function loadWorkspace() {
 
     const data = await response.json();
     const storedAccounts = readLoadedTables(data);
+    openedBudget(data.budget);
     workspaceLoaded = true;
     // Accounts that were just set up (like Savings in a new budget) are saved right away, so the
     // Quick Entry page can list them too
@@ -192,7 +197,7 @@ async function loadWorkspace() {
     if (lastDailyUpdate.getTime() > today.getTime()) setBudgetDay(lastDailyUpdate);
     if (isNewAccount) {
       pendingProcessedDate = formatToMMDDYYYY(today);
-      try { localStorage.setItem(GETTING_STARTED_KEY, "1"); } catch (e) {}
+      try { localStorage.setItem(GETTING_STARTED_KEY, String(budgetInfo ? budgetInfo.id : "1")); } catch (e) {}
     }
     const isNewDay = lastDailyUpdate.getTime() < today.getTime();
     lastActiveDay = latestActiveDay(lastDailyUpdate, data.quick_entries);
@@ -230,10 +235,59 @@ async function loadWorkspace() {
   }
 }
 
-// Where the budget loads from: /api/data/load, naming the Quick Entry icons this device made or used (ownQuickIcons), whose
-// waiting entries it adds as it loads (the API marks only those as picked up; see holdQuickEntries)
+// Where the budget loads from: /api/data/load, naming the budget (see budgetQuery) and the Quick Entry icons this device
+// made or used (ownQuickIcons), whose waiting entries it adds as it loads (the API marks only those as picked up; see
+// holdQuickEntries)
 function budgetLoadAddress() {
-  return `${window.API_BASE_URL}/api/data/load?icons=${encodeURIComponent(ownQuickIcons().join(","))}`;
+  return withBudget(`${window.API_BASE_URL}/api/data/load?icons=${encodeURIComponent(ownQuickIcons().join(","))}`);
+}
+
+/* ---------- Which budget ---------- */
+// An account can have several budgets, and budgets shared with it (Budgets.js picks which one a page opens). Every request
+// about the budget names the one this page has open, so a save never lands in another one; the API refuses a budget the
+// account can't open (a 404 saying budgetGone), and then the page opens the account's own instead.
+
+// The budget this page has open, as the API's addresses name it ("budget=12"; "" on the Quick Entry page, which has none)
+function budgetQuery() {
+  return window.Budgets ? window.Budgets.query() : "";
+}
+
+// An API address with the open budget in it
+function withBudget(address) {
+  const query = budgetQuery();
+  return query ? `${address}${address.includes("?") ? "&" : "?"}${query}` : address;
+}
+
+// Routes that are about the open budget (the rest are about the account)
+const BUDGET_ROUTES = /^\/api\/(data|quick)\/|^\/api\/notify\/plan$/;
+
+// The budget the page loaded: { id, name, first, owned, owner, shared } (see Budgets.js), or null before it has
+let budgetInfo = null;
+
+// The load said which budget it is: this page's from now on (Budgets.js keeps it for the tab, and its picker shows it)
+function openedBudget(budget) {
+  if (!budget || !Number.isSafeInteger(budget.id)) return;
+  budgetInfo = { ...budget };
+  if (window.Budgets) window.Budgets.loaded(budget);
+}
+
+// Is the budget shared (anyone else can open it)? Some things only the person who set them up can keep up to date then
+// (see CONNECTED SPREADSHEETS).
+const budgetIsShared = () => !!budgetInfo && (budgetInfo.shared || !budgetInfo.owned);
+
+// The account signed in here (Change Logs say who made each change in a shared budget)
+const signedInName = () => { try { return localStorage.getItem("prismal_username") || ""; } catch (e) { return ""; } };
+
+// A 404 that says the budget asked for is gone (deleted, or not shared with the account anymore): the page opens the
+// account's own (Budgets.gone). Resolves to whether it was that.
+async function budgetIsGone(response) {
+  if (response.status !== 404) return false;
+  let data = null;
+  try { data = await response.clone().json(); } catch (e) {}
+  if (!data || !data.budgetGone) return false;
+  workspaceLoaded = false;
+  if (window.Budgets) window.Budgets.gone();
+  return true;
 }
 
 // The budget as /api/data/load sent it, into the page's tables, with its revision and its waiting quick entries'
@@ -688,7 +742,7 @@ async function saveProcessedDate(dateString) {
   if (!token) return false;
 
   try {
-    const res = await fetch(`${window.API_BASE_URL}/api/data/save_date`, {
+    const res = await fetch(withBudget(`${window.API_BASE_URL}/api/data/save_date`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -698,6 +752,7 @@ async function saveProcessedDate(dateString) {
         last_processed_date: dateString
       })
     });
+    if (await budgetIsGone(res)) return false;
     if (!res.ok) throw new Error(`Server responded with status: ${res.status}`);
     return true;
   } catch (err) {
@@ -1137,11 +1192,13 @@ const OWN_ICONS_KEY = "prismal_quick_icons";
 const MAX_OWN_ICONS = 20;
 const ICON_ID_LENGTH = 16;
 
+// An icon's id: the start of its key's SHA-256, the way the API names the icon a waiting entry came from
 async function quickIconId(key) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(key)));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("").slice(0, ICON_ID_LENGTH);
 }
 
+// The ids of this device's own icons, newest first ([] when there are none, or they can't be read)
 function ownQuickIcons() {
   try {
     const list = JSON.parse(localStorage.getItem(OWN_ICONS_KEY) || "[]");
@@ -1151,6 +1208,7 @@ function ownQuickIcons() {
   }
 }
 
+// Keep an icon's id as this device's own (it goes to the front, and the oldest past MAX_OWN_ICONS drop off)
 async function rememberQuickIcon(key) {
   if (!key || !window.crypto || !crypto.subtle) return;
   try {
@@ -1409,7 +1467,8 @@ function markChangedTables(snapshot) {
 }
 
 /* ---------- Change Logs (the spreadsheet's "Form Entries" tab) ---------- */
-// Row: [time, duration, action, detail, detail, detail, detail, status ("" | "Not Found" | "Error")]
+// Row: [time, duration, action, detail, detail, detail, detail, status ("" | "Not Found" | "Error"), what it changed (for
+// its Undo), who made it (the account's username: the Change Logs page shows it while the budget is shared)]
 
 // startedAt (performance.now() time): when the change was asked for, which is the row's time. finishChangeLog
 // works out how long it took.
@@ -1425,7 +1484,7 @@ function beginChangeLog(type, startedAt = performance.now()) {
 function finishChangeLog(record = null) {
   formEntryRow[1] = ((performance.now() - changeLogStart) / 1000).toFixed(2) + " Seconds";
   const status = hadError ? "Error" : (notFound ? "Not Found" : "");
-  logsData.splice(1, 0, [...formEntryRow.slice(0, 7), status, hadError ? "" : record || ""]);
+  logsData.splice(1, 0, [...formEntryRow.slice(0, 7), status, hadError ? "" : record || "", signedInName()]);
   if (logsData.length > MAX_LOG_ROWS + 1) logsData.length = MAX_LOG_ROWS + 1;
   trimLogUndo();
   logsEdited = true;
@@ -3239,6 +3298,7 @@ function goalEntry(fields, index, calendar = calendarData) {
   return {};
 }
 
+// Take a goal out of the list (its change log row says which one it was)
 function removeGoal(index) {
   const goals = accountsData.goals || [];
   const goal = goals[index];
@@ -3771,15 +3831,19 @@ const BACKUP_CHOICES = ["current", "uploaded", "remove"];
 // The tables a backup can fill, by the names its window gives them (Change Logs keep only their newest rows anyway)
 const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Other Accounts", tracker: "Tracker", sheets: "Connected Spreadsheets And Calendars", calculator: "Paycheck Calculator", notes: "Notes" };
 
-// A Download My Data file's text, read and checked: { from: { username, downloaded (a Date, or null) }, days: Map(day's
+// A Download My Data file's text, read and checked: { from: { username, downloaded (a Date, or null) }, budgets (the
+// names of the budgets the file has: its account's first budget, then its others), which (the one read), days: Map(day's
 // time -> { lines, inBank }) from its History and calendar, upcoming (rows), recurring (rows), accounts (like
-// accountsData), tracker (rows, aliases as stored), sheets, calculator (rows), notes, logs (rows) }. A part the file
-// doesn't have is null. A file that isn't one is refused (a BudgetInputError).
-function readBackup(text) {
+// accountsData), tracker (rows, aliases as stored), sheets, calculator (rows), notes, logs (rows) }. which: the budget
+// to read from the file (0 for its first). A part the file doesn't have is null. A file that isn't one is refused (a
+// BudgetInputError).
+function readBackup(text, which = 0) {
   let file = null;
   try { file = JSON.parse(text); } catch (e) {}
-  const budget = file && typeof file === "object" && !Array.isArray(file) ? file.budget : null;
-  if (!budget || typeof budget !== "object" || Array.isArray(budget)) {
+  const isPart = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+  const all = isPart(file) && isPart(file.budget) ? [file.budget, ...(Array.isArray(file.otherBudgets) ? file.otherBudgets.filter(isPart) : [])] : [];
+  const budget = all[which] || null;
+  if (!budget) {
     throw new BudgetInputError("That file isn't one Download My Data saved. Pick the .json file it downloaded.");
   }
   const has = (name) => budget[name] !== null && budget[name] !== undefined;
@@ -3789,6 +3853,8 @@ function readBackup(text) {
   if (tracker) trackerAliasesFromWords(tracker);
   return {
     from: { username: String(file.account?.username ?? "").slice(0, 100), downloaded: downloaded && !isNaN(downloaded.getTime()) ? downloaded : null },
+    budgets: all.map((part, index) => String(part.name ?? "").slice(0, 100) || (index === 0 ? "Its first budget" : `Budget ${index + 1}`)),
+    which,
     days: has("history") || has("calendar") ? backupDays(budget, downloaded) : null,
     upcoming: has("upcoming") ? normalizeApiTable(budget.upcoming, TABLE_SHAPES.future).slice(1) : null,
     recurring: has("recurringEntries") ? normalizeApiTable(budget.recurringEntries, TABLE_SHAPES.recurring).slice(2) : null,
@@ -4167,7 +4233,8 @@ function uploadBackup(backup, choices) {
 // Connected calendars are kept in the same list and land the same way: their entries are the paychecks their shifts
 // come to (Calendars.js works them out, with the connection's pay settings).
 // sheetsData.list: [{ id, name, link, on, fields, entries: [[MM/DD/YYYY, type, amount, title]], problems: [text],
-// tabs: [tab names], access: "public" | "shared" }]. fields: { date, title, amount, type, account }, each
+// tabs: [tab names], access: "public" | "shared", by (the username that connected it or changed it last) }]. fields:
+// { date, title, amount, type, account }, each
 // { tab, range: "B2:B50" } (cells; amount adds sign: "written" | "costs" | "gains") or { value } (typed).
 // A calendar also has kind: "calendar", pay (its pay settings, see PAY SETTINGS in Calendars.js), paychecks (what each
 // paycheck came to the last time it was read), and checked ({ shifts, paychecks, from }: what that read found);
@@ -4208,6 +4275,7 @@ function normalizeSheetConnection(item) {
     problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
     tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
     access: item.access === "shared" ? "shared" : "public",
+    ...(item.by ? { by: text(item.by, 120) } : {}), // The account that connected it (or changed it last), see readsConnection
     ...(item.placeholder === true ? { placeholder: true } : {}), // Its entries are placeholders
     ...(isCalendar ? {
       kind: "calendar",
@@ -4238,6 +4306,29 @@ const connectionNoun = (connection) => (connection?.kind === "calendar" ? "Calen
 // read made from anything else, like one that started before the connection was changed, is out of date.
 const connectionBasis = (connection) => JSON.stringify([connection.link, connection.fields, connection.pay ?? null]);
 
+// In a shared budget, each page reads the connections it can (Spreadsheets.js and Calendars.js refresh):
+//   - A spreadsheet shared only with Prismal Budget's Google account opens just for the emails of whoever connected it,
+//     so only that account's pages read it (readsConnection)
+//   - A read that fails is kept in the budget (as the connection's problem) only from that account's pages too: another
+//     account's failure is about that account (like an email that isn't verified yet), not the connection
+//     (keepsReadProblem)
+// A budget that's only the account's reads everything and keeps every problem, as always.
+
+// Did this account connect it (or change it last)? One from before connections said who is its budget's owner's.
+function connectedHere(connection) {
+  return (connection.by || budgetInfo?.owner || "") === signedInName();
+}
+
+// Does this page read the connection again?
+function readsConnection(connection) {
+  return !budgetIsShared() || connection.access !== "shared" || connectedHere(connection);
+}
+
+// Is a read of it that failed here kept as its problem?
+function keepsReadProblem(connection) {
+  return !budgetIsShared() || connectedHere(connection);
+}
+
 // New (id null) or changed connection. config: { name, link, fields, placeholder (its entries are placeholders), and
 // for a calendar, kind: "calendar" and pay }; read: what reading it just now found ({ entries, problems, tabs, access }
 // from Spreadsheets.js readConnection, or a calendar's { entries, problems, paychecks, checked } from Calendars.js
@@ -4263,6 +4354,7 @@ function sheetConnection(config, read, id) {
     problems: read.problems,
     tabs: read.tabs,
     access: read.access,
+    by: signedInName(),
     placeholder: config.placeholder === undefined ? !!old?.placeholder : config.placeholder === true,
     ...(noun === "Calendar" ? { kind: "calendar", pay: config.pay, paychecks: read.paychecks, checked: read.checked } : {})
   });
@@ -5785,7 +5877,8 @@ function queueReminderPlanSync(force = false) {
 async function syncReminderPlan(force) {
   if (!workspaceLoaded) return false;
   const payload = { plan: buildReminderPlan(), timezone: currentTimeZone() };
-  const text = JSON.stringify(payload);
+  // (Each budget's plan is its own: this browser sending one budget's says nothing about another's)
+  const text = JSON.stringify({ budget: budgetInfo ? budgetInfo.id : null, ...payload });
   let lastSent = null;
   try { lastSent = localStorage.getItem(REMINDER_PLAN_KEY); } catch {}
   if (!force && text === lastSent) return true;
@@ -5876,14 +5969,16 @@ async function saveChangedTables() {
   return allSaved;
 }
 
-// One request to the API with the login token: a POST of JSON when there's a payload, a GET otherwise.
-// Resolves to { ok, status, data } and never throws (status 0 = the server couldn't be reached).
-// A 401 means the session ended on the server, so the page signs out (see signedOutElsewhere).
+// One request to the API with the login token: a POST of JSON when there's a payload, a GET otherwise. One about the
+// budget (BUDGET_ROUTES) names the one this page has open. Resolves to { ok, status, data } and never throws (status 0 =
+// the server couldn't be reached). A 401 means the session ended on the server, so the page signs out (see
+// signedOutElsewhere); a budget that's gone opens the account's own (see budgetIsGone).
 async function budgetApi(endpoint, payload) {
   const token = localStorage.getItem('prismal_jwt');
   if (!token) return { ok: false, status: 401, data: null };
   try {
-    const res = await fetch(`${window.API_BASE_URL}${endpoint}`, {
+    const address = `${window.API_BASE_URL}${endpoint}`;
+    const res = await fetch(BUDGET_ROUTES.test(endpoint) ? withBudget(address) : address, {
       method: payload === undefined ? 'GET' : 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -5894,6 +5989,10 @@ async function budgetApi(endpoint, payload) {
     let data = null;
     try { data = await res.json(); } catch (e) {}
     if (res.status === 401) signedOutElsewhere();
+    if (res.status === 404 && data && data.budgetGone && BUDGET_ROUTES.test(endpoint)) {
+      workspaceLoaded = false;
+      if (window.Budgets) window.Budgets.gone();
+    }
     return { ok: res.ok, status: res.status, data };
   } catch (err) {
     console.error(`Failed to reach ${endpoint}:`, err);
@@ -6958,8 +7057,9 @@ function finishDaySwipe(e) {
 window.editingCell = false;
 let activeEditCell = null;
 const fullZoomQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)");
-// Does the device ask for less motion?
-const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Less motion, please? (The device asks, or Settings' Reduced Motion switch for animations is on: Boot.js; a page
+// without Boot.js asks the device)
+const reducedMotion = () => (window.lessMotion ? window.lessMotion() : window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 let zoomBackdrop = null;
 // Where a phone's zoomed day sits on the page: the screen as it was when the day zoomed in ({ x, y: its top left corner,
 // in page pixels; width, height: its size, in the page's pixels (the page's own size, on a page that was pinch-zoomed in);
@@ -7438,8 +7538,9 @@ class StaleHistoryError extends BudgetInputError {
   }
 }
 
-// Where this tab keeps Undo's steps for the signed-in account
-const undoStorageKey = () => `prismal_undo_${localStorage.getItem("prismal_username") || ""}`;
+// Where this tab keeps Undo's steps for the signed-in account's open budget (each budget has its own; the account's first
+// keeps the key it had before there could be more)
+const undoStorageKey = () => `prismal_undo_${localStorage.getItem("prismal_username") || ""}${budgetInfo && !(budgetInfo.first && budgetInfo.owned) ? `_${budgetInfo.id}` : ""}`;
 
 // This tab's Undo and Redo steps: { undo, redo }, oldest first
 function readUndoHistory() {
@@ -7954,7 +8055,8 @@ function reloadForNewerBudget() {
 }
 
 const BUDGET_NOTICES = {
-  conflict: ["Your budget was changed on another device or tab, so this page reloaded with the newest version. Your last change wasn't saved, so please make it again.", true]
+  conflict: ["Your budget was changed on another device or tab, so this page reloaded with the newest version. Your last change wasn't saved, so please make it again.", true],
+  gone: ["The budget this page had open was deleted, or isn't shared with you anymore, so another of your budgets opened instead.", true]
 };
 
 // A note for the page to show once it reloads
@@ -8019,6 +8121,11 @@ async function liveCheck() {
     const known = dataRevision;
     const result = await budgetApi("/api/data/revision");
     if (!result.ok || !result.data || !Number.isInteger(result.data.revision)) return;
+    // (Sharing started or stopped somewhere else)
+    if (budgetInfo && typeof result.data.shared === "boolean") {
+      budgetInfo.shared = result.data.shared;
+      if (window.Budgets) window.Budgets.sharedNow(result.data.shared);
+    }
     // (A save from this page while the answer was on its way moved the revision on itself: that's not a change from
     // somewhere else)
     if (dataRevision !== known) return;
@@ -8048,6 +8155,7 @@ function loadInPlace() {
       signedOutElsewhere();
       return null;
     }
+    if (await budgetIsGone(response)) return null;
     if (!response.ok) return null;
     const data = await response.json();
     // (Something changed here while it loaded: this page's copy is kept, and the next check loads again, since this load

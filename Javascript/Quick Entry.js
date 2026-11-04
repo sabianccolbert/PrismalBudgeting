@@ -5,7 +5,8 @@
 // Budget.js), and change or delete the ones it queued until a budget has
 // loaded them (see WAITING ENTRIES). Besides those, it only gets In Bank today and the lowest it gets (shown at the top), the Other Accounts'
 // names and balances, for the account picker, and the account's prisms (preset entries, see PRISMS), which it can
-// change. Keys stop working when the password changes. Nothing on the site links here. Opened without a key, or with
+// change. Each icon adds to the budget that was open when it was made. Keys stop working when the password changes, or
+// once their account can't open that budget anymore. Nothing on the site links here. Opened without a key, or with
 // one that stopped working, it goes to the sign-in page. Opened on an Apple Watch (a link tapped in Messages or Mail
 // there), it shows only In Bank today and the lowest it gets.
 // Process Budget.js is only loaded for its helpers: it skips loading a budget here.
@@ -19,6 +20,7 @@ const quickKey = quickParams.get("key") || "";
 // The API stores refraction types by name: "✖️" -> "hidden"
 const QUICK_TYPE_NAMES = Object.fromEntries(Object.entries(QUICK_ENTRY_TYPES).map(([name, sprite]) => [sprite, name]));
 let quickUsername = null;
+let quickBudget = null; // The name of the budget the icon adds to, when its account has more than one (the API's check says)
 let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance, max }] (see showQuickAccounts)
 let quickPrisms = [];   // The account's prisms, in order: [{ title, amount, type }] (see PRISMS)
 let quickWavelengths = null; // The budget's wavelengths ([{ id, name }]) when the form asks for one (Bob's card for it is on; the API's check says)
@@ -95,6 +97,7 @@ async function checkQuickKey() {
     // This device's own icon (where the page shares the budget's storage): the budget adds its entries when it opens here
     rememberQuickIcon(quickKey);
     quickUsername = result.data.username;
+    quickBudget = typeof result.data.budget === "string" && result.data.budget ? result.data.budget : null;
     quickWavelengths = Array.isArray(result.data.wavelengths) && result.data.wavelengths.length > 0 ? result.data.wavelengths : null;
     showQuickAnswer(result.data);
     // Prisms need the server, so they show once the key is known to work
@@ -321,7 +324,7 @@ function applyPrism(prism) {
 function highlightForm() {
   const panel = quickForm && quickForm.panel.panel;
   if (!panel) return;
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reducedMotion = window.lessMotion();
   panel.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
   panel.classList.remove("prismFlash");
   void panel.offsetWidth; // Restart the glow
@@ -716,16 +719,18 @@ function quickToday() {
   return formatToYMD(createSafeMidnight(new Date()));
 }
 
-// "Adding to sam's budget. 2 entries are waiting to show up there the next time you open it."
+// "Adding to sam's budget. 2 entries are waiting to show up there the next time you open it." With more than one budget,
+// it names the one the icon adds to: "Adding to sam's budget: Vacation."
 function accountLine(waiting) {
   if (!quickUsername) return "";
-  const line = `Adding to ${quickUsername}'s budget.`;
+  const line = quickBudget ? `Adding to ${quickUsername}'s budget: ${quickBudget}.` : `Adding to ${quickUsername}'s budget.`;
   if (!waiting) return line;
   return `${line} ${waiting} ${waiting === 1 ? "entry is" : "entries are"} waiting to show up there the next time you open it.`;
 }
 
 // A request to the API without a login (the key goes in the body). Resolves to { ok, status, data };
-// status 0 = the server couldn't be reached.
+// status 0 = the server couldn't be reached. An icon whose budget was deleted (or isn't shared with its account anymore)
+// has stopped like any other (401).
 async function quickApi(endpoint, payload) {
   try {
     const res = await fetch(`${window.API_BASE_URL}${endpoint}`, {
@@ -735,6 +740,7 @@ async function quickApi(endpoint, payload) {
     });
     let data = null;
     try { data = await res.json(); } catch (e) {}
+    if (res.status === 410) return { ok: false, status: 401, data };
     return { ok: res.ok, status: res.status, data };
   } catch (err) {
     return { ok: false, status: 0, data: null };
