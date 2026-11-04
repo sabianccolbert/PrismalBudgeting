@@ -757,7 +757,8 @@ const Spreadsheets = (() => {
     if (typeof workspaceLoaded === "undefined" || !workspaceLoaded || !sheetsData) return null;
     const reads = lastReads();
     const now = Date.now();
-    const due = sheetsData.list.filter(connection => connection.kind !== "calendar" && connection.on && (force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
+    // (In a shared budget, one only its connector's emails can open is theirs to read: readsConnection)
+    const due = sheetsData.list.filter(connection => connection.kind !== "calendar" && connection.on && readsConnection(connection) && (force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
     if (due.length === 0) return null;
     // (basis: the link and cells each one was read with, see connectionBasis)
     const results = await Promise.all(due.map(async (connection) => {
@@ -777,7 +778,7 @@ const Spreadsheets = (() => {
     const changed = results.filter(Boolean).filter(result => {
       const connection = sheetConnectionById(result.id);
       if (!connection || connectionBasis(connection) !== result.basis) return false;
-      if (result.failed) return !(connection.problems.length === 1 && connection.problems[0] === result.failed);
+      if (result.failed) return keepsReadProblem(connection) && !(connection.problems.length === 1 && connection.problems[0] === result.failed);
       const updated = normalizeSheetConnection({ ...connection, entries: result.entries, problems: result.problems, tabs: result.tabs, access: result.access });
       return JSON.stringify(updated) !== JSON.stringify(connection);
     });

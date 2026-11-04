@@ -2,9 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=268cd22569">
+    <link rel="stylesheet" href="/stylesheet.css?v=09de32a6ff">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=c6e3f94769">
+    <link rel="stylesheet" href="/budgetStyle.css?v=d9d6d0b82a">
+    <link rel="stylesheet" href="/themes.css?v=c793d940e8">
     <title>Prismal Budget - Menu</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -37,7 +38,7 @@
   <body>
     <canvas id="constellations"></canvas>
     <div id="transitionContainer">
-      
+
       <header>
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
@@ -64,7 +65,8 @@
       <main>
         <!-- Recurring Entries, History, and Other Accounts are tabs on Home (and on each other) instead -->
         <nav class="menuLinks" aria-label="Menu">
-          <a class="menuLink" href="/menu/bob.html"><span class="menuLinkName">Bob</span><span class="menuLinkAbout">Accounts ahead, goals, Wavelength Planning, and tips</span></a>
+          <!-- Bob's picture beside his name: Resources/Bob.webp, like his card on Home -->
+          <a class="menuLink" href="/menu/bob.html"><span class="menuLinkName hasPicture"><img class="menuLinkPicture" src="/Resources/Bob.webp?v=63c7f6554d" alt="">Bob</span><span class="menuLinkAbout">Accounts ahead, goals, Wavelength Planning, and tips</span></a>
           <a class="menuLink" href="/menu/spreadsheets.html"><span class="menuLinkName">Spreadsheets &amp; Calendars</span><span class="menuLinkAbout">Connect a spreadsheet's bills, or the calendar your shifts are on</span></a>
           <a class="menuLink" href="/menu/tracker.html"><span class="menuLinkName">Tracker</span><span class="menuLinkAbout">Where your money goes, by category</span></a>
           <a class="menuLink" href="/menu/calculator.html"><span class="menuLinkName">Paycheck Calculator</span><span class="menuLinkAbout">Take-home pay from your hours and taxes</span></a>

@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.03.2026.B";
+  const SITE_VERSION = "11.03.2026.C";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -24,30 +24,31 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "9436a62ce0",
+    "/Javascript/Active Starfield.js": "ed641e83dd",
     "/Javascript/Analytics.js": "2e26ee1f3d",
     "/Javascript/Bob Page.js": "56c365b7c9",
-    "/Javascript/Budget Pages.js": "bce7117702",
+    "/Javascript/Budget Pages.js": "cf122dbd11",
     "/Javascript/Budget Search.js": "ac9e964a18",
-    "/Javascript/Budget UI.js": "9552af87df",
-    "/Javascript/Calendar Page.js": "ca8cc93b2a",
+    "/Javascript/Budget UI.js": "5229ace2b3",
+    "/Javascript/Budgets.js": "03d82d3bd6",
+    "/Javascript/Calendar Page.js": "0a1560b42b",
     "/Javascript/Calendars Page.js": "5ee574fc39",
-    "/Javascript/Calendars.js": "32491b7b4a",
-    "/Javascript/Dates.js": "4d24ab7d01",
+    "/Javascript/Calendars.js": "b397e862a1",
+    "/Javascript/Dates.js": "6c1a227708",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "04622646fe",
-    "/Javascript/Login.js": "c506a7ae6a",
+    "/Javascript/Layout.js": "3b788045e3",
+    "/Javascript/Login.js": "f1cac6d77a",
     "/Javascript/Passkeys.js": "e67395c634",
-    "/Javascript/Process Budget.js": "f6dcdc6eda",
-    "/Javascript/Quick Entry.js": "df58d4c240",
+    "/Javascript/Process Budget.js": "7d72162759",
+    "/Javascript/Quick Entry.js": "26f175616f",
     "/Javascript/Session.js": "988bbb66b5",
-    "/Javascript/Settings Page.js": "2f6d7b675e",
+    "/Javascript/Settings Page.js": "15a64136d6",
     "/Javascript/Sounds.js": "4cfba7dffa",
     "/Javascript/Spreadsheets Page.js": "5e5152eca6",
-    "/Javascript/Spreadsheets.js": "13d46a59b4",
+    "/Javascript/Spreadsheets.js": "e070c41e6f",
     "/Javascript/Sprites.js": "c6c86160d9",
-    "/Javascript/Starfield Setup.js": "70e7fd08cb",
+    "/Javascript/Starfield Setup.js": "e86b316303",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
     "/Resources/Sounds/Ambient2.mp3": "aab38039a1",
     "/Resources/Sounds/Ambient3.mp3": "4b81f3efe0",
@@ -133,6 +134,42 @@
   } catch (e) {
     storage = null;
   }
+  // Settings' Reduced Motion, kept on this device whoever signs in on it: the starfield holding still (STILL_STARS_KEY),
+  // and the other animations off (LESS_MOTION_KEY: pages sliding, windows zooming open, cards floating, days zooming). A
+  // device that asks for less motion on its own gets both, and no starfield at all (stylesheet.css section 11).
+  // html.lessMotion turns the animations off in the CSS, and the scripts ask lessMotion() and stillStars().
+  const STILL_STARS_KEY = "prismal_still_stars";
+  const LESS_MOTION_KEY = "prismal_less_motion";
+  const deviceAsksLessMotion = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const motionSwitch = (key) => {
+    try { return !!storage && storage.getItem(key) === "1"; } catch (e) { return false; }
+  };
+  window.lessMotion = () => deviceAsksLessMotion() || motionSwitch(LESS_MOTION_KEY);
+  window.stillStars = () => deviceAsksLessMotion() || motionSwitch(STILL_STARS_KEY);
+  // The page as Reduced Motion has it: html.lessMotion, and the starfield moving or held still
+  function applyMotion() {
+    document.documentElement.classList.toggle("lessMotion", window.lessMotion());
+    if (window.STARFIELD && typeof window.STARFIELD.setStill === "function") window.STARFIELD.setStill(window.stillStars());
+  }
+  applyMotion();
+  window.Motion = {
+    deviceAsks: deviceAsksLessMotion,
+    // Whether a switch is on: the starfield's ("stars") or the other animations' ("animations")
+    isOn: (which) => motionSwitch(which === "stars" ? STILL_STARS_KEY : LESS_MOTION_KEY),
+    // Turns a switch on or off (false when this browser won't keep it)
+    set(which, on) {
+      try {
+        const key = which === "stars" ? STILL_STARS_KEY : LESS_MOTION_KEY;
+        if (on) storage.setItem(key, "1");
+        else storage.removeItem(key);
+      } catch (e) {
+        return false;
+      }
+      applyMotion();
+      return true;
+    }
+  };
+
   const isLoggedIn = !!(storage && storage.getItem("prismal_jwt"));
   // A sign-in that's over but not signed out yet: left 15 minutes without activity (Session.js signs it out once a
   // signed-in page opens), or past the end its token gives. The login page shows for it instead of sending it Home.
@@ -192,14 +229,290 @@
   }
 
   /* ===============================
+   *  3b) THEME (this device)
+   * =============================== */
+  // The theme picked in Settings, kept on this device (so two devices on the same budget can each have their own):
+  // html[data-theme] sets the colors, edges, background, icons, and font (themes.css), and the starfield's look (Active
+  // Starfield.js). Only the pages behind a sign-in, and Quick Entry, have one: the login page, the front page, and the
+  // pages for anyone (How It Works, the Privacy Policy) always look like Prismal, which has no data-theme.
+  // Custom is a theme of the person's own (Settings' Custom window): one of the others to start from (its data-theme),
+  // with five colors of their own (the page behind the cards, the cards, the words, the glow, and what's chosen) worked
+  // out into the tokens on html itself (customTokens), and if they like, small or sharp corners, another font, other
+  // stars, and gray or glowing icons (html's data-corners and data-icons, themes.css).
+  const THEMES = ["prismal", "professional", "dark", "spooky", "elements", "poison", "blue", "custom"];
+  const BASE_THEMES = THEMES.filter(theme => theme !== "custom");
+  const THEME_KEY = "prismal_theme";
+  const CUSTOM_KEY = "prismal_custom_theme";
+  // Each theme's five colors (Custom starts from them; the first is also what the browser paints around the page, like a
+  // phone's status bar, except Prismal's black)
+  const THEME_PALETTES = {
+    prismal:      { background: "#05041d", cards: "#181a46", words: "#f2f3ff", glow: "#6070ff", chosen: "#e8230a" },
+    professional: { background: "#eef2f7", cards: "#ffffff", words: "#0f172a", glow: "#2563eb", chosen: "#2563eb" },
+    dark:         { background: "#0f1115", cards: "#1b1f26", words: "#f0f3f6", glow: "#388bfd", chosen: "#388bfd" },
+    spooky:       { background: "#070405", cards: "#1e0a0c", words: "#f5ebe6", glow: "#dc141e", chosen: "#ff5a14" },
+    elements:     { background: "#1e1b18", cards: "#2e2924", words: "#f6f0e7", glow: "#3a87a8", chosen: "#d0643b" },
+    poison:       { background: "#0d0714", cards: "#241036", words: "#f3ecff", glow: "#963ce6", chosen: "#46dc28" },
+    blue:         { background: "#2457a0", cards: "#24528f", words: "#ffffff", glow: "#96d2ff", chosen: "#ffbe28" }
+  };
+  // A Custom theme's other choices ("theme": the one it starts from keeps its own)
+  const CUSTOM_CHOICES = {
+    corners: ["theme", "small", "sharp"],
+    font: ["theme", "prismal", "plain", "sharp"],
+    stars: ["theme", "stars", "dots", "embers", "elements", "bubbles"],
+    icons: ["theme", "gray", "glowing"]
+  };
+  const CUSTOM_FONTS = {
+    prismal: "'Main Font', sans-serif",
+    plain: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    sharp: '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif'
+  };
+  // Which theme's stars each Stars choice borrows (dots: Professional's on light cards, Dark's on dark ones)
+  const CUSTOM_STARS = { stars: "prismal", embers: "spooky", elements: "elements", bubbles: "poison" };
+  const THEMED = !IS_PUBLIC || PAGE === "quick";
+  const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+  // The theme this device keeps (Prismal when it has none, or one it doesn't know)
+  function savedTheme() {
+    try {
+      const theme = storage.getItem(THEME_KEY);
+      return THEMES.includes(theme) ? theme : "prismal";
+    } catch (e) {
+      return "prismal";
+    }
+  }
+  const shownTheme = () => (THEMED ? savedTheme() : "prismal");
+
+  // A Custom theme with every part as it should be (what's missing or odd comes from the theme it starts from)
+  function tidyCustom(custom) {
+    const given = custom && typeof custom === "object" ? custom : {};
+    const base = BASE_THEMES.includes(given.base) ? given.base : "prismal";
+    const tidy = { base };
+    for (const part of Object.keys(THEME_PALETTES.prismal)) {
+      tidy[part] = HEX_COLOR.test(given[part]) ? given[part].toLowerCase() : THEME_PALETTES[base][part];
+    }
+    for (const [part, choices] of Object.entries(CUSTOM_CHOICES)) tidy[part] = choices.includes(given[part]) ? given[part] : "theme";
+    return tidy;
+  }
+
+  // The Custom theme this device keeps (null when it has none yet)
+  function savedCustom() {
+    try {
+      const text = storage.getItem(CUSTOM_KEY);
+      return text ? tidyCustom(JSON.parse(text)) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Colors as numbers: "#rrggbb" as [r, g, b], how light one is (0 to 1), SHARE of the way from one to another, and
+  // back to "r, g, b" for rgba(var(--NAME), alpha)
+  const rgbOf = (hex) => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
+  const lightness = ([r, g, b]) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  const mix = (from, to, share) => from.map((value, at) => value + (to[at] - value) * share);
+  const rgbText = (rgb) => rgb.map(Math.round).join(", ");
+  const rgba = (rgb, alpha) => `rgba(${rgbText(rgb)}, ${alpha})`;
+  const rgbColor = (rgb) => `rgb(${rgbText(rgb)})`;
+  const WHITE = [255, 255, 255];
+  const BLACK = [0, 0, 0];
+  const SLATE = [15, 23, 42];
+
+  // Are a Custom theme's cards light (so shadows stay dark, but halos, boxes, and wells go light)?
+  const lightCards = (custom) => lightness(rgbOf(custom.cards)) > 0.6;
+
+  // A Custom theme's tokens (stylesheet.css section 1, and budgetStyle.css's), worked out from its five colors
+  function customTokens(custom) {
+    const page = rgbOf(custom.background);
+    const card = rgbOf(custom.cards);
+    const text = rgbOf(custom.words);
+    const glow = rgbOf(custom.glow);
+    const pick = rgbOf(custom.chosen);
+    const light = lightCards(custom);
+    const glowLight = mix(glow, WHITE, 0.4);
+    const pickLight = mix(pick, WHITE, 0.45);
+    const pickDark = mix(pick, BLACK, 0.35);
+    const cardDeep = mix(card, BLACK, light ? 0.04 : 0.35);
+    const button = mix(card, light ? WHITE : BLACK, 0.1);
+    // (A recommended button is mostly its glow: its words are dark on a light one, white on a dark one)
+    const recommended = mix(button, glow, 0.6);
+    const tokens = {
+      "--BASE_COLOR": rgbColor(mix(text, card, 0.12)),
+      "--TEXT_BRIGHT": rgbColor(text),
+      "--TEXT_DIM": rgbColor(mix(text, card, 0.42)),
+      "--TEXT_HOT": rgbColor(light ? mix(text, BLACK, 0.3) : mix(text, WHITE, 0.5)),
+      "--PRIMARY_TEXT": lightness(recommended) > 0.6 ? "#0f172a" : "#ffffff",
+      "--LINK_LIGHT": rgbColor(pick),
+      "--LINK_DARK": rgbColor(pickDark),
+      "--GLASS": `linear-gradient(180deg, ${rgba(card, light ? 1 : 0.86)}, ${rgba(cardDeep, light ? 1 : 0.9)})`,
+      "--GLASS_BUTTON": rgba(button, light ? 1 : 0.8),
+      "--GLASS_LINE": rgba(light ? SLATE : glowLight, light ? 0.14 : 0.26),
+      "--GLASS_LINE_BRIGHT": rgba(light ? SLATE : glowLight, light ? 0.26 : 0.48),
+      "--GLASS_SHADOW": light ? "0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 14px rgba(15, 23, 42, 0.08)" : "0 10px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+      "--HOVER_GRADIENT": `linear-gradient(160deg, ${rgba(mix(card, glow, light ? 0.04 : 0.14), 0.98)}, ${rgba(cardDeep, 0.98)})`,
+      "--FLOAT_SHADOW": `0 16px 40px rgba(0, 0, 0, ${light ? 0.2 : 0.7}), 0 0 26px ${rgba(glow, 0.28)}`,
+      "--GLOW_RGB": rgbText(glow),
+      "--GLOW_LIGHT_RGB": rgbText(glowLight),
+      "--GLOW_FILL": `radial-gradient(ellipse at center, ${rgba(glow, 0.5)} 0%, ${rgba(glow, 0.26)} 45%, ${rgba(glow, 0.1)} 75%, ${rgba(glow, 0.04)} 100%)`,
+      "--GLOW_EDGE": rgba(light ? glow : glowLight, 0.92),
+      "--GLOW_SHADOW": `0 0 16px ${rgba(glow, 0.55)}, inset 0 0 12px ${rgba(glow, 0.25)}`,
+      "--HOVER_SHADOW": `0 0 12px ${rgba(glow, 0.55)}`,
+      "--TITLE_GLOW": light ? "none" : `0 0 14px ${rgba(glow, 0.45)}`,
+      "--RECOMMENDED_FILL": `linear-gradient(90deg, ${rgba(glow, 0.65)}, ${rgba(mix(glow, pick, 0.3), 0.65)})`,
+      "--PICK_RGB": rgbText(pick),
+      "--PICK_EDGE": rgbColor(mix(pick, WHITE, 0.15)),
+      "--PICK_FILL": `radial-gradient(ellipse at center, ${rgba(pickLight, 0.42)} 0%, ${rgba(pick, 0.22)} 50%, ${rgba(pickDark, 0.08)} 85%, transparent 100%)`,
+      "--EDGE_GRADIENT": `linear-gradient(135deg, ${rgbColor(pickDark)} 0%, ${rgbColor(pick)} 55%, ${rgbColor(pickLight)} 100%)`,
+      "--SHADOW": `0 0 20px ${rgba(pick, 1)}`,
+      "--PICK_SHADOW": `0 0 16px ${rgba(pick, 0.75)}`,
+      "--DARK_BUTTON": rgba(mix(card, light ? SLATE : BLACK, light ? 0.06 : 0.6), 0.9),
+      "--DAY_FILL": light ? `linear-gradient(180deg, ${rgbColor(card)}, ${rgbColor(cardDeep)})` : `linear-gradient(180deg, ${rgba(mix(card, glow, 0.12), 0.62)} 0%, ${rgba(mix(card, glow, 0.12), 0)} 50%)`,
+      "--DAY_SOLID": `linear-gradient(180deg, ${rgbColor(mix(card, glow, light ? 0.03 : 0.1))}, ${rgbColor(cardDeep)})`,
+      "--DAY_EDGE": rgba(light ? SLATE : glowLight, light ? 0.14 : 0.24),
+      "--LIST_FILL": rgbColor(light ? card : mix(card, BLACK, 0.2)),
+      "--BOX_FILL": light ? "#ffffff" : rgba(mix(card, BLACK, 0.6), 0.6),
+      "--WELL_RGB": light ? "255, 255, 255" : rgbText(mix(card, BLACK, 0.6)),
+      "--INSET_RGB": light ? rgbText(mix(card, SLATE, 0.14)) : "0, 0, 0",
+      "--SHADE_RGB": light ? "15, 23, 42" : "0, 0, 0",
+      "--HALO_RGB": light ? "255, 255, 255" : "0, 0, 0",
+      "--TINT_RGB": light ? "15, 23, 42" : "255, 255, 255",
+      "--PANEL_DEEP": rgba(mix(card, glow, light ? 0.08 : 0.25), light ? 1 : 0.7),
+      "--PANEL_SOFT": rgba(mix(card, glow, 0.1), light ? 0.4 : 0.35),
+      "--PANEL_DARK": rgba(cardDeep, light ? 1 : 0.62),
+      "--PANEL_LINE": rgba(light ? SLATE : glowLight, light ? 0.08 : 0.16),
+      "--PANEL_BORDER": rgba(light ? SLATE : glowLight, light ? 0.16 : 0.36),
+      "--TILE_FILL": `radial-gradient(circle at 50% 40%, ${rgba(glow, 0.35)}, ${rgba(cardDeep, 0.92)})`,
+      "--LINE_GRADIENT": `linear-gradient(90deg, transparent, ${rgba(glow, 0.65)} 25%, ${rgba(mix(glow, pick, 0.4), 0.65)} 75%, transparent)`,
+      "--BAR_FILL": `linear-gradient(90deg, ${rgbColor(glow)}, ${rgbColor(glowLight)})`,
+      // The page behind the cards (themes.css CUSTOM: a glow at the top left, darker at the bottom right)
+      "--CUSTOM_BG": rgbColor(page),
+      "--CUSTOM_BG_GLOW": rgba(glow, light ? 0.1 : 0.22),
+      "--CUSTOM_BG_DEEP": rgbColor(mix(page, BLACK, light ? 0.06 : 0.35))
+    };
+    // Light cards take Professional's costs, gains, and placeholders (a dark theme's are too pale on them)
+    if (light) {
+      Object.assign(tokens, {
+        "--NEGATIVE_TEXT": "#dc2626", "--POSITIVE_TEXT": "#059669", "--ZERO_TEXT": "#94a3b8", "--PLACEHOLDER_TEXT": "#b45309",
+        "--YELLOW_RGB": "202, 138, 4", "--PLACEHOLDER_COLOR": "rgba(100, 116, 139, 0.7)",
+        "--NEGATIVE_DAY_FILL": "linear-gradient(180deg, #fee2e2, #fff1f2)", "--NEGATIVE_DAY_SOLID": "linear-gradient(180deg, #fee2e2, #fff1f2)",
+        "--NEGATIVE_DAY_EDGE": "rgba(220, 38, 38, 0.55)", "--NEGATIVE_GLOW_FILL": "linear-gradient(rgba(220, 38, 38, 0.1), rgba(220, 38, 38, 0.1))"
+      });
+    }
+    if (custom.font !== "theme") tokens["--FONT"] = CUSTOM_FONTS[custom.font];
+    // Gray icons: dark on light cards, light on dark ones; glowing: the same, with the glow around them
+    const iconGray = light ? "grayscale(1) brightness(0.32)" : "grayscale(1) brightness(1.7)";
+    if (custom.icons === "gray") tokens["--ICON_FILTER"] = iconGray;
+    if (custom.icons === "glowing") tokens["--ICON_FILTER"] = `${iconGray} drop-shadow(0 0 6px ${rgba(glow, 0.8)})`;
+    return tokens;
+  }
+
+  // The starfield's look on this page: { name: the theme whose stars it has, colors: lines, ring, and paddles, or null
+  // for that theme's own }
+  function starLook(custom, base) {
+    if (!custom) return { name: base, colors: null };
+    const glow = rgbOf(custom.glow);
+    const name = custom.stars === "theme" ? custom.base
+      : custom.stars === "dots" ? (lightCards(custom) ? "professional" : "dark")
+      : CUSTOM_STARS[custom.stars];
+    return { name, colors: { link: rgbText(mix(glow, [110, 110, 110], 0.55)), ring: rgbText(mix(glow, WHITE, 0.35)), paddle: rgbText(rgbOf(custom.words)) } };
+  }
+
+  // What Settings is showing before it's kept (a theme's name, or a Custom theme), or null
+  let previewing = null;
+  const CUSTOM_SET = new Set(); // The tokens a Custom theme set on html, taken off when it isn't shown
+  let shownLook = { name: "prismal", colors: null };
+
+  // Show this page's theme: its data-theme, a Custom theme's tokens and choices, the browser's color around the page,
+  // and the starfield's look
+  function applyTheme() {
+    const shown = previewing || shownTheme();
+    const custom = typeof shown === "object" ? shown : shown === "custom" ? savedCustom() || tidyCustom(null) : null;
+    const base = custom ? custom.base : shown;
+    const root = document.documentElement;
+    if (base === "prismal") delete root.dataset.theme;
+    else root.dataset.theme = base;
+    root.classList.toggle("customTheme", !!custom);
+    const tokens = custom ? customTokens(custom) : {};
+    CUSTOM_SET.forEach(name => { if (!(name in tokens)) root.style.removeProperty(name); });
+    CUSTOM_SET.clear();
+    Object.entries(tokens).forEach(([name, value]) => {
+      root.style.setProperty(name, value);
+      CUSTOM_SET.add(name);
+    });
+    for (const part of ["corners", "icons"]) {
+      if (custom && custom[part] !== "theme") root.dataset[part] = custom[part];
+      else delete root.dataset[part];
+    }
+    root.style.colorScheme = custom ? (lightCards(custom) ? "light" : "dark") : "";
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = custom ? custom.background : base === "prismal" ? "#000000" : THEME_PALETTES[base].background;
+    shownLook = starLook(custom, base);
+    if (window.STARFIELD && typeof window.STARFIELD.setTheme === "function") window.STARFIELD.setTheme(shownLook.name, shownLook.colors);
+  }
+  applyTheme();
+
+  window.Themes = {
+    list: THEMES,
+    palettes: THEME_PALETTES,
+    choices: CUSTOM_CHOICES,
+    // The one this device keeps, and the one this page shows (Prismal on a page that isn't themed)
+    saved: savedTheme,
+    shown: shownTheme,
+    // The Custom theme this device keeps (null when it has none yet), and one with every part as it should be
+    custom: savedCustom,
+    tidyCustom,
+    // The starfield's look on this page (Starfield Setup.js): { name, colors }
+    starLook: () => shownLook,
+    // Keeps THEME on this device and shows it (false when this browser won't keep it)
+    set(theme) {
+      if (!THEMES.includes(theme)) return false;
+      try {
+        if (theme === "prismal") storage.removeItem(THEME_KEY);
+        else storage.setItem(THEME_KEY, theme);
+      } catch (e) {
+        return false;
+      }
+      previewing = null;
+      applyTheme();
+      return true;
+    },
+    // Keeps a Custom theme on this device, and shows it
+    saveCustom(custom) {
+      try {
+        storage.setItem(CUSTOM_KEY, JSON.stringify(tidyCustom(custom)));
+        storage.setItem(THEME_KEY, "custom");
+      } catch (e) {
+        return false;
+      }
+      previewing = null;
+      applyTheme();
+      return true;
+    },
+    // Shows a theme (a name, or a Custom theme) without keeping it, until endPreview
+    preview(theme) {
+      previewing = theme && typeof theme === "object" ? tidyCustom(theme) : THEMES.includes(theme) ? theme : null;
+      applyTheme();
+    },
+    endPreview() {
+      previewing = null;
+      applyTheme();
+    }
+  };
+
+  // Another tab on this device changed the theme or Reduced Motion: this one follows
+  window.addEventListener("storage", (event) => {
+    if (event.key === THEME_KEY || event.key === CUSTOM_KEY) applyTheme();
+    if (event.key === STILL_STARS_KEY || event.key === LESS_MOTION_KEY) applyMotion();
+  });
+
+  /* ===============================
    *  4) STARFIELD HEAD START
    * =============================== */
   // The starfield's engine (a worker running Active Starfield.js) and its star image start loading now, while
   // the page itself is still loading, instead of after it: Starfield Setup.js picks them both up, so the stars
   // are drawn as soon as the page shows instead of a moment later. Not when the device asks for reduced motion
   // (there's no starfield then), or in a browser that can't hand the canvas to a worker (Setup draws on the page).
-  const reducedMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  if (!reducedMotion && typeof Worker === "function" && window.HTMLCanvasElement && "transferControlToOffscreen" in HTMLCanvasElement.prototype) {
+  // (Settings' Reduced Motion switch for the starfield doesn't stop it from starting: it draws the stars once, and they
+  // hold still.)
+  if (!deviceAsksLessMotion() && typeof Worker === "function" && window.HTMLCanvasElement && "transferControlToOffscreen" in HTMLCanvasElement.prototype) {
     try {
       window.STARFIELD_HEAD_START = {
         worker: new Worker(window.assetUrl("/Javascript/Active Starfield.js")),
@@ -291,6 +604,11 @@
     }
     else if (!isPublic) {
       scripts.push("/Javascript/Session.js"); // Sends signed-out visitors to login, so public pages skip it
+      // Which budget the page opens, and the budget picker over the header's buttons (before Process Budget, which asks
+      // it which budget to load)
+      scripts.push("/Javascript/Budgets.js");
+      // The Menu page shows no budget, but its picker's list and Share open the same panels as the budget pages'
+      if (page === "menu") scripts.push("/Javascript/Budget UI.js");
     }
     if (page === "notfound") {
       scripts.push("/Javascript/Debug.js");
@@ -361,5 +679,6 @@
 
     loadPageScripts();
     addVersionBadge();
+    applyTheme(); // (Its color for the browser's bar: the page's <meta> is in now)
   });
 })();

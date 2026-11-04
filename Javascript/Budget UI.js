@@ -30,7 +30,7 @@ const BudgetUI = (() => {
 
   let currentPanel = null;
   const panelsUnder = []; // Panels with another one open over them (stacked), newest last
-  const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const prefersReducedMotion = () => window.lessMotion(); // (The device asks, or Settings' Reduced Motion: Boot.js)
 
   // Open a panel. "large" panels float over the top of the screen: nothing on the page moves, and the
   // page under them can still be scrolled and tapped (like a calendar day for a date field). "small"

@@ -12,8 +12,8 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="dark">
     <title>Prismal Budget - Site Notes</title>
-    <link rel="stylesheet" href="/stylesheet.css?v=268cd22569">
-    <link rel="stylesheet" href="/budgetStyle.css?v=c6e3f94769">
+    <link rel="stylesheet" href="/stylesheet.css?v=09de32a6ff">
+    <link rel="stylesheet" href="/budgetStyle.css?v=d9d6d0b82a">
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
   </head>
   <body>
@@ -39,7 +39,7 @@
           <section id="about" aria-labelledby="aboutTitle">
             <h2 id="aboutTitle">What This Page Is</h2>
             <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Budget Works</a>.</p>
-            <p>Last checked: November 3, 2026 (site version 11.03.2026.B).</p>
+            <p>Last checked: November 3, 2026 (site version 11.03.2026.C).</p>
           </section>
 
           <section id="map" aria-labelledby="mapTitle">
@@ -143,7 +143,7 @@ X-XSS-Protection: 0</code></pre>
             <ul>
               <li><strong>Deploying:</strong> <code>npx wrangler deploy</code> from the API's folder (the saved wrangler sign-in is enough). <code>npx wrangler deployments list</code> shows each version, and <code>npx wrangler rollback</code> goes back to the one before. <code>npx wrangler tail</code> shows its logs as they happen.</li>
               <li><strong>Secrets:</strong> set with <code>npx wrangler secret put</code> and its name; <code>npx wrangler secret list</code> shows which are set. Which ones there are, and what each one is for, is in the private API repo's notes. Without them, sign-in, emails, spreadsheets, reminders, or Create Account's person check stop working, each with a message saying so.</li>
-              <li><strong>The database:</strong> every part of a budget is one row of JSON per person, up to about 1.9 MB each (D1 keeps up to 2 MB in one value; a bigger save is refused with "That's more than one part of a budget can hold."). People can keep their own copy with Download My Data, and bring one back with Upload A Backup (both in Settings). D1's Time Travel can put the whole database back to an earlier minute (<code>npx wrangler d1 time-travel</code>; how far back depends on the plan).</li>
+              <li><strong>The database:</strong> every part of a budget is one row of JSON per budget (an account's first budget under the account's own number, every other budget under its own; the API's <code>budgets.js</code> says how), up to about 1.9 MB each (D1 keeps up to 2 MB in one value; a bigger save is refused with "That's more than one part of a budget can hold."). People can keep their own copy with Download My Data, and bring one back with Upload A Backup (both in Settings). D1's Time Travel can put the whole database back to an earlier minute (<code>npx wrangler d1 time-travel</code>; how far back depends on the plan).</li>
               <li><strong>Testing on this computer:</strong> <code>npx wrangler dev --local</code> serves it at <code>http://127.0.0.1:8787</code>, and the site uses that address when it's opened at localhost or 127.0.0.1 (<code>Boot.js</code>).</li>
               <li><strong>Privacy Policy update emails:</strong> every few minutes the Worker reads the live Privacy Policy page's <code>policy-version</code> tag; when it's new, every account with a verified email gets one email (a few each run) with the page's <code>policy-changes</code> text.</li>
             </ul>
@@ -175,8 +175,10 @@ X-XSS-Protection: 0</code></pre>
           <section id="files" aria-labelledby="filesTitle">
             <h2 id="filesTitle">9. Files That Matter Most</h2>
             <ul>
-              <li><code>Javascript/Boot.js</code>: every page's first script. The version, each page's name from its address, which pages work without signing in, the API's address, and every script's fingerprint.</li>
-              <li><code>Javascript/Layout.js</code>: what every page shares (sliding between pages, the footer, Help, signing out, the Quick Entry icon's app).</li>
+              <li><code>Javascript/Boot.js</code>: every page's first script. The version, each page's name from its address, which pages work without signing in, the API's address, every script's fingerprint, and the device's theme and Reduced Motion (before the page shows, so it never flashes another look).</li>
+              <li><code>Javascript/Layout.js</code>: what every page shares (sliding between pages, the footer, Help, floating windows and cards, signing out, the Quick Entry icon's app).</li>
+              <li><code>Javascript/Budgets.js</code>: which budget a page opens, and the budget picker (the list, Share, New Budget) over the header's buttons.</li>
+              <li><code>stylesheet.css</code> (the look's colors and shapes, as tokens, in its section 1), <code>budgetStyle.css</code> (the budget's pages), and <code>themes.css</code> (each theme setting those tokens again).</li>
               <li><code>_tools/stamp.mjs</code> and <code>_tools/hooks/pre-commit</code>: fingerprints, and the check before each commit.</li>
               <li><code>CNAME</code>, <code>robots.txt</code>, <code>sitemap.xml</code>, <code>llms.txt</code>, and <code>404.html</code> (GitHub Pages shows it for any address it doesn't have).</li>
               <li><code>how-it-works.html</code>: the full guide to what the site does.</li>

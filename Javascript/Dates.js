@@ -285,7 +285,8 @@ const DatePicker = (() => {
     return el;
   };
   const midnight = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Less motion: the device asks, or Settings' Reduced Motion (Boot.js; a page without it asks the device)
+  const reducedMotion = () => (window.lessMotion ? window.lessMotion() : window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
   // The calendar button for a typed date box: a glass button with the site's calendar icon (stylesheet.css
   // .iconCalendar). options: { label (what the box is, like "End Date"), min, max (Dates, or null), today (false leaves

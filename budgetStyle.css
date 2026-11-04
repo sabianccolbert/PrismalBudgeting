@@ -98,7 +98,7 @@
   z-index: 60; /* Above the other days and the dimmed page (.dayZoomBackdrop) */
   position: relative;
   transition: transform 0.4s cubic-bezier(0.33, 0, 0.2, 1);
-  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 8px 12px rgba(var(--SHADE_RGB), 0.6));
 }
 
 /* A zoomed day on a computer is as tall as its lines (at least as tall as the day), and its entries run past its
@@ -172,7 +172,7 @@
      shadow, not a border, so the v stays in the very corner. */
   background: var(--DAY_SOLID);
   border-radius: calc(var(--DAY_RADIUS) * var(--zoom, 1));
-  box-shadow: inset 0 0 0 1px rgba(140, 152, 255, 0.4), 0 2px 12px rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(var(--GLOW_LIGHT_RGB), 0.4), 0 2px 12px rgba(var(--SHADE_RGB), 0.7);
 }
 
 /* Its lines stop at the screen's right edge (with a little room, and the content's padding after them), ending in "..."
@@ -186,12 +186,12 @@
 /* Today keeps its glow, and red days stay red, when zoomed */
 .elastic-table td.is-editing.is-fullZoom.isToday .cell-content::before {
   background: var(--GLOW_FILL), var(--DAY_SOLID);
-  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 14px rgba(96, 112, 255, 0.65);
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 14px rgba(var(--GLOW_RGB), 0.65);
 }
 
 .elastic-table td.is-editing.is-fullZoom.isNegative .cell-content::before {
   background: var(--NEGATIVE_DAY_SOLID);
-  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 2px 12px rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 2px 12px rgba(var(--SHADE_RGB), 0.7);
 }
 
 .elastic-table td.is-editing.is-fullZoom.isToday.isNegative .cell-content::before {
@@ -206,11 +206,11 @@
   inset: 0;
   z-index: 55;
   display: none;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(var(--SHADE_RGB), 0.7);
 }
 
 .elastic-table td.is-editing .cell-content {
-  text-shadow: 0 0 3px #000, 0 0 6px #000;
+  text-shadow: 0 0 3px rgb(var(--HALO_RGB)), 0 0 6px rgb(var(--HALO_RGB));
 }
 
 .dayZoomBackdrop.shown {
@@ -221,7 +221,8 @@
   z-index: 1;
 }
 
-/* Reduced motion: days zoom and magnify without easing into it */
+/* Reduced motion (the device's, or Settings' animations switch: html.lessMotion): days zoom and magnify without easing
+   into it */
 @media (prefers-reduced-motion: reduce) {
   .elastic-table td,
   .elastic-table td .cell-content,
@@ -229,6 +230,13 @@
   .elastic-table td.is-magnified .cell-content {
     transition: none;
   }
+}
+
+html.lessMotion .elastic-table td,
+html.lessMotion .elastic-table td .cell-content,
+html.lessMotion .elastic-table td.is-editing,
+html.lessMotion .elastic-table td.is-magnified .cell-content {
+  transition: none;
 }
 
 /* Anchor the first column so it zooms to the right */
@@ -378,6 +386,24 @@
   color: var(--TEXT_BRIGHT);
 }
 
+/* Bob's picture beside his name: a small circle, about two lines of his name tall, like his picture on Home */
+.menuLinkName.hasPicture {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.menuLinkPicture {
+  flex-shrink: 0;
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--BOX_FILL);
+  border: 2px solid var(--PANEL_BORDER);
+  box-shadow: 0 0 10px rgba(var(--GLOW_RGB), 0.35);
+}
+
 .menuLinkAbout {
   font-size: clamp(12px, 2.4vmin, 15px);
   color: var(--TEXT_DIM);
@@ -408,7 +434,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
+  scrollbar-color: rgba(var(--GLOW_LIGHT_RGB), 0.45) transparent;
 }
 
 /* Base data table */
@@ -436,7 +462,7 @@
     linear-gradient(90deg, var(--NEON_CYAN), var(--NEON_BLUE), var(--NEON_VIOLET), var(--NEON_PINK)) var(--barX, 0px) 100% / var(--barWidth, 100%) 2px no-repeat,
     linear-gradient(to bottom, var(--PANEL_DEEP), var(--PANEL_SOFT));
   border-bottom: none;
-  box-shadow: 0 6px 12px -8px rgba(100, 110, 255, 0.9);
+  box-shadow: 0 6px 12px -8px rgba(var(--GLOW_RGB), 0.9);
 }
 
 .dataTable th:first-child {
@@ -561,7 +587,7 @@
   max-height: 2.7em;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
+  scrollbar-color: rgba(var(--GLOW_LIGHT_RGB), 0.45) transparent;
 }
 
 .dataTable .aliasBox.isClipped {
@@ -818,7 +844,7 @@
    and draws the day itself (::before, above). */
 .elastic-table td.isToday:not(.is-fullZoom) .cell-content {
   background: var(--GLOW_FILL), var(--DAY_FILL);
-  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 12px rgba(96, 112, 255, 0.65);
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE), 0 0 12px rgba(var(--GLOW_RGB), 0.65);
 }
 
 .elastic-table td.isNegative:not(.is-fullZoom) .cell-content {
@@ -857,12 +883,12 @@
 
 .elastic-table td.is-editing .lineEntry:hover,
 .elastic-table:not(.historyGrid) td.is-editing .lineInBank:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--TINT_RGB), 0.1);
 }
 
 /* Date picking: tap a day to fill the waiting date field (its calendar button opens the date picker instead) */
 body.datePicking .elastic-table {
-  outline: 2px dashed rgba(238, 0, 0, 0.55);
+  outline: 2px dashed rgba(var(--PICK_RGB), 0.55);
   outline-offset: 6px;
   border-radius: 6px;
 }
@@ -1046,7 +1072,7 @@ body.datePicking .elastic-table td {
   font-size: 0.85em;
   line-height: 1;
   color: var(--BASE_COLOR);
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 50%;
 }
@@ -1055,8 +1081,8 @@ body.datePicking .elastic-table td {
 .fieldHelpButton:focus-visible,
 .fieldHelpButton[aria-expanded="true"] {
   transform: none;
-  color: #fff;
-  box-shadow: 0 0 8px rgba(200, 0, 0, 0.55);
+  color: var(--TEXT_HOT);
+  box-shadow: 0 0 8px rgba(var(--PICK_RGB), 0.55);
 }
 
 .fieldHelp {
@@ -1064,7 +1090,7 @@ body.datePicking .elastic-table td {
   font-size: 0.85em;
   line-height: 1.45;
   text-align: left;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(var(--INSET_RGB), 0.35);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
 }
@@ -1092,11 +1118,11 @@ body.datePicking .elastic-table td {
   max-width: 100%;
   margin: 0;
   padding: 0.5em 0.8em;
-  font-family: 'Main Font', sans-serif;
+  font-family: var(--FONT);
   font-size: var(--UI_TEXT);
   text-align: left;
   color: var(--TEXT_BRIGHT);
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 10px;
   user-select: text;
@@ -1145,7 +1171,7 @@ body.datePicking .elastic-table td {
 .budgetPanel select option,
 .budgetCard select option,
 .searchBar select option {
-  background: #141238;
+  background: var(--LIST_FILL);
 }
 
 .amountRow {
@@ -1184,9 +1210,9 @@ body.datePicking .elastic-table td {
 /* The chosen one: the red-orange border and a red glow, over a red radial gradient from its center */
 .segmented .budgetButton[aria-checked="true"],
 .choiceList .budgetButton[aria-checked="true"] {
-  color: #fff;
-  background: var(--PICK_FILL), rgba(120, 0, 20, 0.35);
-  box-shadow: 0 0 10px rgba(200, 0, 0, 0.6);
+  color: var(--TEXT_HOT);
+  background: var(--PICK_FILL), rgba(var(--PICK_RGB), 0.22);
+  box-shadow: 0 0 10px rgba(var(--PICK_RGB), 0.6);
 }
 
 /* A choice list (Budget UI.js choiceList: what a goal is for): buttons that wrap, each with its name and, under it, a
@@ -1245,7 +1271,7 @@ button.dropdownBox {
   line-height: 1.25;
   text-align: left;
   color: var(--TEXT_BRIGHT);
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 10px;
   box-shadow: none;
@@ -1290,7 +1316,7 @@ button.dropdownBox:focus-visible {
 }
 
 .dropdownList .dropdownOption[aria-selected="true"]:not(.isActive):not(:hover) {
-  background: rgba(255, 90, 60, 0.14);
+  background: rgba(var(--PICK_RGB), 0.16);
 }
 
 .dropdown .choiceDetail {
@@ -1346,7 +1372,7 @@ button.dropdownBox:focus-visible {
   padding: 0.45em 0.5em;
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(var(--INSET_RGB), 0.2);
 }
 
 .budgetPanel .termRow .termInput {
@@ -1388,7 +1414,7 @@ button.dropdownBox:focus-visible {
 .panelEntry {
   padding: 0.45em 0.7em;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(var(--INSET_RGB), 0.4);
   font-size: 1.05em;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -1588,7 +1614,7 @@ button.dropdownBox:focus-visible {
 .searchTerms .termList:has(.termRow + .termRow) .termRow {
   padding: 0.45em 0.5em;
   border: 1px solid var(--PANEL_LINE);
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(var(--INSET_RGB), 0.2);
 }
 
 .searchBar .termInput {
@@ -1786,7 +1812,7 @@ button.dropdownBox:focus-visible {
   padding: 0.8em 1em;
   text-align: left;
   font-size: var(--UI_TEXT);
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(var(--INSET_RGB), 0.3);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
 }
@@ -1821,7 +1847,7 @@ button.dropdownBox:focus-visible {
 }
 
 .searchTable tr.clickable:hover td {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--TINT_RGB), 0.06);
 }
 
 .searchScroll {
@@ -1891,7 +1917,7 @@ button.dropdownBox:focus-visible {
   text-shadow: none;
   outline: none;
   border-color: var(--GLASS_LINE_BRIGHT);
-  box-shadow: var(--GLASS_SHADOW), 0 0 10px rgba(96, 112, 255, 0.35);
+  box-shadow: var(--GLASS_SHADOW), 0 0 10px rgba(var(--GLOW_RGB), 0.35);
 }
 
 /* The page that's showing glows: a bright edge and its glow, a blue-violet radial gradient from its center (::after), and
@@ -1899,7 +1925,7 @@ button.dropdownBox:focus-visible {
 .pageTabs a.pageTab[aria-current="page"] {
   color: var(--TEXT_BRIGHT);
   border-color: var(--GLOW_EDGE);
-  box-shadow: 0 0 16px rgba(96, 112, 255, 0.55);
+  box-shadow: 0 0 16px rgba(var(--GLOW_RGB), 0.55);
   cursor: default;
 }
 
@@ -1910,7 +1936,7 @@ button.dropdownBox:focus-visible {
   z-index: -1;
   border-radius: inherit;
   background: var(--GLOW_FILL);
-  box-shadow: inset 0 0 12px rgba(120, 140, 255, 0.25);
+  box-shadow: inset 0 0 12px rgba(var(--GLOW_RGB), 0.25);
   opacity: 0;
   pointer-events: none;
 }
@@ -1942,7 +1968,7 @@ button.dropdownBox:focus-visible {
   box-sizing: border-box;
   border: 1px solid var(--GLOW_EDGE);
   border-radius: 12px;
-  box-shadow: 0 0 16px rgba(96, 112, 255, 0.55);
+  box-shadow: 0 0 16px rgba(var(--GLOW_RGB), 0.55);
   pointer-events: none;
 }
 
@@ -1985,12 +2011,12 @@ button.dropdownBox:focus-visible {
 .pageTab[aria-current="page"] .tabIcon,
 .pageTabs.isGliding .pageTab.isGlideTarget .tabIcon {
   opacity: 1;
-  filter: drop-shadow(0 0 4px rgba(170, 180, 255, 0.8));
+  filter: drop-shadow(0 0 4px rgba(var(--GLOW_LIGHT_RGB), 0.8));
 }
 
 .pageTabs.isGliding .pageTab[aria-current="page"] .tabIcon {
   opacity: 0.85;
-  filter: drop-shadow(0 0 4px rgba(170, 180, 255, 0));
+  filter: drop-shadow(0 0 4px rgba(var(--GLOW_LIGHT_RGB), 0));
 }
 
 /* The narrowest phones: the tabs two by two, over the page's buttons (side by side, the buttons wouldn't fit) */
@@ -2091,10 +2117,10 @@ button.dropdownBox:focus-visible {
   box-sizing: border-box;
   width: clamp(36px, 7vmin, 54px);
   height: clamp(36px, 7vmin, 54px);
-  background: radial-gradient(circle at 50% 40%, rgba(70, 90, 230, 0.35), rgba(12, 14, 44, 0.92));
+  background: var(--TILE_FILL);
   border: 1px solid var(--GLASS_LINE);
   border-radius: 12px;
-  box-shadow: 0 0 12px rgba(80, 100, 255, 0.25);
+  box-shadow: 0 0 12px rgba(var(--GLOW_RGB), 0.25);
 }
 
 .cardIcon img {
@@ -2102,11 +2128,12 @@ button.dropdownBox:focus-visible {
   height: 62%;
   border-radius: 0;
   object-fit: contain;
-  filter: drop-shadow(0 0 4px rgba(150, 170, 255, 0.6));
+  filter: drop-shadow(0 0 4px rgba(var(--GLOW_LIGHT_RGB), 0.6));
 }
 
 /* The calendar's dark blue icon, lifted to a bright neon blue */
 .cardIcon img[src*="/Calendar."] {
+  --ICON_LIFT: 2.8; /* (A theme's icon colors lift it the same way first: themes.css) */
   filter: brightness(2.8) drop-shadow(0 0 6px rgba(60, 120, 255, 0.95));
 }
 
@@ -2181,7 +2208,7 @@ button.dropdownBox:focus-visible {
   font-size: 2.3em;
   line-height: 1.1;
   color: var(--TEXT_BRIGHT);
-  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 0 12px rgba(var(--HALO_RGB), 0.9);
 }
 
 .lowestAmount.negative,
@@ -2263,9 +2290,9 @@ button.dropdownBox:focus-visible {
   min-width: 52px;
   min-height: 52px;
   border-radius: 50%;
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 2px solid var(--PANEL_BORDER);
-  box-shadow: 0 0 12px rgba(110, 120, 255, 0.35);
+  box-shadow: 0 0 12px rgba(var(--GLOW_RGB), 0.35);
   color: var(--BASE_COLOR);
   font-size: 0.8em;
   text-align: center;
@@ -2362,7 +2389,7 @@ button.dropdownBox:focus-visible {
   font: inherit;
   text-align: left;
   color: var(--BASE_COLOR);
-  background: rgba(8, 10, 32, 0.45);
+  background: rgba(var(--WELL_RGB), 0.45);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
   cursor: pointer;
@@ -2407,15 +2434,15 @@ button.dropdownBox:focus-visible {
   display: block;
   height: 4px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--TINT_RGB), 0.08);
   border-radius: 2px;
 }
 
 .goalFill {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #6a5cff, #c14dff);
-  box-shadow: 0 0 6px rgba(160, 90, 255, 0.6);
+  background: var(--BAR_FILL);
+  box-shadow: 0 0 6px rgba(var(--GLOW_RGB), 0.6);
 }
 
 .goalItem.isReached .goalFill {
@@ -2472,7 +2499,7 @@ button.dropdownBox:focus-visible {
   transform: none;
   text-shadow: none;
   outline: none;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--TINT_RGB), 0.08);
   box-shadow: none;
 }
 
@@ -2547,20 +2574,20 @@ button.dropdownBox:focus-visible {
 }
 
 .budgetButton.homeSearch:hover {
-  color: #fff;
+  color: var(--TEXT_HOT);
 }
 
 /* Quick Entry glows: a blue-violet radial gradient from its center and a bright edge (a recommended button, .primary,
    looks the same), and glows a little more under the pointer */
 .budgetButton.homeQuick {
-  color: var(--TEXT_BRIGHT);
+  color: var(--PRIMARY_TEXT);
   background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
   border-color: var(--GLOW_EDGE);
   box-shadow: var(--GLOW_SHADOW);
 }
 
 .budgetButton.homeQuick:not(:disabled):hover {
-  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(110, 125, 255, 0.6);
+  box-shadow: var(--GLOW_SHADOW), 0 0 22px rgba(var(--GLOW_RGB), 0.6);
 }
 
 /* New Entry: the prism, with a + on it, and its name under it */
@@ -2594,7 +2621,7 @@ button.dropdownBox:focus-visible {
   border-radius: 50%;
   background: url("/Resources/Icons/NewEntry.webp?v=390f496c85") center / cover no-repeat;
   box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.14),
+    0 0 0 2px rgba(var(--TINT_RGB), 0.14),
     0 0 18px rgba(140, 90, 255, 0.55),
     0 0 34px rgba(60, 190, 255, 0.25);
   transition: box-shadow var(--SLOW_SHADOW);
@@ -2608,7 +2635,7 @@ button.dropdownBox:focus-visible {
   inset: 9%;
   border-radius: 50%;
   background: var(--GLOW_FILL), linear-gradient(90deg, rgb(30, 47, 139), rgb(80, 36, 145));
-  box-shadow: 0 0 0 1px var(--GLOW_EDGE), 0 0 8px rgba(96, 112, 255, 0.55), inset 0 0 12px rgba(120, 140, 255, 0.35);
+  box-shadow: 0 0 0 1px var(--GLOW_EDGE), 0 0 8px rgba(var(--GLOW_RGB), 0.55), inset 0 0 12px rgba(var(--GLOW_RGB), 0.35);
 }
 
 /* Hovered or focused: the red-orange edge and red glow, and a red radial gradient from its center */
@@ -2625,8 +2652,8 @@ button.dropdownBox:focus-visible {
 .newEntryButton:hover .newEntryPrism,
 .newEntryButton:focus-visible .newEntryPrism {
   box-shadow:
-    0 0 0 2px #ff4500,
-    0 0 22px rgba(255, 60, 0, 0.75);
+    0 0 0 2px var(--PICK_EDGE),
+    0 0 22px rgba(var(--PICK_RGB), 0.75);
 }
 
 .newEntryButton:hover .newEntryPrism::after,
@@ -2639,7 +2666,7 @@ button.dropdownBox:focus-visible {
   z-index: 1;
   font-size: 2.6em;
   line-height: 1;
-  color: #fff;
+  color: white; /* (On the prism, whatever the theme) */
   text-shadow: 0 0 6px rgba(0, 0, 0, 0.95), 0 0 2px #000;
 }
 
@@ -2675,7 +2702,7 @@ button.dropdownBox:focus-visible {
   margin: 0.6em 0 1em;
   padding: 0.7em 0.9em;
   text-align: left;
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(var(--INSET_RGB), 0.22);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
 }
@@ -2698,13 +2725,13 @@ button.dropdownBox:focus-visible {
   font-family: inherit;
   font-size: max(16px, 1em);
   color: var(--TEXT_BRIGHT);
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 10px;
 }
 
 .deviceGuide .deviceSelect option {
-  background: #141238;
+  background: var(--LIST_FILL);
 }
 
 .deviceGuide .deviceName {
@@ -2829,7 +2856,7 @@ html.watchView .quickBalanceAmount {
   align-items: center;
   gap: 0.6em;
   padding: 0.4em 0.45em 0.4em 0.75em;
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1px solid var(--PANEL_BORDER);
   border-radius: 10px;
 }
@@ -2981,7 +3008,7 @@ html.watchView .quickBalanceAmount {
   align-items: center;
   gap: 0.6em;
   padding: 0.35em 0.6em;
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1px solid var(--PANEL_BORDER);
   border-radius: 10px;
 }
@@ -3006,15 +3033,15 @@ html.watchView .quickBalanceAmount {
 }
 
 .prismEditRow.dragging {
-  border-color: #ff4500;
-  box-shadow: 0 0 12px rgba(200, 0, 0, 0.55);
+  border-color: var(--PICK_EDGE);
+  box-shadow: 0 0 12px rgba(var(--PICK_RGB), 0.55);
   opacity: 0.85;
 }
 
 /* New Prism: the form glows, so it's clear it's making a prism, not adding an entry */
 .budgetPanel.prismDraft {
   position: relative;
-  box-shadow: var(--FLOAT_SHADOW), 0 0 22px rgba(200, 0, 0, 0.7);
+  box-shadow: var(--FLOAT_SHADOW), 0 0 22px rgba(var(--PICK_RGB), 0.7);
 }
 
 .prismDraftHint {
@@ -3027,7 +3054,7 @@ html.watchView .quickBalanceAmount {
 }
 
 @keyframes prismFlash {
-  0%   { box-shadow: 0 0 0 3px var(--LINK_LIGHT), 0 0 34px rgba(255, 60, 60, 0.9); }
+  0%   { box-shadow: 0 0 0 3px var(--LINK_LIGHT), 0 0 34px rgba(var(--PICK_RGB), 0.9); }
   100% { box-shadow: var(--FLOAT_SHADOW); }
 }
 
@@ -3035,6 +3062,10 @@ html.watchView .quickBalanceAmount {
   .budgetPanel.prismFlash {
     animation: none;
   }
+}
+
+html.lessMotion .budgetPanel.prismFlash {
+  animation: none;
 }
 
 /* Recurring/Tracker toolbar */
@@ -3063,7 +3094,7 @@ html.watchView .quickBalanceAmount {
 }
 
 .dataTable tr.selected td {
-  background: rgba(200, 0, 0, 0.22);
+  background: rgba(var(--PICK_RGB), 0.22);
 }
 
 .dataTable .moveBar {
@@ -3151,7 +3182,7 @@ html.watchView .quickBalanceAmount {
 .accountEntryItem button.accountEntryButton:focus-visible {
   transform: none;
   outline: none;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--TINT_RGB), 0.08);
   box-shadow: none;
 }
 
@@ -3201,8 +3232,8 @@ html.watchView .quickBalanceAmount {
 }
 
 .dataTable tr.dragRow td {
-  background: rgba(200, 0, 0, 0.3);
-  box-shadow: 0 0 14px rgba(200, 0, 0, 0.6);
+  background: rgba(var(--PICK_RGB), 0.3);
+  box-shadow: 0 0 14px rgba(var(--PICK_RGB), 0.6);
 }
 
 .dataTable tr.dragRow .moveBar {
@@ -3255,11 +3286,11 @@ html.watchView .quickBalanceAmount {
   max-width: none;
   margin: 0;
   padding: 0.5em 0.8em;
-  font-family: 'Main Font', sans-serif;
+  font-family: var(--FONT);
   font-size: var(--UI_TEXT);
   text-align: left;
   color: var(--TEXT_BRIGHT);
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 10px;
   user-select: text;
@@ -3278,7 +3309,7 @@ html.watchView .quickBalanceAmount {
 .budgetCard select:focus {
   transform: none;
   text-shadow: none;
-  box-shadow: 0 0 10px rgba(200, 0, 0, 0.55);
+  box-shadow: 0 0 10px rgba(var(--PICK_RGB), 0.55);
   outline: none;
 }
 
@@ -3300,9 +3331,115 @@ a.budgetButton {
 
 a.budgetButton:hover {
   transform: scale(1.05);
-  color: #fff;
-  text-shadow: 0 0 10px rgba(255, 60, 0, 0.85);
+  color: var(--TEXT_HOT);
+  text-shadow: 0 0 10px rgba(var(--PICK_RGB), 0.85);
   box-shadow: var(--PICK_SHADOW);
+}
+
+/* Budgets (Budgets.js): the picker's list, Share's list of people, and Settings' Budgets card. Each row is its name over
+   a dimmer line (who it's shared with, or whose it is), with its buttons beside it; the open budget's row glows. */
+.budgetLists {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+.budgetListHeading {
+  margin: 0.5em 0 0.3em;
+  font-size: 0.85em;
+  font-weight: normal;
+  letter-spacing: 0.04em;
+  color: var(--TEXT_DIM);
+}
+
+.budgetList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.budgetList[hidden] {
+  display: none;
+}
+
+.budgetPeople {
+  margin-top: 0.4em;
+}
+
+.budgetManager {
+  margin: 0.8em 0 1em;
+}
+
+.budgetItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.35em 0.45em 0.35em 0.4em;
+  background: var(--BOX_FILL);
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+}
+
+.budgetItem.isOpen {
+  border-color: var(--GLOW_EDGE);
+  background: var(--GLOW_FILL), var(--BOX_FILL);
+  box-shadow: var(--GLOW_SHADOW);
+}
+
+/* The name and its line: a button that opens it in the picker's list, words in Settings and Share's list */
+.budgetItem .budgetOpen {
+  display: flex;
+  flex: 1 1 10em;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1em;
+  min-width: 0;
+  margin: 0;
+  padding: 0.25em 0.4em;
+  font-size: 1em;
+  line-height: 1.25;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.budgetItem button.budgetOpen:hover,
+.budgetItem button.budgetOpen:focus-visible {
+  transform: none;
+  outline: none;
+  background: rgba(var(--GLOW_RGB), 0.12);
+  box-shadow: none;
+}
+
+.budgetName {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.budgetDetail {
+  font-size: 0.82em;
+  color: var(--TEXT_DIM);
+  overflow-wrap: anywhere;
+}
+
+.budgetItem .budgetShare,
+.budgetInvitationButtons .budgetButton {
+  flex: 0 0 auto;
+  padding: 0.3em 0.85em;
+  font-size: 0.85em;
+}
+
+.budgetInvitationButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
 }
 
 /* Settings */
@@ -3501,8 +3638,8 @@ a.budgetButton:hover {
   margin-top: 0.8em;
   padding: 0.5em 0.9em;
   text-align: left;
-  background: rgba(255, 205, 40, 0.1);
-  border: 1px solid rgba(255, 205, 40, 0.6);
+  background: rgba(var(--YELLOW_RGB), 0.1);
+  border: 1px solid rgba(var(--YELLOW_RGB), 0.6);
   border-radius: 10px;
 }
 
@@ -3536,6 +3673,10 @@ a.budgetButton:hover {
   }
 }
 
+html.lessMotion .sheetForm.isOpening {
+  animation: none;
+}
+
 /* A part of an entry: its yellow ➕, then what's typed, or the cells it comes from */
 .sheetLine {
   display: flex;
@@ -3559,8 +3700,8 @@ a.budgetButton:hover {
   padding: 0;
   font-size: 1em;
   line-height: 1;
-  background: rgba(255, 205, 40, 0.12);
-  border: 2px solid rgba(255, 205, 40, 0.7);
+  background: rgba(var(--YELLOW_RGB), 0.12);
+  border: 2px solid rgba(var(--YELLOW_RGB), 0.7);
   border-radius: 50%;
 }
 
@@ -3572,14 +3713,14 @@ a.budgetButton:hover {
 .sheetPick:hover,
 .sheetPick:focus-visible {
   transform: scale(1.08);
-  box-shadow: 0 0 10px rgba(255, 205, 40, 0.65);
+  box-shadow: 0 0 10px rgba(var(--YELLOW_RGB), 0.65);
 }
 
 /* Picked: filled in */
 .sheetPick.isLinked {
-  background: rgba(255, 205, 40, 0.38);
-  border-color: rgb(255, 205, 40);
-  box-shadow: 0 0 8px rgba(255, 205, 40, 0.5);
+  background: rgba(var(--YELLOW_RGB), 0.38);
+  border-color: rgb(var(--YELLOW_RGB));
+  box-shadow: 0 0 8px rgba(var(--YELLOW_RGB), 0.5);
 }
 
 /* The cells it comes from (tap to change them) */
@@ -3592,8 +3733,8 @@ a.budgetButton:hover {
   text-align: left;
   overflow-wrap: anywhere;
   color: var(--BASE_COLOR);
-  background: rgba(0, 0, 0, 0.35);
-  border: 2px solid rgba(255, 205, 40, 0.7);
+  background: rgba(var(--INSET_RGB), 0.35);
+  border: 2px solid rgba(var(--YELLOW_RGB), 0.7);
   border-radius: 10px;
 }
 
@@ -3615,7 +3756,7 @@ a.budgetButton:hover {
   margin: 0;
   padding: 0.45em 0.7em;
   list-style: none;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(var(--INSET_RGB), 0.35);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
 }
@@ -3744,9 +3885,9 @@ a.budgetButton:hover {
 }
 
 .budgetButton.calendarVersionTab.isPicked {
-  color: #fff;
-  border-color: rgb(255, 205, 40);
-  box-shadow: 0 0 10px rgba(255, 205, 40, 0.5);
+  color: var(--TEXT_HOT);
+  border-color: rgb(var(--YELLOW_RGB));
+  box-shadow: 0 0 10px rgba(var(--YELLOW_RGB), 0.5);
 }
 
 .budgetButton.calendarVersionAdd {
@@ -3803,7 +3944,7 @@ a.budgetButton:hover {
 
 .calendarGroupNote {
   font-size: 0.85em;
-  color: rgb(255, 205, 40);
+  color: rgb(var(--YELLOW_RGB));
 }
 
 .calendarGroupBoxes,
@@ -3848,11 +3989,11 @@ a.budgetButton:hover {
   min-width: 0;
   margin: 0;
   padding: 0.45em 0.6em;
-  font-family: 'Main Font', sans-serif;
+  font-family: var(--FONT);
   font-size: var(--UI_TEXT);
   color: var(--TEXT_BRIGHT);
   color-scheme: dark;
-  background: rgba(8, 10, 32, 0.6);
+  background: var(--BOX_FILL);
   border: 1.5px solid var(--PANEL_BORDER);
   border-radius: 10px;
 }
@@ -3958,7 +4099,7 @@ a.budgetButton:hover {
   min-height: 3.6em;
   min-width: 0;
   padding: 0.25em;
-  background: rgba(8, 10, 32, 0.55);
+  background: rgba(var(--WELL_RGB), 0.55);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 6px;
 }
@@ -3989,7 +4130,7 @@ a.budgetButton:hover {
 }
 
 .calendarShift.isPremium .calendarShiftTime {
-  color: rgb(255, 205, 40);
+  color: rgb(var(--YELLOW_RGB));
 }
 
 .calendarShiftTitle {
@@ -4096,7 +4237,7 @@ a.budgetButton:hover {
 .calendarShiftList li {
   padding: 0.35em 0.6em;
   overflow-wrap: anywhere;
-  background: rgba(8, 10, 32, 0.45);
+  background: rgba(var(--WELL_RGB), 0.45);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 8px;
 }
@@ -4164,7 +4305,7 @@ footer.hasHelp > hr {
   position: fixed;
   inset: 0;
   z-index: 999;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(var(--SHADE_RGB), 0.6);
 }
 
 .helpView h4 {
@@ -4203,7 +4344,7 @@ footer.hasHelp > hr {
 .paycheckAmount {
   font-size: 1.8em;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 0 12px rgba(var(--HALO_RGB), 0.9);
 }
 
 .takeHome .paycheckAmount {
@@ -4302,7 +4443,7 @@ footer.hasHelp > hr {
   gap: 0.5em;
   margin-top: 0.8em;
   padding: 0.7em 0.8em;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(var(--INSET_RGB), 0.3);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
 }
@@ -4314,7 +4455,7 @@ footer.hasHelp > hr {
 
 .calculatorForm.presetDraft {
   position: relative;
-  box-shadow: var(--GLASS_SHADOW), 0 0 22px rgba(200, 0, 0, 0.7);
+  box-shadow: var(--GLASS_SHADOW), 0 0 22px rgba(var(--PICK_RGB), 0.7);
 }
 
 /* A short glow when a crystal or gem fills it */
@@ -4326,6 +4467,10 @@ footer.hasHelp > hr {
   .calculatorForm.prismFlash {
     animation: none;
   }
+}
+
+html.lessMotion .calculatorForm.prismFlash {
+  animation: none;
 }
 
 /* Debt Calculator (menu/payments.html): its gems, the form, its results, and an Other Account's own pace with its
@@ -4472,7 +4617,7 @@ footer.hasHelp > hr {
   padding: 0.55em 0.8em;
   font-size: 0.9em;
   line-height: 1.45;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(var(--INSET_RGB), 0.35);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
 }
@@ -4548,7 +4693,7 @@ button.bobDataRow:hover,
 button.bobDataRow:focus-visible {
   transform: none;
   outline: none;
-  background: rgba(104, 124, 255, 0.14);
+  background: rgba(var(--GLOW_RGB), 0.14);
   box-shadow: inset 0 0 0 1px var(--PANEL_BORDER);
 }
 
@@ -4594,7 +4739,7 @@ button.bobDataRow:focus-visible {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
+  scrollbar-color: rgba(var(--GLOW_LIGHT_RGB), 0.45) transparent;
 }
 
 .dataTable.bobAccounts {
@@ -4638,7 +4783,7 @@ button.bobDataRow:focus-visible {
 
 .bobAccounts tr.totalRow td {
   color: var(--TEXT_BRIGHT);
-  background: rgba(40, 42, 110, 0.55);
+  background: var(--PANEL_DEEP);
 }
 
 .bobAccounts tr.totalRow td.negative {
@@ -4660,7 +4805,7 @@ button.bobDataRow:focus-visible {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(140, 150, 255, 0.45) transparent;
+  scrollbar-color: rgba(var(--GLOW_LIGHT_RGB), 0.45) transparent;
 }
 
 .dataTable.bobTable {
@@ -4836,7 +4981,7 @@ button.bobDataRow:focus-visible {
 .purposeLegendButton:focus-visible {
   transform: none;
   outline: none;
-  background: rgba(104, 124, 255, 0.14);
+  background: rgba(var(--GLOW_RGB), 0.14);
 }
 
 .purposeLegendButton:disabled {
@@ -4984,7 +5129,7 @@ button.bobDataRow:focus-visible {
 
 .backupPart {
   padding: 0.6em 0.75em;
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(var(--INSET_RGB), 0.22);
   border: 1px solid var(--PANEL_LINE);
   border-radius: 10px;
 }
@@ -5112,7 +5257,7 @@ button.bobDataRow:focus-visible {
   padding: 0.05em 0.3em;
   font-family: Consolas, "Courier New", monospace;
   font-size: 0.92em;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(var(--INSET_RGB), 0.4);
   border-radius: 4px;
 }
 
@@ -5123,7 +5268,7 @@ button.bobDataRow:focus-visible {
   padding: 0.7em 0.9em;
   font-size: 0.9em;
   line-height: 1.4;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(var(--INSET_RGB), 0.45);
   border-radius: 8px;
 }
 
@@ -5141,7 +5286,7 @@ button.bobDataRow:focus-visible {
   font-size: 0.9em;
   line-height: 1.3;
   text-align: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(var(--INSET_RGB), 0.4);
   border: 1px solid var(--PANEL_BORDER);
   border-bottom-width: 2px;
   border-radius: 5px;

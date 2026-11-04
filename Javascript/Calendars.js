@@ -1435,7 +1435,8 @@ const Calendars = (() => {
     const changed = results.filter(Boolean).filter(result => {
       const connection = sheetConnectionById(result.id);
       if (!connection || connectionBasis(connection) !== result.basis) return false;
-      if (result.failed) return !(connection.problems.length === 1 && connection.problems[0] === result.failed);
+      // (In a shared budget, a failed read is kept only from its connector's pages: keepsReadProblem)
+      if (result.failed) return keepsReadProblem(connection) && !(connection.problems.length === 1 && connection.problems[0] === result.failed);
       const updated = normalizeSheetConnection({ ...connection, entries: result.entries, problems: result.problems, paychecks: result.paychecks, checked: result.checked });
       return JSON.stringify(updated) !== JSON.stringify(connection);
     });
