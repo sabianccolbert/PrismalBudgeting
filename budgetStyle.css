@@ -343,7 +343,11 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   --POSITIVE_TEXT: #5ee39a;              /* Gains (positive entries) */
   --ZERO_TEXT: #6f7396;                  /* $0.00 entries: a darker grey */
   --PLACEHOLDER_TEXT: #ffd447;           /* Placeholder entries, whatever their amount */
+  --NEGATIVE_ON_RED: #ff9aa5;            /* Costs in a day below $0: lighter, to stand out on its red */
   --UI_TEXT: clamp(13px, 2.6vmin, 18px); /* Panels, search, toolbars */
+  /* New Entry's ring hovered (the chosen color's neon), and in a theme, the ring itself (its glow's colors, themes.css) */
+  --RING_HOVER_FILL: conic-gradient(from 200deg, #ff2a2a, #ff6a1a, #ffb03a, #ff6a1a, #ff2a2a);
+  --RING_FILL: conic-gradient(from 200deg, rgb(var(--GLOW_RGB)), rgb(var(--GLOW_LIGHT_RGB)), rgb(var(--GLOW_RGB)));
 }
 
 /* Page links on the Menu page: a glass card each, with its name and what it's for */
@@ -823,6 +827,11 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 .lineEntry.negative,
 .negative {
   color: var(--NEGATIVE_TEXT);
+}
+
+/* A cost in a day below $0: a lighter red, so it stands out on the day's own red (a placeholder stays yellow) */
+.elastic-table td.isNegative .lineEntry.negative:not(.isPlaceholder) {
+  color: var(--NEGATIVE_ON_RED);
 }
 
 .lineEntry.isZero,
@@ -2610,6 +2619,9 @@ button.dropdownBox:focus-visible {
   box-shadow: none;
 }
 
+/* The prism: a thin neon ring (NewEntryRing.webp, in Prismal's own colors) around a solid disk that glows like Quick
+   Entry, with the + on it. Every other theme paints the ring in its own colors in the picture's shape (--RING_FILL,
+   themes.css). */
 .newEntryPrism {
   position: relative;
   display: flex;
@@ -2619,41 +2631,45 @@ button.dropdownBox:focus-visible {
   width: clamp(52px, 13vw, 84px);
   height: clamp(52px, 13vw, 84px);
   border-radius: 50%;
-  background: url("/Resources/Icons/NewEntry.webp?v=390f496c85") center / cover no-repeat;
-  box-shadow:
-    0 0 0 2px rgba(var(--TINT_RGB), 0.14),
-    0 0 18px rgba(140, 90, 255, 0.55),
-    0 0 34px rgba(60, 190, 255, 0.25);
-  transition: box-shadow var(--SLOW_SHADOW);
 }
 
-/* The colors are a thin ring, a few pixels wide: its middle is solid and glows like Quick Entry (a blue-violet radial
-   gradient from its center, over Quick Entry's blue-to-violet, with a bright edge), under the + */
+/* The disk: a blue-violet radial gradient from its center over Quick Entry's blue-to-violet, its edge under the ring.
+   Its glow spreads from there, so it hugs the ring. */
 .newEntryPrism::before {
   content: "";
   position: absolute;
-  inset: 9%;
+  inset: 11%;
   border-radius: 50%;
   background: var(--GLOW_FILL), linear-gradient(90deg, rgb(30, 47, 139), rgb(80, 36, 145));
-  box-shadow: 0 0 0 1px var(--GLOW_EDGE), 0 0 8px rgba(var(--GLOW_RGB), 0.55), inset 0 0 12px rgba(var(--GLOW_RGB), 0.35);
+  box-shadow: 0 0 16px 2px rgba(var(--GLOW_RGB), 0.45), inset 0 0 12px rgba(var(--GLOW_RGB), 0.35);
+  transition: box-shadow var(--SLOW_SHADOW);
 }
 
-/* Hovered or focused: the red-orange edge and red glow, and a red radial gradient from its center */
+.newEntryRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: url("/Resources/Icons/NewEntryRing.webp?v=9c8bd5e752") center / 100% 100% no-repeat;
+}
+
+/* Hovered or focused: the ring turns the chosen color (red to orange to gold), it glows that color, and so does the
+   disk's edge */
 .newEntryPrism::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 1;
   border-radius: 50%;
-  background: var(--PICK_FILL);
+  background: var(--RING_HOVER_FILL);
+  -webkit-mask: url("/Resources/Icons/NewEntryRing.webp?v=9c8bd5e752") center / 100% 100% no-repeat;
+  mask: url("/Resources/Icons/NewEntryRing.webp?v=9c8bd5e752") center / 100% 100% no-repeat;
   opacity: 0;
   transition: opacity var(--SLOW_SHADOW);
 }
 
-.newEntryButton:hover .newEntryPrism,
-.newEntryButton:focus-visible .newEntryPrism {
-  box-shadow:
-    0 0 0 2px var(--PICK_EDGE),
-    0 0 22px rgba(var(--PICK_RGB), 0.75);
+.newEntryButton:hover .newEntryPrism::before,
+.newEntryButton:focus-visible .newEntryPrism::before {
+  box-shadow: 0 0 20px 4px rgba(var(--PICK_RGB), 0.6), inset 0 0 16px 2px rgba(var(--PICK_RGB), 0.6);
 }
 
 .newEntryButton:hover .newEntryPrism::after,
@@ -2663,7 +2679,7 @@ button.dropdownBox:focus-visible {
 
 .newEntryPlus {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   font-size: 2.6em;
   line-height: 1;
   color: white; /* (On the prism, whatever the theme) */

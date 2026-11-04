@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.03.2026.C";
+  const SITE_VERSION = "11.04.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -24,7 +24,7 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "ed641e83dd",
+    "/Javascript/Active Starfield.js": "63d15ca235",
     "/Javascript/Analytics.js": "2e26ee1f3d",
     "/Javascript/Bob Page.js": "56c365b7c9",
     "/Javascript/Budget Pages.js": "cf122dbd11",
@@ -43,7 +43,7 @@
     "/Javascript/Process Budget.js": "7d72162759",
     "/Javascript/Quick Entry.js": "26f175616f",
     "/Javascript/Session.js": "988bbb66b5",
-    "/Javascript/Settings Page.js": "15a64136d6",
+    "/Javascript/Settings Page.js": "1a98cafc0b",
     "/Javascript/Sounds.js": "4cfba7dffa",
     "/Javascript/Spreadsheets Page.js": "5e5152eca6",
     "/Javascript/Spreadsheets.js": "e070c41e6f",
@@ -238,9 +238,12 @@
   // Custom is a theme of the person's own (Settings' Custom window): one of the others to start from (its data-theme),
   // with five colors of their own (the page behind the cards, the cards, the words, the glow, and what's chosen) worked
   // out into the tokens on html itself (customTokens), and if they like, small or sharp corners, another font, other
-  // stars, and gray or glowing icons (html's data-corners and data-icons, themes.css).
-  const THEMES = ["prismal", "professional", "dark", "spooky", "elements", "poison", "blue", "custom"];
+  // stars, and gray or glowing icons (html's data-corners and data-icons, themes.css). (themes.css's header lists
+  // everything a new theme needs.)
+  const THEMES = ["prismal", "professional", "dark", "spooky", "elements", "poison", "blue", "fall", "winter", "festive", "floral", "digital", "custom"];
   const BASE_THEMES = THEMES.filter(theme => theme !== "custom");
+  // The themes with dark words on light cards (html gets lightCards, as it does for a Custom theme with light cards)
+  const LIGHT_THEMES = ["professional", "winter", "floral"];
   const THEME_KEY = "prismal_theme";
   const CUSTOM_KEY = "prismal_custom_theme";
   // Each theme's five colors (Custom starts from them; the first is also what the browser paints around the page, like a
@@ -252,22 +255,29 @@
     spooky:       { background: "#070405", cards: "#1e0a0c", words: "#f5ebe6", glow: "#dc141e", chosen: "#ff5a14" },
     elements:     { background: "#1e1b18", cards: "#2e2924", words: "#f6f0e7", glow: "#3a87a8", chosen: "#d0643b" },
     poison:       { background: "#0d0714", cards: "#241036", words: "#f3ecff", glow: "#963ce6", chosen: "#46dc28" },
-    blue:         { background: "#2457a0", cards: "#24528f", words: "#ffffff", glow: "#96d2ff", chosen: "#ffbe28" }
+    blue:         { background: "#2457a0", cards: "#24528f", words: "#ffffff", glow: "#96d2ff", chosen: "#ffbe28" },
+    fall:         { background: "#1a0f08", cards: "#3a2010", words: "#fff3e4", glow: "#ff8a2a", chosen: "#e8432e" },
+    winter:       { background: "#e3effb", cards: "#ffffff", words: "#0c2440", glow: "#3a9be0", chosen: "#2747c9" },
+    festive:      { background: "#06190f", cards: "#103a24", words: "#fffaf0", glow: "#f2c14e", chosen: "#e63946" },
+    floral:       { background: "#fde8f1", cards: "#fffcfe", words: "#3d1a35", glow: "#f472b6", chosen: "#9b6dff" },
+    digital:      { background: "#020805", cards: "#04160c", words: "#e4ffee", glow: "#00ff88", chosen: "#ffb000" }
   };
   // A Custom theme's other choices ("theme": the one it starts from keeps its own)
   const CUSTOM_CHOICES = {
     corners: ["theme", "small", "sharp"],
-    font: ["theme", "prismal", "plain", "sharp"],
-    stars: ["theme", "stars", "dots", "embers", "elements", "bubbles"],
+    font: ["theme", "prismal", "plain", "sharp", "rounded", "digital"],
+    stars: ["theme", "stars", "dots", "embers", "elements", "bubbles", "leaves", "snow", "ornaments", "flowers", "pixels"],
     icons: ["theme", "gray", "glowing"]
   };
   const CUSTOM_FONTS = {
     prismal: "'Main Font', sans-serif",
     plain: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    sharp: '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif'
+    sharp: '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif',
+    rounded: "ui-rounded, 'SF Pro Rounded', 'Main Font', sans-serif",
+    digital: 'ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, "Roboto Mono", "DejaVu Sans Mono", monospace'
   };
   // Which theme's stars each Stars choice borrows (dots: Professional's on light cards, Dark's on dark ones)
-  const CUSTOM_STARS = { stars: "prismal", embers: "spooky", elements: "elements", bubbles: "poison" };
+  const CUSTOM_STARS = { stars: "prismal", embers: "spooky", elements: "elements", bubbles: "poison", leaves: "fall", snow: "winter", ornaments: "festive", flowers: "floral", pixels: "digital" };
   const THEMED = !IS_PUBLIC || PAGE === "quick";
   const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -315,9 +325,35 @@
   const WHITE = [255, 255, 255];
   const BLACK = [0, 0, 0];
   const SLATE = [15, 23, 42];
+  // How easy one color is to read on another (the contrast ratio of the accessibility guidelines: 1 to 21)
+  const luminance = (rgb) => rgb.map(value => value / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, c, at) => sum + c * [0.2126, 0.7152, 0.0722][at], 0);
+  const contrast = (a, b) => {
+    const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (high + 0.05) / (low + 0.05);
+  };
 
-  // Are a Custom theme's cards light (so shadows stay dark, but halos, boxes, and wells go light)?
+  // Are a Custom theme's cards light (so shadows stay dark, but halos, boxes, and wells go light)? And are they the other
+  // lightness from the theme it starts from's (light cards on a dark theme, or dark ones on a light theme)?
   const lightCards = (custom) => lightness(rgbOf(custom.cards)) > 0.6;
+  const flipped = (custom) => lightCards(custom) !== LIGHT_THEMES.includes(custom.base);
+  // A Custom theme's icons: its choice, or gray when it keeps the theme's but its cards are the other lightness (the
+  // theme's icons are made for its own cards)
+  const iconsFor = (custom) => (custom.icons === "theme" && flipped(custom) ? "gray" : custom.icons);
+  // Costs, gains, placeholders, and Delete's words for light cards (Professional's) and for dark ones (Prismal's)
+  const LIGHT_CARD_SHADES = {
+    "--NEGATIVE_TEXT": "#b91c1c", "--POSITIVE_TEXT": "#047857", "--ZERO_TEXT": "#94a3b8", "--PLACEHOLDER_TEXT": "#9a4708", "--DANGER_TEXT": "#b91c1c",
+    "--YELLOW_RGB": "202, 138, 4", "--PLACEHOLDER_COLOR": "rgba(100, 116, 139, 0.7)",
+    "--NEGATIVE_DAY_FILL": "linear-gradient(180deg, #fee2e2, #fff1f2)", "--NEGATIVE_DAY_SOLID": "linear-gradient(180deg, #fee2e2, #fff1f2)",
+    "--NEGATIVE_DAY_EDGE": "rgba(220, 38, 38, 0.55)", "--NEGATIVE_GLOW_FILL": "linear-gradient(rgba(220, 38, 38, 0.1), rgba(220, 38, 38, 0.1))"
+  };
+  const DARK_CARD_SHADES = {
+    "--NEGATIVE_TEXT": "#ff8a95", "--NEGATIVE_ON_RED": "#ffb0b9", "--POSITIVE_TEXT": "#5ee39a", "--ZERO_TEXT": "#6f7396", "--PLACEHOLDER_TEXT": "#ffd447", "--DANGER_TEXT": "#d98a94",
+    "--YELLOW_RGB": "255, 205, 40", "--PLACEHOLDER_COLOR": "rgba(90, 90, 90, 0.5)",
+    "--NEGATIVE_DAY_FILL": "linear-gradient(180deg, rgba(122, 14, 48, 0.68) 0%, rgba(122, 14, 48, 0) 50%)",
+    "--NEGATIVE_DAY_SOLID": "linear-gradient(180deg, rgb(112, 12, 44), rgb(42, 6, 24))", "--NEGATIVE_DAY_EDGE": "rgba(255, 80, 100, 0.6)",
+    "--NEGATIVE_GLOW_FILL": "radial-gradient(ellipse at center, rgba(255, 70, 90, 0.5) 0%, rgba(200, 20, 50, 0.28) 50%, rgba(90, 0, 30, 0.1) 85%, transparent 100%)"
+  };
 
   // A Custom theme's tokens (stylesheet.css section 1, and budgetStyle.css's), worked out from its five colors
   function customTokens(custom) {
@@ -332,14 +368,17 @@
     const pickDark = mix(pick, BLACK, 0.35);
     const cardDeep = mix(card, BLACK, light ? 0.04 : 0.35);
     const button = mix(card, light ? WHITE : BLACK, 0.1);
-    // (A recommended button is mostly its glow: its words are dark on a light one, white on a dark one)
-    const recommended = mix(button, glow, 0.6);
+    // (A recommended button is mostly its glow, brightest in its middle where its words are: they're white or dark,
+    // whichever is easier to read there)
+    const recommendedMiddle = mix(card, glow, 0.82);
+    const darkWords = contrast(SLATE, recommendedMiddle) > contrast(WHITE, recommendedMiddle);
     const tokens = {
       "--BASE_COLOR": rgbColor(mix(text, card, 0.12)),
       "--TEXT_BRIGHT": rgbColor(text),
-      "--TEXT_DIM": rgbColor(mix(text, card, 0.42)),
+      // (Dim, but still easy to read: a little closer to the words on light cards)
+      "--TEXT_DIM": rgbColor(mix(text, card, light ? 0.25 : 0.35)),
       "--TEXT_HOT": rgbColor(light ? mix(text, BLACK, 0.3) : mix(text, WHITE, 0.5)),
-      "--PRIMARY_TEXT": lightness(recommended) > 0.6 ? "#0f172a" : "#ffffff",
+      "--PRIMARY_TEXT": darkWords ? "#0f172a" : "#ffffff",
       "--LINK_LIGHT": rgbColor(pick),
       "--LINK_DARK": rgbColor(pickDark),
       "--GLASS": `linear-gradient(180deg, ${rgba(card, light ? 1 : 0.86)}, ${rgba(cardDeep, light ? 1 : 0.9)})`,
@@ -382,25 +421,24 @@
       "--TILE_FILL": `radial-gradient(circle at 50% 40%, ${rgba(glow, 0.35)}, ${rgba(cardDeep, 0.92)})`,
       "--LINE_GRADIENT": `linear-gradient(90deg, transparent, ${rgba(glow, 0.65)} 25%, ${rgba(mix(glow, pick, 0.4), 0.65)} 75%, transparent)`,
       "--BAR_FILL": `linear-gradient(90deg, ${rgbColor(glow)}, ${rgbColor(glowLight)})`,
+      // New Entry's ring in the glow's colors (the theme it starts from may have its own), and Quick Entry's bolt the
+      // color of its words
+      "--RING_FILL": `conic-gradient(from 200deg, ${rgbColor(glow)}, ${rgbColor(glowLight)}, ${rgbColor(mix(glow, pick, 0.35))}, ${rgbColor(glow)})`,
+      "--PRIMARY_ICON": darkWords ? "brightness(0) invert(0.08)" : "brightness(0) invert(1)",
       // The page behind the cards (themes.css CUSTOM: a glow at the top left, darker at the bottom right)
       "--CUSTOM_BG": rgbColor(page),
       "--CUSTOM_BG_GLOW": rgba(glow, light ? 0.1 : 0.22),
       "--CUSTOM_BG_DEEP": rgbColor(mix(page, BLACK, light ? 0.06 : 0.35))
     };
-    // Light cards take Professional's costs, gains, and placeholders (a dark theme's are too pale on them)
-    if (light) {
-      Object.assign(tokens, {
-        "--NEGATIVE_TEXT": "#dc2626", "--POSITIVE_TEXT": "#059669", "--ZERO_TEXT": "#94a3b8", "--PLACEHOLDER_TEXT": "#b45309",
-        "--YELLOW_RGB": "202, 138, 4", "--PLACEHOLDER_COLOR": "rgba(100, 116, 139, 0.7)",
-        "--NEGATIVE_DAY_FILL": "linear-gradient(180deg, #fee2e2, #fff1f2)", "--NEGATIVE_DAY_SOLID": "linear-gradient(180deg, #fee2e2, #fff1f2)",
-        "--NEGATIVE_DAY_EDGE": "rgba(220, 38, 38, 0.55)", "--NEGATIVE_GLOW_FILL": "linear-gradient(rgba(220, 38, 38, 0.1), rgba(220, 38, 38, 0.1))"
-      });
-    }
+    // Cards lighter or darker than the theme it starts from take costs, gains, placeholders, and Delete's words in shades
+    // made for them (a dark theme's are too pale on light cards, and a light theme's too dark on dark ones)
+    if (flipped(custom)) Object.assign(tokens, light ? LIGHT_CARD_SHADES : DARK_CARD_SHADES);
     if (custom.font !== "theme") tokens["--FONT"] = CUSTOM_FONTS[custom.font];
     // Gray icons: dark on light cards, light on dark ones; glowing: the same, with the glow around them
     const iconGray = light ? "grayscale(1) brightness(0.32)" : "grayscale(1) brightness(1.7)";
-    if (custom.icons === "gray") tokens["--ICON_FILTER"] = iconGray;
-    if (custom.icons === "glowing") tokens["--ICON_FILTER"] = `${iconGray} drop-shadow(0 0 6px ${rgba(glow, 0.8)})`;
+    const icons = iconsFor(custom);
+    if (icons === "gray") tokens["--ICON_FILTER"] = iconGray;
+    if (icons === "glowing") tokens["--ICON_FILTER"] = `${iconGray} drop-shadow(0 0 6px ${rgba(glow, 0.8)})`;
     return tokens;
   }
 
@@ -430,6 +468,7 @@
     if (base === "prismal") delete root.dataset.theme;
     else root.dataset.theme = base;
     root.classList.toggle("customTheme", !!custom);
+    root.classList.toggle("lightCards", custom ? lightCards(custom) : LIGHT_THEMES.includes(base));
     const tokens = custom ? customTokens(custom) : {};
     CUSTOM_SET.forEach(name => { if (!(name in tokens)) root.style.removeProperty(name); });
     CUSTOM_SET.clear();
@@ -437,8 +476,9 @@
       root.style.setProperty(name, value);
       CUSTOM_SET.add(name);
     });
-    for (const part of ["corners", "icons"]) {
-      if (custom && custom[part] !== "theme") root.dataset[part] = custom[part];
+    const choices = { corners: custom ? custom.corners : "theme", icons: custom ? iconsFor(custom) : "theme" };
+    for (const [part, choice] of Object.entries(choices)) {
+      if (choice !== "theme") root.dataset[part] = choice;
       else delete root.dataset[part];
     }
     root.style.colorScheme = custom ? (lightCards(custom) ? "light" : "dark") : "";

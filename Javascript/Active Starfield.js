@@ -287,8 +287,9 @@ function loadStarSprite(URL) {
 /* GROUP: Themes */
 // Each theme (Settings, Boot.js: the page sends its name) has its own stars and colors: which sprites the stars are
 // (each star keeps one, picked by its own random "kind", so a theme's mix stays put as the stars move), and the colors of
-// the lines between stars, the ring around the pointer, and the keyboard's paddles ("r, g, b"). Prismal and Blue use the
-// star image; the rest are drawn here, once, on a small canvas each (SPRITE_KINDS).
+// the lines between stars, the ring around the pointer, and the keyboard's paddles ("r, g, b"), and on a light page, the
+// color a star fades toward as it dims (shade; black otherwise). Prismal and Blue use the star image; the rest are drawn
+// here, once, on a small canvas each (SPRITE_KINDS; a kind with a color is [kind, "r, g, b"]).
 const THEME_LOOKS = {
   prismal:      { sprites: ["star"], link: "100, 100, 100", ring: "189, 189, 189", paddle: "255, 255, 255" },
   professional: { sprites: [["dot", "100, 116, 139"]], link: "148, 163, 184", ring: "100, 116, 139", paddle: "71, 85, 105" },
@@ -296,11 +297,50 @@ const THEME_LOOKS = {
   spooky:       { sprites: ["ember", "ember", "ember", "bat"], link: "110, 16, 20", ring: "190, 30, 30", paddle: "230, 210, 200" },
   elements:     { sprites: ["flame", "drop", "leaf", "wind"], link: "110, 98, 84", ring: "214, 196, 160", paddle: "240, 230, 210" },
   poison:       { sprites: ["bubble", "spore", "bubble"], link: "84, 52, 120", ring: "140, 255, 100", paddle: "200, 255, 180" },
-  blue:         { sprites: ["star"], link: "160, 195, 240", ring: "225, 238, 255", paddle: "255, 255, 255" }
+  blue:         { sprites: ["star"], link: "160, 195, 240", ring: "225, 238, 255", paddle: "255, 255, 255" },
+  fall:         { sprites: [["maple", "232, 67, 46"], ["maple", "255, 138, 42"], ["maple", "242, 178, 52"], ["maple", "180, 86, 28"], "acorn", "pumpkin"],
+                  link: "130, 72, 36", ring: "255, 170, 90", paddle: "255, 225, 190" },
+  winter:       { sprites: [["snowflake", "110, 160, 215"], ["snowflake", "110, 160, 215"], ["snow", "120, 170, 220"], ["snow", "120, 170, 220"]],
+                  link: "140, 180, 220", ring: "58, 130, 200", paddle: "30, 80, 140", shade: "210, 228, 248" },
+  festive:      { sprites: [["bauble", "230, 57, 70"], ["bauble", "242, 193, 78"], ["bauble", "46, 158, 91"], "holly", ["snowflake", "200, 230, 255"], "goldStar", "candyCane"],
+                  link: "120, 100, 50", ring: "242, 193, 78", paddle: "255, 240, 210" },
+  floral:       { sprites: [["blossom", "255, 158, 200"], ["blossom", "196, 170, 255"], ["blossom", "255, 196, 160"], ["petal", "255, 170, 205"], ["petal", "214, 190, 255"], ["heart", "255, 150, 190"]],
+                  link: "214, 150, 190", ring: "236, 110, 170", paddle: "150, 70, 120", shade: "255, 238, 246" },
+  digital:      { sprites: [["pixel", "0, 255, 136"], ["pixel", "125, 255, 185"], ["pixel", "0, 196, 106"], "bit0", "bit1"],
+                  link: "0, 120, 64", ring: "0, 255, 136", paddle: "125, 255, 185" }
 };
 
+// A maple leaf's outline (a SPRITE_PX square, its stem at the bottom), and a holly leaf's (pointing right from its base)
+const MAPLE_LEAF = [[32, 4], [36, 14], [42, 11], [40, 22], [50, 17], [48, 24], [58, 26], [52, 32], [55, 36], [44, 38], [46, 44], [36, 40],
+  [34, 48], [30, 48], [28, 40], [18, 44], [20, 38], [9, 36], [12, 32], [6, 26], [16, 24], [14, 17], [24, 22], [22, 11], [28, 14]];
+const HOLLY_LEAF = [[0, 0], [4, -5], [7, -3], [10, -8], [13, -5], [17, -9], [19, -5], [24, -6], [27, 0], [24, 6], [19, 5], [17, 9],
+  [13, 5], [10, 8], [7, 3], [4, 5]];
+// A 0 and a 1 in blocks, five wide and seven tall
+const BIT_ROWS = {
+  0: ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+  1: ["00100", "01100", "00100", "00100", "00100", "00100", "01110"]
+};
+
+// A path through POINTS ([x, y] pairs), closed
+function outline(C, POINTS) {
+  C.beginPath();
+  POINTS.forEach(([X, Y], AT) => (AT ? C.lineTo(X, Y) : C.moveTo(X, Y)));
+  C.closePath();
+}
+
+// A digit from BIT_ROWS in glowing green blocks
+function drawBit(C, ROWS) {
+  C.shadowColor = "rgba(0, 255, 136, 0.8)";
+  C.shadowBlur = 6;
+  C.fillStyle = "rgb(0, 255, 136)";
+  ROWS.forEach((ROW, Y) => [...ROW].forEach((ON, X) => {
+    if (ON === "1") C.fillRect(17 + X * 6, 11 + Y * 6, 5, 5);
+  }));
+}
+
 // How each drawn sprite looks (on a SPRITE_PX square, centered), how big it is next to a star its size (scale), and
-// whether it stays upright (a flame, a drop, or a bat only tilts a little) instead of turning with its star
+// whether it stays upright (a flame, a drop, or a bat only tilts a little) or level (a pixel or a digit doesn't turn at
+// all) instead of turning with its star
 const SPRITE_PX = 64;
 const SPRITE_KINDS = {
   // A soft round dot, in COLOR
@@ -459,14 +499,313 @@ const SPRITE_KINDS = {
     GLOW.addColorStop(1, "rgba(100, 20, 160, 0)");
     C.fillStyle = GLOW;
     C.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
-  } }
+  } },
+  // A maple leaf in COLOR, lighter at its top and darker at its base, with its veins and stem
+  maple: { scale: 1.9, draw(C, COLOR) {
+    outline(C, MAPLE_LEAF);
+    C.fillStyle = `rgb(${COLOR})`;
+    C.fill();
+    C.globalCompositeOperation = "source-atop";
+    const SHADE = C.createLinearGradient(0, 4, 0, 48);
+    SHADE.addColorStop(0, "rgba(255, 255, 255, 0.2)");
+    SHADE.addColorStop(1, "rgba(60, 20, 0, 0.35)");
+    C.fillStyle = SHADE;
+    C.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+    C.globalCompositeOperation = "source-over";
+    C.strokeStyle = "rgba(90, 30, 10, 0.5)";
+    C.lineWidth = 1.2;
+    C.beginPath();
+    for (const [X, Y] of [[32, 8], [54, 27], [10, 27], [44, 41], [20, 41]]) {
+      C.moveTo(32, 44);
+      C.lineTo(X, Y);
+    }
+    C.stroke();
+    C.strokeStyle = "rgb(110, 60, 25)";
+    C.lineWidth = 2;
+    C.lineCap = "round";
+    C.beginPath();
+    C.moveTo(32, 46);
+    C.lineTo(32, 58);
+    C.stroke();
+  } },
+  // An acorn: its brown cap and stem over a tan nut, with a shine
+  acorn: { scale: 1.3, upright: true, draw(C) {
+    const NUT = C.createLinearGradient(20, 28, 44, 58);
+    NUT.addColorStop(0, "#d99c58");
+    NUT.addColorStop(1, "#8a5426");
+    C.fillStyle = NUT;
+    C.beginPath();
+    C.ellipse(32, 40, 11, 15, 0, 0, Math.PI * 2);
+    C.fill();
+    C.fillStyle = "rgba(255, 240, 210, 0.35)";
+    C.beginPath();
+    C.ellipse(27, 41, 2.5, 6, 0.2, 0, Math.PI * 2);
+    C.fill();
+    C.fillStyle = "#6b4423";
+    C.beginPath();
+    C.moveTo(17, 31);
+    C.bezierCurveTo(17, 17, 47, 17, 47, 31);
+    C.quadraticCurveTo(32, 35, 17, 31);
+    C.fill();
+    C.strokeStyle = "rgba(40, 24, 10, 0.55)";
+    C.lineWidth = 1;
+    C.beginPath();
+    for (const X of [22, 27, 32, 37, 42]) {
+      C.moveTo(X - 2, 24);
+      C.lineTo(X + 2, 30);
+    }
+    C.stroke();
+    C.strokeStyle = "#5a3a1c";
+    C.lineWidth = 2.5;
+    C.lineCap = "round";
+    C.beginPath();
+    C.moveTo(32, 21);
+    C.quadraticCurveTo(33, 15, 36, 12);
+    C.stroke();
+  } },
+  // A pumpkin: orange ribs, a shine, and its green stem and leaf
+  pumpkin: { scale: 1.6, upright: true, draw(C) {
+    for (const [X, WIDTH, COLOR] of [[17, 11, "#c2410c"], [47, 11, "#c2410c"], [24, 12, "#e8661a"], [40, 12, "#e8661a"], [32, 12, "#ff8a2a"]]) {
+      C.fillStyle = COLOR;
+      C.beginPath();
+      C.ellipse(X, 40, WIDTH, 15, 0, 0, Math.PI * 2);
+      C.fill();
+    }
+    C.fillStyle = "rgba(255, 220, 160, 0.35)";
+    C.beginPath();
+    C.ellipse(28, 34, 3, 6, -0.3, 0, Math.PI * 2);
+    C.fill();
+    C.fillStyle = "#5b6b2a";
+    C.beginPath();
+    C.moveTo(30, 27);
+    C.lineTo(34, 27);
+    C.quadraticCurveTo(35, 20, 39, 17);
+    C.lineTo(37, 15);
+    C.quadraticCurveTo(31, 19, 30, 27);
+    C.fill();
+    C.fillStyle = "#6f8f2f";
+    C.beginPath();
+    C.ellipse(25, 22, 6, 3, -0.5, 0, Math.PI * 2);
+    C.fill();
+  } },
+  // A snowflake: six white arms with branches, edged in COLOR so it shows on a light page too
+  snowflake: { scale: 1.5, draw(C, COLOR) {
+    const ARMS = (STYLE, WIDTH) => {
+      C.strokeStyle = STYLE;
+      C.lineWidth = WIDTH;
+      C.lineCap = "round";
+      for (let ARM = 0; ARM < 6; ARM++) {
+        C.save();
+        C.translate(32, 32);
+        C.rotate((ARM * Math.PI) / 3);
+        C.beginPath();
+        C.moveTo(0, 0);
+        C.lineTo(0, -26);
+        for (const [ALONG, OUT] of [[10, 7], [18, 5]]) {
+          C.moveTo(0, -ALONG);
+          C.lineTo(-OUT, -ALONG - OUT);
+          C.moveTo(0, -ALONG);
+          C.lineTo(OUT, -ALONG - OUT);
+        }
+        C.stroke();
+        C.restore();
+      }
+    };
+    ARMS(`rgba(${COLOR}, 0.55)`, 5);
+    ARMS("rgba(255, 255, 255, 0.98)", 2.4);
+  } },
+  // A soft flake of snow: white, with an edge of COLOR
+  snow: { scale: 0.8, draw(C, COLOR) {
+    const GLOW = C.createRadialGradient(32, 32, 0, 32, 32, 30);
+    GLOW.addColorStop(0, "rgba(255, 255, 255, 1)");
+    GLOW.addColorStop(0.45, "rgba(255, 255, 255, 0.9)");
+    GLOW.addColorStop(0.62, `rgba(${COLOR}, 0.55)`);
+    GLOW.addColorStop(1, `rgba(${COLOR}, 0)`);
+    C.fillStyle = GLOW;
+    C.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+  } },
+  // An ornament in COLOR: a shiny ball with a gold band, cap, and hook
+  bauble: { scale: 1.3, upright: true, draw(C, COLOR) {
+    const BALL = C.createRadialGradient(26, 31, 1, 32, 38, 20);
+    BALL.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+    BALL.addColorStop(0.25, `rgb(${COLOR})`);
+    BALL.addColorStop(1, `rgb(${COLOR})`);
+    C.fillStyle = BALL;
+    C.beginPath();
+    C.arc(32, 38, 19, 0, Math.PI * 2);
+    C.fill();
+    C.globalCompositeOperation = "source-atop";
+    const SHADE = C.createRadialGradient(28, 33, 8, 32, 38, 22);
+    SHADE.addColorStop(0, "rgba(0, 0, 0, 0)");
+    SHADE.addColorStop(1, "rgba(0, 0, 0, 0.4)");
+    C.fillStyle = SHADE;
+    C.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
+    C.globalCompositeOperation = "source-over";
+    C.strokeStyle = "rgba(255, 236, 170, 0.75)";
+    C.lineWidth = 1.6;
+    C.beginPath();
+    C.ellipse(32, 38, 19, 5, 0, 0, Math.PI);
+    C.stroke();
+    const CAP = C.createLinearGradient(27, 0, 37, 0);
+    CAP.addColorStop(0, "#b8892a");
+    CAP.addColorStop(0.5, "#ffe08a");
+    CAP.addColorStop(1, "#b8892a");
+    C.fillStyle = CAP;
+    C.fillRect(27, 15, 10, 6);
+    C.strokeStyle = "#d9b44a";
+    C.lineWidth = 1.5;
+    C.beginPath();
+    C.arc(32, 12, 3.5, Math.PI * 0.9, Math.PI * 2.1);
+    C.stroke();
+  } },
+  // Holly: two spiky green leaves and three red berries
+  holly: { scale: 1.5, draw(C) {
+    for (const [X, Y, TURN] of [[30, 34, -2.6], [34, 34, -0.55]]) {
+      C.save();
+      C.translate(X, Y);
+      C.rotate(TURN);
+      outline(C, HOLLY_LEAF);
+      C.fillStyle = "#1d7a3c";
+      C.fill();
+      C.strokeStyle = "rgba(150, 230, 170, 0.6)";
+      C.lineWidth = 1;
+      C.beginPath();
+      C.moveTo(1, 0);
+      C.lineTo(25, 0);
+      C.stroke();
+      C.restore();
+    }
+    for (const [X, Y] of [[28, 38], [36, 38], [32, 32]]) {
+      const BERRY = C.createRadialGradient(X - 1.5, Y - 1.5, 0.5, X, Y, 5);
+      BERRY.addColorStop(0, "#ff8a8a");
+      BERRY.addColorStop(0.4, "#e01e2e");
+      BERRY.addColorStop(1, "#8a0a14");
+      C.fillStyle = BERRY;
+      C.beginPath();
+      C.arc(X, Y, 4.6, 0, Math.PI * 2);
+      C.fill();
+    }
+  } },
+  // A glowing gold star with five points
+  goldStar: { scale: 1.2, draw(C) {
+    C.beginPath();
+    for (let POINT = 0; POINT < 10; POINT++) {
+      const REACH = POINT % 2 ? 9 : 22;
+      const ANGLE = -Math.PI / 2 + (POINT * Math.PI) / 5;
+      C.lineTo(32 + REACH * Math.cos(ANGLE), 32 + REACH * Math.sin(ANGLE));
+    }
+    C.closePath();
+    C.shadowColor = "rgba(255, 210, 90, 0.9)";
+    C.shadowBlur = 8;
+    const FILL = C.createLinearGradient(0, 10, 0, 54);
+    FILL.addColorStop(0, "#fff1b0");
+    FILL.addColorStop(0.5, "#f2c14e");
+    FILL.addColorStop(1, "#c8901a");
+    C.fillStyle = FILL;
+    C.fill();
+  } },
+  // A candy cane: white, striped red
+  candyCane: { scale: 1.6, upright: true, draw(C) {
+    const CANE = () => {
+      C.beginPath();
+      C.moveTo(38, 56);
+      C.lineTo(38, 22);
+      C.arc(30, 22, 8, 0, Math.PI, true);
+      C.lineTo(22, 28);
+    };
+    C.lineCap = "round";
+    C.lineWidth = 7.5;
+    C.strokeStyle = "#fffaf0";
+    CANE();
+    C.stroke();
+    C.lineCap = "butt";
+    C.setLineDash([4.5, 4.5]);
+    C.strokeStyle = "#e01e2e";
+    CANE();
+    C.stroke();
+    C.setLineDash([]);
+  } },
+  // A flower in COLOR: five petals, white toward its middle, around a yellow center
+  blossom: { scale: 1.4, draw(C, COLOR) {
+    C.translate(32, 32);
+    for (let PETAL = 0; PETAL < 5; PETAL++) {
+      C.save();
+      C.rotate((PETAL * Math.PI * 2) / 5);
+      const FILL = C.createRadialGradient(0, -5, 1, 0, -12, 14);
+      FILL.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+      FILL.addColorStop(0.45, `rgb(${COLOR})`);
+      FILL.addColorStop(1, `rgb(${COLOR})`);
+      C.fillStyle = FILL;
+      C.beginPath();
+      C.ellipse(0, -13, 8.5, 13, 0, 0, Math.PI * 2);
+      C.fill();
+      C.strokeStyle = "rgba(150, 60, 110, 0.22)";
+      C.lineWidth = 1;
+      C.stroke();
+      C.restore();
+    }
+    C.fillStyle = "#ffd77a";
+    C.beginPath();
+    C.arc(0, 0, 5.5, 0, Math.PI * 2);
+    C.fill();
+  } },
+  // A petal in COLOR, paler toward its notched tip
+  petal: { scale: 1, draw(C, COLOR) {
+    C.beginPath();
+    C.moveTo(32, 54);
+    C.bezierCurveTo(14, 44, 16, 18, 28, 10);
+    C.lineTo(32, 15);
+    C.lineTo(36, 10);
+    C.bezierCurveTo(48, 18, 50, 44, 32, 54);
+    C.closePath();
+    const FILL = C.createLinearGradient(0, 54, 0, 10);
+    FILL.addColorStop(0, `rgb(${COLOR})`);
+    FILL.addColorStop(1, "rgb(255, 245, 250)");
+    C.fillStyle = FILL;
+    C.fill();
+    C.strokeStyle = "rgba(200, 90, 140, 0.35)";
+    C.lineWidth = 1.2;
+    C.stroke();
+  } },
+  // A heart in COLOR, with a shine at its top
+  heart: { scale: 1, upright: true, draw(C, COLOR) {
+    C.beginPath();
+    C.moveTo(32, 52);
+    C.bezierCurveTo(10, 38, 10, 16, 24, 16);
+    C.bezierCurveTo(29, 16, 32, 20, 32, 24);
+    C.bezierCurveTo(32, 20, 35, 16, 40, 16);
+    C.bezierCurveTo(54, 16, 54, 38, 32, 52);
+    C.closePath();
+    const FILL = C.createLinearGradient(0, 16, 0, 52);
+    FILL.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+    FILL.addColorStop(0.35, `rgb(${COLOR})`);
+    FILL.addColorStop(1, `rgb(${COLOR})`);
+    C.fillStyle = FILL;
+    C.fill();
+    C.strokeStyle = "rgba(200, 80, 140, 0.35)";
+    C.lineWidth = 1.2;
+    C.stroke();
+  } },
+  // A glowing square pixel in COLOR, its top edge lit
+  pixel: { scale: 0.7, level: true, draw(C, COLOR) {
+    C.shadowColor = `rgba(${COLOR}, 0.9)`;
+    C.shadowBlur = 10;
+    C.fillStyle = `rgb(${COLOR})`;
+    C.fillRect(20, 20, 24, 24);
+    C.shadowBlur = 0;
+    C.fillStyle = "rgba(255, 255, 255, 0.35)";
+    C.fillRect(20, 20, 24, 5);
+  } },
+  // A 0 and a 1, in green blocks
+  bit0: { scale: 1.5, level: true, draw(C) { drawBit(C, BIT_ROWS[0]); } },
+  bit1: { scale: 1.5, level: true, draw(C) { drawBit(C, BIT_ROWS[1]); } }
 };
 
 // Drawn sprites, by kind and color, so each is drawn once
 const DRAWN_SPRITES = new Map();
 
-// A sprite of KIND (with COLOR, for a dot), drawn on its own canvas: { image, scale, upright }, or null when this
-// browser has no canvas to draw it on
+// A sprite of KIND (with COLOR, for one drawn in a color), drawn on its own canvas: { image, scale, upright, level }, or
+// null when this browser has no canvas to draw it on
 function drawnSprite(KIND, COLOR) {
   const KEY = `${KIND}:${COLOR || ""}`;
   if (DRAWN_SPRITES.has(KEY)) return DRAWN_SPRITES.get(KEY);
@@ -477,7 +816,7 @@ function drawnSprite(KIND, COLOR) {
       : Object.assign(self.document.createElement("canvas"), { width: SPRITE_PX, height: SPRITE_PX });
     const KIND_LOOK = SPRITE_KINDS[KIND];
     KIND_LOOK.draw(CANVAS.getContext("2d"), COLOR);
-    SPRITE = { image: CANVAS, scale: KIND_LOOK.scale, upright: !!KIND_LOOK.upright };
+    SPRITE = { image: CANVAS, scale: KIND_LOOK.scale, upright: !!KIND_LOOK.upright, level: !!KIND_LOOK.level };
   } catch (ERROR) {
     console.warn("Could not draw a star sprite:", ERROR);
   }
@@ -503,13 +842,13 @@ S.useTheme = function useTheme(NAME, COLORS) {
 // The star image as a sprite, made once for each image (every star draws it, every frame)
 let STAR_SPRITE = null;
 
-// The sprite STAR draws as ({ image, scale, upright }), or null while the star image it needs is still loading
+// The sprite STAR draws as ({ image, scale, upright, level }), or null while the star image it needs is still loading
 function spriteFor(STAR) {
   if (typeof STAR.kind !== "number") STAR.kind = Math.random();          // Its own kind, kept as it moves (and saved)
   const SPRITE = S.sprites[Math.floor(STAR.kind * S.sprites.length) % S.sprites.length];
   if (SPRITE !== "star") return SPRITE;
   if (!STAR_SPRITES.ready) return null;
-  if (!STAR_SPRITE || STAR_SPRITE.image !== STAR_SPRITES.img) STAR_SPRITE = { image: STAR_SPRITES.img, scale: 1, upright: false };
+  if (!STAR_SPRITE || STAR_SPRITE.image !== STAR_SPRITES.img) STAR_SPRITE = { image: STAR_SPRITES.img, scale: 1, upright: false, level: false };
   return STAR_SPRITE;
 }
 
@@ -1317,6 +1656,7 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
   }
 
   /* GROUP: Stars */
+  const SHADE_COLOR = `rgb(${S.look.shade || "0, 0, 0"})`;               // What a dim star fades toward (the theme's)
   for (const STAR of S.starList) {                                        // Draw each star
 
     const SPRITE = spriteFor(STAR);                                       // The theme's sprite for this star
@@ -1342,12 +1682,12 @@ S.renderStarsAndLinks = function renderStarsAndLinks() {                  // Ins
 
     CONTEXT.translate(STAR_CENTER_X, STAR_CENTER_Y);                      // Move origin to star center
     const TURN = STAR.rotation || 0;                                      // Rotate sprite for variation
-    CONTEXT.rotate(SPRITE.upright ? (TURN - Math.PI) * 0.06 : TURN);      // (An upright one only tilts a little)
+    CONTEXT.rotate(SPRITE.level ? 0 : SPRITE.upright ? (TURN - Math.PI) * 0.06 : TURN); // (Upright: only tilts a little)
     CONTEXT.drawImage(SPRITE.image, -SPRITE_SIZE / 2, -SPRITE_SIZE / 2, SPRITE_SIZE, SPRITE_SIZE); // Draw sprite centered
 
     CONTEXT.globalCompositeOperation = "source-atop";                     // Restrict overlay to sprite pixels
     CONTEXT.globalAlpha = STAR.opacity * DARKNESS;                        // Alpha for darkness overlay
-    CONTEXT.fillStyle = "rgba(0, 0, 0, 1)";                               // Black overlay
+    CONTEXT.fillStyle = SHADE_COLOR;                                      // Black, or a light page's shade
     CONTEXT.beginPath();                                                  // Begin overlay circle
     CONTEXT.arc(0, 0, OVERLAY_RADIUS, 0, Math.PI * 2);                    // Circle at center
     CONTEXT.fill();                                                       // Fill overlay

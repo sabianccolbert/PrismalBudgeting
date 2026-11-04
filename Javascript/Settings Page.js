@@ -39,6 +39,11 @@ const THEME_INFO = [
   { key: "elements", name: "Elements", about: "Fire, water, air, and earth" },
   { key: "poison", name: "Poison", about: "Purple and green" },
   { key: "blue", name: "Blue", about: "A medium blue" },
+  { key: "fall", name: "Fall", about: "Pumpkins and falling leaves" },
+  { key: "winter", name: "Winter", about: "Whites, blues, and snow" },
+  { key: "festive", name: "Festive", about: "Red, green, gold, and lights" },
+  { key: "floral", name: "Floral", about: "Pastel flowers" },
+  { key: "digital", name: "Digital", about: "Blocky, black and green" },
   { key: "custom", name: "Custom", about: "Your own" }
 ];
 const CUSTOM_COLORS = [
@@ -50,8 +55,9 @@ const CUSTOM_COLORS = [
 ];
 const CUSTOM_PARTS = [
   { part: "corners", label: "Corners", options: [["theme", "The theme's"], ["small", "Small"], ["sharp", "Sharp"]] },
-  { part: "font", label: "Font", options: [["theme", "The theme's"], ["prismal", "Prismal's"], ["plain", "Plain"], ["sharp", "Sharp"]] },
-  { part: "stars", label: "Stars", options: [["theme", "The theme's"], ["stars", "Stars"], ["dots", "Dots"], ["embers", "Embers and bats"], ["elements", "Elements"], ["bubbles", "Bubbles"]] },
+  { part: "font", label: "Font", options: [["theme", "The theme's"], ["prismal", "Prismal's"], ["plain", "Plain"], ["sharp", "Sharp"], ["rounded", "Rounded"], ["digital", "Digital"]] },
+  { part: "stars", label: "Stars", options: [["theme", "The theme's"], ["stars", "Stars"], ["dots", "Dots"], ["embers", "Embers and bats"], ["elements", "Elements"], ["bubbles", "Bubbles"],
+    ["leaves", "Leaves"], ["snow", "Snow"], ["ornaments", "Ornaments"], ["flowers", "Flowers"], ["pixels", "Pixels"]] },
   { part: "icons", label: "Icons", options: [["theme", "The theme's"], ["gray", "Gray"], ["glowing", "Glowing"]] }
 ];
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";

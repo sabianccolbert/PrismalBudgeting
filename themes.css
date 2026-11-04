@@ -8,6 +8,7 @@
  *  colors written out where they're used. The starfield's stars and colors are in Active Starfield.js (THEME_LOOKS).
  *  The login page, the front page, and the pages for anyone (How It Works, the Privacy Policy) keep Prismal's look.
  *
+ *   0) WHAT EVERY THEME STARTS FROM (New Entry's ring in the theme's own colors)
  *   1) PROFESSIONAL AND DARK (what they share: a plain font, smaller corners, no glows)
  *   2) PROFESSIONAL (light)
  *   3) DARK
@@ -15,10 +16,45 @@
  *   5) ELEMENTS (fire, water, air, and earth; matte)
  *   6) POISON (dark, purple and green)
  *   7) BLUE (a medium blue)
- *   8) CUSTOM (the person's own: one of the others, with their colors and choices)
- *   9) WHAT EVERY THEME CHANGES THE SAME WAY
- *  10) THE THEME PICKER AND THE CUSTOM WINDOW (Settings)
+ *   8) FALL (pumpkin orange, maple red, and gold on warm brown)
+ *   9) WINTER (light: white frost, icy blues, and snow)
+ *  10) FESTIVE (pine green, cranberry red, and gold, with lights)
+ *  11) FLORAL (light: pastel pink, lavender, and mint, with flowers)
+ *  12) DIGITAL (blocky: square corners, a terminal's font, black with green)
+ *  13) LIGHT CARDS (what Professional, Winter, Floral, and a Custom theme with light cards share)
+ *  14) CUSTOM (the person's own: one of the others, with their colors and choices)
+ *  15) WHAT EVERY THEME CHANGES THE SAME WAY
+ *  16) THE THEME PICKER AND THE CUSTOM WINDOW (Settings)
+ *
+ *  ADDING A THEME (everything a new one needs):
+ *   - Boot.js (3b THEME): its name in THEMES (before "custom"), its five colors in THEME_PALETTES (the first is also
+ *     the browser's color around the page, like a phone's status bar), and, for dark words on light cards, its name
+ *     in LIGHT_THEMES (so region 13 applies, and Custom works out light cards' colors from it).
+ *   - Here: its region, after the last theme's. Set every token in stylesheet.css section 1 and budgetStyle.css's
+ *     :root (copy the theme most like it: a dark one from Fall, a light one from Winter), html's background-color (all
+ *     that shows when the device asks for less motion and the starfield is hidden), #constellations' background, the
+ *     icons' filter (starting with brightness(var(--ICON_LIFT, 1)), so dark icons are lifted first), Logout's color,
+ *     Lowest's wave (or add it to region 15's list of plain ones), and New Entry's ring (--RING_FILL, in region 0's
+ *     shape). Sharp or square corners keep New Entry round (region 15) unless the theme shapes it too, as Digital does.
+ *     Its swatch goes in region 16, and its name in this list.
+ *   - Active Starfield.js: its look in THEME_LOOKS (its sprites, from SPRITE_KINDS or new ones drawn there, the colors
+ *     of the lines between stars, the pointer's ring, and the paddles, and for a light page, the color stars fade
+ *     toward instead of black).
+ *   - Settings Page.js: its name and a few words in THEME_INFO (before Custom). New stars or a new font can be offered
+ *     to Custom too: CUSTOM_PARTS there, and CUSTOM_CHOICES, CUSTOM_STARS, and CUSTOM_FONTS in Boot.js.
+ *   - How It Works: the Themes section, the list in Things Every Page Shares, the Theme glossary entry, the FAQ (in the
+ *     JSON-LD at the top and on the page), and prismal_theme's values; and llms.txt and stylesheet.css's header.
+ *   - Look at it on every page and window, at a phone's width and a computer's, and in Safari.
  *==============================================================*/
+
+
+/* #region 0) WHAT EVERY THEME STARTS FROM */
+/* New Entry's ring: the theme's glow colors (budgetStyle.css --RING_FILL, unless the theme gives its own), in the shape
+   of Prismal's ring picture (region 15), and the chosen color while it's hovered */
+html:is([data-theme], .customTheme) {
+  --RING_HOVER_FILL: conic-gradient(from 200deg, rgb(var(--PICK_RGB)), var(--PICK_EDGE), rgb(var(--PICK_RGB)));
+}
+/* #endregion 0) WHAT EVERY THEME STARTS FROM */
 
 
 /* #region 1) PROFESSIONAL AND DARK */
@@ -69,7 +105,7 @@ html[data-theme="professional"] {
   --LINK_DARK: #1e3a8a;
   --BASE_COLOR: #334155;
   --TEXT_BRIGHT: #0f172a;
-  --TEXT_DIM: #64748b;
+  --TEXT_DIM: #526075;
 
   --NEON_BLUE: #2563eb;
   --NEON_VIOLET: #7c3aed;
@@ -125,10 +161,11 @@ html[data-theme="professional"] {
   --PANEL_DARK: #f8fafc;
   --PANEL_LINE: rgba(15, 23, 42, 0.08);
   --PANEL_BORDER: rgba(15, 23, 42, 0.14);
-  --NEGATIVE_TEXT: #dc2626;
-  --POSITIVE_TEXT: #059669;
+  --NEGATIVE_TEXT: #b91c1c;
+  --POSITIVE_TEXT: #047857;
   --ZERO_TEXT: #94a3b8;
-  --PLACEHOLDER_TEXT: #b45309;
+  --PLACEHOLDER_TEXT: #9a4708;
+  --RING_FILL: conic-gradient(from 200deg, #dbeafe, #ffffff, #bfdbfe, #ffffff, #dbeafe);
 }
 
 html[data-theme="professional"] #constellations {
@@ -149,40 +186,7 @@ html[data-theme="professional"] .logoutButton span {
   color: #be185d;
 }
 
-/* What's written out light for a dark page, darker here */
-html[data-theme="professional"] .goalItem.isReached .goalStatus {
-  color: var(--POSITIVE_TEXT);
-}
-
-html[data-theme="professional"] .goalItem.isDanger .goalStatus {
-  color: #c2410c;
-}
-
-html[data-theme="professional"] .logsTable tr.errorRow td {
-  background: #fee2e2;
-}
-
-html[data-theme="professional"] .logsTable tr.notFoundRow td {
-  background: #ffedd5;
-}
-
-html[data-theme="professional"] :is(.sheetProblems, .recurringProblems) {
-  background: #fef2f2;
-  border-color: rgba(220, 38, 38, 0.4);
-}
-
-html[data-theme="professional"] .calendarScheduleDay.isToday {
-  border-color: #0891b2;
-  box-shadow: 0 0 0 1px rgba(8, 145, 178, 0.35);
-}
-
-html[data-theme="professional"] .calendarPaycheckStatus.isUpcoming {
-  color: #0891b2;
-}
-
-html[data-theme="professional"] .newEntryPrism {
-  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.18);
-}
+/* (What every light theme shares, like darker shades of what's written out light for a dark page: region 13) */
 /* #endregion 2) PROFESSIONAL */
 
 
@@ -214,7 +218,7 @@ html[data-theme="dark"] {
   --GLOW_FILL: linear-gradient(rgba(56, 139, 253, 0.14), rgba(56, 139, 253, 0.14));
   --GLOW_EDGE: #388bfd;
   --GLOW_SHADOW: 0 0 0 1px rgba(56, 139, 253, 0.35);
-  --RECOMMENDED_FILL: linear-gradient(#1f6feb, #1f6feb);
+  --RECOMMENDED_FILL: linear-gradient(#1a63d6, #1a63d6);
   --PRIMARY_TEXT: #ffffff;
   --DARK_BUTTON: #161b22;
   --DANGER_TEXT: #ff7b72;
@@ -254,6 +258,7 @@ html[data-theme="dark"] {
   --POSITIVE_TEXT: #3fb950;
   --ZERO_TEXT: #6e7681;
   --PLACEHOLDER_TEXT: #d29922;
+  --RING_FILL: conic-gradient(from 200deg, #1f6feb, #79c0ff, #388bfd, #1f6feb);
 }
 
 html[data-theme="dark"] #constellations {
@@ -341,9 +346,11 @@ html[data-theme="spooky"] {
   --PANEL_LINE: rgba(200, 30, 40, 0.18);
   --PANEL_BORDER: rgba(230, 50, 60, 0.4);
   --NEGATIVE_TEXT: #ff4d4d;
+  --NEGATIVE_ON_RED: #ff9a9a;
   --POSITIVE_TEXT: #b9d98c;
   --ZERO_TEXT: #7a6464;
   --PLACEHOLDER_TEXT: #ff9a3c;
+  --RING_FILL: conic-gradient(from 200deg, #8b0000, #ff2a2a, #ff7a1a, #ff2a2a, #8b0000);
 }
 
 /* A moon at the top right, and red mist rising from the bottom */
@@ -399,7 +406,7 @@ html[data-theme="elements"] {
   --LINK_DARK: #6b2e17;
   --BASE_COLOR: #e2d9cc;
   --TEXT_BRIGHT: #f6f0e7;
-  --TEXT_DIM: #a89f92;
+  --TEXT_DIM: #b8afa2;
 
   --NEON_BLUE: #3a87a8;
   --NEON_VIOLET: #7d8b45;
@@ -417,7 +424,7 @@ html[data-theme="elements"] {
   --GLOW_FILL: linear-gradient(rgba(58, 135, 168, 0.3), rgba(58, 135, 168, 0.3));
   --GLOW_EDGE: #6fa9c0;
   --GLOW_SHADOW: 0 0 0 1px rgba(58, 135, 168, 0.55);
-  --RECOMMENDED_FILL: linear-gradient(90deg, #b5532f, #c9773e);
+  --RECOMMENDED_FILL: linear-gradient(90deg, #9a4526, #a85f2c);
   --PRIMARY_TEXT: #fff8ef;
   --DARK_BUTTON: rgba(30, 27, 24, 0.95);
   --DANGER_TEXT: #e7a08a;
@@ -453,9 +460,11 @@ html[data-theme="elements"] {
   --PANEL_LINE: rgba(226, 217, 204, 0.1);
   --PANEL_BORDER: rgba(226, 217, 204, 0.22);
   --NEGATIVE_TEXT: #ec8f72;
+  --NEGATIVE_ON_RED: #f7c0ab;
   --POSITIVE_TEXT: #a8c47a;
   --ZERO_TEXT: #8a8277;
   --PLACEHOLDER_TEXT: #e7c26a;
+  --RING_FILL: conic-gradient(from 225deg, #d0643b, #e0a24f, #3a87a8, #a7c4cf, #7d8b45, #d0643b);
 }
 
 /* The four elements in the corners (fire, water, earth, air), under a fine grain */
@@ -489,8 +498,10 @@ html[data-theme="elements"] .logoutButton span {
   color: #e8865c;
 }
 
-html[data-theme="elements"] .newEntryPrism {
-  filter: saturate(0.6) sepia(0.2);
+/* New Entry is matte too: no glow around it, hovered or not */
+html[data-theme="elements"] .newEntryPrism::before,
+html[data-theme="elements"] .newEntryButton:is(:hover, :focus-visible) .newEntryPrism::before {
+  box-shadow: none;
 }
 /* #endregion 5) ELEMENTS */
 
@@ -556,9 +567,11 @@ html[data-theme="poison"] {
   --PANEL_LINE: rgba(150, 90, 220, 0.18);
   --PANEL_BORDER: rgba(170, 120, 240, 0.38);
   --NEGATIVE_TEXT: #ff6b9a;
+  --NEGATIVE_ON_RED: #ffa3c2;
   --POSITIVE_TEXT: #7dff5a;
   --ZERO_TEXT: #7a6f8c;
   --PLACEHOLDER_TEXT: #e8ff5a;
+  --RING_FILL: conic-gradient(from 200deg, #8f4dff, #39ff14, #b04dff, #7dff5a, #8f4dff);
 }
 
 html[data-theme="poison"] #constellations {
@@ -605,7 +618,7 @@ html[data-theme="blue"] {
   --LINK_DARK: #7a5a00;
   --BASE_COLOR: #e3eeff;
   --TEXT_BRIGHT: #ffffff;
-  --TEXT_DIM: #b7cbea;
+  --TEXT_DIM: #e4edfb;
 
   --NEON_BLUE: #7cc4ff;
   --NEON_VIOLET: #a5b8ff;
@@ -619,13 +632,14 @@ html[data-theme="blue"] {
   --GLASS_LINE_BRIGHT: rgba(220, 235, 255, 0.55);
   --GLASS_SHADOW: 0 10px 26px rgba(6, 22, 52, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 
-  --GLOW_FILL: radial-gradient(ellipse at center, rgba(160, 215, 255, 0.5) 0%, rgba(110, 180, 255, 0.28) 45%, rgba(60, 130, 230, 0.12) 75%, rgba(40, 100, 200, 0.05) 100%);
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(160, 215, 255, 0.3) 0%, rgba(110, 180, 255, 0.2) 45%, rgba(60, 130, 230, 0.1) 75%, rgba(40, 100, 200, 0.04) 100%);
   --GLOW_EDGE: rgba(215, 238, 255, 0.95);
   --GLOW_SHADOW: 0 0 16px rgba(150, 210, 255, 0.55), inset 0 0 12px rgba(150, 210, 255, 0.25);
-  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(40, 140, 230, 0.85), rgba(80, 175, 255, 0.85));
+  /* (A deeper blue than the cards, so a recommended button's white words stand out on it) */
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(10, 80, 170, 0.95), rgba(24, 106, 200, 0.95));
   --DARK_BUTTON: rgba(14, 38, 80, 0.9);
   --DANGER_TEXT: #ffb3bd;
-  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 210, 90, 0.42) 0%, rgba(255, 170, 30, 0.22) 50%, rgba(160, 100, 0, 0.08) 85%, transparent 100%);
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 210, 90, 0.3) 0%, rgba(255, 170, 30, 0.22) 50%, rgba(160, 100, 0, 0.08) 85%, transparent 100%);
   --PLACEHOLDER_COLOR: rgba(200, 220, 245, 0.55);
   --EDGE_GRADIENT: linear-gradient(135deg, #ffb703 0%, #ffd166 55%, #fff3b0 100%);
   --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 90, 162, 0.98) 0%, rgba(30, 72, 138, 0.98) 50%, rgba(22, 58, 116, 0.98) 100%);
@@ -657,18 +671,20 @@ html[data-theme="blue"] {
   --PANEL_DARK: rgba(10, 32, 70, 0.62);
   --PANEL_LINE: rgba(200, 225, 255, 0.18);
   --PANEL_BORDER: rgba(215, 235, 255, 0.4);
-  --NEGATIVE_TEXT: #ffa3b1;
+  --NEGATIVE_TEXT: #ffb3bf;
+  --NEGATIVE_ON_RED: #ffc4cf;
   --POSITIVE_TEXT: #8ff0b4;
   --ZERO_TEXT: #9fb3d1;
   --PLACEHOLDER_TEXT: #ffe066;
+  --RING_FILL: conic-gradient(from 200deg, #9be7ff, #ffffff, #7cc4ff, #ffd166, #9be7ff);
 }
 
 html[data-theme="blue"] #constellations {
   background-color: #2457a0;
   background-image:
-    radial-gradient(ellipse at 15% 0%, rgba(140, 200, 255, 0.35), transparent 55%),
+    radial-gradient(ellipse at 15% 0%, rgba(140, 200, 255, 0.15), transparent 55%),
     radial-gradient(ellipse at 100% 100%, rgba(10, 40, 100, 0.55), transparent 60%),
-    linear-gradient(180deg, #2b62ad, #1d4987);
+    linear-gradient(180deg, #23579e, #1b4580);
 }
 
 /* Icons: white, with a pale glow */
@@ -688,7 +704,611 @@ html[data-theme="blue"] .lowestCard {
 /* #endregion 7) BLUE */
 
 
-/* #region 8) CUSTOM */
+/* #region 8) FALL */
+/* An autumn evening: warm brown glass, cream words, a pumpkin orange glow, maple red for what's chosen, gold, a sunset
+   rising from the bottom over a pumpkin patch, warm orange icons, and falling leaves, acorns, and pumpkins for stars */
+html[data-theme="fall"] {
+  background-color: #1a0f08;
+
+  --SHADOW: 0 0 20px rgba(232, 67, 46, 1);
+  --PICK_SHADOW: 0 0 16px rgba(232, 67, 46, 0.75);
+  --HOVER_SHADOW: 0 0 12px rgba(255, 138, 42, 0.55);
+
+  --LINK_LIGHT: #ffa24c;
+  --LINK_DARK: #7a3a0e;
+  --BASE_COLOR: #ecd9c6;
+  --TEXT_BRIGHT: #fff3e4;
+  --TEXT_DIM: #c9ab90;
+
+  --NEON_BLUE: #ff8a2a;
+  --NEON_VIOLET: #c2410c;
+  --NEON_CYAN: #ffc65c;
+  --NEON_PINK: #e8432e;
+  --TITLE_GLOW: 0 0 14px rgba(255, 138, 42, 0.4);
+
+  --GLASS: linear-gradient(180deg, rgba(58, 32, 16, 0.86), rgba(34, 18, 9, 0.9));
+  --GLASS_BUTTON: rgba(62, 34, 16, 0.8);
+  --GLASS_LINE: rgba(255, 160, 80, 0.24);
+  --GLASS_LINE_BRIGHT: rgba(255, 180, 100, 0.48);
+  --GLASS_SHADOW: 0 10px 28px rgba(10, 4, 0, 0.55), inset 0 1px 0 rgba(255, 220, 170, 0.07);
+
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 150, 50, 0.45) 0%, rgba(230, 100, 20, 0.26) 45%, rgba(140, 50, 10, 0.12) 75%, rgba(70, 25, 5, 0.05) 100%);
+  --GLOW_EDGE: rgba(255, 178, 92, 0.92);
+  --GLOW_SHADOW: 0 0 16px rgba(255, 138, 42, 0.5), inset 0 0 12px rgba(255, 138, 42, 0.22);
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(168, 52, 10, 0.92), rgba(206, 86, 16, 0.92));
+  --PRIMARY_TEXT: #fff8ee;
+  --DARK_BUTTON: rgba(22, 11, 5, 0.9);
+  --DANGER_TEXT: #f0a58c;
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 110, 70, 0.42) 0%, rgba(220, 50, 30, 0.22) 50%, rgba(120, 20, 10, 0.08) 85%, transparent 100%);
+  --EDGE_GRADIENT: linear-gradient(135deg, #8c1c13 0%, #e8432e 55%, #ff8a3d 100%);
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(74, 38, 16, 0.98) 0%, rgba(50, 26, 12, 0.98) 50%, rgba(32, 16, 8, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(8, 3, 0, 0.75), 0 0 26px rgba(255, 138, 42, 0.22);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(92, 48, 20, 0.6) 0%, rgba(92, 48, 20, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(72, 38, 16), rgb(30, 15, 7));
+  --DAY_EDGE: rgba(255, 160, 80, 0.2);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(150, 20, 24, 0.72) 0%, rgba(150, 20, 24, 0) 50%);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(130, 18, 22), rgb(50, 6, 8));
+  --NEGATIVE_DAY_EDGE: rgba(255, 90, 80, 0.75);
+
+  --GLOW_RGB: 255, 138, 42;
+  --GLOW_LIGHT_RGB: 255, 190, 120;
+  --PICK_RGB: 232, 67, 46;
+  --WELL_RGB: 26, 13, 6;
+  --YELLOW_RGB: 255, 200, 60;
+  --PICK_EDGE: #ff6a3d;
+  --LIST_FILL: rgb(44, 23, 11);
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(255, 138, 42, 0.7) 25%, rgba(232, 67, 46, 0.6) 75%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #e8432e, #ff8a2a, #ffc65c);
+  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(255, 138, 42, 0.32), rgba(30, 15, 7, 0.92));
+
+  --PANEL_DEEP: rgba(96, 46, 16, 0.7);
+  --PANEL_SOFT: rgba(64, 32, 14, 0.35);
+  --PANEL_DARK: rgba(24, 12, 5, 0.62);
+  --PANEL_LINE: rgba(255, 160, 80, 0.16);
+  --PANEL_BORDER: rgba(255, 180, 100, 0.36);
+  --NEGATIVE_TEXT: #ff7b6b;
+  --NEGATIVE_ON_RED: #ffb0a5;
+  --POSITIVE_TEXT: #a9dc76;
+  --ZERO_TEXT: #8f7563;
+  --PLACEHOLDER_TEXT: #ffd45c;
+  --RING_FILL: conic-gradient(from 200deg, #e8432e, #ff8a2a, #ffc65c, #b4561c, #e8432e);
+}
+
+/* A sunset glow rising from the bottom, over a dark hill with pumpkins on it */
+html[data-theme="fall"] #constellations {
+  background-color: #1a0f08;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='120' viewBox='0 0 600 120'><path d='M0 84 C 90 66, 170 98, 300 80 S 500 64, 600 84 L 600 120 L 0 120 Z' fill='rgb(30, 16, 8)'/><g transform='translate(118 84)'><ellipse cx='-7' rx='9' ry='8' fill='rgb(170, 70, 18)'/><ellipse cx='7' rx='9' ry='8' fill='rgb(170, 70, 18)'/><ellipse rx='8' ry='8.5' fill='rgb(206, 96, 26)'/><path d='M0 -8 q 1 -5 4 -6' stroke='rgb(86, 96, 44)' stroke-width='2' fill='none'/></g><g transform='translate(410 74) scale(1.3)'><ellipse cx='-7' rx='9' ry='8' fill='rgb(170, 70, 18)'/><ellipse cx='7' rx='9' ry='8' fill='rgb(170, 70, 18)'/><ellipse rx='8' ry='8.5' fill='rgb(206, 96, 26)'/><path d='M0 -8 q 1 -5 4 -6' stroke='rgb(86, 96, 44)' stroke-width='2' fill='none'/></g><g transform='translate(452 80) scale(0.75)'><ellipse cx='-7' rx='9' ry='8' fill='rgb(160, 64, 16)'/><ellipse cx='7' rx='9' ry='8' fill='rgb(160, 64, 16)'/><ellipse rx='8' ry='8.5' fill='rgb(196, 88, 24)'/><path d='M0 -8 q 1 -5 4 -6' stroke='rgb(86, 96, 44)' stroke-width='2' fill='none'/></g></svg>"),
+    radial-gradient(ellipse at 50% 120%, rgba(255, 120, 30, 0.42), transparent 60%),
+    radial-gradient(ellipse at 88% 0%, rgba(232, 67, 46, 0.24), transparent 50%),
+    radial-gradient(ellipse at 0% 8%, rgba(255, 190, 90, 0.14), transparent 45%),
+    linear-gradient(180deg, #24130a, #140a05);
+  background-size: 600px 120px, cover, cover, cover, cover;
+  background-position: bottom, center, center, center, center;
+  background-repeat: repeat-x, no-repeat, no-repeat, no-repeat, no-repeat;
+}
+
+html[data-theme="fall"] header .brand-icon {
+  filter: drop-shadow(0 0 10px rgba(255, 138, 42, 0.45));
+}
+
+/* Icons: warm orange, glowing */
+html[data-theme="fall"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) sepia(1) saturate(3.5) hue-rotate(-15deg) brightness(1.05) drop-shadow(0 0 5px rgba(255, 138, 42, 0.45)) !important;
+}
+
+html[data-theme="fall"] .logoutButton span {
+  color: #ffa24c;
+}
+
+html[data-theme="fall"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(255, 138, 42, 0.16)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(232, 67, 46, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 8) FALL */
+
+
+/* #region 9) WINTER */
+/* A snowy day, light: white frosted cards with icy blue edges on a pale blue sky, navy words, an icy blue glow,
+   sapphire for what's chosen, snow drifts at the bottom, navy icons, and snowflakes for stars */
+html[data-theme="winter"] {
+  color-scheme: light;
+  background-color: #e3effb;
+
+  --SHADOW: 0 0 14px rgba(39, 71, 201, 0.45);
+  --PICK_SHADOW: 0 0 0 2px rgba(39, 71, 201, 0.3), 0 0 12px rgba(39, 71, 201, 0.25);
+  --HOVER_SHADOW: 0 2px 10px rgba(20, 60, 110, 0.14), 0 0 10px rgba(58, 155, 224, 0.35);
+
+  --LINK_LIGHT: #1d5fbf;
+  --LINK_DARK: #0b3270;
+  --BASE_COLOR: #23405f;
+  --TEXT_BRIGHT: #0c2440;
+  --TEXT_DIM: #456582;
+
+  --NEON_BLUE: #2f86d6;
+  --NEON_VIOLET: #5b6fd8;
+  --NEON_CYAN: #0b7fb0;
+  --NEON_PINK: #7aa7e6;
+  --TITLE_GLOW: none;
+
+  --GLASS: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(241, 248, 255, 0.92));
+  --GLASS_BUTTON: rgba(255, 255, 255, 0.86);
+  --GLASS_LINE: rgba(64, 130, 200, 0.24);
+  --GLASS_LINE_BRIGHT: rgba(64, 130, 200, 0.45);
+  --GLASS_SHADOW: 0 1px 2px rgba(20, 60, 110, 0.08), 0 8px 22px rgba(20, 60, 110, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(120, 190, 255, 0.22) 0%, rgba(120, 190, 255, 0.16) 55%, rgba(120, 190, 255, 0.04) 100%);
+  --GLOW_EDGE: #3a9be0;
+  --GLOW_SHADOW: 0 0 0 1px rgba(58, 155, 224, 0.25), 0 0 14px rgba(58, 155, 224, 0.3);
+  --RECOMMENDED_FILL: linear-gradient(90deg, #15579c, #1d6cb8);
+  --PRIMARY_TEXT: #ffffff;
+  --DARK_BUTTON: #e8f1fa;
+  --DANGER_TEXT: #b91c1c;
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(39, 71, 201, 0.16) 0%, rgba(39, 71, 201, 0.08) 60%, transparent 100%);
+  --PLACEHOLDER_COLOR: rgba(90, 120, 150, 0.6);
+  --EDGE_GRADIENT: linear-gradient(135deg, #1e3a8a, #2747c9 55%, #5b8def);
+  --HOVER_GRADIENT: linear-gradient(170deg, rgba(255, 255, 255, 0.98), rgba(236, 245, 255, 0.98));
+  --FLOAT_SHADOW: 0 16px 40px rgba(20, 60, 110, 0.22), 0 0 0 1px rgba(64, 130, 200, 0.12);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(240, 247, 255, 0.85));
+  --DAY_SOLID: linear-gradient(180deg, #ffffff, #eef6ff);
+  --DAY_EDGE: rgba(64, 130, 200, 0.22);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, #fde4e4, #fff3f3);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, #fde4e4, #fff3f3);
+  --NEGATIVE_DAY_EDGE: rgba(220, 38, 38, 0.5);
+  --NEGATIVE_GLOW_FILL: linear-gradient(rgba(220, 38, 38, 0.1), rgba(220, 38, 38, 0.1));
+
+  --GLOW_RGB: 58, 155, 224;
+  --GLOW_LIGHT_RGB: 140, 200, 245;
+  --PICK_RGB: 39, 71, 201;
+  --SHADE_RGB: 20, 50, 90;
+  --HALO_RGB: 255, 255, 255;
+  --WELL_RGB: 255, 255, 255;
+  --INSET_RGB: 200, 220, 240;
+  --TINT_RGB: 12, 36, 64;
+  --YELLOW_RGB: 202, 138, 4;
+  --BOX_FILL: #ffffff;
+  --PICK_EDGE: #2747c9;
+  --LIST_FILL: #ffffff;
+  --TEXT_HOT: #0c2440;
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(58, 155, 224, 0.5) 25%, rgba(140, 200, 245, 0.6) 75%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #2f86d6, #7cc4f5);
+  --TILE_FILL: linear-gradient(180deg, #f2f8ff, #e2effb);
+
+  --PANEL_DEEP: #e6f0fb;
+  --PANEL_SOFT: rgba(64, 130, 200, 0.05);
+  --PANEL_DARK: #f5f9fe;
+  --PANEL_LINE: rgba(64, 130, 200, 0.14);
+  --PANEL_BORDER: rgba(64, 130, 200, 0.28);
+  --NEGATIVE_TEXT: #b42020;
+  --POSITIVE_TEXT: #0b7350;
+  --ZERO_TEXT: #8aa0b8;
+  --PLACEHOLDER_TEXT: #9a4708;
+  --RING_FILL: conic-gradient(from 200deg, #ffffff, #cfe9ff, #ffffff, #9fd4ff, #ffffff);
+}
+
+/* A pale winter sky, a low sun at the top left, and snow drifts along the bottom */
+html[data-theme="winter"] #constellations {
+  background-color: #e3effb;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 80' preserveAspectRatio='none'><path d='M0 34 C 60 16, 120 46, 200 30 S 330 14, 400 32 L 400 80 L 0 80 Z' fill='rgb(226, 238, 252)'/><path d='M0 52 C 80 36, 150 62, 240 46 S 350 36, 400 48 L 400 80 L 0 80 Z' fill='rgb(250, 252, 255)' stroke='rgba(120, 170, 220, 0.35)' stroke-width='1.2'/></svg>"),
+    radial-gradient(circle at 18% 6%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 32%),
+    linear-gradient(180deg, #b6d4f0 0%, #d8e9f9 55%, #f2f8ff 100%);
+  background-size: 100% 18vh, cover, cover;
+  background-position: bottom, center, center;
+  background-repeat: no-repeat;
+}
+
+/* Icons: navy */
+html[data-theme="winter"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) grayscale(1) brightness(0.35) sepia(1) saturate(4) hue-rotate(175deg) brightness(1.1) !important;
+}
+
+html[data-theme="winter"] .logoutButton span {
+  color: #c2185b;
+}
+
+html[data-theme="winter"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(140, 200, 245, 0.22)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(58, 155, 224, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 9) WINTER */
+
+
+/* #region 10) FESTIVE */
+/* The holidays: deep pine green glass with gold edges, warm white words, a gold glow, cranberry red buttons and what's
+   chosen, a string of lights along the top and snow along the bottom, gold icons, and ornaments, holly, snowflakes,
+   gold stars, and candy canes for stars */
+html[data-theme="festive"] {
+  background-color: #06190f;
+
+  --SHADOW: 0 0 20px rgba(230, 57, 70, 1);
+  --PICK_SHADOW: 0 0 16px rgba(230, 57, 70, 0.75);
+  --HOVER_SHADOW: 0 0 12px rgba(242, 193, 78, 0.55);
+
+  --LINK_LIGHT: #f2c14e;
+  --LINK_DARK: #7a5a10;
+  --BASE_COLOR: #e8e1cf;
+  --TEXT_BRIGHT: #fffaf0;
+  --TEXT_DIM: #cfc8b0;
+
+  --NEON_BLUE: #f2c14e;
+  --NEON_VIOLET: #c81d25;
+  --NEON_CYAN: #6fd08c;
+  --NEON_PINK: #ff5d6c;
+  --TITLE_GLOW: 0 0 14px rgba(242, 193, 78, 0.4);
+
+  --GLASS: linear-gradient(180deg, rgba(16, 58, 36, 0.86), rgba(8, 34, 20, 0.9));
+  --GLASS_BUTTON: rgba(14, 52, 32, 0.8);
+  --GLASS_LINE: rgba(242, 193, 78, 0.26);
+  --GLASS_LINE_BRIGHT: rgba(242, 205, 110, 0.5);
+  --GLASS_SHADOW: 0 10px 28px rgba(0, 8, 3, 0.55), inset 0 1px 0 rgba(255, 240, 200, 0.07);
+
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 214, 120, 0.38) 0%, rgba(242, 170, 60, 0.2) 45%, rgba(150, 100, 20, 0.1) 75%, rgba(80, 50, 10, 0.04) 100%);
+  --GLOW_EDGE: rgba(246, 206, 110, 0.95);
+  --GLOW_SHADOW: 0 0 16px rgba(242, 193, 78, 0.5), inset 0 0 12px rgba(242, 193, 78, 0.22);
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(150, 18, 24, 0.95), rgba(196, 32, 48, 0.95));
+  --PRIMARY_TEXT: #fffaf0;
+  --DARK_BUTTON: rgba(4, 18, 10, 0.9);
+  --DANGER_TEXT: #ff9aa2;
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 90, 100, 0.42) 0%, rgba(214, 40, 57, 0.22) 50%, rgba(120, 10, 20, 0.08) 85%, transparent 100%);
+  --EDGE_GRADIENT: linear-gradient(135deg, #8d0b13 0%, #e63946 55%, #f2c14e 100%);
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(20, 70, 44, 0.98) 0%, rgba(12, 50, 30, 0.98) 50%, rgba(8, 34, 20, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(0, 8, 3, 0.75), 0 0 26px rgba(242, 193, 78, 0.2);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(24, 84, 52, 0.6) 0%, rgba(24, 84, 52, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(20, 70, 44), rgb(6, 26, 15));
+  --DAY_EDGE: rgba(242, 193, 78, 0.2);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(150, 14, 26, 0.75) 0%, rgba(150, 14, 26, 0) 50%);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(130, 12, 24), rgb(48, 4, 10));
+  --NEGATIVE_DAY_EDGE: rgba(255, 90, 100, 0.8);
+
+  --GLOW_RGB: 242, 193, 78;
+  --GLOW_LIGHT_RGB: 255, 226, 150;
+  --PICK_RGB: 230, 57, 70;
+  --WELL_RGB: 4, 20, 11;
+  --YELLOW_RGB: 255, 214, 92;
+  --PICK_EDGE: #ff4d5a;
+  --LIST_FILL: rgb(10, 40, 24);
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(230, 57, 70, 0.7) 20%, rgba(242, 193, 78, 0.7) 50%, rgba(60, 170, 100, 0.7) 80%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #c81d25, #f2c14e, #2e9e5b);
+  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(242, 193, 78, 0.3), rgba(6, 26, 15, 0.92));
+
+  --PANEL_DEEP: rgba(20, 80, 48, 0.7);
+  --PANEL_SOFT: rgba(14, 56, 34, 0.35);
+  --PANEL_DARK: rgba(4, 20, 11, 0.62);
+  --PANEL_LINE: rgba(242, 193, 78, 0.16);
+  --PANEL_BORDER: rgba(242, 205, 110, 0.36);
+  --NEGATIVE_TEXT: #ff8a92;
+  --NEGATIVE_ON_RED: #ffaab0;
+  --POSITIVE_TEXT: #7ee08f;
+  --ZERO_TEXT: #7f8f80;
+  --PLACEHOLDER_TEXT: #ffd75e;
+  --RING_FILL: conic-gradient(#e63946, #f2c14e, #2e9e5b, #e63946, #f2c14e, #2e9e5b, #e63946);
+}
+
+/* A string of lights along the top, warm light from below, and snow along the bottom, on deep pine green */
+html[data-theme="festive"] #constellations {
+  background-color: #06190f;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='40' viewBox='0 0 240 40'><filter id='g' x='-1' y='-1' width='3' height='3'><feGaussianBlur stdDeviation='2.4'/></filter><path d='M0 4 Q 60 22 120 4 Q 180 22 240 4' fill='none' stroke='rgb(26, 44, 32)' stroke-width='1.6'/><g><ellipse cx='20' cy='17' rx='7' ry='9' fill='rgb(255, 72, 86)' opacity='0.45' filter='url(%23g)'/><rect x='18' y='8' width='4' height='4' rx='1' fill='rgb(30, 50, 36)'/><ellipse cx='20' cy='16' rx='3.2' ry='5' fill='rgb(255, 72, 86)'/></g><g><ellipse cx='60' cy='21' rx='7' ry='9' fill='rgb(255, 206, 84)' opacity='0.45' filter='url(%23g)'/><rect x='58' y='12' width='4' height='4' rx='1' fill='rgb(30, 50, 36)'/><ellipse cx='60' cy='20' rx='3.2' ry='5' fill='rgb(255, 206, 84)'/></g><g><ellipse cx='100' cy='17' rx='7' ry='9' fill='rgb(74, 214, 120)' opacity='0.45' filter='url(%23g)'/><rect x='98' y='8' width='4' height='4' rx='1' fill='rgb(30, 50, 36)'/><ellipse cx='100' cy='16' rx='3.2' ry='5' fill='rgb(74, 214, 120)'/></g><g><ellipse cx='140' cy='17' rx='7' ry='9' fill='rgb(90, 170, 255)' opacity='0.45' filter='url(%23g)'/><rect x='138' y='8' width='4' height='4' rx='1' fill='rgb(30, 50, 36)'/><ellipse cx='140' cy='16' rx='3.2' ry='5' fill='rgb(90, 170, 255)'/></g><g><ellipse cx='180' cy='21' rx='7' ry='9' fill='rgb(255, 72, 86)' opacity='0.45' filter='url(%23g)'/><rect x='178' y='12' width='4' height='4' rx='1' fill='rgb(30, 50, 36)'/><ellipse cx='180' cy='20' rx='3.2' ry='5' fill='rgb(255, 72, 86)'/></g><g><ellipse cx='220' cy='17' rx='7' ry='9' fill='rgb(255, 206, 84)' opacity='0.45' filter='url(%23g)'/><rect x='218' y='8' width='4' height='4' rx='1' fill='rgb(30, 50, 36)'/><ellipse cx='220' cy='16' rx='3.2' ry='5' fill='rgb(255, 206, 84)'/></g></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 80' preserveAspectRatio='none'><path d='M0 40 C 60 22, 120 52, 200 36 S 330 20, 400 38 L 400 80 L 0 80 Z' fill='rgba(255, 255, 255, 0.07)'/><path d='M0 56 C 80 40, 150 66, 240 50 S 350 40, 400 52 L 400 80 L 0 80 Z' fill='rgba(255, 255, 255, 0.1)'/></svg>"),
+    radial-gradient(ellipse at 50% 115%, rgba(242, 193, 78, 0.2), transparent 55%),
+    radial-gradient(ellipse at 0% 0%, rgba(200, 30, 40, 0.26), transparent 50%),
+    radial-gradient(ellipse at 100% 12%, rgba(46, 158, 91, 0.24), transparent 50%),
+    linear-gradient(180deg, #0a2416, #04130b);
+  background-size: 240px 40px, 100% 16vh, cover, cover, cover, cover;
+  background-position: top, bottom, center, center, center, center;
+  background-repeat: repeat-x, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+}
+
+html[data-theme="festive"] header .brand-icon {
+  filter: drop-shadow(0 0 10px rgba(242, 193, 78, 0.45));
+}
+
+/* Icons: gold, glowing */
+html[data-theme="festive"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) sepia(1) saturate(2.6) hue-rotate(2deg) brightness(1.12) drop-shadow(0 0 5px rgba(242, 193, 78, 0.5)) !important;
+}
+
+html[data-theme="festive"] .logoutButton span {
+  color: #ff6b75;
+}
+
+html[data-theme="festive"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(255, 255, 255, 0.09)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(242, 193, 78, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 10) FESTIVE */
+
+
+/* #region 11) FLORAL */
+/* Pastel and light: blush pink, lavender, and mint, with flowers in the corners, white cards with pink edges and extra
+   round corners, plum words, a pink glow, lavender for what's chosen, a rounded font where the device has one, plum
+   icons, and blossoms, petals, and hearts for stars */
+html[data-theme="floral"] {
+  color-scheme: light;
+  background-color: #fde8f1;
+
+  --FONT: ui-rounded, "SF Pro Rounded", 'Main Font', sans-serif;
+  --GLASS_RADIUS: 22px;
+  --DAY_RADIUS: clamp(6px, 1.4vmin, 14px);
+  --SHADOW: 0 0 16px rgba(155, 109, 255, 0.55);
+  --PICK_SHADOW: 0 0 0 2px rgba(155, 109, 255, 0.3), 0 0 14px rgba(155, 109, 255, 0.35);
+  --HOVER_SHADOW: 0 2px 10px rgba(120, 40, 90, 0.12), 0 0 12px rgba(244, 114, 182, 0.4);
+
+  --LINK_LIGHT: #c2367f;
+  --LINK_DARK: #7a1f52;
+  --BASE_COLOR: #5a3552;
+  --TEXT_BRIGHT: #3d1a35;
+  --TEXT_DIM: #74506a;
+
+  --NEON_BLUE: #ec5c9f;
+  --NEON_VIOLET: #8b5cf6;
+  --NEON_CYAN: #0f8f7a;
+  --NEON_PINK: #db2777;
+  --TITLE_GLOW: none;
+
+  --GLASS: linear-gradient(180deg, rgba(255, 252, 254, 0.9), rgba(255, 243, 249, 0.92));
+  --GLASS_BUTTON: rgba(255, 255, 255, 0.88);
+  --GLASS_LINE: rgba(214, 120, 170, 0.26);
+  --GLASS_LINE_BRIGHT: rgba(214, 120, 170, 0.48);
+  --GLASS_SHADOW: 0 2px 4px rgba(150, 60, 110, 0.06), 0 10px 24px rgba(150, 60, 110, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(255, 160, 200, 0.22) 0%, rgba(255, 160, 200, 0.18) 55%, rgba(255, 160, 200, 0.04) 100%);
+  --GLOW_EDGE: #f472b6;
+  --GLOW_SHADOW: 0 0 0 1px rgba(244, 114, 182, 0.25), 0 0 14px rgba(244, 114, 182, 0.32);
+  --RECOMMENDED_FILL: linear-gradient(90deg, #a0256a, #b0337a);
+  --PRIMARY_TEXT: #ffffff;
+  --DARK_BUTTON: #fbeef5;
+  --DANGER_TEXT: #b91c4a;
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(155, 109, 255, 0.2) 0%, rgba(155, 109, 255, 0.1) 60%, transparent 100%);
+  --PLACEHOLDER_COLOR: rgba(150, 110, 140, 0.6);
+  --EDGE_GRADIENT: linear-gradient(135deg, #7c4dff, #a78bfa 55%, #f0abfc);
+  --HOVER_GRADIENT: linear-gradient(170deg, rgba(255, 252, 254, 0.98), rgba(253, 238, 246, 0.98));
+  --FLOAT_SHADOW: 0 16px 40px rgba(150, 60, 110, 0.2), 0 0 0 1px rgba(214, 120, 170, 0.12);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 245, 250, 0.88));
+  --DAY_SOLID: linear-gradient(180deg, #ffffff, #fff1f7);
+  --DAY_EDGE: rgba(214, 120, 170, 0.24);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, #ffe0e6, #fff2f5);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, #ffe0e6, #fff2f5);
+  --NEGATIVE_DAY_EDGE: rgba(225, 29, 72, 0.5);
+  --NEGATIVE_GLOW_FILL: linear-gradient(rgba(225, 29, 72, 0.1), rgba(225, 29, 72, 0.1));
+
+  --GLOW_RGB: 244, 114, 182;
+  --GLOW_LIGHT_RGB: 251, 182, 214;
+  --PICK_RGB: 155, 109, 255;
+  --SHADE_RGB: 90, 30, 70;
+  --HALO_RGB: 255, 255, 255;
+  --WELL_RGB: 255, 255, 255;
+  --INSET_RGB: 240, 214, 228;
+  --TINT_RGB: 61, 26, 53;
+  --YELLOW_RGB: 202, 138, 4;
+  --BOX_FILL: #ffffff;
+  --PICK_EDGE: #8b5cf6;
+  --LIST_FILL: #fffafd;
+  --TEXT_HOT: #3d1a35;
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(244, 114, 182, 0.55) 25%, rgba(167, 139, 250, 0.55) 75%, transparent);
+  --BAR_FILL: linear-gradient(90deg, #f472b6, #a78bfa, #6ee7c8);
+  --TILE_FILL: linear-gradient(180deg, #fff5fa, #fde7f2);
+
+  --PANEL_DEEP: #fde7f2;
+  --PANEL_SOFT: rgba(244, 114, 182, 0.05);
+  --PANEL_DARK: #fff7fb;
+  --PANEL_LINE: rgba(214, 120, 170, 0.15);
+  --PANEL_BORDER: rgba(214, 120, 170, 0.3);
+  --NEGATIVE_TEXT: #b5173f;
+  --POSITIVE_TEXT: #0b7356;
+  --ZERO_TEXT: #a58ea0;
+  --PLACEHOLDER_TEXT: #9a4708;
+  --RING_FILL: conic-gradient(from 200deg, #f472b6, #f9a8d4, #a78bfa, #6ee7c8, #fdba74, #f472b6);
+}
+
+/* Blush, lavender, and mint, with a spray of flowers in the top right and bottom left corners (away from the page's
+   title at the top left) */
+html[data-theme="floral"] #constellations {
+  background-color: #fde8f1;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='200' viewBox='0 0 260 200'><g opacity='0.6' transform='translate(260 0) scale(-1 1)'><path d='M30 150 Q 70 110 120 120 Q 80 140 30 150 Z' fill='rgb(170, 220, 190)'/><path d='M120 60 Q 170 40 200 70 Q 160 80 120 60 Z' fill='rgb(170, 220, 190)'/><g transform='translate(70 70) scale(1.5)'><g fill='rgb(255, 176, 210)'><ellipse rx='8' ry='13' cy='-12'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(72)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(144)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(216)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(288)'/></g><circle r='5.5' fill='rgb(255, 222, 140)'/></g><g transform='translate(150 36)'><g fill='rgb(214, 196, 255)'><ellipse rx='8' ry='13' cy='-12'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(72)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(144)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(216)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(288)'/></g><circle r='5.5' fill='rgb(255, 222, 140)'/></g><g transform='translate(40 150) scale(0.9)'><g fill='rgb(255, 204, 170)'><ellipse rx='8' ry='13' cy='-12'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(72)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(144)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(216)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(288)'/></g><circle r='5.5' fill='rgb(255, 238, 170)'/></g><g transform='translate(125 108) scale(0.7)'><g fill='rgb(255, 196, 222)'><ellipse rx='8' ry='13' cy='-12'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(72)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(144)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(216)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(288)'/></g><circle r='5.5' fill='rgb(255, 222, 140)'/></g><circle cx='200' cy='110' r='4' fill='rgb(255, 176, 210)'/><circle cx='100' cy='170' r='3' fill='rgb(214, 196, 255)'/><circle cx='215' cy='40' r='3' fill='rgb(255, 204, 170)'/></g></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='200' viewBox='0 0 260 200'><g opacity='0.6' transform='translate(0 200) scale(1 -1)'><path d='M30 150 Q 70 110 120 120 Q 80 140 30 150 Z' fill='rgb(170, 220, 190)'/><g transform='translate(70 70) scale(1.4)'><g fill='rgb(214, 196, 255)'><ellipse rx='8' ry='13' cy='-12'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(72)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(144)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(216)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(288)'/></g><circle r='5.5' fill='rgb(255, 222, 140)'/></g><g transform='translate(150 40) scale(0.9)'><g fill='rgb(255, 176, 210)'><ellipse rx='8' ry='13' cy='-12'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(72)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(144)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(216)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(288)'/></g><circle r='5.5' fill='rgb(255, 222, 140)'/></g><g transform='translate(45 145) scale(0.75)'><g fill='rgb(180, 236, 214)'><ellipse rx='8' ry='13' cy='-12'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(72)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(144)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(216)'/><ellipse rx='8' ry='13' cy='-12' transform='rotate(288)'/></g><circle r='5.5' fill='rgb(255, 238, 170)'/></g><circle cx='190' cy='120' r='4' fill='rgb(255, 204, 170)'/><circle cx='110' cy='160' r='3' fill='rgb(255, 176, 210)'/></g></svg>"),
+    radial-gradient(ellipse at 10% 0%, rgba(255, 200, 225, 0.8), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, rgba(214, 200, 255, 0.7), transparent 60%),
+    radial-gradient(ellipse at 92% 8%, rgba(200, 245, 230, 0.6), transparent 50%),
+    linear-gradient(180deg, #fff0f6, #f7ecff);
+  background-size: min(240px, 52vw) auto, min(240px, 52vw) auto, cover, cover, cover, cover;
+  background-position: top right, bottom left, center, center, center, center;
+  background-repeat: no-repeat;
+}
+
+/* Icons: plum */
+html[data-theme="floral"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) grayscale(1) brightness(0.42) sepia(1) saturate(3) hue-rotate(285deg) brightness(1.1) !important;
+}
+
+html[data-theme="floral"] .logoutButton span {
+  color: #c2367f;
+}
+
+html[data-theme="floral"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(244, 114, 182, 0.12)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(167, 139, 250, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 11) FLORAL */
+
+
+/* #region 12) DIGITAL */
+/* Blocky: every corner square, a terminal's font, black glass with green pixel edges and hard shadows, pale green
+   words, a neon green glow, amber for what's chosen, a green grid behind the page, a square New Entry, green icons, and
+   pixels and bits for stars */
+html[data-theme="digital"] {
+  background-color: #020805;
+
+  --FONT: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, "Roboto Mono", "DejaVu Sans Mono", monospace;
+  --GLASS_RADIUS: 0px;
+  --DAY_RADIUS: 0px;
+  --SHADOW: 0 0 18px rgba(255, 176, 0, 0.9);
+  --PICK_SHADOW: 0 0 14px rgba(255, 176, 0, 0.7);
+  --HOVER_SHADOW: 3px 3px 0 rgba(0, 255, 136, 0.3), 0 0 10px rgba(0, 255, 136, 0.35);
+
+  --LINK_LIGHT: #39ff88;
+  --LINK_DARK: #0b5a2c;
+  --BASE_COLOR: #b9f5cf;
+  --TEXT_BRIGHT: #e4ffee;
+  --TEXT_DIM: #6fae86;
+
+  --NEON_BLUE: #00ff88;
+  --NEON_VIOLET: #00c46a;
+  --NEON_CYAN: #7dffb9;
+  --NEON_PINK: #ffb000;
+  --TITLE_GLOW: 0 0 10px rgba(0, 255, 136, 0.45);
+
+  --GLASS: linear-gradient(180deg, rgba(4, 22, 12, 0.92), rgba(2, 12, 6, 0.94));
+  --GLASS_BUTTON: rgba(6, 26, 14, 0.9);
+  --GLASS_LINE: rgba(0, 255, 136, 0.3);
+  --GLASS_LINE_BRIGHT: rgba(0, 255, 136, 0.6);
+  --GLASS_SHADOW: 6px 6px 0 rgba(0, 255, 136, 0.12);
+
+  --GLOW_FILL: linear-gradient(rgba(0, 255, 136, 0.16), rgba(0, 255, 136, 0.16));
+  --GLOW_EDGE: #00ff88;
+  --GLOW_SHADOW: 3px 3px 0 rgba(0, 255, 136, 0.3), 0 0 12px rgba(0, 255, 136, 0.3);
+  --RECOMMENDED_FILL: linear-gradient(#00c46a, #00c46a);
+  --PRIMARY_TEXT: #00140a;
+  --DARK_BUTTON: rgba(0, 8, 4, 0.92);
+  --DANGER_TEXT: #ff8a7a;
+  --PICK_FILL: linear-gradient(rgba(255, 176, 0, 0.2), rgba(255, 176, 0, 0.2));
+  --EDGE_GRADIENT: linear-gradient(135deg, #ffb000, #ffd166);
+  --HOVER_GRADIENT: linear-gradient(180deg, rgba(4, 26, 14, 0.98), rgba(2, 14, 8, 0.98));
+  --FLOAT_SHADOW: 8px 8px 0 rgba(0, 255, 136, 0.16), 0 0 0 1px rgba(0, 255, 136, 0.35);
+
+  --DAY_FILL: linear-gradient(180deg, rgba(0, 60, 30, 0.5) 0%, rgba(0, 60, 30, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(4, 34, 18), rgb(2, 12, 6));
+  --DAY_EDGE: rgba(0, 255, 136, 0.2);
+  --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(120, 10, 20, 0.7) 0%, rgba(120, 10, 20, 0) 50%);
+  --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(100, 8, 16), rgb(36, 2, 6));
+  --NEGATIVE_DAY_EDGE: rgba(255, 70, 80, 0.75);
+  --NEGATIVE_GLOW_FILL: linear-gradient(rgba(255, 70, 80, 0.22), rgba(255, 70, 80, 0.22));
+
+  --GLOW_RGB: 0, 255, 136;
+  --GLOW_LIGHT_RGB: 125, 255, 185;
+  --PICK_RGB: 255, 176, 0;
+  --WELL_RGB: 0, 10, 5;
+  --YELLOW_RGB: 255, 214, 64;
+  --PICK_EDGE: #ffb000;
+  --LIST_FILL: rgb(3, 18, 10);
+  --LINE_GRADIENT: repeating-linear-gradient(90deg, rgba(0, 255, 136, 0.6) 0 6px, transparent 6px 10px);
+  --BAR_FILL: repeating-linear-gradient(90deg, #00ff88 0 8px, #00b862 8px 10px);
+  --TILE_FILL: linear-gradient(rgba(0, 255, 136, 0.12), rgba(0, 255, 136, 0.12)), rgb(2, 14, 8);
+
+  --PANEL_DEEP: rgba(0, 60, 30, 0.75);
+  --PANEL_SOFT: rgba(0, 40, 20, 0.35);
+  --PANEL_DARK: rgba(0, 10, 5, 0.7);
+  --PANEL_LINE: rgba(0, 255, 136, 0.16);
+  --PANEL_BORDER: rgba(0, 255, 136, 0.4);
+  --NEGATIVE_TEXT: #ff6b6b;
+  --POSITIVE_TEXT: #39ff88;
+  --ZERO_TEXT: #4f7a60;
+  --PLACEHOLDER_TEXT: #ffd23f;
+  --RING_FILL: linear-gradient(#00ff88, #00ff88);
+  /* New Entry's ring is square, with stepped corners like a pixel drawing's, and a recommended button's icon is dark
+     like its words */
+  --RING_SHAPE: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><filter id='b' x='-1' y='-1' width='3' height='3'><feGaussianBlur stdDeviation='1.4'/></filter><path d='M12 6H52V12H58V52H52V58H12V52H6V12H12Z' fill='none' stroke='white' stroke-width='5' opacity='0.55' filter='url(%23b)'/><path d='M12 6H52V12H58V52H52V58H12V52H6V12H12Z' fill='none' stroke='white' stroke-width='3'/></svg>");
+  --PRIMARY_ICON: brightness(0);
+}
+
+/* A faint green grid, with a glow at the top */
+html[data-theme="digital"] #constellations {
+  background-color: #020805;
+  background-image:
+    linear-gradient(rgba(0, 255, 136, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.06) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 0%, rgba(0, 255, 136, 0.14), transparent 60%),
+    linear-gradient(180deg, #03100a, #010402);
+  background-size: 32px 32px, 32px 32px, cover, cover;
+  background-position: center;
+  background-repeat: repeat, repeat, no-repeat, no-repeat;
+}
+
+/* Every corner square */
+html[data-theme="digital"] *,
+html[data-theme="digital"] *::before,
+html[data-theme="digital"] *::after {
+  border-radius: 0 !important;
+}
+
+/* New Entry's disk: square, its corners stepped to sit under the ring's */
+html[data-theme="digital"] .newEntryPrism::before {
+  clip-path: polygon(13% 0, 87% 0, 87% 13%, 100% 13%, 100% 87%, 87% 87%, 87% 100%, 13% 100%, 13% 87%, 0 87%, 0 13%, 13% 13%);
+}
+
+/* Icons: green, glowing */
+html[data-theme="digital"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
+  filter: brightness(var(--ICON_LIFT, 1)) grayscale(1) brightness(1.5) sepia(1) saturate(5) hue-rotate(80deg) drop-shadow(0 0 4px rgba(0, 255, 136, 0.6)) !important;
+}
+
+html[data-theme="digital"] .logoutButton span {
+  color: #ffb000;
+}
+
+html[data-theme="digital"] .lowestCard {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 36 H40 V30 H80 V38 H120 V26 H160 V34 H200 V28 H240 V36 H280 V24 H320 V32 H360 V28 H400 V60 H0 Z' fill='rgba(0, 255, 136, 0.12)'/><path d='M0 48 H50 V42 H100 V50 H150 V40 H200 V46 H250 V38 H300 V48 H350 V42 H400 V60 H0 Z' fill='rgba(0, 196, 106, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    var(--GLASS);
+}
+/* #endregion 12) DIGITAL */
+
+
+/* #region 13) LIGHT CARDS */
+/* Dark words on light cards (Professional, Winter, Floral, and a Custom theme whose cards are light: Boot.js gives html
+   lightCards): darker shades of what's written out light for a dark page */
+html.lightCards .goalItem.isReached .goalStatus {
+  color: var(--POSITIVE_TEXT);
+}
+
+html.lightCards .goalItem.isDanger .goalStatus {
+  color: #c2410c;
+}
+
+html.lightCards .logsTable tr.errorRow td {
+  background: #fee2e2;
+}
+
+html.lightCards .logsTable tr.notFoundRow td {
+  background: #ffedd5;
+}
+
+html.lightCards :is(.sheetProblems, .recurringProblems) {
+  background: #fef2f2;
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+html.lightCards .calendarScheduleDay.isToday {
+  border-color: var(--GLOW_EDGE);
+  box-shadow: 0 0 0 1px rgba(var(--GLOW_RGB), 0.35);
+}
+
+html.lightCards .calendarPaycheckStatus.isUpcoming {
+  color: var(--LINK_LIGHT);
+}
+
+/* A cost in a day below $0 keeps its own red (it's dark enough on a light day's pink) */
+html.lightCards {
+  --NEGATIVE_ON_RED: var(--NEGATIVE_TEXT);
+}
+
+/* New Entry: a soft shadow under it, and only a little glow */
+html.lightCards .newEntryPrism::before {
+  box-shadow: 0 2px 8px rgba(var(--SHADE_RGB), 0.18), 0 0 10px 1px rgba(var(--GLOW_RGB), 0.25), inset 0 0 12px rgba(var(--GLOW_RGB), 0.3);
+}
+/* #endregion 13) LIGHT CARDS */
+
+
+/* #region 14) CUSTOM */
 /* A Custom theme (Boot.js customTokens): the theme it starts from (its data-theme), with the tokens its five colors work
    out to set on html itself. The page behind the cards is its own color, with its glow at the top left and a little
    darker at the bottom right. */
@@ -740,13 +1360,43 @@ html[data-corners="sharp"] header .brand-icon {
 html[data-icons] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
   filter: brightness(var(--ICON_LIFT, 1)) var(--ICON_FILTER) !important;
 }
-/* #endregion 8) CUSTOM */
+
+/* Logout's word: Delete's muted red, in the shade made for the cards (a theme's own Logout color is made for its cards) */
+html.customTheme .logoutButton span {
+  color: var(--DANGER_TEXT);
+}
+/* #endregion 14) CUSTOM */
 
 
-/* #region 9) WHAT EVERY THEME CHANGES THE SAME WAY */
-/* The middle of the New Entry prism: the theme's recommended fill, on its list color so it's solid */
+/* #region 15) WHAT EVERY THEME CHANGES THE SAME WAY */
+/* New Entry: its disk is the theme's recommended fill (on its list color, so it's solid), and its ring is the theme's
+   colors in the ring's shape (Prismal's ring picture, or the theme's own --RING_SHAPE), with the chosen color's ring over
+   it while it's hovered */
 html:is([data-theme], .customTheme) .newEntryPrism::before {
   background: var(--GLOW_FILL), var(--RECOMMENDED_FILL), var(--LIST_FILL);
+}
+
+html:is([data-theme], .customTheme) .newEntryRing {
+  background: var(--RING_FILL);
+  -webkit-mask: var(--RING_SHAPE, url("/Resources/Icons/NewEntryRing.webp?v=9c8bd5e752")) center / 100% 100% no-repeat;
+  mask: var(--RING_SHAPE, url("/Resources/Icons/NewEntryRing.webp?v=9c8bd5e752")) center / 100% 100% no-repeat;
+}
+
+html:is([data-theme], .customTheme) .newEntryPrism::after {
+  -webkit-mask: var(--RING_SHAPE, url("/Resources/Icons/NewEntryRing.webp?v=9c8bd5e752")) center / 100% 100% no-repeat;
+  mask: var(--RING_SHAPE, url("/Resources/Icons/NewEntryRing.webp?v=9c8bd5e752")) center / 100% 100% no-repeat;
+}
+
+/* Sharp corners (Spooky's, or a Custom theme's) leave New Entry round; Digital makes it square on purpose */
+html:is([data-theme="spooky"], [data-corners="sharp"]):not([data-theme="digital"]) :is(.newEntryPrism, .newEntryRing),
+html:is([data-theme="spooky"], [data-corners="sharp"]):not([data-theme="digital"]) .newEntryPrism::before,
+html:is([data-theme="spooky"], [data-corners="sharp"]):not([data-theme="digital"]) .newEntryPrism::after {
+  border-radius: 50% !important;
+}
+
+/* Quick Entry's bolt is the color of its words (white, unless the theme's are dark: --PRIMARY_ICON) */
+html:is([data-theme], .customTheme) .budgetButton.homeQuick .buttonIcon {
+  filter: var(--PRIMARY_ICON, brightness(0) invert(1)) !important;
 }
 
 /* Search's results after today: tinted with the theme's glow */
@@ -758,10 +1408,10 @@ html:is([data-theme], .customTheme) .searchTable tr.searchComing td {
 html:is([data-theme="professional"], [data-theme="dark"], [data-theme="elements"], .customTheme) .lowestCard {
   background: var(--GLASS);
 }
-/* #endregion 9) WHAT EVERY THEME CHANGES THE SAME WAY */
+/* #endregion 15) WHAT EVERY THEME CHANGES THE SAME WAY */
 
 
-/* #region 10) THE THEME PICKER AND THE CUSTOM WINDOW */
+/* #region 16) THE THEME PICKER AND THE CUSTOM WINDOW */
 /* Settings' Theme: a button for each, its swatch over its name and a few words about it. The swatches look the same in
    every theme (they're a preview), so their colors are written out. */
 .choiceList.themeChoices {
@@ -794,6 +1444,11 @@ html:is([data-theme="professional"], [data-theme="dark"], [data-theme="elements"
 .themeSwatch[data-swatch="elements"]     { background: linear-gradient(90deg, #b5532f 0 25%, #3a87a8 25% 50%, #a7c4cf 50% 75%, #7d8b45 75% 100%); }
 .themeSwatch[data-swatch="poison"]       { background: linear-gradient(135deg, #0d0714 0%, #5b1f8f 50%, #39ff14 100%); }
 .themeSwatch[data-swatch="blue"]         { background: linear-gradient(135deg, #1d4987 0%, #2b62ad 55%, #9be7ff 100%); }
+.themeSwatch[data-swatch="fall"]         { background: radial-gradient(circle at 76% 58%, #ff8a2a 0 15%, transparent 17%), linear-gradient(135deg, #24130a 0%, #7a2e10 45%, #e8432e 72%, #ffc65c 100%); }
+.themeSwatch[data-swatch="winter"]       { background: radial-gradient(circle at 24% 36%, #ffffff 0 6%, transparent 8%), radial-gradient(circle at 62% 64%, #ffffff 0 5%, transparent 7%), linear-gradient(135deg, #b6d4f0 0%, #e3effb 50%, #ffffff 72%, #2f86d6 100%); }
+.themeSwatch[data-swatch="festive"]      { background: radial-gradient(circle at 20% 30%, #ff4856 0 7%, transparent 9%), radial-gradient(circle at 45% 42%, #ffce54 0 7%, transparent 9%), radial-gradient(circle at 70% 30%, #4ad678 0 7%, transparent 9%), linear-gradient(135deg, #0a2416 0%, #1f7a3f 55%, #c81d25 100%); }
+.themeSwatch[data-swatch="floral"]       { background: radial-gradient(circle at 30% 50%, #ffb6d5 0 14%, transparent 16%), radial-gradient(circle at 68% 40%, #d8c4ff 0 11%, transparent 13%), linear-gradient(135deg, #fff0f6 0%, #fbcfe8 45%, #e9d5ff 75%, #bbf7d0 100%); }
+.themeSwatch[data-swatch="digital"]      { background: linear-gradient(rgba(0, 255, 136, 0.28) 1px, transparent 1px) 0 0 / 6px 6px, linear-gradient(90deg, rgba(0, 255, 136, 0.28) 1px, transparent 1px) 0 0 / 6px 6px, linear-gradient(135deg, #010402 0%, #03140b 55%, #00ff88 100%); }
 /* Custom, until there's one: every color (once there is, Settings Page.js paints it in its own) */
 .themeSwatch[data-swatch="custom"]       { background: linear-gradient(90deg, #ff4d4d, #ffd166, #7dff5a, #46c8ff, #8d5cff, #e050ff); }
 
@@ -859,4 +1514,4 @@ html:is([data-theme="professional"], [data-theme="dark"], [data-theme="elements"
   border: none;
   border-radius: 5px;
 }
-/* #endregion 10) THE THEME PICKER AND THE CUSTOM WINDOW */
+/* #endregion 16) THE THEME PICKER AND THE CUSTOM WINDOW */
