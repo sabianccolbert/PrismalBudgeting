@@ -1534,7 +1534,7 @@ button.pickDay[aria-expanded="true"] {
   -webkit-user-select: none;
 }
 
-/* The month and the year between ‹ and › */
+/* The month between ‹ and ›, then the year */
 .pickerHead {
   display: flex;
   align-items: center;
@@ -1709,7 +1709,8 @@ button.pickDay[aria-expanded="true"] {
  *  --FLOAT_Y; how long a loop takes, --FLOAT_TIME; and when it starts, --FLOAT_DELAY). The loop moves the translate
  *  property, so a card's own transform (growing under the pointer) still works with it. A card holds still while a day
  *  in it is zoomed or held bigger: moving, it would keep the day under the dimmed page and the cards after it. Nothing
- *  floats with Reduced Motion's animations switch on, or for a device that asks for less motion.
+ *  floats with Reduced Motion's animations switch on, or for a device that asks for less motion. On a computer
+ *  (html.pixelFloat), Layout.js moves the cards along the same loop by whole pixels instead.
  */
 @keyframes cardFloat {
   0%    { translate: 0 0; }
@@ -1725,6 +1726,12 @@ button.pickDay[aria-expanded="true"] {
 
 .isFloating {
   animation: cardFloat var(--FLOAT_TIME, 9s) linear var(--FLOAT_DELAY, 0s) infinite;
+}
+
+/* Computers (a mouse or trackpad): Layout.js moves each card along the same loop by whole pixels of the screen instead,
+   since moving by part of a pixel smears its words and lines there */
+html.pixelFloat .isFloating {
+  animation: none;
 }
 
 /* (Process Budget.js gives html .dayZoomed while a day is zoomed; :has() also catches a day shrinking back, and one held

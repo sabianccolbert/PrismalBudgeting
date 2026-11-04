@@ -294,7 +294,7 @@ const THEME_LOOKS = {
   prismal:      { sprites: ["star"], link: "100, 100, 100", ring: "189, 189, 189", paddle: "255, 255, 255" },
   professional: { sprites: [["dot", "100, 116, 139"]], link: "148, 163, 184", ring: "100, 116, 139", paddle: "71, 85, 105" },
   dark:         { sprites: [["dot", "200, 208, 218"]], link: "75, 85, 99", ring: "156, 163, 175", paddle: "229, 231, 235" },
-  spooky:       { sprites: ["ember", "ember", "ember", "bat"], link: "110, 16, 20", ring: "190, 30, 30", paddle: "230, 210, 200" },
+  spooky:       { sprites: ["ember", "ember", "bat"], link: "80, 12, 16", ring: "190, 30, 30", paddle: "230, 210, 200" },
   elements:     { sprites: ["flame", "drop", "leaf", "wind"], link: "110, 98, 84", ring: "214, 196, 160", paddle: "240, 230, 210" },
   poison:       { sprites: ["bubble", "spore", "bubble"], link: "84, 52, 120", ring: "140, 255, 100", paddle: "200, 255, 180" },
   blue:         { sprites: ["star"], link: "160, 195, 240", ring: "225, 238, 255", paddle: "255, 255, 255" },

@@ -286,9 +286,9 @@ html[data-theme="spooky"] {
   background-color: #070405;
 
   --FONT: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
-  --SHADOW: 0 0 20px rgba(255, 30, 30, 1);
+  --SHADOW: 0 0 20px rgba(255, 30, 30, 0.75);
   --PICK_SHADOW: 0 0 16px rgba(255, 90, 20, 0.75);
-  --HOVER_SHADOW: 0 0 12px rgba(220, 20, 30, 0.55);
+  --HOVER_SHADOW: 0 0 12px rgba(220, 20, 30, 0.45);
 
   --LINK_LIGHT: #ff2a2a;
   --LINK_DARK: #5a0000;
@@ -300,31 +300,31 @@ html[data-theme="spooky"] {
   --NEON_VIOLET: #9c0f1f;
   --NEON_CYAN: #ff7a3c;
   --NEON_PINK: #ff2a6a;
-  --TITLE_GLOW: 0 0 14px rgba(255, 30, 30, 0.5);
+  --TITLE_GLOW: 0 0 14px rgba(255, 30, 30, 0.38);
 
-  --GLASS: linear-gradient(180deg, rgba(30, 10, 12, 0.9), rgba(12, 5, 6, 0.94));
-  --GLASS_BUTTON: rgba(32, 9, 11, 0.85);
-  --GLASS_LINE: rgba(190, 25, 35, 0.35);
-  --GLASS_LINE_BRIGHT: rgba(230, 45, 55, 0.55);
+  --GLASS: linear-gradient(180deg, rgba(20, 8, 9, 0.92), rgba(9, 4, 5, 0.95));
+  --GLASS_BUTTON: rgba(22, 7, 8, 0.88);
+  --GLASS_LINE: rgba(190, 25, 35, 0.26);
+  --GLASS_LINE_BRIGHT: rgba(230, 45, 55, 0.45);
   --GLASS_SHADOW: 0 10px 28px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 60, 60, 0.08);
   --GLASS_RADIUS: 2px;
   --DAY_RADIUS: 1px;
   --PANEL_RADIUS: 2px;
 
-  --GLOW_FILL: radial-gradient(ellipse at center, rgba(220, 20, 30, 0.5) 0%, rgba(150, 10, 20, 0.28) 45%, rgba(80, 0, 10, 0.1) 75%, rgba(40, 0, 6, 0.05) 100%);
+  --GLOW_FILL: radial-gradient(ellipse at center, rgba(220, 20, 30, 0.36) 0%, rgba(150, 10, 20, 0.2) 45%, rgba(80, 0, 10, 0.07) 75%, rgba(40, 0, 6, 0.03) 100%);
   --GLOW_EDGE: rgba(255, 70, 70, 0.9);
-  --GLOW_SHADOW: 0 0 16px rgba(220, 20, 30, 0.55), inset 0 0 12px rgba(220, 20, 30, 0.25);
-  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(120, 0, 12, 0.8), rgba(180, 10, 24, 0.8));
+  --GLOW_SHADOW: 0 0 16px rgba(220, 20, 30, 0.42), inset 0 0 12px rgba(220, 20, 30, 0.18);
+  --RECOMMENDED_FILL: linear-gradient(90deg, rgba(100, 0, 10, 0.82), rgba(150, 8, 20, 0.82));
   --DARK_BUTTON: rgba(10, 3, 4, 0.9);
   --DANGER_TEXT: #ff8a7a;
   --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 120, 40, 0.42) 0%, rgba(220, 50, 10, 0.22) 50%, rgba(120, 20, 0, 0.08) 85%, transparent 100%);
   --EDGE_GRADIENT: linear-gradient(135deg, #8b0000 0%, #ff2a2a 50%, #ff7a1a 100%);
-  --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 8, 11, 0.98) 0%, rgba(22, 5, 7, 0.98) 50%, rgba(12, 3, 4, 0.98) 100%);
-  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 26px rgba(170, 0, 12, 0.3);
+  --HOVER_GRADIENT: linear-gradient(160deg, rgba(28, 6, 8, 0.98) 0%, rgba(16, 4, 5, 0.98) 50%, rgba(9, 3, 4, 0.98) 100%);
+  --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 26px rgba(170, 0, 12, 0.2);
 
-  --DAY_FILL: linear-gradient(180deg, rgba(64, 10, 14, 0.62) 0%, rgba(64, 10, 14, 0) 50%);
-  --DAY_SOLID: linear-gradient(180deg, rgb(44, 9, 11), rgb(14, 3, 4));
-  --DAY_EDGE: rgba(200, 30, 40, 0.25);
+  --DAY_FILL: linear-gradient(180deg, rgba(44, 8, 10, 0.6) 0%, rgba(44, 8, 10, 0) 50%);
+  --DAY_SOLID: linear-gradient(180deg, rgb(30, 7, 9), rgb(10, 3, 4));
+  --DAY_EDGE: rgba(200, 30, 40, 0.2);
   --NEGATIVE_DAY_FILL: linear-gradient(180deg, rgba(150, 0, 30, 0.78) 0%, rgba(150, 0, 30, 0) 50%);
   --NEGATIVE_DAY_SOLID: linear-gradient(180deg, rgb(130, 0, 26), rgb(48, 0, 10));
   --NEGATIVE_DAY_EDGE: rgba(255, 50, 60, 0.9);
@@ -332,19 +332,19 @@ html[data-theme="spooky"] {
   --GLOW_RGB: 220, 20, 30;
   --GLOW_LIGHT_RGB: 255, 90, 80;
   --PICK_RGB: 255, 90, 20;
-  --WELL_RGB: 14, 4, 5;
+  --WELL_RGB: 10, 3, 4;
   --YELLOW_RGB: 255, 154, 60;
   --PICK_EDGE: #ff6a1a;
-  --LIST_FILL: rgb(26, 6, 8);
-  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(200, 20, 30, 0.7) 25%, rgba(255, 90, 40, 0.6) 75%, transparent);
+  --LIST_FILL: rgb(18, 5, 6);
+  --LINE_GRADIENT: linear-gradient(90deg, transparent, rgba(200, 20, 30, 0.55) 25%, rgba(255, 90, 40, 0.48) 75%, transparent);
   --BAR_FILL: linear-gradient(90deg, #8b0000, #ff2a2a);
-  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(200, 20, 30, 0.35), rgba(16, 4, 5, 0.94));
+  --TILE_FILL: radial-gradient(circle at 50% 40%, rgba(200, 20, 30, 0.24), rgba(12, 4, 5, 0.95));
 
-  --PANEL_DEEP: rgba(90, 10, 16, 0.7);
-  --PANEL_SOFT: rgba(60, 8, 12, 0.35);
-  --PANEL_DARK: rgba(14, 3, 4, 0.7);
-  --PANEL_LINE: rgba(200, 30, 40, 0.18);
-  --PANEL_BORDER: rgba(230, 50, 60, 0.4);
+  --PANEL_DEEP: rgba(60, 8, 12, 0.7);
+  --PANEL_SOFT: rgba(42, 6, 9, 0.35);
+  --PANEL_DARK: rgba(10, 3, 4, 0.72);
+  --PANEL_LINE: rgba(200, 30, 40, 0.15);
+  --PANEL_BORDER: rgba(230, 50, 60, 0.32);
   --NEGATIVE_TEXT: #ff4d4d;
   --NEGATIVE_ON_RED: #ff9a9a;
   --POSITIVE_TEXT: #b9d98c;
@@ -358,9 +358,9 @@ html[data-theme="spooky"] #constellations {
   background-color: #070405;
   background-image:
     radial-gradient(circle at 82% 14%, rgba(255, 238, 225, 0.32) 0 28px, rgba(255, 210, 190, 0.1) 34px, transparent 90px),
-    radial-gradient(ellipse at 50% 115%, rgba(150, 0, 14, 0.55), transparent 60%),
-    radial-gradient(ellipse at 0% 0%, rgba(70, 0, 10, 0.4), transparent 50%),
-    linear-gradient(180deg, #0c0607, #050304);
+    radial-gradient(ellipse at 50% 115%, rgba(150, 0, 14, 0.36), transparent 60%),
+    radial-gradient(ellipse at 0% 0%, rgba(70, 0, 10, 0.26), transparent 50%),
+    linear-gradient(180deg, #090506, #040203);
 }
 
 /* Every corner sharp (the logo stays round) */
@@ -386,7 +386,7 @@ html[data-theme="spooky"] .logoutButton span {
 
 html[data-theme="spooky"] .lowestCard {
   background:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(200, 20, 30, 0.16)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(255, 90, 40, 0.12)'/></svg>") bottom / 100% 45% no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'><path d='M0 38 C 70 18, 130 56, 210 34 S 340 12, 400 30 L 400 60 L 0 60 Z' fill='rgba(200, 20, 30, 0.11)'/><path d='M0 48 C 90 30, 160 62, 240 44 S 350 30, 400 42 L 400 60 L 0 60 Z' fill='rgba(255, 90, 40, 0.09)'/></svg>") bottom / 100% 45% no-repeat,
     var(--GLASS);
 }
 /* #endregion 4) SPOOKY */
@@ -1440,7 +1440,7 @@ html:is([data-theme="professional"], [data-theme="dark"], [data-theme="elements"
 .themeSwatch[data-swatch="prismal"]      { background: linear-gradient(135deg, #05041d 0%, #2a1f7a 45%, #4f7bff 75%, #e050ff 100%); }
 .themeSwatch[data-swatch="professional"] { background: linear-gradient(135deg, #ffffff 0%, #eef2f7 55%, #2563eb 100%); }
 .themeSwatch[data-swatch="dark"]         { background: linear-gradient(135deg, #0f1115 0%, #21262d 55%, #388bfd 100%); }
-.themeSwatch[data-swatch="spooky"]       { background: radial-gradient(circle at 78% 30%, rgba(255, 238, 225, 0.6) 0 10%, transparent 13%), linear-gradient(135deg, #050304 0%, #3a0508 55%, #c4161c 100%); }
+.themeSwatch[data-swatch="spooky"]       { background: radial-gradient(circle at 78% 30%, rgba(255, 238, 225, 0.6) 0 10%, transparent 13%), linear-gradient(135deg, #050304 0%, #2a0406 62%, #a8131a 100%); }
 .themeSwatch[data-swatch="elements"]     { background: linear-gradient(90deg, #b5532f 0 25%, #3a87a8 25% 50%, #a7c4cf 50% 75%, #7d8b45 75% 100%); }
 .themeSwatch[data-swatch="poison"]       { background: linear-gradient(135deg, #0d0714 0%, #5b1f8f 50%, #39ff14 100%); }
 .themeSwatch[data-swatch="blue"]         { background: linear-gradient(135deg, #1d4987 0%, #2b62ad 55%, #9be7ff 100%); }

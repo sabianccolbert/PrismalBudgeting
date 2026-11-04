@@ -25,6 +25,9 @@ window.workspaceReady.then((loaded) => {
   wireBobWarnings();
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
+  wireLowestCard();
+  // Right after a sign-in: turn notifications on here? (once, above the Welcome card and the calendar)
+  window.PushNotifications?.askAfterSignIn(document.getElementById("gettingStarted")).catch(error => console.warn("Couldn't check notifications on this device:", error));
 });
 
 document.addEventListener("budget:updated", () => {
@@ -372,49 +375,8 @@ function wireCalendar() {
     if (!lineEl) return;
     const td = lineEl.closest("td");
     if (!td || !td.classList.contains("is-editing") || td.classList.contains("isZoomClosing")) return;
-    if (lineEl.classList.contains("lineInBank")) openInBankOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col));
+    if (lineEl.classList.contains("lineInBank")) BudgetUI.openInBankOptions(lineEl, gridDates[Number(td.dataset.row)][Number(td.dataset.col)]);
     else openEntryOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col), Number(lineEl.dataset.line));
-  });
-}
-
-// The title of the entry that makes a day's In Bank match the bank's (search() and the spending numbers know it
-// as "catch up" in any spelling)
-const CATCHUP_TITLE = "Catchup";
-
-// In Bank tapped on a zoomed day: type what the bank says, and the difference goes on that day as a Regular entry
-// titled Catchup (adding into one that's already there), so that day and the ones after it follow. It's the purchases
-// (or gains) that slipped by, so it counts as a cost or gain like they would have: in the day's Gains and Costs, and in
-// the tracker.
-function openInBankOptions(lineEl, r, c) {
-  const date = gridDates[r][c];
-  const current = readInBank(calendarData[r][c]);
-  if (current === null) return;
-  BudgetUI.openPanel({
-    origin: lineEl,
-    size: "small",
-    title: `${showDay(date)} In Bank`,
-    build(form, panel) {
-      // (Negative is for a bank account that's below zero)
-      const balance = BudgetUI.amountField({
-        label: "In Bank",
-        amount: current,
-        signs: BudgetUI.BALANCE_SIGNS,
-        hint: `What your bank says for this day. The difference goes on it as a ❗️ Regular entry titled ${CATCHUP_TITLE}, and the days after it follow.`
-      });
-      form.append(balance.el, BudgetUI.buttonRow([
-        { label: "Save", kind: "primary", type: "submit" },
-        { label: "Cancel", onClick: () => panel.close() }
-      ]));
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const typed = balance.value() ?? 0;
-        if (!Number.isFinite(typed)) return panel.setError("Enter what's in the bank, like 1250.00 (tap Negative when it's below zero).");
-        if (Math.abs(typed) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-        const difference = Math.round((typed - current) * 100) / 100;
-        if (difference === 0) return panel.close(); // Already right
-        BudgetUI.submit(panel, () => addCalendarEntry({ title: CATCHUP_TITLE, sprite: "❗️", amount: difference, date }));
-      });
-    }
   });
 }
 
@@ -458,6 +420,67 @@ function renderInfoRow() {
     item.appendChild(button);
     list.appendChild(item);
   }
+}
+
+// The Lowest card opens the 28 days after the calendar (a tap, or Enter or Space)
+function wireLowestCard() {
+  const card = document.querySelector(".lowestCard");
+  if (!card) return;
+  card.addEventListener("click", () => openAheadDays(card));
+  card.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openAheadDays(card);
+  });
+}
+
+// "$1235" or "-$40": In Bank to the dollar, short enough for a day in the window's small squares
+function wholeDollars(amount) {
+  const dollars = Math.round(amount);
+  return `${dollars < 0 ? "-" : ""}$${Math.abs(dollars)}`;
+}
+
+// The Lowest card's window: the 28 days after the calendar (aheadDays in Process Budget.js), four weeks from Sunday like
+// History, each day with its date and In Bank as the daily update will have it (to the dollar; the lowest one ringed,
+// and one below $0 red), and the lowest and the 28th day's In Bank over them. Tapping a day closes it and zooms that day
+// in over the calendar, like any day there, to see its entries, add one, or change one (a change goes into Upcoming),
+// and to swipe on to the days before it.
+function openAheadDays(origin) {
+  const days = aheadDays();
+  if (days.length === 0) return;
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "The 28 Days After The Calendar",
+    build(form, panel) {
+      const lowest = days.reduce((low, day) => (day.inBank < low.inBank ? day : low), days[0]);
+      const last = days[days.length - 1];
+      const summary = BudgetUI.element("p", "panelText aheadSummary");
+      const amount = (value) => BudgetUI.noTranslate(BudgetUI.element("span", value < 0 ? "negative" : "", formatMoney(value)));
+      summary.append("Lowest: ", amount(lowest.inBank), ` on ${showDay(lowest.date)}. Day 28: `, amount(last.inBank), ".");
+      const table = BudgetUI.element("table", "aheadGrid");
+      const head = table.createTHead().insertRow();
+      for (let c = 0; c < 7; c++) head.appendChild(BudgetUI.element("th", "", ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][(days[0].date.getDay() + c) % 7]));
+      const body = table.createTBody();
+      let row = null;
+      days.forEach((day, index) => {
+        if (index % 7 === 0) row = body.insertRow();
+        const td = row.insertCell();
+        const button = BudgetUI.element("button", "aheadDay");
+        button.type = "button";
+        button.classList.toggle("isNegative", day.inBank < 0);
+        button.classList.toggle("isLowest", day === lowest);
+        button.setAttribute("aria-label", `${showDay(day.date)}: In Bank ${formatMoney(day.inBank)}${day === lowest ? ", the lowest" : ""}`);
+        button.append(BudgetUI.noTranslate(BudgetUI.element("span", "aheadDate", showDay(day.date))), BudgetUI.noTranslate(BudgetUI.element("span", "aheadInBank", wholeDollars(day.inBank))));
+        button.addEventListener("click", () => {
+          panel.close();
+          zoomBudgetDay(day.date);
+        });
+        td.appendChild(button);
+      });
+      form.append(summary, table, BudgetUI.element("p", "panelHint", "In Bank at the end of each day, counting your recurring entries, connected spreadsheets' and calendars' entries, and Upcoming entries (not Hidden ones). Tap a day to see its entries, add one, or change one."), BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+    }
+  });
 }
 
 // The Lowest card's look past the calendar, from the last day's two lines (see afterCalendarLine): the day In Bank is

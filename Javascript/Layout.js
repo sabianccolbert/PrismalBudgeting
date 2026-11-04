@@ -318,10 +318,15 @@ const FLOAT_CARDS = [
   ".authCard",
   "#transitionContainer .budgetCard:not(.helpView)"
 ].join(", ");
-const FLOATING = new WeakSet();
+const FLOATING = new WeakMap(); // Each floating card's loop: { x, y (px), time, delay (ms) }
 const FLOAT_WATCH = typeof IntersectionObserver === "function"
   ? new IntersectionObserver((ENTRIES) => {
-      ENTRIES.forEach(ENTRY => ENTRY.target.classList.toggle("isFloating", ENTRY.isIntersecting));
+      ENTRIES.forEach((ENTRY) => {
+        ENTRY.target.classList.toggle("isFloating", ENTRY.isIntersecting);
+        if (!ENTRY.isIntersecting) stopPixelFloat(ENTRY.target);
+        else if (!PIXEL_FLOATERS.has(ENTRY.target)) PIXEL_FLOATERS.set(ENTRY.target, "");
+      });
+      startPixelFloat();
     }, { rootMargin: "200px 0px" })
   : null;
 
@@ -330,14 +335,73 @@ function floatCards() {
   if (!FLOAT_WATCH) return;
   document.querySelectorAll(FLOAT_CARDS).forEach((CARD) => {
     if (FLOATING.has(CARD)) return;
-    FLOATING.add(CARD);
     const SIDE = Math.random() < 0.5 ? -1 : 1;
-    CARD.style.setProperty("--FLOAT_X", `${(SIDE * (0.8 + Math.random() * 1.2)).toFixed(2)}px`);
-    CARD.style.setProperty("--FLOAT_Y", `${(2 + Math.random() * 1.5).toFixed(2)}px`);
-    CARD.style.setProperty("--FLOAT_TIME", `${(7 + Math.random() * 4).toFixed(2)}s`);
-    CARD.style.setProperty("--FLOAT_DELAY", `${(Math.random() * 1.5).toFixed(2)}s`);
+    const LOOP = { x: SIDE * (0.8 + Math.random() * 1.2), y: 2 + Math.random() * 1.5, time: (7 + Math.random() * 4) * 1000, delay: Math.random() * 1500 };
+    FLOATING.set(CARD, LOOP);
+    CARD.style.setProperty("--FLOAT_X", `${LOOP.x.toFixed(2)}px`);
+    CARD.style.setProperty("--FLOAT_Y", `${LOOP.y.toFixed(2)}px`);
+    CARD.style.setProperty("--FLOAT_TIME", `${(LOOP.time / 1000).toFixed(2)}s`);
+    CARD.style.setProperty("--FLOAT_DELAY", `${(LOOP.delay / 1000).toFixed(2)}s`);
     FLOAT_WATCH.observe(CARD);
   });
+}
+
+/* GROUP: Floating by whole pixels (computers) */
+// On a computer's screen, a card that moves by part of a pixel has its words and lines smeared across two pixels, then
+// sharp again as it reaches the next one, over and over. So there (a mouse or trackpad: html.pixelFloat, which turns the
+// CSS loop off, stylesheet.css FLOATING CARDS), each card moves along the same loop, but only by whole pixels of the
+// screen: a frame sets its translate when its spot, rounded to the screen's pixels, changes. Phones keep the CSS loop,
+// where part of a pixel is too small to see. Reduced Motion holds them still, and a card holds still while a day in it is
+// zoomed or held bigger (like the CSS loop).
+const PIXEL_FLOAT_QUERY = window.matchMedia("(pointer: fine)");
+const PIXEL_FLOATERS = new Map(); // The cards floating by whole pixels -> the spot each was last moved to ("" for its own)
+let PIXEL_FLOAT_FRAME = 0;
+
+const pixelFloatOn = () => PIXEL_FLOAT_QUERY.matches;
+document.documentElement.classList.toggle("pixelFloat", pixelFloatOn());
+PIXEL_FLOAT_QUERY.addEventListener?.("change", () => {
+  document.documentElement.classList.toggle("pixelFloat", pixelFloatOn());
+  for (const CARD of PIXEL_FLOATERS.keys()) {
+    CARD.style.translate = "";
+    PIXEL_FLOATERS.set(CARD, "");
+  }
+  startPixelFloat();
+});
+
+// A card that stopped floating goes back to its spot
+function stopPixelFloat(CARD) {
+  PIXEL_FLOATERS.delete(CARD);
+  if (CARD.style.translate) CARD.style.translate = "";
+}
+
+function startPixelFloat() {
+  if (!PIXEL_FLOAT_FRAME && pixelFloatOn() && PIXEL_FLOATERS.size > 0) PIXEL_FLOAT_FRAME = requestAnimationFrame(movePixelFloaters);
+}
+
+// One frame: each card's spot on its loop (across and back, and up and back down: the CSS cardFloat's path), in whole
+// pixels of the screen, written only when it moved to another one
+function movePixelFloaters(NOW) {
+  PIXEL_FLOAT_FRAME = 0;
+  if (!pixelFloatOn() || PIXEL_FLOATERS.size === 0) return;
+  const STILL = prefersReducedMotion();
+  const PIXEL = 1 / (window.devicePixelRatio || 1);
+  const ZOOMED = document.documentElement.classList.contains("dayZoomed");
+  const BIG_DAY = document.querySelector("td.is-editing, td.is-magnified");
+  for (const [CARD, LAST] of PIXEL_FLOATERS) {
+    const LOOP = FLOATING.get(CARD);
+    const HOLD = STILL || !LOOP || (ZOOMED && CARD.matches(".calendarCard, .pageCard")) || (!!BIG_DAY && CARD.contains(BIG_DAY));
+    let SPOT = "";
+    if (!HOLD) {
+      const TURN = (2 * Math.PI * Math.max(0, NOW - LOOP.delay)) / LOOP.time;
+      const X = Math.round((LOOP.x * Math.sin(TURN)) / PIXEL) * PIXEL;
+      const Y = Math.round((-LOOP.y * (1 - Math.cos(TURN)) / 2) / PIXEL) * PIXEL;
+      SPOT = X || Y ? `${X}px ${Y}px` : "";
+    }
+    if (SPOT === LAST) continue;
+    CARD.style.translate = SPOT;
+    PIXEL_FLOATERS.set(CARD, SPOT);
+  }
+  PIXEL_FLOAT_FRAME = requestAnimationFrame(movePixelFloaters);
 }
 
 let FLOAT_FRAME = 0;
@@ -1107,9 +1171,11 @@ document.addEventListener("click", (EVENT) => {
 // this tab's Undo history and the budget it had open, but keeps the device's own choices: whether analytics is off here, its date format,
 // whether music and sound effects are off (Sounds.js), the kind of phone picked for the Steps for lists, the passkey
 // it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Entry icons it made or used
-// (their entries are added when the budget opens here, see holdQuickEntries), and the day picked for Bob's Accounts
-// card (Bob Page.js).
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day"];
+// (their entries are added when the budget opens here, see holdQuickEntries), the day picked for Bob's Accounts
+// card (Bob Page.js), its theme and Custom theme and its Reduced Motion switches (Boot.js), so the next sign-in here
+// looks the same, and whether push notifications were turned off here on purpose (Notifications.js).
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
+  "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));

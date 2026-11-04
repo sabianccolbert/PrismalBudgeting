@@ -34,7 +34,7 @@ const TABLE_SHAPES = {
   history:    { cols: 7, minRows: 1 },  // [0] column titles, then one row per week (newest first)
   search:     { cols: 4, minRows: 3 },  // [0]-[2] search summary
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
-  accounts:   { cols: 12, minRows: 1 }, // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest since, max, compounds, added every, added on, "separate" | "", interest balance when it started counting]
+  accounts:   { cols: 16, minRows: 1 }, // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest (and escrow) since, max, compounds, added every, added on, "separate" | "", interest balance when it started counting, escrow a month, escrow's day, escrow due when it started counting, interest counted from]
   account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
   logs:       { cols: 10, minRows: 1 }  // [0] column titles, then [time, duration, action, 4 details, status, what it changed (for its Undo, see CHANGE LOG UNDO), who made it]
 };
@@ -825,7 +825,7 @@ let changeLogStart = 0;
 // New calendar entry. entry: { title, sprite, amount (signed number), percent (signed, for a % amount instead; see
 // PERCENT_MARK), date, placeholder, until (a placeholder's last day: a Date, or left out for its own day), purpose (what its title's money is for: one of the wavelengths, see WAVELENGTH
 // PLANNING; left out, it stays as it is), note (see ENTRY NOTES: added to the entry's, when it goes into one already
-// there) }. Can be undone.
+// there), reminder (days before its day, for a day after today; see ENTRY REMINDERS) }. Can be undone.
 function addCalendarEntry(entry) {
   const hasPercent = typeof entry.percent === "number";
   const signed = hasPercent ? entry.percent : entry.amount;
@@ -843,19 +843,22 @@ function addCalendarEntry(entry) {
     });
     noteEntryPurpose(entry.title, entry.purpose);
     addEntryNote(entry.date || today, entry.title, landed.entryType, entry.note);
+    addEntryReminder(entry.date || today, entry.title, landed.entryType, entry.reminder ?? null);
     return {};
   }, { label: `added ${capitalize(String(entry.title || "").trim())} (${hasPercent ? showPercent(entry.percent) : formatMoney(entry.amount)}) on ${showDay(createSafeMidnight(entry.date || today))}`, dates: [entry.date || today] });
 }
 
 // Change, move, or delete a calendar entry (or one in Upcoming; History's go through changeHistoryEntry). change: { title,
 // sprite, date, action, amount, moveDate, renameTo (a new title of its own, see renameEntry), purpose (its title's, see
-// addCalendarEntry), note (its own, see ENTRY NOTES; left out, it keeps the one it has) }. Can be undone.
+// addCalendarEntry), note (its own, see ENTRY NOTES; left out, it keeps the one it has), reminder (days before its day,
+// or null for none, see ENTRY REMINDERS; left out, it keeps the one it has) }. Can be undone.
 function changeCalendarEntry(change) {
   return runBudgetAction("", () => keepEntryDetails(entryChange(change), change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
 // After a change to an entry: its title's purpose as the form says (change.purpose; see WAVELENGTH PLANNING), on the
-// title it has now, and its note, which goes where it went (see followEntryNote). Nothing, when it couldn't be found.
+// title it has now, and its note and reminder, which go where it went (see followEntryNote). Nothing, when it couldn't
+// be found.
 function keepEntryDetails(result, change) {
   if (notFound) return result;
   const deleted = String(change.action || "").toLowerCase() === "delete";
@@ -1039,8 +1042,8 @@ function accountBalancesToday() {
 
 // After a change to History (worked out again: refreshBudgetData), each Other Account's balance today goes back to what
 // it was (balances, from accountBalancesToday): its starting amount moves by the difference, so its entries stay as they
-// are. An account with interest whose interest that would change (an entry moved after its interest started counting)
-// starts counting its interest again from today instead, like typing its balance does (accountEntry).
+// are. An account with interest or escrow whose interest or escrow that would change (an entry moved after it started
+// counting) starts counting again from today instead, like typing its balance does (accountEntry).
 function keepAccountBalances(balances) {
   let moved = false;
   for (const summary of accountSummaries()) {
@@ -1050,14 +1053,18 @@ function keepAccountBalances(balances) {
     const start = Math.round((summary.start - (summary.today - target)) * 100) / 100;
     row[3] = start ? formatMoney(start) : "";
     moved = true;
-    if (!summary.interest) continue;
+    if (!summary.interest && !summary.escrow) continue;
     const after = accountSummaries().find(account => account.index === summary.index);
     if (after && Math.abs(after.today - target) >= 0.005) {
       const rebased = Math.round((target - after.entriesToday) * 100) / 100;
       row[3] = rebased ? formatMoney(rebased) : "";
+      // (The stretch of interest today is in still counts from its start: see interestPeriodStart)
+      const periodStart = after.interest ? interestPeriodStart(after.interest, today) : null;
       row[5] = formatToMMDDYYYY(today);
-      // (With Separate Interest, its interest balance is today's)
+      row[15] = periodStart && periodStart < today ? formatToMMDDYYYY(periodStart) : "";
+      // (With Separate Interest, its interest balance is today's, and with escrow, so is what's due)
       if (after.interest?.separate) row[11] = formatMoney(after.owed ?? 0);
+      if (after.escrow) row[14] = after.escrowDue > 0 ? formatMoney(after.escrowDue) : "";
     }
   }
   if (moved) updateAccountBalances();
@@ -1339,6 +1346,7 @@ function quickEntry(quick) {
   formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
   noteEntryPurpose(entry.title, entry.purpose, true); // (Picked on the Quick Entry page, or left out to stay as it is)
   addEntryNote(date, entry.title, landed.entryType, entry.note, true);
+  addEntryReminder(date, entry.title, landed.entryType, typeof entry.remind === "number" ? entry.remind : null, true);
   return { quickEntry: { id: quick.id, table } };
 }
 
@@ -1530,6 +1538,7 @@ function refreshBudgetData() {
   nextFourNegative = false;
   recurringToDeleteIndexes = [];
 
+  aheadDaysCache = null; // (The 28 days after the calendar are worked out again when they're next looked at)
   normalizeFrequencies();
   upcomingEntriesMaintenance();
   writeRecurring();
@@ -2286,10 +2295,12 @@ function describeAliases(text) {
 // An account's balance is its starting amount plus all of those changes, so changing, moving, or deleting one of
 // its entries changes it too. Typing a balance on the Other Accounts page changes the starting amount (no entry
 // is made). An account can also get interest (a credit card, a loan, or savings that earn it), compounding and added
-// how and when it says: see interestStepper. accountsData.list: [0] column titles, then [name, balance today (filled in
-// by updateAccountBalances, so the Quick Entry page can show it), "default" | "cash" | "", starting amount ("" is
-// $0.00), interest rate (a year, in %; "" for none), the day interest started counting (MM/DD/YYYY), max, how interest
-// compounds, every how many months it's added, the day of the month it's added (see accountInterest)].
+// how and when it says: see interestStepper; and escrow, like a mortgage's: see accountEscrow. accountsData.list: [0]
+// column titles, then [name, balance today (filled in by updateAccountBalances, so the Quick Entry page can show it),
+// "default" | "cash" | "", starting amount ("" is $0.00), interest rate (a year, in %; "" for none), the day interest
+// and escrow started counting (MM/DD/YYYY), max, how interest compounds, every how many months it's added, the day of
+// the month it's added, Separate Interest and its interest balance then (see accountInterest), escrow a month, its day,
+// and what was due then (see accountEscrow), and the day interest counts from (see interestPeriodStart)].
 // accountsData.coming: each account's changes after today, which the Quick Entry page counts once their day comes (see
 // accountChangesAhead). accountsData.inBank: In Bank from today through the 28 days after the calendar, for the Quick
 // Entry page (see inBankAhead). The default account, Savings, is always there and can't be deleted.
@@ -2379,17 +2390,30 @@ function accountEntryLines(index) {
 // [{ date, change, name (the account's) }], for the tracker's Interest row (updateAccountBalances fills it in)
 let interestAdded = [];
 
-// Each account's balance today goes in its row, and its changes still to come go with them (interest too), and so
-// does In Bank from today on (the Quick Entry page can't add up the budget itself)
+// Each account's balance today goes in its row, and its changes still to come go with them (interest and escrow too,
+// worked out with its changes after the calendar), and so does In Bank from today on (the Quick Entry page can't add up
+// the budget itself)
 function updateAccountBalances() {
   const lastDay = addDays(gridEndDate, 28);
   const coming = accountChangesAhead();
   interestAdded = [];
-  for (let summary of accountSummaries(lastDay)) {
+  const afterCalendar = new Map(); // Each account's changes after the calendar (by its name, as compared)
+  for (const [name, day, change] of coming) {
+    const date = createSafeMidnight(day, true);
+    if (date <= gridEndDate) continue;
+    const key = cleanString(name);
+    if (!afterCalendar.has(key)) afterCalendar.set(key, []);
+    afterCalendar.get(key).push({ date, change });
+  }
+  for (let summary of accountSummaries(today)) {
     accountsData.list[summary.index][1] = formatMoney(summary.today);
-    for (const credit of summary.interestCredits) {
+    const extras = accountExtras({ ...summary, entries: [...summary.entries, ...(afterCalendar.get(cleanString(summary.name)) || [])] }, lastDay);
+    for (const credit of extras.credits) {
       if (credit.date > today) coming.push([summary.name, formatToYMD(credit.date), credit.change]);
       else interestAdded.push({ date: credit.date, change: credit.change, name: summary.name });
+    }
+    for (const paid of extras.escrow) {
+      if (paid.date > today) coming.push([summary.name, formatToYMD(paid.date), paid.change]);
     }
   }
   coming.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
@@ -2509,11 +2533,12 @@ function isTransferEntry(sprite) {
 }
 
 // Each account's balance today, with the entries that changed it (and the ones on the calendar that will), newest
-// first, and its interest (through interestUntil): [{ index, name, isDefault, start, interest (see accountInterest, or
-// null), entriesToday (its entries through today, added up), today, owed (with Separate Interest: the part of today's
-// balance that's interest, see interestBalance), entries: [{ date, change, sprite, title (its own, "" without one) }],
-// interestCredits: [{ date, change }] oldest first }]. calendarStart: the calendar's first day (the daily update's is
-// still the saved one's).
+// first, and its interest and escrow (through interestUntil): [{ index, name, isDefault, start, interest (see
+// accountInterest, or null), escrow (see accountEscrow, or null), entriesToday (its entries through today, added up),
+// today, owed (with Separate Interest: the part of today's balance that's interest, see accountState), escrowDue (with
+// escrow: what's still due today), entries: [{ date, change, sprite, title (its own, "" without one) }],
+// interestCredits: [{ date, change }] oldest first, escrowPaid: [{ date, change (below $0) }] oldest first }].
+// calendarStart: the calendar's first day (the daily update's is still the saved one's).
 function accountSummaries(interestUntil = gridEndDate, calendarStart = gridStartDate) {
   let accounts = accountTitleMap();
   let summaries = new Map(accountRows().map(account => [account.index, {
@@ -2522,10 +2547,12 @@ function accountSummaries(interestUntil = gridEndDate, calendarStart = gridStart
     isDefault: isDefaultAccount(account.row),
     start: accountStart(account.row),
     interest: accountInterest(account.row),
+    escrow: accountEscrow(account.row),
     entriesToday: 0,
     today: 0,
     entries: [],
-    interestCredits: []
+    interestCredits: [],
+    escrowPaid: []
   }]));
 
   // dayOf(lines): the cell's day (only worked out for a cell with an account entry)
@@ -2550,11 +2577,18 @@ function accountSummaries(interestUntil = gridEndDate, calendarStart = gridStart
   const addUp = (list, through) => list.filter(item => item.date <= through).reduce((total, item) => total + item.change, 0);
   return [...summaries.values()].map(summary => {
     summary.entries.sort((a, b) => b.date - a.date);
-    if (summary.interest) summary.interestCredits = interestCredits(summary.start, summary.entries, summary.interest, interestUntil);
+    const extras = accountExtras(summary, interestUntil);
+    summary.interestCredits = extras.credits;
+    summary.escrowPaid = extras.escrow;
     summary.entriesToday = round(addUp(summary.entries, today));
-    summary.today = round(summary.start + summary.entriesToday + addUp(summary.interestCredits, today));
-    // With Separate Interest, today's balance is in two parts: the interest owed (or earned) apart, and the rest
-    if (summary.interest?.separate) summary.owed = runInterest(summary.start, summary.entries, summary.interest, today).state.owed;
+    summary.today = round(summary.start + summary.entriesToday + addUp(summary.interestCredits, today) + addUp(summary.escrowPaid, today));
+    // With Separate Interest, today's balance is in two parts: the interest owed (or earned) apart, and the rest. With
+    // escrow, what's still due today.
+    if (summary.interest?.separate || summary.escrow) {
+      const now = runAccount(summary.start, summary.entries, summary.interest, summary.escrow, today).state;
+      if (summary.interest?.separate) summary.owed = now.owed;
+      if (summary.escrow) summary.escrowDue = now.escrowDue;
+    }
     return summary;
   });
 }
@@ -2574,9 +2608,10 @@ function budgetAhead(summaries) {
 // the way the daily update will fill them (Upcoming entries, then recurring and connected spreadsheets' entries; see
 // dayAfterCalendar). summaries: accountSummaries(), when the caller has them. Returns { until, summaries, inBank: [{ date,
 // amount }] (In Bank at the end of each day, today first), inBankOn(date), accountOn(index, date) (an Other Account's
-// balance at the end of date, its interest too; index: its row), interestBetween(index, from, to) (the interest it gets
-// after from, through to: below $0 is interest paid), accountParts(index) (what its balance comes from: { start, interest,
-// entries }, to work it out again with more entries, see interestCredits) }. Days after until count as until.
+// balance at the end of date, its interest and escrow too; index: its row), interestBetween(index, from, to) (the
+// interest it gets after from, through to: below $0 is interest paid), accountParts(index) (what its balance comes from:
+// { start, interest, escrow, entries }, to work it out again with more entries, see accountExtras) }. Days after until
+// count as until.
 function projectBudget(until, summaries = accountSummaries()) {
   const accounts = accountTitleMap();
   const coming = new Map(summaries.map(summary => [summary.index, []]));
@@ -2598,8 +2633,9 @@ function projectBudget(until, summaries = accountSummaries()) {
   }
   const byIndex = new Map(summaries.map(summary => {
     const entries = [...summary.entries, ...(coming.get(summary.index) || [])];
-    const credits = summary.interest ? interestCredits(summary.start, entries, summary.interest, until) : [];
-    return [summary.index, { start: summary.start, interest: summary.interest, entries, credits }];
+    const parts = { start: summary.start, interest: summary.interest, escrow: summary.escrow, entries };
+    const extras = accountExtras(parts, until);
+    return [summary.index, { ...parts, credits: extras.credits, escrowPaid: extras.escrow }];
   }));
   const round = (amount) => Math.round(amount * 100) / 100;
   const through = (list, date) => list.reduce((total, item) => (item.date <= date ? total + item.change : total), 0);
@@ -2613,7 +2649,7 @@ function projectBudget(until, summaries = accountSummaries()) {
     },
     accountOn(index, date) {
       const account = byIndex.get(index);
-      return account ? round(account.start + through(account.entries, date) + through(account.credits, date)) : 0;
+      return account ? round(account.start + through(account.entries, date) + through(account.credits, date) + through(account.escrowPaid, date)) : 0;
     },
     interestBetween(index, from, to) {
       const account = byIndex.get(index);
@@ -2621,7 +2657,7 @@ function projectBudget(until, summaries = accountSummaries()) {
     },
     accountParts(index) {
       const account = byIndex.get(index);
-      return account ? { start: account.start, interest: account.interest, entries: account.entries } : null;
+      return account ? { start: account.start, interest: account.interest, escrow: account.escrow, entries: account.entries } : null;
     }
   };
 }
@@ -2632,13 +2668,17 @@ function accountStart(row) {
   return text ? Math.round(parseAmount(text) * 100) / 100 : 0;
 }
 
-// An account's interest: { rate (a year, in %), since (the day it started counting), compound (how often it earns
-// interest of its own: a key of INTEREST_COMPOUNDING), every (months between the days it's added: INTEREST_EVERY), day
-// (the day of the month it's added, 1 to 31: a shorter month's last day for one past it), separate (Separate Interest:
-// the interest added is kept apart from the balance, like a mortgage's, see interestBalance), owed (with separate, the
-// interest balance on the day it started counting) }, or null when it has none. Its row's [4], [5], [7], [8], [9], [10],
-// and [11]; blank ones are monthly, every month, the day of the month it started counting, and not separate.
+// An account's interest: { rate (a year, in %), since (the day it started counting), from (the day the interest it gets
+// next counts from: since, or for a balance typed again between the days interest is added, the last of those days
+// before it, the way a bank adds a stretch's interest at its end, on the balances it had; see interestPeriodStart),
+// compound (how often it earns interest of its own: a key of INTEREST_COMPOUNDING), every (months between the days it's
+// added: INTEREST_EVERY), day (the day of the month it's added, 1 to 31: a shorter month's last day for one past it),
+// separate (Separate Interest: the interest added is kept apart from the balance, like a mortgage's, see accountState),
+// owed (with separate, the interest balance on the day it started counting) }, or null when it has none. Its row's [4],
+// [5], [7], [8], [9], [10], [11], and [15]; blank ones are monthly, every month, the day of the month it started
+// counting, not separate, and counting from since.
 const MAX_INTEREST_RATE = 1000;
+const MAX_PERIOD_DAYS = 370; // The longest stretch between the days interest is added (a year), with some room
 // How often interest earns interest: every day, every 1, 3, or 12 months, or never ("simple": only the balance without
 // the interest added to it earns any)
 const INTEREST_COMPOUNDING = { daily: 0, monthly: 1, quarterly: 3, yearly: 12, simple: null };
@@ -2653,9 +2693,12 @@ function accountInterest(row) {
   const every = Number(row?.[8]);
   const day = Number(row?.[9]);
   const separate = String(row?.[10] ?? "").trim() === "separate";
+  const fromText = String(row?.[15] ?? "").trim();
+  const from = fromText ? createSafeMidnight(fromText, true) : null;
   return {
     rate,
     since,
+    from: from && !isNaN(from.getTime()) && from < since && getDayDifference(since, from) <= MAX_PERIOD_DAYS ? from : since,
     compound: Object.prototype.hasOwnProperty.call(INTEREST_COMPOUNDING, compoundText) ? compoundText : "monthly",
     every: INTEREST_EVERY.includes(every) ? every : 1,
     day: Number.isInteger(day) && day >= 1 && day <= 31 ? day : since.getDate(),
@@ -2664,33 +2707,76 @@ function accountInterest(row) {
   };
 }
 
-// An account's balance as interest is worked out a day at a time (see runInterest), from its starting amount (start,
-// everything in it). With Separate Interest (interest.separate), the interest added is kept apart (owed: what's owed in
-// interest, below $0, or earned, above it), and only the rest earns interest, like a mortgage. A payment toward it (an
-// entry the other way from what's owed) pays the interest first, then the rest; entries on or before the day it started
-// counting were already in the balance typed then. Without it, it's one balance, which is what earns interest.
-// { base (what earns interest), owed, total, entry(change, date), credit(change) }
-function interestBalance(start, interest) {
+// An account's escrow, like a mortgage's (the part of each month's payment the lender keeps to pay the home's property
+// taxes and insurance): { amount (due each month, above $0), day (the day of the month it's due, 1 to 31: a shorter
+// month's last day for one past it), since (the day it started counting: the row's [5], which its interest shares), due
+// (what was still due then) }, or null for none. Its row's [12], [13], and [14]. Each month on its day the amount comes
+// due, and money put into the account pays it after the interest owed and before the rest (see accountState), so the
+// balance only goes down by what's left, the way a mortgage's principal does.
+function accountEscrow(row) {
+  const amountText = String(row?.[12] ?? "").trim();
+  const amount = Math.round(parseAmount(amountText) * 100) / 100;
+  const sinceText = String(row?.[5] ?? "").trim();
+  const since = sinceText ? createSafeMidnight(sinceText, true) : null;
+  if (!amountText || !(amount > 0) || amount > MAX_AMOUNT || !since || isNaN(since.getTime())) return null;
+  const day = Number(row?.[13]);
+  const due = Math.round(parseAmount(row?.[14]) * 100) / 100;
+  return { amount, day: Number.isInteger(day) && day >= 1 && day <= 31 ? day : since.getDate(), since, due: due > 0 ? Math.min(due, MAX_AMOUNT) : 0 };
+}
+
+// Is day an escrow's day of the month (a shorter month's last day for one past it)?
+function isEscrowDay(day, escrow) {
+  const last = new Date(day.getFullYear(), day.getMonth() + 1, 0).getDate();
+  return day.getDate() === Math.min(escrow.day, last);
+}
+
+// An account's escrow in words, for Change Logs: "$412.50 a month, due on day 1"
+function describeEscrow(escrow) {
+  return `${formatMoney(escrow.amount)} a month, due on day ${escrow.day}`;
+}
+
+// An account's balance as it's worked out a day at a time (see runAccount), from its starting amount (start, everything
+// in it), in parts: base (what earns interest), owed (with Separate Interest, interest.separate: the interest added, kept
+// apart from the rest, below $0 when it's owed or above it when it's earned; only the rest earns interest, like a
+// mortgage), and escrowDue (escrow due and not paid yet). total is the balance: base and owed together. Entries on or
+// before the day it started counting were already in the balance typed then. After it, a payment toward it pays the
+// interest owed first (an entry the other way from what's owed: money put in for a loan, or taken out of savings that
+// earned it); then money put in pays the escrow due, which leaves the account; and the rest goes to the base.
+// { base, owed, escrowDue, total, entry(change, date) (gives back the escrow it paid: 0 for none), credit(change) (the
+// interest added), dueEscrow(amount) (a month's escrow comes due) }
+function accountState(start, interest, escrow = null) {
   const separate = !!interest?.separate;
   const round = (amount) => Math.round(amount * 100) / 100;
   let owed = separate ? interest.owed : 0;
   let rest = round(start - owed);
+  let escrowDue = escrow ? escrow.due : 0;
   return {
     get base() { return rest; },
     get owed() { return owed; },
+    get escrowDue() { return escrowDue; },
     get total() { return round(rest + owed); },
     entry(change, date) {
+      let left = change;
       if (separate && date > interest.since) {
-        const toward = owed < 0 && change > 0 ? Math.min(change, -owed) : owed > 0 && change < 0 ? -Math.min(-change, owed) : 0;
+        const toward = owed < 0 && left > 0 ? Math.min(left, -owed) : owed > 0 && left < 0 ? -Math.min(-left, owed) : 0;
         owed = round(owed + toward);
-        rest = round(rest + change - toward);
-      } else {
-        rest = round(rest + change);
+        left = round(left - toward);
       }
+      let paid = 0;
+      if (escrow && date > escrow.since && left > 0 && escrowDue > 0) {
+        paid = Math.min(left, escrowDue);
+        escrowDue = round(escrowDue - paid);
+        left = round(left - paid);
+      }
+      rest = round(rest + left);
+      return paid;
     },
     credit(change) {
       if (separate) owed = round(owed + change);
       else rest = round(rest + change);
+    },
+    dueEscrow(amount) {
+      escrowDue = round(escrowDue + amount);
     }
   };
 }
@@ -2716,42 +2802,46 @@ function describeInterest(interest) {
   return `${interest.rate}% a year, ${compounding}, added ${every} on day ${interest.day}${interest.separate ? ", kept separate" : ""}`;
 }
 
-// An account's interest, worked out a day at a time from the day after it started counting (interest.since). step(day,
-// balance) takes each day in order with the account's balance at its start (its starting amount, its entries before
-// that day, and the interest added before it), and gives back the interest added to it that day, to the cent (0 on most
-// days):
+// An account's interest, worked out a day at a time from the day after it counts from (interest.from: the day it started
+// counting, since, or the start of the stretch that day was in). step(day, balance) takes each day in order with the
+// account's balance at its start (its starting amount, its entries before that day, and the interest added before it),
+// and gives back the interest added to it that day, to the cent (0 on most days):
 //   - It's added on interest.day every interest.every months, counting that day of the month from the first one after
-//     it started counting: first on the interest.every-th of them (every month: the first one itself, every 3 months:
-//     the third), then every interest.every months
+//     it counts from: first on the interest.every-th of them (every month: the first one itself, every 3 months: the
+//     third), then every interest.every months
 //   - "daily": every day earns a 365th of the yearly rate, on the balance and the interest earned since it was last
 //     added
 //   - "simple": every day earns a 365th of the yearly rate, on the balance without any interest added to it
 //   - "monthly", "quarterly", "yearly": every 1, 3, or 12 months on that day of the month (counted the same way), the
 //     balance that morning and the interest earned since it was last added earn that many twelfths of the yearly rate
 //     (a first stretch shorter than that earns a 365th a day)
-// So a balance below $0 (money owed, like a credit card's) goes further below, and one above $0 grows.
+//   - Up to since (a stretch that started before the balance was typed again), it earns the same way, but interest added
+//     on one of its days was in the balance typed then, so it isn't added again (what was earned before it goes with it)
+// So a balance below $0 (money owed, like a credit card's) goes further below, and one above $0 grows. isAddDay(day):
+// is it one of the days interest is added?
 function interestStepper(interest) {
   const rate = interest.rate; // (% a year: a dollar earns rate cents a year)
   const months = INTEREST_COMPOUNDING[interest.compound];
+  const from = interest.from || interest.since;
   // The day it's added in a month (counted in months from the year 0)
   const dayIn = (month) => {
     const year = Math.floor(month / 12);
     const last = new Date(year, month % 12 + 1, 0).getDate();
     return new Date(year, month % 12, Math.min(interest.day, last));
   };
-  const sinceMonth = interest.since.getFullYear() * 12 + interest.since.getMonth();
-  const firstMonth = dayIn(sinceMonth) > interest.since ? sinceMonth : sinceMonth + 1;
+  const fromMonth = from.getFullYear() * 12 + from.getMonth();
+  const firstMonth = dayIn(fromMonth) > from ? fromMonth : fromMonth + 1;
   // Is day one of the days every `step` months, from the first one?
   const isEvery = (day, step) => {
     const month = day.getFullYear() * 12 + day.getMonth() - (firstMonth + step - 1);
     return month >= 0 && month % step === 0 && day.getTime() === dayIn(day.getFullYear() * 12 + day.getMonth()).getTime();
   };
-  let earned = 0;                     // Interest earned and not added yet, in cents
-  let added = 0;                      // Interest added so far
-  let lastWorkedOut = interest.since; // ("monthly", "quarterly", "yearly") The day interest was last worked out
+  let earned = 0;            // Interest earned and not added yet, in cents
+  let added = 0;             // Interest added so far
+  let lastWorkedOut = from;  // ("monthly", "quarterly", "yearly") The day interest was last worked out
   return {
     step(day, balance) {
-      if (day <= interest.since) return 0;
+      if (day <= from) return 0;
       if (months === 0) earned += (balance + earned / 100) * rate / 365;
       // (With Separate Interest, the balance given has no interest added to it already)
       else if (months === null) earned += (balance - (interest.separate ? 0 : added)) * rate / 365;
@@ -2763,43 +2853,97 @@ function interestStepper(interest) {
       if (!isEvery(day, interest.every)) return 0;
       const change = Math.round(earned) / 100;
       earned = 0;
+      if (day <= interest.since) return 0; // (In the balance typed then)
       added += change;
       return change;
-    }
+    },
+    isAddDay: (day) => isEvery(day, interest.every)
   };
 }
 
-// An account's interest from the day after it started counting through until, with its starting amount and its entries
-// ([{ date, change }]): { credits: [{ date, change }] oldest first, stepper (see interestStepper, ready for the day
-// after until), state (its balance at the end of until, see interestBalance) }. Typing the account's balance or changing
-// its interest starts it counting again from that day (accountEntry), so interest never counts twice.
-function runInterest(start, entries, interest, until) {
-  const ordered = [...entries].sort((a, b) => a.date - b.date);
+// The day an account's interest stretch started, as of day: the last day on or before it that interest was added, or
+// the day it counts from when none has come since (so typing its balance again on day loses none of that stretch)
+function interestPeriodStart(interest, day) {
   const stepper = interestStepper(interest);
-  const credits = [];
-  const state = interestBalance(start, interest);
-  let counted = 0; // Entries added into the balance so far
-  for (let day = addDays(interest.since, 1); day <= until; day = addDays(day, 1)) {
-    while (counted < ordered.length && ordered[counted].date < day) {
-      const entry = ordered[counted++];
-      state.entry(entry.change, entry.date);
-    }
-    const change = stepper.step(day, state.base);
-    if (change === 0) continue;
-    credits.push({ date: day, change });
-    state.credit(change);
+  const from = interest.from || interest.since;
+  for (let at = day; at > from; at = addDays(at, -1)) {
+    if (stepper.isAddDay(at)) return at;
   }
-  // (Entries on until itself, after its interest)
-  while (counted < ordered.length && ordered[counted].date <= until) {
-    const entry = ordered[counted++];
-    state.entry(entry.change, entry.date);
-  }
-  return { credits, stepper, state };
+  return from;
 }
 
-// The interest an account gets through until (see runInterest): [{ date, change }], oldest first
+// The last time a day of the month (a shorter month's last day for one past it) came, on or before date: where the
+// interest of an account that's new to the budget counts from, since its next statement adds that whole stretch's
+// interest (an account added on the 4th with interest added on the 1st has counted since the 1st)
+function lastMonthDay(dayOfMonth, date) {
+  const inMonth = (year, month) => new Date(year, month, Math.min(dayOfMonth, new Date(year, month + 1, 0).getDate()));
+  const thisMonth = inMonth(date.getFullYear(), date.getMonth());
+  return thisMonth <= date ? thisMonth : inMonth(date.getFullYear(), date.getMonth() - 1);
+}
+
+// An account worked out a day at a time (see runAccount): day(date) adds that day's interest and escrow due, before the
+// day's entries, and gives back the interest added; entry(change, date) puts an entry in and gives back the escrow it
+// paid; state: its balance in parts (accountState)
+function accountRunner(start, interest, escrow) {
+  const stepper = interest ? interestStepper(interest) : null;
+  const state = accountState(start, interest, escrow);
+  return {
+    state,
+    day(date) {
+      let change = 0;
+      if (stepper) {
+        change = stepper.step(date, state.base);
+        if (change !== 0) state.credit(change);
+      }
+      if (escrow && date > escrow.since && isEscrowDay(date, escrow)) state.dueEscrow(escrow.amount);
+      return change;
+    },
+    entry: (change, date) => state.entry(change, date)
+  };
+}
+
+// An account's interest and escrow through until, from the day after they count from, with its starting amount and its
+// entries ([{ date, change }]): { credits: [{ date, change }] (its interest, oldest first), escrow: [{ date, change }]
+// (what its payments paid in escrow, which left the account: each below $0, oldest first), runner (ready for the day
+// after until, see accountRunner), state (its balance at the end of until, see accountState) }. Typing the account's
+// balance or changing its interest or escrow starts them counting again from that day (accountEntry), so nothing counts
+// twice.
+function runAccount(start, entries, interest, escrow, until) {
+  const ordered = [...entries].sort((a, b) => a.date - b.date);
+  const runner = accountRunner(start, interest, escrow);
+  const credits = [];
+  const paid = [];
+  let counted = 0; // Entries added into the balance so far
+  const put = (entry) => {
+    const escrowPaid = runner.entry(entry.change, entry.date);
+    if (escrowPaid > 0) paid.push({ date: entry.date, change: -escrowPaid });
+  };
+  const starts = [interest && (interest.from || interest.since), escrow && escrow.since].filter(Boolean);
+  if (starts.length > 0) {
+    const first = starts.reduce((a, b) => (a < b ? a : b));
+    for (let day = addDays(first, 1); day <= until; day = addDays(day, 1)) {
+      while (counted < ordered.length && ordered[counted].date < day) put(ordered[counted++]);
+      const change = runner.day(day);
+      if (change !== 0) credits.push({ date: day, change });
+    }
+  }
+  // (Entries on until itself, after its interest and escrow)
+  while (counted < ordered.length && ordered[counted].date <= until) put(ordered[counted++]);
+  return { credits, escrow: paid, runner, state: runner.state };
+}
+
+// What changes an account's balance besides its entries, through until (see runAccount): { credits (its interest), escrow
+// (what its payments paid in escrow) }, both empty for an account with neither. parts: { start, interest, escrow,
+// entries }
+function accountExtras(parts, until) {
+  if (!parts || (!parts.interest && !parts.escrow)) return { credits: [], escrow: [] };
+  const run = runAccount(parts.start, parts.entries, parts.interest, parts.escrow, until);
+  return { credits: run.credits, escrow: run.escrow };
+}
+
+// The interest an account gets through until (see runAccount): [{ date, change }], oldest first
 function interestCredits(start, entries, interest, until) {
-  return runInterest(start, entries, interest, until).credits;
+  return runAccount(start, entries, interest, null, until).credits;
 }
 
 /* ---------- Paying a balance off (the Debt Calculator) ---------- */
@@ -2830,7 +2974,7 @@ function paymentDays(first, frequency, until) {
 // the start), interest (all of it), paid (all of it) }
 function payOff({ owed, interest, payment, frequency, first, from, until = addMonths(from, PAYOFF_YEARS * 12) }) {
   const round = (amount) => Math.round(amount * 100) / 100;
-  const stepper = interest ? interestStepper({ ...interest, since: from }) : null;
+  const stepper = interest ? interestStepper({ ...interest, since: from, from }) : null;
   const days = new Set(paymentDays(first, frequency, until).map(day => day.getTime()));
   const yearIn = addMonths(first, 12);
   const schedule = [];
@@ -2895,8 +3039,8 @@ function accountPayoff(index, projection, { extra = 0, frequency = "monthly", fi
   const round = (amount) => Math.round(amount * 100) / 100;
   const run = (more) => {
     const entries = [...parts.entries, ...more];
-    const credits = parts.interest ? interestCredits(parts.start, entries, parts.interest, until) : [];
-    const events = [...entries, ...credits.map(credit => ({ ...credit, interest: true }))].sort((a, b) => a.date - b.date);
+    const extras = accountExtras({ ...parts, entries }, until);
+    const events = [...entries, ...extras.escrow, ...extras.credits.map(credit => ({ ...credit, interest: true }))].sort((a, b) => a.date - b.date);
     let balance = parts.start;
     let at = 0;
     while (at < events.length && events[at].date <= today) balance += events[at++].change;
@@ -2922,10 +3066,13 @@ function accountPayoff(index, projection, { extra = 0, frequency = "monthly", fi
 // to keep it), interest ({ rate (a year in %), compound, every, day, separate (see accountInterest; each left out is the
 // default) }, or null for none; leave it out to keep it), owed (with Separate Interest: today's interest balance, apart
 // from balance; leave it out to keep it), max (the most it can hold, like a credit card's limit: a number, or null for
-// none; leave it out to keep it) }. A new name goes on its entries and tracker aliases too, so they stay with it. A
-// balance sets the starting amount so today's balance comes out to it (the entries stay as they are). A new balance or new
-// interest starts interest counting from today, with the interest so far kept in today's balance (with Separate
-// Interest, in its interest balance; turned off, that goes into the balance).
+// none; leave it out to keep it), escrow ({ amount (each month), day (of the month it's due; left out: the day interest
+// is added, or today's) }, or null for none; leave it out to keep it) }. A new name goes on its entries and tracker
+// aliases too, so they stay with it. A balance sets the starting amount so today's balance comes out to it (the entries
+// stay as they are). A new balance, new interest, or new escrow starts interest and escrow counting from today, with the
+// interest so far kept in today's balance (with Separate Interest, in its interest balance; turned off, that goes into
+// the balance), the stretch of interest it's in still counting from its start (interestPeriodStart), and the escrow
+// still due kept.
 // calendar: the calendar as it was before the change. While a change runs, the entries that land by themselves (a
 // recurring transfer into the account today, say) are off it, and today's balance has to count them.
 function accountEntry(fields, index, calendar = calendarData) {
@@ -2965,6 +3112,18 @@ function accountEntry(fields, index, calendar = calendarData) {
   let owed = fields.owed === undefined || fields.owed === null ? null : Math.round(Number(fields.owed) * 100) / 100;
   if (owed !== null && (!Number.isFinite(owed) || Math.abs(owed) > MAX_AMOUNT)) throw new BudgetInputError("Enter the interest balance, like 512.40 (Negative for interest owed).");
   const separateColumns = (interestOwed) => (separate ? ["separate", formatMoney(interestOwed)] : ["", ""]);
+  // Escrow: as the form says, or as it was
+  const oldEscrow = row ? accountEscrow(row) : null;
+  let escrow = fields.escrow === undefined ? (oldEscrow ? { amount: oldEscrow.amount, day: oldEscrow.day } : null) : fields.escrow;
+  if (escrow) {
+    const amount = Math.round(Number(escrow.amount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_AMOUNT) throw new BudgetInputError("Enter the escrow due each month, like 412.50 (up to $1,000,000,000), or turn Escrow off.");
+    const day = escrow.day === undefined || escrow.day === null ? (settings ? settings.day : oldInterest ? oldInterest.day : today.getDate()) : Number(escrow.day);
+    if (!Number.isInteger(day) || day < 1 || day > 31) throw new BudgetInputError("Pick the day of the month the escrow is due.");
+    escrow = { amount, day };
+  }
+  const escrowChanged = !!escrow !== !!oldEscrow || (!!escrow && (escrow.amount !== oldEscrow.amount || escrow.day !== oldEscrow.day));
+  const escrowColumns = (due) => (escrow ? [formatMoney(escrow.amount), String(escrow.day), due > 0 ? formatMoney(due) : ""] : ["", "", ""]);
 
   formEntryRow[3] = "Account: " + name;
   formEntryRow[4] = "";
@@ -2972,11 +3131,15 @@ function accountEntry(fields, index, calendar = calendarData) {
   if (isNew) {
     const interestOwed = separate ? owed ?? 0 : 0;
     const total = Math.round(((balance || 0) + interestOwed) * 100) / 100;
-    const row = [name, formatMoney(total), "", total ? formatMoney(total) : "", rate ? String(rate) : "", rate ? formatToMMDDYYYY(today) : "", maxText, ...(settings ? settings.columns : ["", "", ""]), ...separateColumns(interestOwed)];
+    // (Its interest counts from the last day it was added, see lastMonthDay)
+    const periodStart = settings ? lastMonthDay(settings.day, today) : null;
+    const row = [name, formatMoney(total), "", total ? formatMoney(total) : "", rate ? String(rate) : "", rate || escrow ? formatToMMDDYYYY(today) : "", maxText,
+      ...(settings ? settings.columns : ["", "", ""]), ...separateColumns(interestOwed), ...escrowColumns(0), periodStart && periodStart < today ? formatToMMDDYYYY(periodStart) : ""];
     list.push(row);
     formEntryRow[2] = "🏦 New Account";
     if (balance || interestOwed) formEntryRow[5] = "Balance: " + formatMoney(balance || 0) + (separate ? ` and ${formatMoney(interestOwed)} in interest` : "");
     if (rate) formEntryRow[6] = `Interest: ${describeInterest(accountInterest(row))}`;
+    if (escrow) formEntryRow[6] = [formEntryRow[6], `Escrow: ${describeEscrow(escrow)}`].filter(Boolean).join(", ");
     if (maxText) formEntryRow[6] = [formEntryRow[6], `Max: ${maxText}`].filter(Boolean).join(", ");
     return {};
   }
@@ -3005,22 +3168,29 @@ function accountEntry(fields, index, calendar = calendarData) {
   // (Its settings written out in full: the day it's added stays put when interest starts counting again from today)
   if (oldInterest) [row[7], row[8], row[9]] = interestSettings(oldInterest, oldInterest.day).columns;
   if (newRate && settings) [row[7], row[8], row[9]] = settings.columns;
-  if (balanceChanged || interestChanged) {
-    // Today's balance is the one typed (or stays what it is, interest so far and all), and interest counts from today
+  if (balanceChanged || interestChanged || escrowChanged) {
+    // Today's balance is the one typed (or stays what it is, interest so far and all), and interest and escrow count
+    // from today
     const target = balanceChanged ? Math.round((targetRest + targetOwed) * 100) / 100 : now;
     const start = Math.round((target - (summary ? summary.entriesToday : 0)) * 100) / 100;
     row[3] = start ? formatMoney(start) : "";
     row[4] = newRate ? String(newRate) : "";
-    row[5] = newRate ? formatToMMDDYYYY(today) : "";
+    row[5] = newRate || escrow ? formatToMMDDYYYY(today) : "";
     if (!newRate) [row[7], row[8], row[9]] = ["", "", ""];
     // (Turned on with nothing typed, the interest balance starts at $0.00, or what it already was)
     [row[10], row[11]] = newRate ? separateColumns(balanceChanged ? targetOwed : nowOwed) : ["", ""];
+    // (Escrow still due stays due; turned on, none is due yet)
+    [row[12], row[13], row[14]] = escrowColumns(escrow && oldEscrow ? summary?.escrowDue ?? 0 : 0);
+    // (The stretch of interest today is in still counts from its start; turned on, from the last day it was added)
+    const periodStart = !newRate ? null : oldInterest ? interestPeriodStart(oldInterest, today) : lastMonthDay(settings ? settings.day : today.getDate(), today);
+    row[15] = periodStart && periodStart < today ? formatToMMDDYYYY(periodStart) : "";
     if (balanceChanged) {
       formEntryRow[5] = separate
         ? `Balance: ${formatMoney(targetRest)} and ${formatMoney(targetOwed)} in interest (was ${formatMoney(now)} in all)`
         : `Balance: ${formatMoney(target)} (was ${formatMoney(now)})`;
     }
     if (interestChanged) formEntryRow[6] = newRate ? `Interest: ${describeInterest(accountInterest(row))}` : "Interest: Off";
+    if (escrowChanged) formEntryRow[6] = [formEntryRow[6], escrow ? `Escrow: ${describeEscrow(escrow)}` : "Escrow: Off"].filter(Boolean).join(", ");
   }
   if (max !== undefined && maxText !== String(row[6] ?? "").trim()) {
     row[6] = maxText;
@@ -3542,6 +3712,7 @@ function saveWavelengths(list) {
 // note goes wherever its entry goes (another day, title, type, or account; into an entry already there, the two notes are
 // put together), and it goes when its entry does (deleted, or a placeholder whose day passed, see dropStrayNotes). Undo
 // and Redo put a day's notes back with its entries. Every entry form has its note at the bottom (BudgetUI.noteField).
+// An entry's reminder is kept here too, the same way (notesData.reminders, see ENTRY REMINDERS).
 
 const NOTE_TYPES = { "❗️": "regular", "✖️": "hidden", "⭕️": "transfer" };
 const MAX_NOTES_BYTES = 1800000;     // Every note together (a little under MAX_TABLE_BYTES)
@@ -3550,18 +3721,24 @@ const NOTES_FULL = "Your notes are full (about 1.8 MB of them together). Make so
 
 // No notes yet
 function emptyNotes() {
-  return { version: 1, entries: {}, recurring: {} };
+  return { version: 1, entries: {}, recurring: {}, reminders: {} };
 }
 
 // The stored notes, checked (none stored is none)
 function normalizeApiNotes(stored) {
   const notes = emptyNotes();
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return notes;
-  for (const part of ["entries", "recurring"]) {
+  for (const part of ["entries", "recurring", "reminders"]) {
     const kept = stored[part] && typeof stored[part] === "object" && !Array.isArray(stored[part]) ? stored[part] : {};
-    for (const [key, text] of Object.entries(kept)) {
+    for (const [key, value] of Object.entries(kept)) {
       // (A "__proto__" key would replace the object's prototype instead of adding a note)
-      if (key !== "__proto__" && key.includes("|") && typeof text === "string" && text.trim()) notes[part][key] = text;
+      if (key === "__proto__" || !key.includes("|")) continue;
+      if (part === "reminders") {
+        const text = reminderText(Number(value));
+        if (text && /^\d{4}-\d{2}-\d{2}\|/.test(key)) notes.reminders[key] = text;
+      } else if (typeof value === "string" && value.trim()) {
+        notes[part][key] = value;
+      }
     }
   }
   return notes;
@@ -3642,19 +3819,31 @@ function addEntryNote(date, title, sprite, note, skipWhenFull = false) {
 }
 
 // Within a change to an entry: its note goes where it went (another day, title, type, or Other Account), after the note
-// of an entry it went into, and the form's note (change.note) takes its place; it goes when the entry is deleted
+// of an entry it went into, and the form's note (change.note) takes its place; it goes when the entry is deleted. Its
+// reminder goes with it the same way (the form's, change.reminder: days before its day, or null for none, takes its
+// place), on a day after today (on any other, it goes); one it went into keeps its own when it had none.
 function followEntryNote(change, deleted) {
   if (!notesData) return;
   const from = entryNoteKey(change.date, change.title, change.sprite);
   const old = noteText("entries", from);
-  if (deleted) return putNote("entries", from, "");
-  const to = entryNoteKey(change.moveDate || change.date, changedTitle(change), change.newSprite ?? change.sprite);
+  const oldReminder = noteText("reminders", from);
+  if (deleted) {
+    putNote("reminders", from, "");
+    return putNote("entries", from, "");
+  }
+  const toDate = change.moveDate || change.date;
+  const to = entryNoteKey(toDate, changedTitle(change), change.newSprite ?? change.sprite);
   const own = change.note !== undefined ? String(change.note) : old;
   const there = to === from ? "" : noteText("entries", to);
   if (to !== from) putNote("entries", from, "");
   putNote("entries", to, joinNotes(there, own));
   if (!notesFit()) throw new BudgetInputError(NOTES_FULL);
   logNoteChange(old, own);
+  const ownReminder = change.reminder !== undefined ? checkedReminder(change.reminder) : oldReminder;
+  const thereReminder = to === from ? "" : noteText("reminders", to);
+  if (to !== from) putNote("reminders", from, "");
+  putNote("reminders", to, createSafeMidnight(toDate) > today ? ownReminder || thereReminder : "");
+  logReminderChange(oldReminder, noteText("reminders", to));
 }
 
 // Within a change to a recurring entry: its own note, on its title, account, and type as they are now (before: its row
@@ -3688,13 +3877,16 @@ function moveDayNotes(oldTitle, oldSprite, newTitle, newSprite, from) {
     const date = createSafeMidnight(row[2], true);
     if (String(row[0] ?? "").trim() && !isNaN(date.getTime())) own.add(entryNoteKey(date, row[0], row[3]));
   }
-  for (const key of Object.keys(notesData.entries)) {
-    if (key.slice(10) !== oldPart || key.slice(0, 10) < first || own.has(key)) continue;
-    const day = key.slice(0, 10);
-    const to = `${day}|${cleanString(newTitle)}|${NOTE_TYPES[getSpecialType(newSprite)]}`;
-    const note = noteText("entries", key);
-    putNote("entries", key, "");
-    putNote("entries", to, joinNotes(noteText("entries", to), note));
+  // (Its days' reminders go with them, see ENTRY REMINDERS)
+  for (const part of ["entries", "reminders"]) {
+    for (const key of Object.keys(notesData[part])) {
+      if (key.slice(10) !== oldPart || key.slice(0, 10) < first || own.has(key)) continue;
+      const day = key.slice(0, 10);
+      const to = `${day}|${cleanString(newTitle)}|${NOTE_TYPES[getSpecialType(newSprite)]}`;
+      const note = noteText(part, key);
+      putNote(part, key, "");
+      putNote(part, to, part === "reminders" ? note : joinNotes(noteText(part, to), note));
+    }
   }
 }
 
@@ -3708,17 +3900,17 @@ function renameAccountNotes(oldClean, newName) {
     const fromIt = !!account && !!from && from === oldClean;
     return toIt || fromIt ? cleanString(withAccount(own, toIt ? newName : account, fromIt ? newName : from)) : null;
   };
-  for (const part of ["entries", "recurring"]) {
+  for (const part of ["entries", "recurring", "reminders"]) {
     for (const key of Object.keys(notesData[part])) {
-      // (An entry's key starts with its day, YYYY-MM-DD|; the type is after the last |)
-      const start = part === "entries" ? 11 : 0;
+      // (An entry's key starts with its day, YYYY-MM-DD|, and so does its reminder's; the type is after the last |)
+      const start = part === "recurring" ? 0 : 11;
       const end = key.lastIndexOf("|");
       const title = renamed(key.slice(start, end));
       if (title === null) continue;
       const to = `${key.slice(0, start)}${title}${key.slice(end)}`;
       const note = noteText(part, key);
       putNote(part, key, "");
-      putNote(part, to, joinNotes(noteText(part, to), note));
+      putNote(part, to, part === "reminders" ? note : joinNotes(noteText(part, to), note));
     }
   }
 }
@@ -3755,13 +3947,21 @@ function dropStrayNotes() {
     const rows = new Set(recurringData.slice(2).filter(row => !["", "-"].includes(String(row[0] ?? "").trim())).map(row => recurringNoteKey(row[0], row[5])));
     for (const key of recurringKeys) if (!rows.has(key)) delete notesData.recurring[key];
   }
+  // Reminders go once their entry's day has come, or when their entry is gone
+  const reminderKeys = Object.keys(notesData.reminders);
+  if (reminderKeys.length > 0) {
+    const days = remindedEntries();
+    for (const key of reminderKeys) if (!days.has(key)) delete notesData.reminders[key];
+  }
 }
 
-// A day's notes, for Undo and Redo (see captureEntryDays): { key: note }
+// A day's notes, for Undo and Redo (see captureEntryDays): { key: note }, its entries' reminders among them as "r:" and
+// their key (see putStepNotes)
 function dayNotes(date) {
   const notes = {};
   const prefix = `${formatToYMD(date)}|`;
   for (const [key, text] of Object.entries(notesData?.entries || {})) if (key.startsWith(prefix)) notes[key] = text;
+  for (const [key, text] of Object.entries(notesData?.reminders || {})) if (key.startsWith(prefix)) notes[`r:${key}`] = text;
   return notes;
 }
 
@@ -3784,18 +3984,24 @@ function notesChange(before = {}, after = {}) {
   return any && size <= MAX_UNDO_NOTE_CHARS ? change : null;
 }
 
-// Within Undo or Redo: notes as a step had them ({ key: note }, see notesChange)
+// Within Undo or Redo: notes as a step had them ({ key: note }, see notesChange; an entry's reminder is "r:" and its key)
 function putStepNotes(notes) {
-  for (const [key, text] of Object.entries(notes || {})) putNote("entries", key, text);
+  for (const [key, text] of Object.entries(notes || {})) {
+    if (key.startsWith("r:")) putNote("reminders", key.slice(2), text);
+    else putNote("entries", key, text);
+  }
 }
 
-// Only a title's purpose or an entry's note changed (an entry's options, with nothing else changed): extras { purpose,
-// note }, each left out to keep it as it is. A note's change can be undone.
-function saveEntryExtras(date, title, sprite, { purpose, note } = {}) {
+// Only a title's purpose, an entry's note, or its reminder changed (an entry's options, with nothing else changed):
+// extras { purpose, note, reminder (days before its day, or null for none) }, each left out to keep it as it is. A
+// note's or reminder's change can be undone.
+function saveEntryExtras(date, title, sprite, { purpose, note, reminder } = {}) {
   const day = createSafeMidnight(date);
   const name = capitalize(String(title || "").trim());
-  const undo = note !== undefined ? { label: `changed the note on ${name} on ${showDay(day)}`, dates: [day] } : null;
-  return runBudgetAction(note !== undefined ? "📝 Entry Note" : "🏷️ Entry Purpose", () => {
+  const what = note !== undefined && reminder !== undefined ? "the note and reminder" : note !== undefined ? "the note" : "the reminder";
+  const undo = note !== undefined || reminder !== undefined ? { label: `changed ${what} on ${name} on ${showDay(day)}`, dates: [day] } : null;
+  const action = note !== undefined ? "📝 Entry Note" : reminder !== undefined ? "🔔 Entry Reminder" : "🏷️ Entry Purpose";
+  return runBudgetAction(action, () => {
     formEntryRow[3] = name;
     formEntryRow[4] = "On: " + showDate(day);
     if (purpose !== undefined) noteEntryPurpose(title, purpose);
@@ -3806,8 +4012,99 @@ function saveEntryExtras(date, title, sprite, { purpose, note } = {}) {
       if (!notesFit()) throw new BudgetInputError(NOTES_FULL);
       logNoteChange(before, note);
     }
+    if (reminder !== undefined) {
+      const key = entryNoteKey(day, title, sprite);
+      const before = noteText("reminders", key);
+      putNote("reminders", key, day > today ? checkedReminder(reminder) : "");
+      logReminderChange(before, noteText("reminders", key));
+    }
     return {};
   }, undo);
+}
+
+/* ---------- Entry reminders ---------- */
+// An entry on a day after today can have a reminder: a number of days before its day (0: on the day itself), on which
+// it comes with that day's reminder, as a push notification or on the calendar link (Settings), at the reminder time:
+// "🔔 Rent is in 3 days (Fri, Nov 27)" (see buildReminderPlan; the API words it). They're kept with the notes
+// (notesData.reminders: { "YYYY-MM-DD|title as compared|type": "3" }, keyed like the entry's note, see entryNoteKey),
+// and go wherever their entry goes, the same way (another day, title, type, or Other Account; with Undo and Redo too).
+// One goes when its entry does, or once its day has come (dropStrayNotes). A recurring entry's or a connected
+// spreadsheet's day can have one too, like a note.
+
+const MAX_REMINDER_DAYS = 365;
+
+// A reminder as it's kept: how many days before its day, as text ("" for none, or for one that isn't a whole number from
+// 0 to MAX_REMINDER_DAYS)
+function reminderText(days) {
+  return Number.isInteger(days) && days >= 0 && days <= MAX_REMINDER_DAYS ? String(days) : "";
+}
+
+// Within a change: a reminder from a form (days, or null for none) as it's kept, refused when it isn't one
+function checkedReminder(days) {
+  if (days === null || days === undefined) return "";
+  const text = reminderText(days);
+  if (!text) throw new BudgetInputError(`Enter how many days before its day to be reminded: a whole number from 0 to ${MAX_REMINDER_DAYS}.`);
+  return text;
+}
+
+// An entry's reminder on its day: how many days before it, or null for none (for its forms)
+function entryReminder(date, title, sprite) {
+  const text = noteText("reminders", entryNoteKey(date, title, sprite));
+  return text === "" ? null : Number(text);
+}
+
+// Change Logs say when a change added, changed, or took off a reminder
+function logReminderChange(before, after) {
+  const words = !before && after ? `Reminder Added: ${reminderWords(Number(after))}` : before && !after ? "Reminder Removed" : before && after && before !== after ? `Reminder Changed: ${reminderWords(Number(after))}` : "";
+  if (words) formEntryRow[3] = `${formEntryRow[3]} (${words})`.trim();
+}
+
+// "3 days before", "1 day before", or "on its day"
+function reminderWords(days) {
+  return days === 0 ? "on its day" : `${days} day${days === 1 ? "" : "s"} before`;
+}
+
+// Within a change: a new entry's reminder (days: from its form, or null for none), on the entry it landed as (sprite: its
+// type), on a day after today (it takes the place of one the entry it went into had). skipBad: a quick entry, which
+// still joins the budget without one that isn't right.
+function addEntryReminder(date, title, sprite, days, skipBad = false) {
+  if (!notesData || days === null || days === undefined) return;
+  const day = createSafeMidnight(date);
+  if (day <= today) return;
+  if (skipBad && !reminderText(days)) return;
+  const key = entryNoteKey(day, title, sprite);
+  const before = noteText("reminders", key);
+  putNote("reminders", key, checkedReminder(days));
+  logReminderChange(before, noteText("reminders", key));
+}
+
+// The entries with a reminder that are still to come, as they are: Map(key -> { date, title (as the entry has it),
+// days }). A day from today on is looked at as the budget has it (the calendar's, then after it, Upcoming's and what lands
+// there by itself, see dayAfterCalendar), and a reminder whose entry isn't on its day (anymore) is left out.
+function remindedEntries() {
+  const found = new Map();
+  const keys = Object.entries(notesData?.reminders || {}).filter(([key]) => key.slice(0, 10) >= formatToYMD(today));
+  if (keys.length === 0) return found;
+  const latest = keys.reduce((last, [key]) => (key.slice(0, 10) > last ? key.slice(0, 10) : last), formatToYMD(today));
+  const lastDate = createSafeMidnight(latest, true);
+  const recurringRows = getParsedRecurringRows();
+  const futureByDate = groupFutureRowsByDate();
+  const sheetDays = lastDate > gridEndDate ? sheetEntriesByDay(nextFourStart, lastDate) : new Map();
+  const wanted = new Map(keys);
+  const days = new Set(keys.map(([key]) => key.slice(0, 10)));
+  for (const ymd of days) {
+    const date = createSafeMidnight(ymd, true);
+    if (isNaN(date.getTime())) continue;
+    const spot = date <= gridEndDate ? calendarSpot(date) : null;
+    const text = spot ? calendarData[spot.r][spot.c] : dayAfterCalendar(date, recurringRows, futureByDate, sheetDays);
+    for (const lineText of String(text ?? "").split("\n").slice(1)) {
+      const line = readLine(lineText);
+      if (line.blank || line.system || !line.title) continue;
+      const key = entryNoteKey(date, line.title, line.sprite);
+      if (wanted.has(key) && !found.has(key)) found.set(key, { date, title: line.title, days: Number(wanted.get(key)) });
+    }
+  }
+  return found;
 }
 
 /* ---------- Backups (Settings' Upload A Backup) ---------- */
@@ -4080,8 +4377,8 @@ function backupPlans(backup) {
     });
   }
 
-  if (backup.notes && (Object.keys(backup.notes.entries).length > 0 || Object.keys(backup.notes.recurring).length > 0)) {
-    const parts = ["entries", "recurring"];
+  if (backup.notes && ["entries", "recurring", "reminders"].some(part => Object.keys(backup.notes[part] || {}).length > 0)) {
+    const parts = ["entries", "recurring", "reminders"];
     const list = (notes) => parts.flatMap(part => Object.entries(notes[part]).map(([key, text]) => [`${part}|${key}`, [part, key, text]]));
     const count = (choice) => mergeKeyed(list(notesData), list(backup.notes), choice, (a, b) => a[2] === b[2]);
     const total = (notes) => parts.reduce((sum, part) => sum + Object.keys(notes[part]).length, 0);
@@ -5809,7 +6106,9 @@ let reminderSync = Promise.resolve();
 //   negative: that day's In Bank is negative (⛔️)
 //   uncommon: uncommon recurring payments from that day to the end of its 4-week calendar (✔️)
 //   cost:     that day has a cost (❗️)
-// Days past the calendar are worked out the same way the daily update will fill them in.
+// Days past the calendar are worked out the same way the daily update will fill them in. And the days entries' reminders
+// are on (🔔, see ENTRY REMINDERS), however far ahead: entries: [{ title, date (its day), days (how many days before
+// it) }]. Each account picks which of these it gets (Settings), and the API sends only those.
 function buildReminderPlan() {
   let recurringRows = getParsedRecurringRows();
   let futureByDate = groupFutureRowsByDate();
@@ -5850,8 +6149,21 @@ function buildReminderPlan() {
     };
     if (reminder.negative || reminder.uncommon > 0 || reminder.cost) days[formatToYMD(day)] = reminder;
   }
+
+  // Entries' reminders, on the day each one is due (the soonest entries first, at most MAX_DAY_REMINDERS a day)
+  const reminded = [...remindedEntries().values()].sort((a, b) => a.date - b.date);
+  for (const entry of reminded) {
+    const on = addDays(entry.date, -entry.days);
+    if (on < today) continue;
+    const key = formatToYMD(on);
+    if (!days[key]) days[key] = { negative: false, uncommon: 0, cost: false };
+    if (!days[key].entries) days[key].entries = [];
+    if (days[key].entries.length < MAX_DAY_REMINDERS) days[key].entries.push({ title: entry.title, date: formatToYMD(entry.date), days: entry.days });
+  }
   return { from: formatToYMD(today), to: formatToYMD(lastDay), days: days };
 }
+
+const MAX_DAY_REMINDERS = 20; // Entries' reminders on one day (the API keeps that many)
 
 // A day after the calendar the way the daily update will fill it in (before its In Bank, see performDailyUpdate): its
 // Upcoming entries, then, when scheduled, its recurring entries and connected spreadsheets' entries. recurringRows,
@@ -6080,7 +6392,7 @@ function normalizeApiAccounts(rawData) {
 
   let list = normalizeApiTable(isCurrent ? parsed.list : [], TABLE_SHAPES.accounts);
   if (parsed.version === 2) list.forEach((row, i) => { if (i > 0) row[1] = formatMoney(0); });
-  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since", "Max", "Compounds", "Added Every", "Added On", "Separate Interest", "Interest Balance"];
+  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since", "Max", "Compounds", "Added Every", "Added On", "Separate Interest", "Interest Balance", "Escrow", "Escrow Day", "Escrow Due", "Interest From"];
   // Each mandatory account: the one marked as it, or one with its name that isn't marked, or a new one after the one
   // before it (a budget whose Savings was renamed to Cash keeps that one, and gets no second Cash)
   let after = 0;
@@ -6374,7 +6686,7 @@ function placeholderPart(sprite) {
 function readPlaceholderDays(value) {
   if (value === undefined || value === null || value === "") return 0;
   const days = Number(value);
-  if (!Number.isInteger(days) || Math.abs(days) > MAX_PLACEHOLDER_DAYS) throw new BudgetInputError(`Enter how many days before or after its day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
+  if (!Number.isInteger(days) || Math.abs(days) > MAX_PLACEHOLDER_DAYS) throw new BudgetInputError(`Enter how many days behind or ahead of the current day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
   return days;
 }
 
@@ -6522,36 +6834,31 @@ function landingAmount(entry, date) {
 
 // Walks days in order, from firstDay, with each Other Account's balance (balances: Map(account row index -> its balance
 // at the start of firstDay)): each day's % entries are worked out from the balances that morning, then the day's
-// entries (and interest) go into them. day(text, date) returns the day's text with its % entries' amounts. summaries:
-// accountSummaries(), for the entries before firstDay.
+// entries (and interest and escrow) go into them. day(text, date) returns the day's text with its % entries' amounts.
+// summaries: accountSummaries(), for the entries before firstDay.
 function percentRunner(balances, firstDay, summaries = accountSummaries()) {
   const accounts = accountTitleMap();
-  // Each account's interest (the way interestCredits works it out), caught up through the day before firstDay: its
-  // stepper, and with Separate Interest, the interest owed apart from the balance (see interestBalance)
-  const interest = new Map();
+  // Each account with interest or escrow, worked out the way runAccount does through the day before firstDay
+  const runners = new Map();
   for (const summary of summaries) {
-    if (summary.interest && balances.has(summary.index)) {
-      const run = runInterest(summary.start, summary.entries.filter(entry => entry.date < firstDay), summary.interest, addDays(firstDay, -1));
-      interest.set(summary.index, { stepper: run.stepper, owed: run.state.owed, separate: summary.interest.separate, since: summary.interest.since });
+    if ((summary.interest || summary.escrow) && balances.has(summary.index)) {
+      runners.set(summary.index, runAccount(summary.start, summary.entries.filter(entry => entry.date < firstDay), summary.interest, summary.escrow, addDays(firstDay, -1)).runner);
     }
   }
   const round = (amount) => Math.round(amount * 100) / 100;
-  // An entry's change to an account with Separate Interest pays its interest first (see interestBalance)
-  const settle = (index, change, date) => {
-    const account = interest.get(index);
-    if (!account || !account.separate || date <= account.since) return;
-    if (account.owed < 0 && change > 0) account.owed = round(account.owed + Math.min(change, -account.owed));
-    else if (account.owed > 0 && change < 0) account.owed = round(account.owed - Math.min(-change, account.owed));
+  // An entry's change to an account, less the escrow it paid (which leaves the account; see accountState)
+  const put = (index, change, date) => {
+    const runner = runners.get(index);
+    const paid = runner ? runner.entry(change, date) : 0;
+    balances.set(index, round((balances.get(index) ?? 0) + change - paid));
   };
   return {
     balances,
     day(text, date) {
       const morning = new Map(balances);
-      for (const [index, account] of interest) {
-        const balance = balances.get(index);
-        const credit = account.stepper.step(date, account.separate ? round(balance - account.owed) : balance);
-        balances.set(index, round(balance + credit));
-        if (account.separate) account.owed = round(account.owed + credit);
+      for (const [index, runner] of runners) {
+        const credit = runner.day(date);
+        if (credit !== 0) balances.set(index, round(balances.get(index) + credit));
       }
       const lines = String(text ?? "").split("\n");
       let changed = false;
@@ -6576,13 +6883,9 @@ function percentRunner(balances, firstDay, summaries = accountSummaries()) {
             changed = true;
           }
         }
-        balances.set(account.index, round((balances.get(account.index) ?? 0) + accountChange(line.sprite, amount)));
-        settle(account.index, accountChange(line.sprite, amount), date);
+        put(account.index, accountChange(line.sprite, amount), date);
         const from = line.fromOther ? fromAccount(line.sprite, line.title, accounts) : null;
-        if (from) {
-          balances.set(from.index, round((balances.get(from.index) ?? 0) + amount));
-          settle(from.index, amount, date);
-        }
+        if (from) put(from.index, amount, date);
       }
       return { text: changed ? lines.join("\n") : text, morning };
     }
@@ -6607,7 +6910,7 @@ function resolvePercentEntries() {
   }
   const start = new Map();
   for (const summary of accountSummaries()) {
-    const before = [...summary.entries, ...summary.interestCredits].filter(item => item.date < today);
+    const before = [...summary.entries, ...summary.interestCredits, ...summary.escrowPaid].filter(item => item.date < today);
     start.set(summary.index, Math.round((summary.start + before.reduce((total, item) => total + item.change, 0)) * 100) / 100);
   }
   const runner = percentRunner(start, today);
@@ -7008,7 +7311,7 @@ function followDaySwipe(e) {
   }
   if (e.cancelable) e.preventDefault();
   const moved = dx - Math.sign(dx) * DAY_DRAG_START_PX;
-  swipe.offset = nextZoomableDay(swipe.cell, dx < 0 ? 1 : -1) ? moved : moved * DAY_DRAG_STRETCH;
+  swipe.offset = nextZoomableDay(swipe.cell, dx < 0 ? 1 : -1, true) ? moved : moved * DAY_DRAG_STRETCH;
   swipe.cell.style.transform = `translateX(${swipe.offset}px) ${swipe.base}`;
   return true;
 }
@@ -7038,7 +7341,7 @@ function finishDaySwipe(e) {
     if (slides) slideToDay(step);
     return;
   }
-  if (slides && swipe.cell === activeEditCell && nextZoomableDay(swipe.cell, step)) slideToDay(step, swipe.offset);
+  if (slides && swipe.cell === activeEditCell && nextZoomableDay(swipe.cell, step, true)) slideToDay(step, swipe.offset);
   else settleDraggedDay(swipe);
 }
 
@@ -7062,9 +7365,10 @@ const fullZoomQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)")
 const reducedMotion = () => (window.lessMotion ? window.lessMotion() : window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 let zoomBackdrop = null;
 // Where a phone's zoomed day sits on the page: the screen as it was when the day zoomed in ({ x, y: its top left corner,
-// in page pixels; width, height: its size, in the page's pixels (the page's own size, on a page that was pinch-zoomed in);
-// layoutWidth: the window's width then }). It stays there while the page is scrolled or pinch-zoomed (the day moves and
-// zooms with the page), and sliding to the next day keeps it. null until a day zooms.
+// in page pixels; width, height: its size, in the page's pixels (the part of the page on the screen, on a page that was
+// pinch-zoomed in); layoutWidth: the window's width then; pinch: how far the page was zoomed in then, 1 for not at all }).
+// It stays there while the page is scrolled or pinch-zoomed (the day moves and zooms with the page), and sliding to the
+// next day keeps it. null until a day zooms.
 let zoomAnchor = null;
 // A phone's zoomed day: this share of the screen's width (up to ZOOM_MAX_WIDTH pixels); its text this share of what that
 // zoom would make it, between ZOOM_TEXT_MIN and ZOOM_TEXT_MAX pixels; at least this share of its width tall; and one
@@ -7183,16 +7487,184 @@ function dayTime(td) {
   return row && row[td.dataset.col] ? row[td.dataset.col].getTime() : null;
 }
 
-// The day on from's table that's step days from it (1: the next day, -1: the day before), counting the days that have
-// something on them, or null
-function nextZoomableDay(from, step) {
-  const table = from && from.closest('table');
-  if (!table) return null;
-  const days = [...table.querySelectorAll('td')]
-    .filter(td => dayTime(td) !== null && td.querySelector('.cell-content')?.childElementCount)
-    .sort((a, b) => dayTime(a) - dayTime(b));
-  const at = days.indexOf(from);
-  return at === -1 ? null : days[at + step] || null;
+// The day step days from a zoomed day (1: the next day, -1: the day before), right across the budget: on the page's
+// own table when it has that day, or as a guest (see ONE DAY AFTER ANOTHER) when it doesn't, or null past the budget's
+// first or last day. A few days with nothing on them (History's days before the budget started) are passed over. peek:
+// only say whether there is one (a finger's drag asks often, and a guest isn't drawn for it).
+function nextZoomableDay(from, step, peek = false) {
+  const time = from ? dayTime(from) : null;
+  if (time === null) return null;
+  const table = pageDayTable();
+  let date = new Date(time);
+  for (let tries = 0; tries < 7; tries++) {
+    date = addDays(date, step);
+    const own = table ? dayCellOn(table, date) : null;
+    if (own) {
+      if (own.querySelector('.cell-content')?.childElementCount) return own;
+      continue;
+    }
+    const day = budgetDayAt(date);
+    if (!day) return null;
+    return peek ? true : guestDayCell(day, from, step);
+  }
+  return null;
+}
+
+// 4. ONE DAY AFTER ANOTHER: HISTORY, THE CALENDAR, AND THE 28 DAYS AFTER IT
+// A zoomed day moves on to the day before or after it (a swipe, or the arrow keys) right across what the budget has:
+// History's days, the calendar's, and the 28 days after the calendar (as the daily update will fill them in, each with
+// its In Bank: the days of the Lowest card's window, Calendar Page.js), whatever page it's on. A day the page's own
+// table doesn't have zooms in as a guest: a day of the guest row, seven days laid over the row of the page's table
+// where its days end (each weekday in its column), which shows only the one that's zoomed. Its entries open their
+// options the way they do on their own page (History's keep the balances, and the days after the calendar's go into
+// Upcoming once they're changed), its In Bank (a calendar day's) is set like Home's, and its + adds an entry on its day.
+
+// The 28 days after the calendar, the way the daily update will fill them in, each with its In Bank (from the calendar's
+// last day's on): [{ date, text (as its cell will have it), inBank }], worked out again after each change
+let aheadDaysCache = null;
+function aheadDays() {
+  if (aheadDaysCache) return aheadDaysCache;
+  const recurringRows = getParsedRecurringRows();
+  const futureByDate = groupFutureRowsByDate();
+  const lastDay = addDays(gridEndDate, 28);
+  const sheetDays = sheetEntriesByDay(nextFourStart, lastDay);
+  let inBank = readInBank(calendarData[3][6]) ?? 0;
+  const days = [];
+  for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
+    const math = applyCellBudgetMath(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), inBank);
+    inBank = math.inBank;
+    days.push({ date: day, text: math.text, inBank });
+  }
+  aheadDaysCache = days;
+  return days;
+}
+
+// A day of the budget, wherever it is: { date, text (its cell: its date, In Bank, and entries), kind: "history" |
+// "calendar" | "ahead" }, or null for a day it doesn't have (before History, or past the 28 days after the calendar)
+function budgetDayAt(date) {
+  if (date >= gridStartDate && date <= gridEndDate) {
+    const spot = calendarSpot(date);
+    return spot ? { date, text: String(calendarData[spot.r][spot.c] ?? ""), kind: "calendar" } : null;
+  }
+  if (date > gridEndDate) {
+    const ahead = aheadDays().find(day => day.date.getTime() === date.getTime());
+    return ahead ? { date, text: ahead.text, kind: "ahead" } : null;
+  }
+  const spot = historySpot(date);
+  return spot ? { date, text: String(historyData[spot.r][spot.c] ?? ""), kind: "history" } : null;
+}
+
+// The page's own table of days (Home's calendar, or History's), or null
+const pageDayTable = () => document.querySelector('.elastic-table:not(.guestDays)');
+
+// The day on a table for a date, or null
+function dayCellOn(table, date) {
+  const time = date.getTime();
+  return [...table.querySelectorAll('td')].find(td => dayTime(td) === time) || null;
+}
+
+// A day for the guest row (see above): its weekday's day in the row, with the day drawn in it. near: the zoomed day it
+// comes from; when that's one of the page's own days, the row goes over the row of the page's table that the days end
+// in, that way (step: 1 after them, -1 before them).
+function guestDayCell(day, near, step) {
+  let guests = document.querySelector('table.guestDays');
+  if (!guests) {
+    guests = document.createElement('table');
+    guests.className = 'elastic-table guestDays';
+    const row = guests.createTBody().insertRow();
+    for (let c = 0; c < 7; c++) row.insertCell().appendChild(Object.assign(document.createElement('div'), { className: 'cell-content' }));
+    guests.addEventListener('click', guestEntryTap);
+    wireElasticTable(guests);
+  }
+  const table = pageDayTable();
+  if (table && !(near && near.closest('table') === guests)) {
+    const card = table.closest('.budgetCard') || table.parentElement;
+    if (guests.parentElement !== card) card.appendChild(guests);
+    const days = [...table.querySelectorAll('td')].filter(td => dayTime(td) !== null);
+    const edge = days.reduce((best, td) => (!best || (step > 0 ? dayTime(td) > dayTime(best) : dayTime(td) < dayTime(best)) ? td : best), null);
+    if (edge) placeGuestRow(guests, edge.closest('tr'), table);
+  }
+  const td = guests.rows[0].cells[day.date.getDay()];
+  fillGuestDay(td, day);
+  return td;
+}
+
+// The guest row laid over one of a table's rows, its days right over that row's
+function placeGuestRow(guests, row, table) {
+  guests.style.left = '0px';
+  guests.style.top = '0px';
+  const origin = guests.getBoundingClientRect();
+  const to = row.getBoundingClientRect();
+  const across = table.getBoundingClientRect();
+  const spacing = parseFloat(getComputedStyle(guests).borderSpacing) || 0;
+  guests.style.left = `${across.left - origin.left}px`;
+  guests.style.top = `${to.top - spacing - origin.top}px`;
+  guests.style.width = `${across.width}px`;
+  guests.style.height = `${to.height + 2 * spacing}px`;
+}
+
+// Draw a budget day in a guest day: its date (History's in full, like on History), In Bank, and entries (not the
+// calendar's last day's lines about the 28 days after it, which Home shows in the Lowest card), and its + and v
+function fillGuestDay(td, day) {
+  td.dataset.date = formatToMMDDYYYY(day.date);
+  td.dataset.kind = day.kind;
+  const content = td.querySelector('.cell-content');
+  const fragment = document.createDocumentFragment();
+  String(day.text).split('\n').forEach((line, l) => {
+    if (l > 0 && (!line.trim() || isAfterCalendarLine(line))) return;
+    const words = l === 0 ? (day.kind === 'history' ? showDate(day.date) : showDay(day.date)) : line;
+    fragment.appendChild(BudgetUI.renderEntryLine(words, l, day.date));
+  });
+  content.replaceChildren(fragment, zoomDayButtons());
+  td.classList.toggle('isNegative', (readInBank(day.text) ?? 0) < 0);
+  td.classList.toggle('isToday', day.date.getTime() === today.getTime());
+}
+
+// The calendar's last day's lines about the 28 days after it ("✅ $812.40 Lowest: 11/14", "✅ $905.10 Day 28 In Bank")
+function isAfterCalendarLine(line) {
+  const parts = getParts(line);
+  if (!systemEmojis.includes(parts[0])) return false;
+  const words = parts.slice(2).join(' ');
+  return /^Lowest: \d{1,2}\/\d{1,2}$/.test(words) || words === 'Day 28 In Bank';
+}
+
+// A tap on a zoomed guest day's entry opens its options (History's keep the balances), and on a calendar day's In Bank
+// sets it, like on their own pages
+function guestEntryTap(event) {
+  const lineEl = event.target.closest('.lineEntry, .lineInBank');
+  const td = lineEl && lineEl.closest('td');
+  if (!td || !td.classList.contains('is-editing') || td.classList.contains('isZoomClosing') || typeof BudgetUI === 'undefined') return;
+  const time = dayTime(td);
+  const day = time === null ? null : budgetDayAt(new Date(time));
+  if (!day) return;
+  if (lineEl.classList.contains('lineInBank')) {
+    if (day.kind === 'calendar') BudgetUI.openInBankOptions(lineEl, day.date);
+    return;
+  }
+  const lineIndex = Number(lineEl.dataset.line);
+  const line = day.text.split('\n')[lineIndex];
+  if (line) BudgetUI.openEntryOptions(lineEl, line, day.date, { lineIndex, inHistory: day.kind === 'history' });
+}
+
+// Zoom in on any day of the budget (the Lowest card's window opens one of the 28 days after the calendar this way): the
+// page's own, or a guest laid over the end of its table
+function zoomBudgetDay(date) {
+  const table = pageDayTable();
+  const own = table ? dayCellOn(table, date) : null;
+  if (own) return zoomDay(own);
+  const day = budgetDayAt(date);
+  if (!day || !table) return;
+  zoomDay(guestDayCell(day, null, date > gridEndDate ? 1 : -1));
+}
+
+// After a change, a zoomed guest day shows its day as it is now
+function refreshGuestDay() {
+  const cell = activeEditCell;
+  if (!cell || !cell.closest('table.guestDays')) return;
+  const time = dayTime(cell);
+  const day = time === null ? null : budgetDayAt(new Date(time));
+  if (day) fillGuestDay(cell, day);
+  else closeZoomedDay(true);
 }
 
 // The zoomed day moves to the next day (step 1) or the day before (-1) on its table. On a phone the zoomed day slides
@@ -7290,11 +7762,11 @@ function keepDoubledDayOnScreen(cell, place) {
 // to the rest (it's part of the page). Its content is as big as the screen (or as the day, when that's taller), from
 // the screen's top left corner, and draws the day itself (budgetStyle.css) at --dayX, --dayY, --dayW by --dayH; a line
 // that would run off the screen ends in "..." instead. Measured at its own size (which nothing draws in between), then
-// moved there. On a page that's still pinch-zoomed in (a browser that didn't zoom it back out, see unzoomPage), it's
-// laid out for the page's own size all the same, across the page like the rest of it, with its middle where the middle
-// of the screen is (so it's zoomed with the page, and pinching back out shows all of it). It goes where the screen was
-// when it zoomed in (zoomAnchor), so it stays put on the page when the page scrolls or zooms. animate: it grows out of the
-// day (opening); without, it just moves (when the window resizes, or the day's entries change).
+// moved there. On a page that's still pinch-zoomed in (a browser that didn't zoom it back out, see unzoomPage), it's laid
+// out on the part of the page that's on the screen instead, at the screen's size (its text too), so all of it is in
+// view, in the middle of the screen (pinching back out shows it smaller, as part of the page). It goes where the screen
+// was when it zoomed in (zoomAnchor), so it stays put on the page when the page scrolls or zooms. animate: it grows out
+// of the day (opening); without, it just moves (when the window resizes, or the day's entries change).
 function fitZoomedDay(animate = false) {
   const cell = activeEditCell;
   if (!cell || !cell.classList.contains('is-fullZoom')) return;
@@ -7309,17 +7781,18 @@ function fitZoomedDay(animate = false) {
     const view = window.visualViewport;
     const layoutWidth = document.documentElement.clientWidth || window.innerWidth;
     if (pageZoomedIn()) {
-      const layoutHeight = document.documentElement.clientHeight || window.innerHeight;
-      const middle = view.pageTop + view.height / 2;
-      zoomAnchor = { x: window.scrollX, y: Math.max(0, middle - layoutHeight / 2), width: layoutWidth, height: layoutHeight, layoutWidth };
+      // (The part of the page on the screen, in page pixels, and how far the page is zoomed in)
+      zoomAnchor = { x: view.pageLeft, y: view.pageTop, width: view.width, height: view.height, layoutWidth, pinch: view.scale };
     } else {
-      zoomAnchor = { x: window.scrollX, y: window.scrollY, width: layoutWidth, height: view ? view.height : window.innerHeight, layoutWidth };
+      zoomAnchor = { x: window.scrollX, y: window.scrollY, width: layoutWidth, height: view ? view.height : window.innerHeight, layoutWidth, pinch: 1 };
     }
   }
   const { width: viewWidth, height: viewHeight } = zoomAnchor;
-  const width = Math.min(viewWidth * ZOOM_WIDTH_SHARE, ZOOM_MAX_WIDTH);
+  // (Sizes in screen pixels are that many page pixels over the page's zoom)
+  const pinch = zoomAnchor.pinch || 1;
+  const width = Math.min(viewWidth * ZOOM_WIDTH_SHARE, ZOOM_MAX_WIDTH / pinch);
   const scale = width / box.width;
-  const textScale = Math.min(Math.max(textSize * scale * ZOOM_TEXT_SHARE, ZOOM_TEXT_MIN), ZOOM_TEXT_MAX) / textSize;
+  const textScale = Math.min(Math.max(textSize * scale * ZOOM_TEXT_SHARE, ZOOM_TEXT_MIN / pinch), ZOOM_TEXT_MAX / pinch) / textSize;
   cell.style.setProperty('--zoom', String(scale));
   cell.style.setProperty('--zoomText', String(textScale));
   const padding = parseFloat(getComputedStyle(content).paddingRight) || 0;
@@ -7370,7 +7843,12 @@ window.addEventListener('resize', () => {
 document.getElementById('transitionContainer')?.addEventListener('transitionend', (e) => {
   if (activeEditCell && e.target === e.currentTarget) refitZoomedDay();
 });
-document.addEventListener('budget:updated', () => { if (activeEditCell) refitZoomedDay(); }); // After the page redraws it
+// After the page redraws it (a guest day draws itself again first, see ONE DAY AFTER ANOTHER)
+document.addEventListener('budget:updated', () => {
+  if (!activeEditCell) return;
+  refreshGuestDay();
+  if (activeEditCell) refitZoomedDay();
+});
 
 // A tap on a table: its day zooms in, a zoomed day's v closes it, and its + opens New Entry on that day (Budget UI.js).
 // On a page that's pinch-zoomed in, the page zooms back out first, where the browser lets a page do that (unzoomPage);
@@ -7890,10 +8368,10 @@ function changeRecord(snapshot, changedTables, undid = null) {
     if (was !== JSON.stringify(get())) record.values.push({ part, before: JSON.parse(was), after: get() });
   }
 
-  // Notes
+  // Notes (and entries' reminders, kept with them)
   if (changed("notes")) {
     const notesBefore = JSON.parse(snapshot.notes);
-    for (const part of ["entries", "recurring"]) {
+    for (const part of ["entries", "recurring", "reminders"]) {
       const was = notesBefore?.[part] || {};
       const now = notesData?.[part] || {};
       for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {

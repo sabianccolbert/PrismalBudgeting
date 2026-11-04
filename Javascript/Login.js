@@ -403,11 +403,13 @@ async function api(endpoint, body, signedIn = false) {
   }
 }
 
-// The token stands in for the password on every other page (Session.js signs out after 15 idle minutes)
+// The token stands in for the password on every other page (Session.js signs out after 15 idle minutes). Home asks once,
+// after each sign-in, whether to turn notifications on (Notifications.js).
 function saveSession(data) {
   localStorage.setItem('prismal_jwt', data.token);
   localStorage.setItem('prismal_username', data.username);
   localStorage.setItem('prismal_last_activity', Date.now().toString());
+  try { localStorage.setItem('prismal_ask_push', '1'); } catch (err) {}
 }
 
 // On to the budget (Home), signed in

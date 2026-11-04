@@ -84,6 +84,16 @@ window.Budgets = (() => {
 
   let leaving = false; // The page is opening another budget (see gone)
 
+  // This page opens again, with the budget this tab has now (writeTab): fresh from its top, sliding down into view, like
+  // a page opened from the header. (A reload puts the page back where it was scrolled to while the new budget draws,
+  // which jumps around until it settles; and with a #spot in its address, the same address only scrolls to it.) Nothing
+  // more saves to the budget that was open.
+  function reopenPage() {
+    if (typeof workspaceLoaded !== "undefined") workspaceLoaded = false;
+    if (typeof leaveNote === "function") leaveNote(window.PAGE, "down");
+    window.location.replace(window.location.pathname + window.location.search);
+  }
+
   // The budget this page asked for isn't the account's to open anymore (it was deleted, or isn't shared with it): the page
   // opens the account's last (or first) budget instead, and says why
   function gone() {
@@ -91,8 +101,7 @@ window.Budgets = (() => {
     leaving = true;
     writeTab(null);
     try { sessionStorage.setItem("prismal_budget_notice", "gone"); } catch {}
-    if (typeof workspaceLoaded !== "undefined") workspaceLoaded = false;
-    window.location.reload();
+    reopenPage();
   }
 
   // ---------- The API ----------
@@ -166,8 +175,7 @@ window.Budgets = (() => {
       return;
     }
     writeTab(budget.id, budget.name);
-    if (typeof workspaceLoaded !== "undefined") workspaceLoaded = false; // (Nothing more saves to the one that's open)
-    window.location.reload();
+    reopenPage();
   }
 
   // ---------- The picker ----------
@@ -500,8 +508,7 @@ window.Budgets = (() => {
     if (result.data.error) return toast(result.data.error, true);
     if (budget.id === id()) {
       writeTab(null);
-      if (typeof workspaceLoaded !== "undefined") workspaceLoaded = false;
-      window.location.reload();
+      reopenPage();
       return;
     }
     toast(budget.owned ? `${budget.name} was deleted.` : `You left ${budget.name}.`);

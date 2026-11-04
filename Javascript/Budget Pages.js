@@ -210,12 +210,12 @@ function historyDay(cellText) {
 // Separator rows: ["-", category title, "", "", "-"]
 // Titles starting with ⭕️ also count Transfers
 function renderTrackerPage(view) {
-  renderToolbar("tracker", (origin) => openTrackerPanel(origin, null), { search: true });
+  renderToolbar("tracker", (origin) => openTrackerPanel(origin, null), { search: true, newLabel: "New Row" });
   view.replaceChildren();
 
   const rows = indexedRows(trackerData, 1);
   if (rows.length === 0 && !editMode) {
-    view.appendChild(emptyMessage("No tracker rows yet. Tap New Entry to add one."));
+    view.appendChild(emptyMessage("No tracker rows yet. Tap New Row to add one."));
     return;
   }
 
@@ -240,7 +240,7 @@ const TRACKER_COLUMNS = ["Type", "Last 4 Weeks", "Last 3 Months", "Last 365 Days
 function trackerCells(tr, row) {
   // Costs, Gains, and Undefined are the budget's own words (they translate); other rows are the person's
   const isAuto = TRACKER_AUTO_ROWS.includes(cleanString(row[0]));
-  tr.appendChild(isAuto ? cell(row[0], "titleCell") : noTranslate(cell(row[0], "titleCell")));
+  tr.appendChild(isAuto ? autoTitleCell(row) : noTranslate(cell(row[0], "titleCell")));
   tr.appendChild(noTranslate(cell(row[1], "amountCell")));
   tr.appendChild(noTranslate(cell(row[2], "amountCell")));
   tr.appendChild(noTranslate(cell(row[3], "amountCell")));
@@ -248,6 +248,55 @@ function trackerCells(tr, row) {
   aliases.appendChild(aliasBox(trackerAliasText(row)));
   // (Undefined and Transfers list entry titles, and Interest accounts' names, which are the person's words)
   tr.appendChild(isAuto && !["undefined", "transfers", "interest"].includes(cleanString(row[0])) ? aliases : noTranslate(aliases));
+}
+
+// What each row that fills in by itself does, and how to use it: what its "?" shows (a paragraph per line)
+const AUTO_ROW_HELP = {
+  costs: [
+    "Costs adds up every cost on your calendar and in History (✖️ Hidden ones too) over the last 4 weeks, 3 months, and 365 days. ⭕️ Transfers aren't counted, since moving money between your own accounts isn't spending.",
+    "It fills in by itself, so it can't be changed or deleted. To see where the money goes, add rows for what you spend on, like Groceries, with an alias for each entry title that belongs there."
+  ],
+  gains: [
+    "Gains adds up every gain on your calendar and in History (✖️ Hidden ones too) over the last 4 weeks, 3 months, and 365 days, like paychecks and refunds. ⭕️ Transfers aren't counted, since moving money between your own accounts isn't income.",
+    "It fills in by itself, so it can't be changed or deleted. Next to Costs, it shows whether you're spending less than comes in."
+  ],
+  transfers: [
+    "Transfers adds up every ⭕️ Transfer (money moving between your own accounts, like into Savings or onto a credit card) and lists their titles, so they never land in Undefined.",
+    "Other rows leave transfers out, unless their \"Count ⭕️ Transfers in this row\" switch is on. It fills in by itself, so it can't be changed or deleted."
+  ],
+  interest: [
+    "Interest adds up the interest your Other Accounts get, and lists the accounts it came from. Above $0 is interest earned, like a savings account's; below $0 is interest paid, like a credit card's or a loan's.",
+    "Interest isn't an entry, so no other row counts it. Each account counts from the day its interest last started counting (typing its balance, or changing its interest, starts it again). An account's interest is set on the Other Accounts page. It fills in by itself, so it can't be changed or deleted."
+  ],
+  undefined: [
+    "Undefined lists the entry titles no other row counts yet, and adds them up, so nothing slips through.",
+    "To move a title out of it, add the title as an alias to a row (tap the row, or New Row for a new one). Still here after that? The alias counts only Costs or only Gains, so entries of the other kind still need one. It fills in by itself, so it can't be changed or deleted."
+  ]
+};
+
+// A row that fills in by itself: its title, with a "?" after it that opens what the row does (AUTO_ROW_HELP). A tap on
+// the "?" never opens or checks the row.
+function autoTitleCell(row) {
+  const td = cell(row[0], "titleCell");
+  const name = String(row[0]).trim();
+  const button = BudgetUI.element("button", "fieldHelpButton autoRowHelp", "?");
+  button.type = "button";
+  button.title = `What ${name} is`;
+  button.setAttribute("aria-label", `What ${name} is`);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    BudgetUI.openPanel({
+      origin: button,
+      size: "small",
+      title: name,
+      build(form, panel) {
+        for (const text of AUTO_ROW_HELP[cleanString(row[0])] || []) form.append(BudgetUI.element("p", "panelText", text));
+        form.append(BudgetUI.buttonRow([{ label: "Okay", kind: "primary", onClick: () => panel.close() }]));
+      }
+    });
+  });
+  td.append(button);
+  return td;
 }
 
 // A row's aliases scroll in a short box, so a long list doesn't make its row tall. Tapping a box with more in it than
@@ -384,13 +433,14 @@ function accountEntryRow(entry) {
   return item;
 }
 
-// A month's interest in an account's entries, laid out like an entry (it isn't one, so it doesn't open)
+// A month's interest, or the escrow a payment paid (credit.escrow), in an account's entries, laid out like an entry
+// (neither is one, so it doesn't open)
 function accountInterestRow(credit) {
-  const item = BudgetUI.element("li", "accountEntryItem isInterest");
+  const item = BudgetUI.element("li", `accountEntryItem ${credit.escrow ? "isEscrow" : "isInterest"}`);
   const row = BudgetUI.element("div", "accountEntryButton");
   const date = BudgetUI.element("span", "accountEntryDate");
   date.append(noTranslate(BudgetUI.element("span", "", showDate(credit.date))), credit.date > today ? " (coming up)" : "");
-  row.append(date, BudgetUI.element("span", "accountEntryLine", "% Interest"),
+  row.append(date, BudgetUI.element("span", "accountEntryLine", credit.escrow ? "Escrow (taxes and insurance)" : "% Interest"),
     noTranslate(BudgetUI.element("span", `accountEntryAmount ${BudgetUI.amountClass(credit.change)}`, (credit.change > 0 ? "+" : "") + formatMoney(credit.change))));
   item.appendChild(row);
   return item;
@@ -1042,13 +1092,15 @@ function paymentsEntries(summary, projection) {
     change: entry.change,
     place: "upcoming"
   }));
-  const interest = parts && parts.interest ? interestCredits(parts.start, parts.entries, parts.interest, yearOut).map(credit => ({ ...credit, interest: true })) : [];
-  const all = [...known, ...coming, ...interest];
+  const extras = accountExtras(parts, yearOut);
+  const interest = extras.credits.map(credit => ({ ...credit, interest: true }));
+  const escrow = extras.escrow.map(paid => ({ ...paid, escrow: true }));
+  const all = [...known, ...coming, ...interest, ...escrow];
   const ahead = all.filter(entry => entry.date > today).sort((a, b) => a.date - b.date);
   const before = all.filter(entry => entry.date <= today).sort((a, b) => b.date - a.date);
   const list = BudgetUI.element("ul", "accountEntries");
   const heading = (text) => BudgetUI.element("li", "accountEntriesHeading", text);
-  const row = (entry) => (entry.interest ? accountInterestRow(entry) : accountEntryRow(entry));
+  const row = (entry) => (entry.interest || entry.escrow ? accountInterestRow(entry) : accountEntryRow(entry));
   if (ahead.length) list.append(heading("Coming up"), ...ahead.map(row));
   if (before.length) list.append(heading("Today and before"), ...before.map(row));
   if (!ahead.length && !before.length) list.append(heading("No entries yet."));
@@ -1775,13 +1827,13 @@ function openRecurringPanel(origin, index) {
       });
       account.setVisible(BudgetUI.isAccountType(refraction.value()));
       // Every day it lands on gets a placeholder (offered while it can still land: no End Date, or one from today on), each
-      // deleted once its day passes, or that many days before or after it
+      // deleted once its day passes, or with days picked, that many days behind or ahead of the current day
       const keeps = existing ? placeholderKeeps(existing[5]) : null;
       const placeholder = BudgetUI.placeholderField({
         checked: !!existing && isPlaceholder(existing[5]),
         until: typeof keeps === "number" ? keeps : null,
         days: true,
-        hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes (or as many days before or after it as you pick under it)."
+        hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes (or, with days picked under it, that many days behind or ahead of the current day)."
       });
       const showPlaceholder = () => placeholder.setDate(end.value() ?? null);
       end.input.addEventListener("input", showPlaceholder);
@@ -1821,7 +1873,7 @@ function openRecurringPanel(origin, index) {
         if (!placeholder.el.hidden) fields.placeholder = placeholder.value();
         if (fields.placeholder) {
           fields.until = placeholder.until();
-          if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return panel.setError(`Enter how many days before or after its day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
+          if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return panel.setError(`Enter how many days behind or ahead of the current day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
         }
         fields.purpose = purpose.value();
         if (note.value() !== currentNote) fields.note = note.value();
@@ -1887,9 +1939,10 @@ function openTrackerPanel(origin, index) {
 }
 
 // New account (index null, from edit mode) or change the tapped one: its name, its balance today (typing one sets
-// its starting amount, so no entry is made), its interest, its max (optional: the most it can hold, like a credit card's
-// limit, shown after its balance), and every entry for it, to change. A change to one of its entries while it's open
-// redraws them, and the balance follows it unless a new one was typed (Save only sets the balance when one was).
+// its starting amount, so no entry is made), its max (optional: the most it can hold, like a credit card's limit, shown
+// after its balance), then under a line its interest (with Separate Interest, Interest today under it), then under
+// another its escrow, and every entry for it, to change. A change to one of its entries while it's open redraws them,
+// and the balance follows it unless a new one was typed (Save only sets the balance when one was).
 function openAccountPanel(origin, index) {
   const existing = index === null ? null : accountsData.list[index];
   const summary = existing ? accountSummaries().find(account => account.index === index) : null;
@@ -1899,7 +1952,7 @@ function openAccountPanel(origin, index) {
     size: "large",
     title: existing ? "Change Account" : "New Account",
     build(form, panel) {
-      const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Investments, HSA, a credit card...", maxLength: MAX_ACCOUNT_NAME });
+      const name = BudgetUI.textField({ label: "Name", value: existing ? existing[0] : "", placeholder: "Investments, HSA, a credit card, a mortgage...", maxLength: MAX_ACCOUNT_NAME });
       // With Separate Interest, the interest owed (or earned) is a balance of its own, beside the rest (Balance today)
       const owedNow = summary?.interest?.separate ? summary.owed ?? 0 : 0;
       // Negative: money owed, like on a credit card
@@ -1907,16 +1960,8 @@ function openAccountPanel(origin, index) {
         label: "Balance today",
         amount: summary ? Math.round((summary.today - owedNow) * 100) / 100 : null,
         signs: BudgetUI.BALANCE_SIGNS,
-        hint: "What's in the account today (Negative for money owed, like a credit card's). Changing it doesn't add an entry: Hidden and Transfer entries with this account picked add to it from here."
+        hint: "What's in the account today (Negative for money owed, like a credit card's or a loan's). Changing it doesn't add an entry: Hidden and Transfer entries with this account picked add to it from here."
       });
-      const interest = interestFields(summary ? summary.interest : null);
-      const owedBox = BudgetUI.amountField({
-        label: "Interest today",
-        amount: owedNow,
-        signs: BudgetUI.BALANCE_SIGNS,
-        hint: "The interest owed (Negative) or earned, kept apart from the balance. A payment toward the account pays it first."
-      });
-      owedBox.el.classList.add("owedField");
       // Max: typed like a cash register (blank for none)
       const currentMax = existing ? accountMax(existing) : null;
       const max = BudgetUI.textField({
@@ -1927,8 +1972,18 @@ function openAccountPanel(origin, index) {
         hint: "The most it can hold, like a credit card's limit. Its balance then shows over it, like $500.00/$2000.00."
       });
       BudgetUI.cashRegister(max.input);
-      const fields = [name.el, balance.el, owedBox.el, interest.el, max.el];
-      if (isMandatory) fields.push(BudgetUI.element("p", "panelHint", mandatoryAccountNote(existing[0])));
+      const owedBox = BudgetUI.amountField({
+        label: "Interest today",
+        amount: owedNow,
+        signs: BudgetUI.BALANCE_SIGNS,
+        hint: "The interest owed (Negative) or earned, kept apart from the balance. A payment toward the account pays it first."
+      });
+      owedBox.el.classList.add("owedField");
+      BudgetUI.addFieldHelp(owedBox.el, "What Interest today is", BudgetUI.helpList(INTEREST_TODAY_HELP));
+      const interest = interestFields(summary ? summary.interest : null, owedBox.el);
+      const escrow = escrowFields(summary ? summary.escrow : null, summary?.escrowDue ?? 0, () => interest.day() ?? today.getDate());
+      const line = () => BudgetUI.element("hr", "panelLine");
+      const fields = [name.el, ...(isMandatory ? [BudgetUI.element("p", "panelHint", mandatoryAccountNote(existing[0]))] : []), balance.el, max.el, line(), interest.el, line(), escrow.el];
       const entries = summary ? accountEntriesField(index, existing[0]) : null;
       if (entries) fields.push(entries.el);
       // The balances shown (with Separate Interest, the rest and the interest), to tell typed ones from ones that only
@@ -1992,10 +2047,13 @@ function openAccountPanel(origin, index) {
         if (most !== null && (!Number.isFinite(most) || most > MAX_AMOUNT)) return panel.setError("Enter the most it can hold, like 2000.00, or leave Max blank.");
         const owed = interestSet && interestSet.separate ? owedBox.value() ?? 0 : null;
         if (owed !== null && (!Number.isFinite(owed) || Math.abs(owed) > MAX_AMOUNT)) return panel.setError("Enter the interest, like 512.40 (Negative for interest owed).");
+        const escrowSet = escrow.value();
+        if (Number.isNaN(escrowSet)) return panel.setError("Enter the escrow due each month, like 412.50, or turn Escrow off.");
+        if (escrowSet && escrowSet.amount > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
         // (A balance that wasn't typed is left out, so it keeps whatever its entries make it)
         const typedBalance = !existing || Math.round(amount * 100) !== Math.round((shownBalance ?? 0) * 100);
         const typedOwed = owed !== null && (!existing || Math.round(owed * 100) !== Math.round(shownOwed * 100));
-        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), ...(typedBalance ? { balance: amount } : {}), interest: interestSet || null, ...(typedOwed ? { owed } : {}), max: most || null }, index));
+        BudgetUI.submit(panel, () => saveAccount({ name: name.value(), ...(typedBalance ? { balance: amount } : {}), interest: interestSet || null, ...(typedOwed ? { owed } : {}), max: most || null, escrow: escrowSet }, index));
       });
 
       // Delete: the account goes, and its entries stay where they are
@@ -2025,19 +2083,41 @@ const ADDED_CHOICES = [
 const COMPOUNDING_HINT = "How often interest starts earning interest of its own. Daily: every day (most credit cards and savings). Monthly and the rest: on the day it's added. Doesn't compound: only the balance earns it, never the interest added to it.";
 const DAY_CHOICES = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
 
-// An account's Interest: a pill switch, and while it's on, the rate for a year (APR), how it compounds, how often it's
-// added, the day of the month it's added (see interestStepper in Process Budget.js; a new one starts on today's day), and
-// Separate Interest (a pill switch: off, interest is added to the balance, like a credit card's; on, it's a balance of
-// its own, like a mortgage's, see interestBalance). value(): { rate (above 0), compound, every, day, separate }, 0 when
-// it's off, NaN when the rate can't be read. separate(): Separate Interest is on (and Interest is). onSeparate(listener):
-// listener(on) runs when that changes.
-function interestFields(current) {
+// What the "?"s in an account's window explain: its Interest (how to set it up for each kind of account), Interest
+// today, and Escrow (each item a [lead, text] pair or plain text, see BudgetUI.helpList)
+const INTEREST_HELP = [
+  ["A credit card: ", "its purchase APR, Compounds Daily, added every month on its statement's closing day. Paid in full by the due date each month, most cards charge no interest at all, so leave Interest off for one you always pay off."],
+  ["A mortgage: ", "its interest rate, Compounds Monthly, added every month on the day its payment is due, with Separate Interest on, and its escrow under Escrow."],
+  ["A car or student loan: ", "its rate, Doesn't compound (interest builds a day at a time on what's still owed), added every month on the payment's due day, with Separate Interest on."],
+  ["Savings: ", "its interest rate, not its APY (the APY already counts the compounding, so it would add a little too much), usually Compounds Daily, added every month on the day it's paid."],
+  "Typing the balance again partway through a month keeps that month's interest counting from its start, the way a bank adds it."
+];
+const INTEREST_TODAY_HELP = [
+  ["What it is: ", "with Separate Interest on, the interest added is kept here, apart from the balance, the way a mortgage or loan keeps it: owed (Negative), or earned for savings."],
+  ["What it does: ", "each time interest is added, it goes here instead of into the balance, so it never earns interest of its own. A payment toward the account pays it first, and only what's left lowers the balance."],
+  ["How to use it: ", "type the interest your statement says is owed today (Negative for owed), usually $0.00 right after a payment. From then on it follows the account's interest and payments by itself."]
+];
+const ESCROW_HELP = [
+  ["What it is: ", "the part of a mortgage payment (or some other loans') the lender keeps in an escrow account to pay the home's property taxes and insurance (homeowners, and mortgage insurance like PMI) when they're due."],
+  ["What it does: ", "each month on its day, the escrow amount comes due. A payment toward the account pays the interest owed first (with Separate Interest), then the escrow due, and only what's left lowers the balance, so the balance shows just the principal paid off. The escrow part leaves the account for the taxes and insurance."],
+  ["How to use it: ", "type the escrow part of the monthly payment from the mortgage statement, and the day the payment is due. It usually changes once a year, after the lender's escrow review: change it here when it does."],
+  "A payment that's less than the interest and escrow due pays what it can, in that order. The escrow still due shows here until a payment covers it."
+];
+
+// An account's Interest: a pill switch (with a "?" on how to set it up), and while it's on, the rate for a year (APR),
+// how it compounds, how often it's added, the day of the month it's added (see interestStepper in Process Budget.js; a
+// new one starts on today's day), and Separate Interest (a pill switch: off, interest is added to the balance, like a
+// credit card's; on, it's a balance of its own, like a mortgage's, see accountState), with owedEl (Interest today) under
+// it while it's on. value(): { rate (above 0), compound, every, day, separate }, 0 when it's off, NaN when the rate can't
+// be read. day(): the day picked (null while it's off). separate(): Separate Interest is on (and Interest is).
+// onSeparate(listener): listener(on) runs when that changes.
+function interestFields(current, owedEl = null) {
   const toggle = BudgetUI.checkboxField({ label: "Add interest", checked: !!current });
   const rate = BudgetUI.textField({
     label: "Interest rate (APR, % a year)",
     value: current ? String(current.rate) : "",
     placeholder: "Like 24.99",
-    hint: "Like a credit card's or a loan's APR, or what savings earn. A balance below $0 (money owed) goes further below, and one above $0 grows."
+    hint: "Like a credit card's or a loan's APR, or the rate savings earn (not the APY). A balance below $0 (money owed) goes further below, and one above $0 grows."
   });
   rate.input.inputMode = "decimal";
   const compound = BudgetUI.selectField({ label: "Compounds", options: COMPOUNDING_CHOICES, value: current ? current.compound : "monthly", hint: COMPOUNDING_HINT });
@@ -2046,7 +2126,7 @@ function interestFields(current) {
   const separateSwitch = BudgetUI.checkboxField({ label: "Separate Interest", checked: !!current?.separate });
   const separate = BudgetUI.field("Kept apart", separateSwitch.el, { hint: "Off: interest is added to the balance, like a credit card's. On: it's a balance of its own (Interest today), like a mortgage's: payments pay it first, and only the rest earns interest." });
   const details = BudgetUI.element("div", "interestDetails");
-  details.append(rate.el, compound.el, every.el, day.el, separate);
+  details.append(rate.el, compound.el, every.el, day.el, separate, ...(owedEl ? [owedEl] : []));
   details.hidden = !current;
   const listeners = [];
   const isSeparate = () => toggle.value() && separateSwitch.value();
@@ -2063,7 +2143,9 @@ function interestFields(current) {
   });
   separateSwitch.input.addEventListener("change", told);
   const el = BudgetUI.element("div", "interestFields");
-  el.append(BudgetUI.field("Interest", toggle.el), details);
+  const switchField = BudgetUI.field("Interest", toggle.el);
+  BudgetUI.addFieldHelp(switchField, "How to set up interest", BudgetUI.helpList(INTEREST_HELP));
+  el.append(switchField, details);
   return {
     el,
     value() {
@@ -2072,8 +2154,47 @@ function interestFields(current) {
       if (!Number.isFinite(number) || number <= 0 || number > MAX_INTEREST_RATE) return NaN;
       return { rate: number, compound: compound.value(), every: Number(every.value()), day: Number(day.value()), separate: separateSwitch.value() };
     },
+    day: () => (toggle.value() ? Number(day.value()) : null),
     separate: isSeparate,
     onSeparate: (listener) => listeners.push(listener)
+  };
+}
+
+// An account's Escrow (see accountEscrow in Process Budget.js): a pill switch (with a "?" on what it is), and while it's
+// on, the amount due each month and the day it's due (to start: the day interest is added, or today's), with what's
+// still due (due) under them. value(): { amount, day }, null when it's off, NaN when the amount can't be read.
+function escrowFields(current, due, startDay) {
+  const toggle = BudgetUI.checkboxField({ label: "Take out escrow", checked: !!current });
+  const amount = BudgetUI.textField({
+    label: "Escrow each month",
+    value: current ? current.amount.toFixed(2) : "",
+    placeholder: "0.00",
+    hint: "The escrow part of each month's payment, from the mortgage statement."
+  });
+  BudgetUI.cashRegister(amount.input);
+  const day = BudgetUI.selectField({ label: "Due on day", options: DAY_CHOICES, value: current ? current.day : startDay(), hint: "The day of the month the payment is due (a shorter month uses its last day)." });
+  const details = BudgetUI.element("div", "escrowDetails");
+  details.append(amount.el, day.el);
+  if (current && due > 0) details.append(BudgetUI.element("p", "panelHint", `Escrow due now: ${formatMoney(due)}. The next payment pays it, after the interest owed.`));
+  details.hidden = !current;
+  toggle.input.addEventListener("change", () => {
+    details.hidden = !toggle.value();
+    if (!toggle.value()) return;
+    if (!current) day.input.value = String(startDay());
+    if (window.matchMedia("(pointer: fine)").matches) amount.input.focus({ preventScroll: true });
+  });
+  const switchField = BudgetUI.field("Escrow", toggle.el);
+  BudgetUI.addFieldHelp(switchField, "What escrow is", BudgetUI.helpList(ESCROW_HELP));
+  const el = BudgetUI.element("div", "escrowFields");
+  el.append(switchField, details);
+  return {
+    el,
+    value() {
+      if (!toggle.value()) return null;
+      const number = readMoneyInput(amount.value());
+      if (!Number.isFinite(number) || number <= 0) return NaN;
+      return { amount: Math.round(number * 100) / 100, day: Number(day.value()) };
+    }
   };
 }
 
@@ -2087,8 +2208,9 @@ function accountEntriesField(index, name) {
   const draw = () => {
     const summary = accountSummaries().find(account => account.index === index);
     const interest = (summary ? summary.interestCredits : []).filter(credit => credit.date <= gridEndDate);
-    const entries = [...accountEntryLines(index), ...interest.map(credit => ({ ...credit, interest: true }))].sort((a, b) => b.date - a.date);
-    list.replaceChildren(...entries.map(entry => (entry.interest ? accountInterestRow(entry) : accountEntryRow(entry))));
+    const escrow = (summary ? summary.escrowPaid : []).filter(paid => paid.date <= gridEndDate);
+    const entries = [...accountEntryLines(index), ...interest.map(credit => ({ ...credit, interest: true })), ...escrow.map(paid => ({ ...paid, escrow: true }))].sort((a, b) => b.date - a.date);
+    list.replaceChildren(...entries.map(entry => (entry.interest || entry.escrow ? accountInterestRow(entry) : accountEntryRow(entry))));
     list.hidden = entries.length === 0;
     none.hidden = entries.length > 0;
   };

@@ -222,11 +222,47 @@ function renderReminderTime() {
   document.getElementById("timeZoneNote").textContent = `Time zone: ${zone}. Reminders go out within 5 minutes of this time.`;
 }
 
-// The Daily Reminder card (the reminder time) only shows while a reminder is on: push notifications on any device, or
-// the calendar link
+// The Reminders card: a switch for each kind of reminder (REMINDER_KINDS), as the account has them (the API keeps them:
+// entries' reminders are on to start, the rest off). A switch saves as soon as it's flipped, and goes back when that
+// couldn't save.
+const REMINDER_KINDS = [
+  { key: "entries", label: "🔔 Entry reminders", detail: "An entry you set a reminder on (Remind me, in New Entry or its options): that many days before it" },
+  { key: "negative", label: "⛔️ In Bank below $0", detail: "A day In Bank goes below $0" },
+  { key: "uncommon", label: "✔️ Uncommon recurring payments", detail: "An uncommon recurring payment (every 3 months or less often) in the current four weeks" },
+  { key: "cost", label: "❗️ Days with a cost", detail: "A day you have a cost" }
+];
 function renderReminderCard() {
-  const pushOn = !!pushSubscription || (reminderSettings.push && reminderSettings.push.devices > 0);
-  document.getElementById("reminderCard").hidden = !pushOn && !reminderSettings.calendarUrl;
+  const box = document.getElementById("reminderKinds");
+  if (box.dataset.drawn) {
+    for (const input of box.querySelectorAll("input")) input.checked = (reminderSettings.kinds || []).includes(input.dataset.kind);
+    return;
+  }
+  box.dataset.drawn = "1";
+  for (const kind of REMINDER_KINDS) {
+    const toggle = BudgetUI.checkboxField({ label: kind.label, checked: (reminderSettings.kinds || []).includes(kind.key) });
+    toggle.input.dataset.kind = kind.key;
+    toggle.input.addEventListener("change", saveReminderKinds);
+    const item = BudgetUI.element("div", "reminderKind");
+    item.append(toggle.el, BudgetUI.element("span", "panelHint", kind.detail));
+    box.append(item);
+  }
+}
+
+// Save the switches as they are
+async function saveReminderKinds() {
+  const box = document.getElementById("reminderKinds");
+  const inputs = [...box.querySelectorAll("input")];
+  const kinds = inputs.filter(input => input.checked).map(input => input.dataset.kind);
+  inputs.forEach(input => { input.disabled = true; });
+  const result = await budgetApi("/api/notify/kinds", { kinds });
+  inputs.forEach(input => { input.disabled = false; });
+  if (result.ok && result.data) {
+    reminderSettings = result.data;
+    BudgetUI.showToast(kinds.length > 0 ? "Saved: which reminders you get." : "Saved: no reminders for now.");
+  } else {
+    BudgetUI.showToast(accountError(result, "Couldn't save which reminders you get. Please try again."), true);
+  }
+  renderReminderCard();
 }
 
 // "08:00" -> "8:00 AM"
@@ -356,9 +392,10 @@ function wireThemes() {
     const swatch = BudgetUI.element("span", "themeSwatch");
     swatch.dataset.swatch = theme.key;
     button.append(swatch, BudgetUI.element("span", "choiceName", theme.name), BudgetUI.element("span", "choiceDetail", theme.about));
+    // (A Custom theme this device keeps comes back with a tap, like the others; tapped while it's on, it opens to change)
     button.addEventListener("click", () => {
-      if (theme.key === "custom") openCustomTheme(button);
-      else pickTheme(theme);
+      if (theme.key !== "custom" || (Themes.custom() && Themes.saved() !== "custom")) pickTheme(theme);
+      else openCustomTheme(button);
     });
     return button;
   }));
@@ -379,13 +416,14 @@ function renderThemes() {
   });
 }
 
-// A theme's button tapped: it shows right away, and this device keeps it
+// A theme's button tapped: it shows right away, and this device keeps it (Custom's says how to change it)
 function pickTheme(theme) {
   if (!Themes.set(theme.key)) {
     BudgetUI.showToast("This browser isn't keeping site data, so the theme can't be saved.", true);
     return;
   }
   renderThemes();
+  if (theme.key === "custom") BudgetUI.showToast("Your Custom theme is back on. Tap Custom again to change it.");
 }
 
 // The Custom window: a theme to start from, five colors (the page behind the cards, the cards, the words, the glow, and
@@ -500,27 +538,13 @@ function openCustomTheme(origin) {
 // #region PUSH NOTIFICATIONS (this device)
 // =====================================================================
 
-const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
-
-// iPhones and iPads only allow push notifications for sites added to the Home Screen
-function needsHomeScreen() {
-  const appleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-  return appleMobile && !standalone;
-}
-
-// Check whether this device already has push on, and make sure the server knows about it
+// Check whether this device already has push on, and make sure the server knows about it (a subscription made with
+// keys the server no longer has can't be used, so it goes: see Notifications.js)
 async function refreshPushState() {
   pushSubscription = null;
-  if (pushSupported() && reminderSettings.push.available) {
+  if (PushNotifications.supported() && reminderSettings.push.available) {
     try {
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      let subscription = await registration.pushManager.getSubscription();
-      // The server's keys changed (push setup ran again), so this subscription can't be used
-      if (subscription && !usesServerKey(subscription)) {
-        await subscription.unsubscribe().catch(() => {});
-        subscription = null;
-      }
+      const subscription = await PushNotifications.current(reminderSettings.push.publicKey);
       if (subscription && Notification.permission === "granted") {
         const result = await budgetApi("/api/notify/push/subscribe", { subscription: subscription.toJSON(), timezone: currentTimeZone() });
         if (result.ok && result.data) {
@@ -559,41 +583,25 @@ function renderPush() {
 // Why push can't be turned on here, or "" when it can
 function pushBlockedReason() {
   if (!reminderSettings.push.available) return "Push notifications aren't set up on the server yet.";
-  if (!pushSupported()) {
-    return needsHomeScreen()
+  if (!PushNotifications.supported()) {
+    return PushNotifications.needsHomeScreen()
       ? "On iPhone and iPad, add Prismal Budget to your Home Screen first (tap Share, then Add to Home Screen), then open it from there to turn these on."
       : "This browser doesn't support push notifications.";
   }
   return Notification.permission === "denied" ? PUSH_BLOCKED_TEXT : "";
 }
 
-// Turn On: allow notifications, subscribe this device, and tell the server
+// Turn On: allow notifications (the browser asks, right after the tap), subscribe this device, and tell the server
 async function turnOnPush(event) {
   event.currentTarget.disabled = true;
   try {
-    // Ask first, while the tap still counts (browsers only show the prompt right after a tap)
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      BudgetUI.showToast(permission === "denied" ? PUSH_BLOCKED_TEXT : "Notifications weren't allowed, so push is still off.", true);
+    const result = await PushNotifications.turnOn(reminderSettings.push.publicKey);
+    if (!result.ok) {
+      BudgetUI.showToast(result.blocked ? PUSH_BLOCKED_TEXT : result.message, true);
       return;
     }
-    const registration = await navigator.serviceWorker.register("/sw.js");
-    await navigator.serviceWorker.ready;
-    let subscription = await registration.pushManager.getSubscription();
-    if (subscription && !usesServerKey(subscription)) {
-      await subscription.unsubscribe();
-      subscription = null;
-    }
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: base64UrlToBytes(reminderSettings.push.publicKey)
-      });
-    }
-    const result = await budgetApi("/api/notify/push/subscribe", { subscription: subscription.toJSON(), timezone: currentTimeZone() });
-    if (!result.ok || !result.data) throw new Error((result.data && result.data.error) || `Server responded with status: ${result.status}`);
-    reminderSettings = result.data;
-    pushSubscription = subscription;
+    reminderSettings = result.settings;
+    pushSubscription = result.subscription;
     queueReminderPlanSync(true); // Make sure the server has the latest reminder days
     BudgetUI.showToast("Push notifications are on for this device.");
   } catch (err) {
@@ -604,7 +612,7 @@ async function turnOnPush(event) {
   }
 }
 
-// Turn Off: drop this device's subscription, here and on the server
+// Turn Off: drop this device's subscription, here and on the server (and Home stops asking to turn it on here)
 async function turnOffPush(event) {
   event.currentTarget.disabled = true;
   const subscription = pushSubscription;
@@ -613,6 +621,7 @@ async function turnOffPush(event) {
   // Even if the server missed this, an unsubscribed device is removed the next time a push bounces
   await subscription.unsubscribe().catch(() => {});
   pushSubscription = null;
+  PushNotifications.setOff(true);
   BudgetUI.showToast("Push notifications are off for this device.");
   renderPush();
 }
@@ -628,13 +637,6 @@ async function sendTestPush(event) {
   } else {
     BudgetUI.showToast((result.data && result.data.error) || "The test didn't go through. Try turning push off and back on.", true);
   }
-}
-
-// Was this subscription made with the server's current key?
-function usesServerKey(subscription) {
-  const key = subscription.options && subscription.options.applicationServerKey;
-  if (!key) return true; // The browser doesn't say, so keep it
-  return bytesToBase64Url(new Uint8Array(key)) === reminderSettings.push.publicKey;
 }
 
 //#endregion
@@ -654,13 +656,13 @@ function renderCalendarLink() {
 
   if (!url) {
     input.value = "";
-    status.textContent = "Off. Turn it on for a private link to add to Google Calendar, Apple Calendar, or most calendar apps. Each reminder shows up as a 30-minute \"Check Budget\" event with an alert.";
+    status.textContent = "Off. Turn it on for your private link.";
     buttons.append(settingsButton("Turn On", "primary", () => setCalendarLink("on")));
     return;
   }
 
   input.value = url;
-  status.textContent = "On. Add this link to your calendar app, and keep it private. In Google Calendar you can also paste it under Other calendars, From URL. Google only checks it every several hours, so changes can take a while to show up there.";
+  status.textContent = "On. Add this link to your calendar app (how is below), and keep it private.";
   const webcal = url.replace(/^https?:\/\//, "webcal://");
   buttons.append(
     settingsButton("Copy Link", "primary", copyCalendarLink),
@@ -1678,20 +1680,6 @@ function settingsLink(label, href, newTab) {
     link.rel = "noopener";
   }
   return link;
-}
-
-// Bytes <-> base64url text (push keys)
-function bytesToBase64Url(bytes) {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-// And back: base64url text -> bytes
-function base64UrlToBytes(text) {
-  const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
-  return Uint8Array.from(binary, character => character.charCodeAt(0));
 }
 
 //#endregion

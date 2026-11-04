@@ -1090,18 +1090,19 @@ function goalValueOn(goal, projection, day) {
 }
 
 // The least to add on each payday (to the cent, rounded up) so the goal's amount is there on its day. An account with
-// interest is worked out again with the extra in it (each month's interest follows the balance, so a credit card paid
-// down faster pays less interest); anything else is the shortfall split over the paydays.
+// interest or escrow is worked out again with the extra in it (each month's interest follows the balance, so a credit
+// card paid down faster pays less interest, and a mortgage's escrow comes out of what's put in); anything else is the
+// shortfall split over the paydays.
 function neededEachPayday(goal, short, paydays, until, projection) {
   const even = Math.ceil(short / paydays.length * 100) / 100;
   if (goal.kind !== "account") return even;
   const account = accountRows().find(known => known.clean === cleanString(goal.account));
   const parts = account ? projection.accountParts(account.index) : null;
-  if (!parts || !parts.interest) return even;
+  if (!parts || (!parts.interest && !parts.escrow)) return even;
   const balanceWith = (extra) => {
     const entries = [...parts.entries, ...paydays.map(date => ({ date, change: extra }))];
-    const credits = interestCredits(parts.start, entries, parts.interest, until);
-    return [...entries, ...credits].reduce((sum, item) => (item.date <= until ? sum + item.change : sum), parts.start);
+    const extras = accountExtras({ ...parts, entries }, until);
+    return [...entries, ...extras.credits, ...extras.escrow].reduce((sum, item) => (item.date <= until ? sum + item.change : sum), parts.start);
   };
   let low = 0;
   let high = Math.max(even, 0.01);

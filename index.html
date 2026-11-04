@@ -4,10 +4,10 @@
 <html lang="en" class="noJs frontPage">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=79f52e09ee">
+    <link rel="stylesheet" href="/stylesheet.css?v=a7c1d9edd1">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=4b3fdd8d2c">
-    <link rel="stylesheet" href="/themes.css?v=acc2bf9792">
+    <link rel="stylesheet" href="/budgetStyle.css?v=fb11019b06">
+    <link rel="stylesheet" href="/themes.css?v=a6bf52e1de">
     <title>Prismal Budget - See Your Bank Balance Four Weeks Ahead</title>
     <meta name="description" content="Prismal Budget is a calendar budget that shows what will be in your bank account at the end of every day for the next four weeks. It fills in your paychecks and bills, and points out low days before they happen.">
     <link rel="canonical" href="https://prismalbudget.org/">
@@ -291,7 +291,8 @@
         <!-- Under the calendar (Calendar Page.js fills them in): Lowest in bank after today, with the lowest In Bank in the
              28 days after the calendar and In Bank on the 28th day; then Bob, and Upcoming -->
         <section class="infoRow">
-          <div class="infoCard lowestCard">
+          <!-- Tapping it opens the 28 days after the calendar (Calendar Page.js openAheadDays) -->
+          <div class="infoCard lowestCard" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Lowest in bank after today. See the 28 days after the calendar">
             <span class="cardIcon walletIcon"><img src="/Resources/Icons/Wallet.webp?v=41dca9f9c0" alt=""></span>
             <div class="lowestMain">
               <span class="infoLabel">Lowest in bank after today</span>
@@ -302,6 +303,7 @@
               <p class="afterLine"><span id="afterLowestDay">Lowest is on --</span>: <span id="afterLowest" class="afterAmount" translate="no"></span></p>
               <p class="afterLine">Day 28 is: <span id="afterDay28" class="afterAmount" translate="no"></span></p>
             </div>
+            <span class="lowestMore">See the 28 days ›</span>
           </div>
           <!-- Bob's message (Calendar Page.js); the card opens his page. His warnings (and Okay) show under it while he has
                one. -->
@@ -343,7 +345,7 @@
           <h4>Viewing The Calendar</h4>
           <ul>
             <li><strong>Tap a day</strong> to zoom in on it, over a dimmed page. On a phone, every day grows to the same size, nearly the screen's width and as tall as its entries need, sharp and easy to read; on a computer, it doubles in size. In its top right corner are two round buttons: <strong>+</strong> opens New Entry with that day already in its date box, and <strong>×</strong> zooms back out (so does a tap anywhere outside the day). A zoomed day is part of the page: scroll the page, or pinch it with two fingers, and the day moves and zooms with it.</li>
-            <li><strong>Swipe a zoomed day</strong> left or right to slide over to the next day or the day before (on a computer, press the → and ← keys). On a phone, the day moves with your finger; let go after only a little, or slide it back, and it stays.</li>
+            <li><strong>Swipe a zoomed day</strong> left or right to slide over to the next day or the day before (on a computer, press the → and ← keys). It keeps going past the calendar's ends, without leaving Home: before its first day come History's days, and after its last day the 28 days after the calendar. On a phone, the day moves with your finger; let go after only a little, or slide it back, and it stays.</li>
             <li>If you've zoomed the whole page in, tapping a day zooms the page back out first. Where your browser keeps the page zoomed, the day still zooms to the page's full size, across the page, with its middle where the middle of your screen is: pinch back out to see all of it.</li>
             <li><strong>Entries stay on one line.</strong> A long one is cut short with "..." at the day's edge (on a computer, a zoomed day lets them run past its edge, over the dimmed page). To read the whole title, tap the entry: its options show it all. On a phone, a zoomed day with more entries than fit on the screen runs past the screen's bottom: scroll the page to see the rest.</li>
             <li><strong>On a zoomed day, tap an entry</strong> to change its title, refraction type, Other Account, or amount, move it to another day, turn its Placeholder switch on or off, pick its Wavelength (once Wavelength Planning is on, on Bob's page), give it a note, or delete it. Any entry on a day before today can get a new title; from today on, one that comes from a recurring entry, a connected spreadsheet, or a connected calendar keeps its title (change it on the Recurring Entries or Spreadsheets &amp; Calendars page). A new title or type that matches an entry already on the day adds the two together, since a day has one of each.</li>
@@ -401,7 +403,7 @@
 
           <h4>Lowest In Bank, Bob, And Upcoming</h4>
           <ul>
-            <li><strong>Lowest in bank after today</strong> is the lowest In Bank from today through the 28 days after the calendar.</li>
+            <li><strong>Lowest in bank after today</strong> is the lowest In Bank from today through the 28 days after the calendar. Tap the card to see those 28 days, each with its In Bank (to the dollar; the lowest is ringed, and one below $0 is red). Tap one to zoom it in, to see its entries, add one (it goes into Upcoming), or change one, and to swipe on from there.</li>
             <li>Next to it, <strong>in the 28 days after the calendar</strong> (counting your recurring entries, connected spreadsheets' entries, and Upcoming entries, but not Hidden ones): <strong>Lowest is on</strong> the day In Bank is lowest in those 28 days, and how low it gets, and <strong>Day 28 is</strong> what In Bank will be on the 28th day. Amounts below $0 show in red, and when any of them is below $0, the whole Lowest card turns red.</li>
             <li><strong>Bob</strong> looks over your budget and lets you know what to keep in mind: days that go below $0, going below $0 in the 28 days after the calendar, uncommon recurring entries (ones that land every 3 months or less often) on the calendar, and Upcoming entries. Bob also has a new affirmation for you every day.</li>
             <li><strong>Tap Bob's card</strong> to open his page (it's in the Menu too), where he goes further, with a card for each thing he works out: each account on any day ahead, goals and what reaching them takes, Wavelength Planning (where your money goes, on a spectrum), and his tips (payday, spending pace, big bills, the weekly check, Catchup entries, and refunds). You pick which cards are on. Its Help has the details.</li>

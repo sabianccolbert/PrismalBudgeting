@@ -444,6 +444,18 @@ const BudgetUI = (() => {
     return list;
   }
 
+  // A "?" explanation's content: a list, one item for each [lead, text] pair (the lead in bold) or plain text
+  function helpList(items) {
+    const list = element("ul");
+    for (const item of items) {
+      const li = element("li");
+      if (Array.isArray(item)) li.append(element("strong", "", item[0]), item[1]);
+      else li.textContent = item;
+      list.append(li);
+    }
+    return list;
+  }
+
   // A tiny ? button after a field's label that shows (or hides) a short explanation under the field
   let fieldHelpCount = 0;
   function addFieldHelp(fieldEl, label, content) {
@@ -848,7 +860,8 @@ const BudgetUI = (() => {
   // The Placeholder switch: a placeholder stands in for an entry that's expected (like an estimate). It counts like any
   // entry and shows in yellow, and the budget deletes it once its last day has passed (see PLACEHOLDER_MARK in Process
   // Budget.js): its own day, or while the switch is on, a day picked under it (Delete it after: any day, before or after
-  // its own), or for a recurring entry (days: true), how many days before or after each day it lands on. It's offered for
+  // its own), or for a recurring entry (days: true), how many days behind or ahead of the current day each one goes
+  // (behind: kept until the current day is that many days past it; ahead: deleted that many days early). It's offered for
   // a day from today on (and for an entry that's a placeholder already: keepShown): setDate(date) hides it for a day
   // before today (date: a Date, or null for today). until: the last day to start with (a Date, or with days, a number,
   // below 0 for days before; null for its own day). value(): on and shown. until(): the last day picked (a Date, or null
@@ -860,7 +873,9 @@ const BudgetUI = (() => {
     const el = element("div", "panelField placeholderField");
     let untilBox;
     if (days) {
-      // Delete each one [3] [days after its day / days before its day], laid out like Frequency
+      // Delete each one [3] [days behind the current day / days ahead of the current day], laid out like Frequency: the
+      // days count from the current day (behind: each one stays until the current day is that many days past it; ahead:
+      // the current day and the days after it, that many in all, don't have it)
       const count = element("input", "frequencyCount placeholderDays");
       count.type = "text";
       count.inputMode = "numeric";
@@ -868,8 +883,8 @@ const BudgetUI = (() => {
       count.maxLength = 3;
       count.setAttribute("aria-label", "How many days");
       const side = element("select", "selectInput frequencyUnit");
-      side.append(new Option("days after its day", "after"), new Option("days before its day", "before"));
-      side.setAttribute("aria-label", "After or before its day");
+      side.append(new Option("days behind the current day", "after"), new Option("days ahead of the current day", "before"));
+      side.setAttribute("aria-label", "Behind or ahead of the current day");
       const show = (value) => {
         count.value = typeof value === "number" && value !== 0 ? String(Math.abs(value)) : "";
         side.value = typeof value === "number" && value < 0 ? "before" : "after";
@@ -878,7 +893,7 @@ const BudgetUI = (() => {
       const row = element("div", "frequencyRow");
       row.append(count, side);
       untilBox = {
-        el: field("Delete each one", row, { optional: true, hint: "Blank or 0: once its own day passes. Before its day: each one is deleted that many days ahead of it, so the days just ahead don't have it." }),
+        el: field("Delete each one", row, { optional: true, hint: "Counted from the current day. Blank or 0: once its own day passes. Behind: each one stays until the current day is that many days past it (in History too). Ahead: the current day and the days after it, that many in all, don't have it." }),
         set: show,
         value() {
           const text = count.value.trim();
@@ -914,6 +929,52 @@ const BudgetUI = (() => {
       until: () => untilBox.value()
     };
   }
+
+  // An entry's reminder (see ENTRY REMINDERS in Process Budget.js): a pill switch, and while it's on, how many days before
+  // the entry's day (0: on its day). It comes at the reminder time, as a push notification or on the calendar link, while
+  // entries' reminders are on in Settings. It's offered for a day after today: setDate(date) hides it for any other (date:
+  // a Date, or null for today). days: the reminder to start with (null for none). value(): days (a whole number), null
+  // while it's off or hidden, NaN when the days can't be read.
+  const REMINDER_HINT = "A notification at your reminder time, that many days before its day (0: on its day). Settings has the reminders' switches and time.";
+  function reminderField({ days = null } = {}) {
+    const toggle = checkboxField({ label: "Remind me", checked: days !== null });
+    const count = element("input", "frequencyCount reminderDays");
+    count.type = "text";
+    count.inputMode = "numeric";
+    count.maxLength = 3;
+    count.placeholder = "0";
+    count.value = String(days ?? 1);
+    count.setAttribute("aria-label", "How many days before its day");
+    const row = element("div", "frequencyRow");
+    row.append(count, element("span", "rangeWord", "days before"));
+    const daysField = field("Reminder", row, { hint: REMINDER_HINT });
+    const el = element("div", "panelField reminderField");
+    const showDays = () => { daysField.hidden = !toggle.input.checked; };
+    toggle.input.addEventListener("change", () => {
+      showDays();
+      if (toggle.input.checked && window.matchMedia("(pointer: fine)").matches) count.focus({ preventScroll: true });
+    });
+    showDays();
+    el.append(toggle.el, daysField);
+    return {
+      el,
+      setDate(date) { el.hidden = !(date instanceof Date && !isNaN(date.getTime()) && date > today); },
+      // On with that many days, or off (null)
+      set(value) {
+        toggle.input.checked = typeof value === "number";
+        if (typeof value === "number") count.value = String(value);
+        showDays();
+      },
+      value() {
+        if (el.hidden || !toggle.input.checked) return null;
+        const text = count.value.trim();
+        const number = text === "" ? 0 : Number(text);
+        return Number.isInteger(number) && number >= 0 && number <= MAX_REMINDER_DAYS ? number : NaN;
+      }
+    };
+  }
+  // (Worked out when it's needed: the Menu page has this file without Process Budget.js, which has MAX_REMINDER_DAYS)
+  const reminderError = () => `Enter how many days before its day to be reminded: a whole number from 0 to ${MAX_REMINDER_DAYS}.`;
 
   // A placeholder's last day as a form gives it (placeholderField's until()), checked: { until } (a Date, or null for its
   // own day), or { error }
@@ -1213,9 +1274,16 @@ const BudgetUI = (() => {
     const account = accountField({ accounts, amount, type: () => refraction.value() });
     const refraction = refractionField({ onChange: (key) => { account.setVisible(isAccountType(key)); followTitle(); } });
     const placeholder = placeholderField();
+    const reminder = reminderField();
     const purpose = purposeField({ shown: purposes, lookup: purposeLookup, wavelengths });
     const note = noteField({ maxLength: noteMax });
-    const showPlaceholder = () => placeholder.setDate(dateInput.value() ?? date);
+    // (The placeholder and reminder follow the day picked: one from today on can be a placeholder, and one after today
+    // can have a reminder)
+    const showPlaceholder = () => {
+      const picked = dateInput.value() ?? date;
+      placeholder.setDate(picked);
+      reminder.setDate(picked);
+    };
     dateInput.input.addEventListener("input", showPlaceholder);
     dateInput.input.addEventListener("change", showPlaceholder);
     showPlaceholder();
@@ -1224,14 +1292,14 @@ const BudgetUI = (() => {
     title.input.addEventListener("input", followTitle);
     account.el.addEventListener("pick", followTitle);
     return {
-      els: [title.el, refraction.el, account.el, amount.el, dateInput.el, placeholder.el, purpose.el],
+      els: [title.el, refraction.el, account.el, amount.el, dateInput.el, placeholder.el, reminder.el, purpose.el],
       dateEl: dateInput.el,
       purposeEl: purpose.el,
       noteEl: note.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), from: account.from(), date: dateInput.value(), placeholder: placeholder.value(), until: placeholder.until(), purpose: purpose.value(), note: note.value() }),
+      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), from: account.from(), date: dateInput.value(), placeholder: placeholder.value(), until: placeholder.until(), reminder: reminder.value(), purpose: purpose.value(), note: note.value() }),
       setAccounts: account.setAccounts,
-      fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", from: newFrom = "", placeholder: newPlaceholder = false, until: newUntil = null, purpose: newPurpose, note: newNote } = {}) {
+      fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", from: newFrom = "", placeholder: newPlaceholder = false, until: newUntil = null, reminder: newReminder, purpose: newPurpose, note: newNote } = {}) {
         if (newTitle) title.input.value = newTitle;
         if (typeof newAmount === "number" && Number.isFinite(newAmount)) {
           amount.input.value = Math.round(newAmount * 100) !== 0 ? Math.abs(newAmount).toFixed(2) : "";
@@ -1241,6 +1309,7 @@ const BudgetUI = (() => {
         if (newAccount) account.pick(newAccount);
         if (newFrom) account.pickFrom(newFrom);
         if (newPlaceholder) placeholder.set(true, newUntil);
+        if (Number.isInteger(newReminder)) reminder.set(newReminder);
         title.input.dispatchEvent(new Event("input", { bubbles: true }));
         account.setVisible(isAccountType(refraction.value())); // Shown for Hidden or Transfer
         if (typeof percent === "number" && percent !== 0) amount.setPercent(percent);
@@ -1269,6 +1338,9 @@ const BudgetUI = (() => {
           if (untilError) return { error: untilError };
           if (until) entry.until = until;
         }
+        const remind = entry.date > today ? reminder.value() : null;
+        if (Number.isNaN(remind)) return { error: reminderError() };
+        if (remind !== null) entry.reminder = remind;
         return { entry };
       }
     };
@@ -1278,8 +1350,8 @@ const BudgetUI = (() => {
   // results): line is the entry as its day stores it ("❗️ -$4.50 Coffee") on date. Its title (see renameEntry in Process
   // Budget.js: any entry before today, and from today on one that doesn't land by itself from a recurring entry or a
   // connected spreadsheet), its refraction type and Other Account, Set to or Add to it, Move to another day, whether it's a
-  // placeholder (for a day from today on), its title's Wavelength (once Bob's card for it is on), Delete,
-  // and its note (under the buttons). Changing its type or account takes it off as it is and puts it on as the new one,
+  // placeholder (for a day from today on), its reminder (for a day after today), its title's Wavelength (once Bob's card
+  // for it is on), Delete, and its note (under the buttons). Changing its type or account takes it off as it is and puts it on as the new one,
   // adding into an entry already on that day with the same title and type (changeEntryKind). One that lands
   // by itself on a day after the calendar (Search's, which isn't in the budget yet) goes into Upcoming for that day once
   // it's changed, the way a changed day on the calendar does. inHistory: a day in History, where the same changes keep
@@ -1354,9 +1426,13 @@ const BudgetUI = (() => {
         const ends = placeholderEnds(parts[0], date);
         const startUntil = ends && ends.getTime() !== date.getTime() ? ends : null;
         const placeholder = placeholderField({ checked: wasPlaceholder, until: startUntil, keepShown: wasPlaceholder });
+        // Its reminder (for a day after today, see ENTRY REMINDERS): it follows Move to's day too
+        const currentReminder = inHistory ? null : entryReminder(date, title, refraction);
+        const reminder = reminderField({ days: currentReminder });
         const showPlaceholder = () => {
           const move = moveTo.value();
           placeholder.setDate(move instanceof Date ? move : date);
+          reminder.setDate(inHistory ? null : move instanceof Date ? move : date);
           if (inHistory && !wasPlaceholder) placeholder.el.hidden = true;
         };
         moveTo.input.addEventListener("input", showPlaceholder);
@@ -1371,7 +1447,7 @@ const BudgetUI = (() => {
         const currentNote = entryNote(date, title, refraction);
         const note = noteField({ note: currentNote });
 
-        form.append(display, ...[accountNote, historyNote, titleBox?.el, titleNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, purpose.el, buttonRow([
+        form.append(display, ...[accountNote, historyNote, titleBox?.el, titleNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, reminder.el, purpose.el, buttonRow([
           { label: "Save", kind: "primary", type: "submit" },
           { label: "Delete", kind: "danger", onClick: deleteEntry },
           { label: "Cancel", onClick: () => panel.close() }
@@ -1402,6 +1478,10 @@ const BudgetUI = (() => {
           const newPurpose = purpose.value();
           // (Left out when it didn't change, so the entry keeps its own wherever it goes)
           const newNote = note.value() !== currentNote ? note.value() : undefined;
+          // (Hidden for a day that isn't after today: one it had goes, see followEntryNote)
+          const pickedReminder = reminder.value();
+          if (Number.isNaN(pickedReminder)) return panel.setError(reminderError());
+          const newReminder = pickedReminder !== currentReminder ? pickedReminder : undefined;
 
           const newSprite = type.value();
           const newAccount = accountPicker.value();
@@ -1414,12 +1494,12 @@ const BudgetUI = (() => {
             const newTitle = withAccount(newOwn, newAccount, newFrom);
             // "→ Savings" has no title of its own, so it can't leave its account without one
             if (!newTitle) return panel.setError(titleBox ? "Give the entry a title, or keep its Other Account." : "This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
-            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, ...(newUntil !== undefined ? { until: newUntil } : {}), purpose: newPurpose, note: newNote };
+            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, ...(newUntil !== undefined ? { until: newUntil } : {}), purpose: newPurpose, note: newNote, reminder: newReminder };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
             return submit(panel, () => changeKind(kind));
           }
 
-          const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder, purpose: newPurpose, note: newNote };
+          const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder, purpose: newPurpose, note: newNote, reminder: newReminder };
           // (A % entry set to dollars becomes a plain amount, even the same one)
           const amountChanged = mode === "set"
             ? (newPercent !== null ? newPercent !== currentPercent : newAmount !== currentAmount || (currentPercent !== null && amount.percentShown()))
@@ -1438,10 +1518,10 @@ const BudgetUI = (() => {
             change.renameTo = newOwn;
           }
           if (!renamed && !amountChanged && !change.moveDate && !placeholderChanged) {
-            // Only its title's purpose or its note changed, or nothing did
+            // Only its title's purpose, its note, or its reminder changed, or nothing did
             const purposeChanged = newPurpose !== undefined && newPurpose !== purposeOf(title);
-            if (purposeChanged || newNote !== undefined) {
-              return submit(panel, () => saveEntryExtras(date, title, refraction, { purpose: purposeChanged ? newPurpose : undefined, note: newNote }));
+            if (purposeChanged || newNote !== undefined || newReminder !== undefined) {
+              return submit(panel, () => saveEntryExtras(date, title, refraction, { purpose: purposeChanged ? newPurpose : undefined, note: newNote, reminder: newReminder }));
             }
             return panel.close();
           }
@@ -1459,8 +1539,9 @@ const BudgetUI = (() => {
   }
 
   // New Entry (Home's button, and a zoomed day's + on Home or History, with that day in its date box): title, refraction
-  // type (Auto to start), for Hidden or Transfer an Other Account, the amount (cost or gain), date, Placeholder, once
-  // Bob's card for it is on, its Wavelength, and a note under its buttons. A day has one entry per title, type,
+  // type (Auto to start), for Hidden or Transfer an Other Account, the amount (cost or gain), date, Placeholder, Remind me
+  // (for a day after today), once Bob's card for it is on, its Wavelength, and a note under its buttons. A day has one
+  // entry per title, type,
   // and Other Account, so when one is already there (its own, or a recurring or connected spreadsheet's entry landing
   // there), the form says so and asks whether to add the new amount to it or set it to the new amount. Either way a
   // recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on the calendar.
@@ -1517,9 +1598,50 @@ const BudgetUI = (() => {
             const amount = typeof entry.percent === "number" ? { amount: "", percent: entry.percent } : { amount: String(entry.amount) };
             // (A note goes after the one the entry has, like adding to it does)
             const note = entry.note.trim() ? joinNotes(entryNote(entry.date, entry.title, sprite), entry.note) : undefined;
-            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, ...(entry.until ? { until: entry.until } : {}), purpose: entry.purpose, note }));
+            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, ...(entry.until ? { until: entry.until } : {}), purpose: entry.purpose, note, ...(entry.reminder !== undefined ? { reminder: entry.reminder } : {}) }));
           }
           submit(panel, () => addCalendarEntry(entry));
+        });
+      }
+    });
+  }
+
+  // The title of the entry that makes a day's In Bank match the bank's (search() and the spending numbers know it
+  // as "catch up" in any spelling)
+  const CATCHUP_TITLE = "Catchup";
+
+  // In Bank tapped on a zoomed calendar day (Home's, or one zoomed in as a guest): type what the bank says, and the
+  // difference goes on that day as a Regular entry titled Catchup (adding into one that's already there), so that day and
+  // the ones after it follow. It's the purchases (or gains) that slipped by, so it counts as a cost or gain like they
+  // would have: in the day's Gains and Costs, and in the tracker.
+  function openInBankOptions(lineEl, date) {
+    const spot = calendarSpot(date);
+    const current = spot ? readInBank(calendarData[spot.r][spot.c]) : null;
+    if (current === null) return;
+    openPanel({
+      origin: lineEl,
+      size: "small",
+      title: `${showDay(date)} In Bank`,
+      build(form, panel) {
+        // (Negative is for a bank account that's below zero)
+        const balance = amountField({
+          label: "In Bank",
+          amount: current,
+          signs: BALANCE_SIGNS,
+          hint: `What your bank says for this day. The difference goes on it as a ❗️ Regular entry titled ${CATCHUP_TITLE}, and the days after it follow.`
+        });
+        form.append(balance.el, buttonRow([
+          { label: "Save", kind: "primary", type: "submit" },
+          { label: "Cancel", onClick: () => panel.close() }
+        ]));
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const typed = balance.value() ?? 0;
+          if (!Number.isFinite(typed)) return panel.setError("Enter what's in the bank, like 1250.00 (tap Negative when it's below zero).");
+          if (Math.abs(typed) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
+          const difference = Math.round((typed - current) * 100) / 100;
+          if (difference === 0) return panel.close(); // Already right
+          submit(panel, () => addCalendarEntry({ title: CATCHUP_TITLE, sprite: "❗️", amount: difference, date }));
         });
       }
     });
@@ -1621,7 +1743,7 @@ const BudgetUI = (() => {
       const el = element("div", "lineSystem");
       // "✅ $812.40 Lowest: 11/14": the day shows in this device's date format
       const words = parts.slice(2).join(" ");
-      // The day's In Bank can be tapped on a zoomed day to set it (Calendar Page.js openInBankOptions)
+      // The day's In Bank can be tapped on a zoomed calendar day to set it (openInBankOptions)
       if (lineIndex === 1 && words === "In Bank") el.classList.add("lineInBank");
       const day = words.match(/^(.*?)(\d{1,2}\/\d{1,2})$/);
       el.append(noTranslate(element("span", "", `${parts[0]} ${parts[1]} `)), day ? day[1] : words);
@@ -1713,6 +1835,7 @@ const BudgetUI = (() => {
     BALANCE_SIGNS,
     cashRegister,
     refractionField,
+    helpList,
     addFieldHelp,
     dateField,
     selectField,
@@ -1732,6 +1855,7 @@ const BudgetUI = (() => {
     newEntryFields,
     openNewEntry,
     openEntryOptions,
+    openInBankOptions,
     buttonRow,
     setPickTarget,
     datePickerButton,
