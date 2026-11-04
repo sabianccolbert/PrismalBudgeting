@@ -181,13 +181,13 @@ async function addQuickEntry(panel, fields) {
 // date: "YYYY-MM-DD", and placeholder: true for a placeholder (until: the day it's deleted after, "YYYY-MM-DD", when one
 // was picked), percent for a % amount (see PERCENT_MARK in Process Budget.js), whose amount is
 // what it comes to with the account's balance today; the budget works it out again for its day, purpose: its title's
-// wavelength, when one was picked (see WAVELENGTH PLANNING), which the budget gives the title as it's added, and note:
-// its note, when it has one (see ENTRY NOTES) }
+// wavelength, when one was picked (see WAVELENGTH PLANNING), which the budget gives the title as it's added, note:
+// its note, when it has one (see ENTRY NOTES), and remind: its reminder, how many days before its day (see ENTRY REMINDERS) }
 function toQueued(entry) {
   const hasPercent = typeof entry.percent === "number";
   const account = quickAccounts.find(known => cleanString(known.name) === cleanString(splitAccount(entry.title).account));
   const amount = hasPercent ? percentValue(entry.percent, account?.balance ?? 0) : entry.amount;
-  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}), ...(entry.placeholder && entry.until instanceof Date ? { until: formatToYMD(entry.until) } : {}), ...(hasPercent ? { percent: entry.percent } : {}), ...(entry.purpose ? { purpose: entry.purpose } : {}), ...(entry.note && entry.note.trim() ? { note: entry.note } : {}) };
+  return { title: entry.title, type: QUICK_TYPE_NAMES[entry.sprite] || "auto", amount, date: formatToYMD(entry.date), ...(entry.placeholder ? { placeholder: true } : {}), ...(entry.placeholder && entry.until instanceof Date ? { until: formatToYMD(entry.until) } : {}), ...(hasPercent ? { percent: entry.percent } : {}), ...(entry.purpose ? { purpose: entry.purpose } : {}), ...(entry.note && entry.note.trim() ? { note: entry.note } : {}), ...(typeof entry.reminder === "number" ? { remind: entry.reminder } : {}) };
 }
 
 // A home screen icon's page often stays open in the background for days. Looked at again on a later day, New
@@ -581,7 +581,7 @@ function changeWaiting(item) {
   if (quickForm && quickForm.mode === "entry") stashedEntry = quickForm.fields.values();
   const { title, account, from } = splitAccount(item.title);
   const until = typeof item.until === "string" ? createSafeMidnight(item.until, true) : null;
-  openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, from, placeholder: !!item.placeholder, until: until && !isNaN(until.getTime()) ? until : null, purpose: item.purpose, note: typeof item.note === "string" ? item.note : "" }, item);
+  openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, from, placeholder: !!item.placeholder, until: until && !isNaN(until.getTime()) ? until : null, reminder: typeof item.remind === "number" ? item.remind : undefined, purpose: item.purpose, note: typeof item.note === "string" ? item.note : "" }, item);
   // An account renamed or deleted since isn't in the list, so it says to pick one
   if (account && !quickAccounts.some(known => cleanString(known.name) === cleanString(account))) {
     BudgetUI.showToast(`${account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);

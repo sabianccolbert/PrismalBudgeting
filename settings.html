@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=79f52e09ee">
+    <link rel="stylesheet" href="/stylesheet.css?v=a7c1d9edd1">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=4b3fdd8d2c">
-    <link rel="stylesheet" href="/themes.css?v=acc2bf9792">
+    <link rel="stylesheet" href="/budgetStyle.css?v=fb11019b06">
+    <link rel="stylesheet" href="/themes.css?v=a6bf52e1de">
     <title>Prismal Budget - Settings</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -76,15 +76,13 @@
         </section>
 
         <div id="settingsView" hidden>
-          <!-- Shown only while push notifications (on any device) or the calendar link are on (Settings Page.js) -->
-          <section id="reminderCard" class="budgetCard settingsCard" aria-labelledby="reminderHeading" hidden>
-            <h3 id="reminderHeading">Daily Reminder</h3>
-            <p>On days your budget needs a look, you get a "🗓️ Check Budget" reminder at this time:</p>
-            <ul class="settingsList">
-              <li>⛔️ Your In Bank is negative that day</li>
-              <li>✔️ An uncommon recurring payment (one that lands every 3 months or less often) is in the current four weeks</li>
-              <li>❗️ You have a cost that day</li>
-            </ul>
+          <!-- The reminders: which kinds this account gets (a switch for each), when, and with more than one budget, which
+               budget they're about (Settings Page.js). They come as push notifications and on the calendar link, the two
+               cards after it. -->
+          <section id="reminderCard" class="budgetCard settingsCard" aria-labelledby="reminderHeading">
+            <h3 id="reminderHeading">Reminders</h3>
+            <p>A "🗓️ Check Budget" reminder at your reminder time, on the days your budget needs a look. Pick what's worth one:</p>
+            <div id="reminderKinds" class="reminderKinds" role="group" aria-labelledby="reminderHeading"></div>
             <label class="settingsField">
               <span class="fieldLabel">Reminder time</span>
               <input id="reminderTime" class="timeInput" type="time" step="300">
@@ -95,21 +93,35 @@
               <span class="fieldLabel">Reminders are about</span>
               <select id="reminderBudget" class="selectInput"></select>
             </label>
-            <p class="panelHint">It comes as a push notification, on your calendar, or both, whichever you turn on below. With both off, this goes away.</p>
+            <p class="panelHint">They come as push notifications, on your calendar, or both: turn those on below. Reminders for entries are on to start; the rest start off.</p>
           </section>
 
           <section class="budgetCard settingsCard" aria-labelledby="pushHeading">
             <h3 id="pushHeading">Push Notifications</h3>
-            <p class="panelHint">A "🗓️ Check Budget" reminder on days your budget needs a look (like a day your In Bank goes below $0), as a notification on this device.</p>
+            <p>Your reminders (picked under Reminders) as a "🗓️ Check Budget" notification on this device, at your reminder time.</p>
             <p id="pushStatus"></p>
             <div id="pushButtons" class="panelButtons"></div>
+            <ul class="settingsList settingsNotes">
+              <li>Its title shows what it's about (like 🗓️🔔⛔️ Check Budget), and its lines say why. An entry's reminder shows the entry's title and its day; the rest never show amounts or entry titles. Tapping it opens the budget it's about.</li>
+              <li>Each device is turned on by itself, from that device, and right after you sign in, Home asks once whether to turn them on there.</li>
+              <li>On an iPhone or iPad (iOS 16.4 or later), add Prismal Budget to your Home Screen first (Share, then Add to Home Screen), and turn these on from there.</li>
+              <li>The days come from your budget as it was the last time it was opened or changed on any device (from today through the 28 days after the calendar, and the days of entries' reminders), so opening it now and then keeps them up to date.</li>
+              <li>Send Test sends one right away. Turn Off stops them on this device (so does turning off this site's notifications in your device's settings).</li>
+            </ul>
           </section>
 
           <section class="budgetCard settingsCard" aria-labelledby="calendarHeading">
             <h3 id="calendarHeading">Calendar Link</h3>
+            <p>A private link your calendar app can subscribe to (Apple Calendar, Google Calendar, Outlook, and most others can). Each day with one of your reminders (picked under Reminders) gets a 30-minute "🗓️ Check Budget" event at your reminder time, with an alert.</p>
             <p id="calendarStatus"></p>
             <input id="calendarUrl" class="linkInput" type="text" readonly aria-label="Calendar link" hidden>
             <div id="calendarButtons" class="panelButtons"></div>
+            <ul class="settingsList settingsNotes">
+              <li>Each event's title shows what it's about (like 🗓️⛔️ Check Budget), and its notes spell it out, with a link to Prismal Budget. Like push notifications, only an entry's reminder shows its title.</li>
+              <li>To add it: Apple Calendar opens it with the Apple Calendar button. In Google Calendar, use the Google Calendar button, or on a computer, Other calendars, then From URL, and paste the link. In Outlook, use Add calendar, then Subscribe from web.</li>
+              <li>Calendar apps check the link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
+              <li>Keep the link private: anyone who has it can see your reminder days (and the titles of entries with a reminder). New Link makes a new one (the old one stops working), and Turn Off stops the events.</li>
+            </ul>
           </section>
         </div>
 
@@ -120,7 +132,7 @@
           <h3 id="themeHeading">Theme</h3>
           <p>How Prismal Budget looks on this device: its colors, corners, background, stars, and icons. Each device keeps its own, even on the same budget.</p>
           <div id="themeChoices" class="choiceList themeChoices" role="radiogroup" aria-labelledby="themeHeading"></div>
-          <p class="panelHint">Custom makes one of your own, starting from any of the others. The login page and the front page always look like Prismal.</p>
+          <p class="panelHint">Custom makes one of your own, starting from any of the others. This device keeps it, even when you sign out or pick another theme: tap Custom to bring it back, and tap it again while it's on to change it. The login page and the front page always look like Prismal.</p>
         </section>
 
         <section id="languageView" class="budgetCard settingsCard" aria-labelledby="languageHeading">
@@ -334,7 +346,8 @@
           <h4>Your Budgets</h4>
           <ul>
             <li><strong>Budgets:</strong> every budget you have, your own and the ones shared with you, with invitations to Join or Decline. <strong>Open</strong> switches to one, <strong>Share</strong> invites someone to one of yours (by their username or email; once they join, they can open it and change anything in it, and Stop Sharing takes it back), <strong>Rename</strong> and <strong>Delete</strong> are for your own (your first budget can't be deleted), and <strong>Leave</strong> is for one shared with you. Only a budget's owner can share it. The name above the buttons at the top of every page switches between them too.</li>
-            <li><strong>Reminders are about:</strong> with more than one budget, the Daily Reminder card picks which one your reminders follow.</li>
+            <li><strong>Reminders are about:</strong> with more than one budget, the Reminders card picks which one your reminders follow.</li>
+            <li><strong>Reminders:</strong> a switch for each kind: 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start). They come as push notifications and on the calendar link, at the reminder time. Right after you sign in, Home asks once whether to turn notifications on there.</li>
           </ul>
 
           <h4>Your Account</h4>

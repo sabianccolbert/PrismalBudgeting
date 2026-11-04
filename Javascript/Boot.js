@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.04.2026.A";
+  const SITE_VERSION = "11.04.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -24,26 +24,27 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "63d15ca235",
+    "/Javascript/Active Starfield.js": "5b11144ba0",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "56c365b7c9",
-    "/Javascript/Budget Pages.js": "cf122dbd11",
+    "/Javascript/Bob Page.js": "3e5fc0808a",
+    "/Javascript/Budget Pages.js": "e13071832b",
     "/Javascript/Budget Search.js": "ac9e964a18",
-    "/Javascript/Budget UI.js": "5229ace2b3",
-    "/Javascript/Budgets.js": "03d82d3bd6",
-    "/Javascript/Calendar Page.js": "0a1560b42b",
-    "/Javascript/Calendars Page.js": "5ee574fc39",
-    "/Javascript/Calendars.js": "b397e862a1",
-    "/Javascript/Dates.js": "6c1a227708",
+    "/Javascript/Budget UI.js": "5dad0fae0e",
+    "/Javascript/Budgets.js": "f057170f61",
+    "/Javascript/Calendar Page.js": "818e1c32a9",
+    "/Javascript/Calendars Page.js": "2920b6ce87",
+    "/Javascript/Calendars.js": "22c035cd0d",
+    "/Javascript/Dates.js": "6431a1d8c3",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "3b788045e3",
-    "/Javascript/Login.js": "f1cac6d77a",
+    "/Javascript/Layout.js": "ff6a5154bb",
+    "/Javascript/Login.js": "9a21f84896",
+    "/Javascript/Notifications.js": "facb1b76b2",
     "/Javascript/Passkeys.js": "e67395c634",
-    "/Javascript/Process Budget.js": "7d72162759",
-    "/Javascript/Quick Entry.js": "26f175616f",
+    "/Javascript/Process Budget.js": "5e078a58f9",
+    "/Javascript/Quick Entry.js": "e97efdff03",
     "/Javascript/Session.js": "988bbb66b5",
-    "/Javascript/Settings Page.js": "1a98cafc0b",
+    "/Javascript/Settings Page.js": "3c44bf1996",
     "/Javascript/Sounds.js": "4cfba7dffa",
     "/Javascript/Spreadsheets Page.js": "5e5152eca6",
     "/Javascript/Spreadsheets.js": "e070c41e6f",
@@ -252,7 +253,7 @@
     prismal:      { background: "#05041d", cards: "#181a46", words: "#f2f3ff", glow: "#6070ff", chosen: "#e8230a" },
     professional: { background: "#eef2f7", cards: "#ffffff", words: "#0f172a", glow: "#2563eb", chosen: "#2563eb" },
     dark:         { background: "#0f1115", cards: "#1b1f26", words: "#f0f3f6", glow: "#388bfd", chosen: "#388bfd" },
-    spooky:       { background: "#070405", cards: "#1e0a0c", words: "#f5ebe6", glow: "#dc141e", chosen: "#ff5a14" },
+    spooky:       { background: "#070405", cards: "#150708", words: "#f5ebe6", glow: "#dc141e", chosen: "#ff5a14" },
     elements:     { background: "#1e1b18", cards: "#2e2924", words: "#f6f0e7", glow: "#3a87a8", chosen: "#d0643b" },
     poison:       { background: "#0d0714", cards: "#241036", words: "#f3ecff", glow: "#963ce6", chosen: "#46dc28" },
     blue:         { background: "#2457a0", cards: "#24528f", words: "#ffffff", glow: "#96d2ff", chosen: "#ffbe28" },
@@ -665,6 +666,8 @@
       if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Calendars.js");
       // Search (Home's and History's): before the page script, which opens it
       if (page === "home" || page === "history") scripts.push("/Javascript/Budget Search.js");
+      // Push notifications on this device: Settings turns them on and off, and Home asks once after a sign-in
+      if (page === "home" || page === "settings") scripts.push("/Javascript/Notifications.js");
       // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings)
       if (page === "home") scripts.push("/Javascript/Bob Page.js");
       scripts.push(PAGE_SCRIPTS[page] || "/Javascript/Budget Pages.js");

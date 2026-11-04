@@ -663,6 +663,27 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   display: none;
 }
 
+/* The guest row (Process Budget.js ONE DAY AFTER ANOTHER): seven days laid over a row of the page's days, for a day
+   the page doesn't have (History's on Home, the calendar's on History, and the 28 days after the calendar on both). Only
+   the one that's zoomed (or shrinking back) shows, or can be tapped. */
+.elastic-table.guestDays {
+  position: absolute;
+  height: auto;
+  margin: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.elastic-table.guestDays td:is(.is-editing, .isZoomClosing) {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Only a calendar day's In Bank can be set (History's and the days after the calendar's can't) */
+.elastic-table.guestDays td:not([data-kind="calendar"]) .lineInBank {
+  pointer-events: none;
+}
+
 /* Recurring Entries and Change Logs fit the screen, with no sideways scrolling: column titles can take two lines, and the
    title (or action) column gets the room that's left, left-aligned, its text cut short with "..." (Budget Pages.js
    clippedCell: tapping it shows it whole, wrapped, and tapping again cuts it short) */
@@ -1784,11 +1805,22 @@ button.dropdownBox:focus-visible {
   color: var(--NEGATIVE_TEXT);
 }
 
-/* An account's Interest switch and rate (its rate shows while the switch is on) */
-.interestFields {
+/* An account's Interest and Escrow: each switch, and while it's on, its boxes (Interest today under Separate Interest) */
+.interestFields,
+.interestDetails,
+.escrowFields,
+.escrowDetails {
   display: flex;
   flex-direction: column;
   gap: 0.6em;
+}
+
+/* The lines between an account's balance and max, its interest, and its escrow */
+.budgetPanel hr.panelLine {
+  width: 100%;
+  margin: 0.15em 0;
+  border: 0;
+  border-top: 1px solid var(--PANEL_LINE);
 }
 
 .startForm .startSign {
@@ -2206,6 +2238,109 @@ button.dropdownBox:focus-visible {
   width: clamp(44px, 9vmin, 64px);
   height: clamp(44px, 9vmin, 64px);
   border-radius: 14px;
+}
+
+/* The card opens the 28 days after the calendar (Calendar Page.js openAheadDays): it lights up like Bob's, and says so
+   at its bottom right */
+.lowestCard {
+  position: relative;
+  cursor: pointer;
+}
+
+.lowestCard:hover,
+.lowestCard:focus-visible {
+  border-color: var(--GLASS_LINE_BRIGHT);
+  box-shadow: var(--GLASS_SHADOW), var(--HOVER_SHADOW);
+  outline: none;
+}
+
+.lowestMore {
+  grid-column: 1 / -1;
+  justify-self: end;
+  margin-top: -0.2em;
+  font-size: 0.8em;
+  color: var(--TEXT_DIM);
+}
+
+/* The window: the lowest and the 28th day over four weeks of days, each a square with its date and In Bank (to the
+   dollar); one below $0 is red, and the lowest is ringed */
+.aheadSummary .negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.aheadGrid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: clamp(2px, 0.8vw, 6px);
+}
+
+.aheadGrid th {
+  padding: 0 0 0.3em;
+  font-size: 0.7em;
+  font-weight: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--TEXT_DIM);
+}
+
+.aheadGrid td {
+  padding: 0;
+}
+
+.budgetButton.aheadDay,
+button.aheadDay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2em;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.4em;
+  margin: 0;
+  padding: 0.35em 0.1em;
+  font: inherit;
+  color: var(--TEXT_BRIGHT);
+  background: var(--DAY_FILL);
+  border: 0;
+  border-radius: var(--DAY_RADIUS);
+  box-shadow: inset 0 0 0 1px var(--DAY_EDGE);
+  cursor: pointer;
+}
+
+button.aheadDay:hover,
+button.aheadDay:focus-visible {
+  background: var(--HOVER_GRADIENT);
+  outline: none;
+}
+
+button.aheadDay.isNegative {
+  background: var(--NEGATIVE_DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE);
+}
+
+button.aheadDay.isLowest {
+  box-shadow: inset 0 0 0 2px var(--PICK_EDGE), 0 0 10px rgba(var(--PICK_RGB), 0.45);
+}
+
+.aheadDate {
+  font-size: clamp(11px, 0.85em, 15px);
+  font-weight: bold;
+  line-height: 1.1;
+}
+
+.aheadInBank {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(9px, 0.72em, 13px);
+  font-variant-numeric: tabular-nums;
+  color: var(--TEXT_DIM);
+}
+
+button.aheadDay.isNegative .aheadInBank {
+  color: var(--NEGATIVE_ON_RED);
 }
 
 .lowestMain {
@@ -3472,6 +3607,48 @@ a.budgetButton:hover {
   text-indent: -1.6em;
 }
 
+/* Settings' Reminders: a switch for each kind, with what it's about under it */
+.reminderKinds {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  margin: 0 0 1em;
+}
+
+.reminderKind {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+/* Home's question right after a sign-in: turn notifications on here? (Notifications.js) */
+.pushAsk h3 {
+  margin: 0 0 0.4em;
+}
+
+.pushAsk .panelButtons {
+  justify-content: flex-start;
+}
+
+/* A card's notes under its buttons (Push Notifications, Calendar Link): smaller, with plain bullets */
+.settingsList.settingsNotes {
+  margin: 1em 0 0;
+  padding-left: 1.2em;
+  list-style: disc;
+  font-size: 0.85em;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+.settingsList.settingsNotes li {
+  padding-left: 0;
+  text-indent: 0;
+}
+
+.settingsList.settingsNotes li + li {
+  margin-top: 0.45em;
+}
+
 .settingsField {
   display: flex;
   flex-direction: column;
@@ -3898,6 +4075,16 @@ html.lessMotion .sheetForm.isOpening {
   margin: 0;
   padding: 0.35em 0.9em;
   font-size: 0.9em;
+}
+
+/* Pay Change's "?" sits beside it, and the explanations of Pay Change and Pay By Event Title open under their row */
+.calendarVersions .fieldHelpButton {
+  align-self: center;
+  margin: 0;
+}
+
+.calendarHelp {
+  margin: 0.6em 0 0.2em;
 }
 
 .budgetButton.calendarVersionTab.isPicked {

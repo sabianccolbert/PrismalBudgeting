@@ -256,8 +256,8 @@ function namedDate(text) {
 // =====================================================================
 // The calendar button opens a small calendar under its date box, drawn like Home's: a month of square days, each with
 // its number (today glowing, the picked day in red), under the month and the year. Each of those is a box to type in,
-// with a list that drops down under it while it's being typed in (or tapped), which scrolls on its own, and ‹ and ›
-// step a month. Picking a month or a year shows it, and the calendar stays open. Tapping a day writes it into the date
+// with a list that drops down under it while it's being typed in (or tapped), which scrolls on its own, and ‹ and ›, on
+// either side of the month, step a month. Picking a month or a year shows it, and the calendar stays open. Tapping a day writes it into the date
 // box in this device's date format and closes the calendar; so do Today, a tap outside it, Close, and Escape. It
 // starts on the date typed in the box (or this month), and lives in the screen layer (Layout.js), so it stays in view
 // however the page is zoomed or scrolled.
@@ -322,7 +322,7 @@ const DatePicker = (() => {
     el.setAttribute("aria-label", `Pick the ${String(options.label || "date").toLowerCase()}`);
     shown = { el, input, opener, options: { ...options, min, max }, picked, view: { year: start.getFullYear(), month: start.getMonth() } };
 
-    // The month and the year, each typed or picked from its list, between ‹ and ›
+    // The month between ‹ and ›, then the year, each typed or picked from its list
     const step = (by, label, text) => {
       const stepButton = make("button", "pickerStep", text);
       stepButton.type = "button";
@@ -346,7 +346,7 @@ const DatePicker = (() => {
       text: () => String(shown.view.year)
     });
     const head = make("div", "pickerHead");
-    head.append(step(-1, "Month before", "‹"), shown.monthBox.el, shown.yearBox.el, step(1, "Next month", "›"));
+    head.append(step(-1, "Month before", "‹"), shown.monthBox.el, step(1, "Next month", "›"), shown.yearBox.el);
 
     const weekdays = make("div", "pickerWeekdays");
     weekdays.setAttribute("aria-hidden", "true");

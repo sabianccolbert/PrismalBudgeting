@@ -175,20 +175,137 @@ const PAY_FIELDS = [
   { section: "Taxes", key: "fedDeductions", kind: "money", unit: "$ a year", label: "W-4 Step 4(b) (deductions)", shown: (s) => s.fedMode === "w4" },
   { section: "Taxes", key: "fedExtra", kind: "money", unit: "$ each", label: "W-4 Step 4(c) (extra withholding)", shown: (s) => s.fedMode === "w4" },
   { section: "Taxes", key: "otFederal", kind: "select", label: "Overtime and federal tax", options: [["taxed", "Taxed like the rest"], ["extra", "Its extra isn't taxed"], ["none", "None of it is taxed"]], hint: "Its extra: what overtime pays over straight time (the half in time and a half).", shown: (s) => s.fedMode !== "none" },
-  { section: "Taxes", key: "stateMode", kind: "select", label: "State tax", options: () => [["percent", "A percentage"], ...Object.entries(Calendars.STATE_TABLES).map(([code, table]) => [`table:${code}`, `${table.name}'s withholding tables`]), ["none", "None"]] },
+  { section: "Taxes", key: "stateMode", kind: "select", label: "State tax", options: () => [["percent", "A percentage"], ...Object.entries(Calendars.STATE_TABLES).sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([code, table]) => [`table:${code}`, table.none ? `${table.name} (no tax on pay)` : table.name]), ["none", "None"]] },
   { section: "Taxes", key: "statePercent", kind: "percent", label: "State percentage", shown: (s) => s.stateMode === "percent" },
-  { section: "Taxes", key: "stateFiling", kind: "select", label: "State filing status", options: [["single", "Single (or head of household)"], ["married", "Married"]], shown: (s) => s.stateMode === "table" },
-  { section: "Taxes", key: "stateAllowances", kind: "number", unit: "allowances", label: "State W-4 allowances", shown: (s) => s.stateMode === "table" },
+  { section: "Taxes", key: "stateElected", kind: "select", label: "Arizona A-4 share", options: () => Calendars.STATE_TABLES.AZ.elected.choices.map(share => [share, `${share.toFixed(1)}% of pay`]), hint: "The share of pay picked on your Arizona Form A-4 (2.0% without one).", shown: (s) => !!pickedState(s)?.elected },
+  { section: "Taxes", key: "stateFiling", kind: "select", label: "State filing status", options: [["single", "Single (or head of household)"], ["married", "Married"]], shown: (s) => !!(pickedState(s)?.rules || pickedState(s)?.years) },
+  { section: "Taxes", key: "stateAllowances", kind: "number", unit: "allowances", label: "State allowances or dependents", hint: "Oklahoma: the allowances on your OK-W-4. Any other state: the dependents (and allowances besides you and your spouse) on its withholding form.", shown: (s) => !!(pickedState(s)?.rules || pickedState(s)?.years) },
   { section: "Taxes", key: "stateExtra", kind: "money", unit: "$ each", label: "Extra state withholding", shown: (s) => s.stateMode !== "none" },
-  { section: "Taxes", key: "otState", kind: "select", label: "Overtime and state tax", options: [["taxed", "Taxed like the rest"], ["extra", "Its extra isn't taxed"], ["none", "None of it is taxed"]], shown: (s) => s.stateMode !== "none" },
+  { section: "Taxes", key: "otState", kind: "select", label: "Overtime and state tax", options: [["taxed", "Taxed like the rest"], ["extra", "Its extra isn't taxed"], ["none", "None of it is taxed"]], shown: (s) => s.stateMode !== "none" && !pickedState(s)?.none },
+  { section: "Taxes", key: "localPercent", kind: "percent", label: "City or county tax", hint: "A local tax on pay, added to the state tax. 0: none." },
   { section: "Post-tax", key: "postTaxPercent", kind: "percent", label: "Post-tax deductions" },
   { section: "Post-tax", key: "postTaxFixed", kind: "money", unit: "$ each", label: "Post-tax deductions, fixed" },
   { section: "Post-tax", key: "nontaxableReimbursements", kind: "money", unit: "$ each", label: "Non-taxable reimbursements" }
 ];
 const PAY_SECTIONS = ["Paydays", "Pay", "Hours And Overtime", "Pre-tax Deductions", "Taxes", "Post-tax"];
+
+// The state picked under State tax (see STATE_TABLES in Calendars.js), or null for a percentage or None
+const pickedState = (s) => (s.stateMode === "table" ? Calendars.STATE_TABLES[s.stateTable] || null : null);
+
+// What the "?" beside a pay setting explains (the ones that are easy to get wrong), by its key: each item is a [lead,
+// text] pair or plain text (see helpList)
+const OVERTIME_TAX_HELP = [
+  ["Taxed like the rest: ", "payroll withholds on overtime like any pay, which is what most paystubs show."],
+  ["Its extra isn't taxed: ", "leaves out what overtime pays over straight time (the half in time and a half), for estimating pay where that part isn't taxed."],
+  ["None of it is taxed: ", "leaves all of it out."],
+  "The federal deduction for overtime (2025 through 2028) is taken on the tax return, not the paycheck, so payroll still withholds on it unless your W-4's Step 4(b) counts it."
+];
+const PAY_HELP = {
+  payAnchor: [
+    "Every other week has two possible sets of paydays, a week apart. Type any payday you know (a paystub's date), and the rest line up two weeks apart from it, before and after.",
+    "Blank: the first paycheck is one of them."
+  ],
+  period: [
+    ["Full workweeks before payday's week: ", "a paycheck pays the workweeks that ended before the week its payday is in, from where the last paycheck's left off. Paid every other Friday with workweeks that start on Sunday, a paycheck pays the two weeks that ended the Saturday before payday's week (a week behind, which is common)."],
+    ["Days up to a few days before payday: ", "a paycheck pays every day since the last one's pay period, through a set number of days before payday (Its pay period ends). Common with pay twice a month or once a month."],
+    ["Not sure? ", "Look at a paystub's pay period and payday. If the period is whole workweeks that end before payday's week starts, pick the first; if not, pick the second and count the days from the period's last day to payday."]
+  ],
+  periodLag: [
+    "How many days after its pay period ends a paycheck is paid: a paycheck on the 20th for a period that ended on the 15th is 5. One that pays through payday itself is 0."
+  ],
+  nightPay: [
+    "Base pay's rate for the hours inside Night hours, for a job that pays more at night (a shift differential). For $1.50 more at night on $20.00 base pay, type 21.50.",
+    "A title rule can have its own night rate."
+  ],
+  premiumWord: [
+    "For shifts paid a multiple of base pay, like a holiday at double time: type a word in those shifts' titles (like Holiday), and they're paid base pay times the premium multiplier.",
+    "Their hours count toward the weekly overtime limit, but they're never paid overtime on top. For shifts paid another way (another rate, or an extra per hour or per shift), use Pay By Event Title."
+  ],
+  taxableAllowances: [
+    "A set amount added to every paycheck that has hours, and taxed like pay, like a phone, uniform, or car allowance on a paystub.",
+    "Money paid back for something bought for work isn't taxed: that goes in Non-taxable reimbursements (under Post-tax)."
+  ],
+  weekStart: [
+    "The day your employer's workweek starts. Weekly overtime counts each workweek's hours on their own, and Full workweeks pay periods start on this day. Most start on Sunday; a handbook or paystub says if yours doesn't."
+  ],
+  otRate: [
+    ["The week's blended rate: ", "what US law (the FLSA) asks for when hours pay different rates. The week's pay (night pay, title rules' rates, bonuses, and taxable extras per shift) over its hours worked is its regular rate, and an overtime hour is paid its own rate plus half the regular rate (with time and a half)."],
+    ["Each hour's own rate: ", "an overtime hour is paid its own rate times the overtime multiplier."],
+    "When every hour pays base pay and there are no bonuses, both come out the same."
+  ],
+  overnight: [
+    ["Counts on the day it starts: ", "a shift from 10:00 PM Friday to 6:00 AM Saturday is all Friday's: one paycheck, and one day for a daily overtime limit."],
+    ["Is split at midnight: ", "2 of its hours are Friday's and 6 are Saturday's, so a shift across the end of a pay period is in two paychecks."],
+    "Match how your paystubs count a shift like that."
+  ],
+  break: [
+    "An unpaid meal break, taken out of each shift at least this long: a 30-minute lunch on shifts of 6 hours or more is 30 minutes for shifts of 6 hrs.",
+    "Breaks that are paid (most short ones are): leave it at 0. A title rule can have its own break."
+  ],
+  retirementBeforeState: [
+    "Most states take state tax after 401(k) and similar retirement contributions come out (Yes). A few, like Pennsylvania, tax pay before they come out (No).",
+    "A paystub shows it: when its state taxable wages are gross pay less medical but not less retirement, pick No."
+  ],
+  ficaPercent: [
+    "7.65% for most: 6.2% Social Security and 1.45% Medicare, on pay less pre-tax medical. Social Security stops for the year once a calendar year's pay reaches its limit ($184,500 in 2026), and Medicare adds 0.9% on pay past $200,000 in a year.",
+    "Jobs that don't pay Social Security (some state and local government jobs, and students working for their school) use 1.45%."
+  ],
+  fedMode: [
+    ["From my W-4: ", "worked out the way payroll does, from the IRS's 2026 tables and the boxes on your W-4 (one from 2020 or later). Bonuses are withheld at the flat 22% for extra pay."],
+    ["A percentage: ", "a flat share of pay after pre-tax deductions. From a paystub: its federal tax over its federal taxable wages."]
+  ],
+  fedStep2: [
+    "Step 2 on the W-4 is for two jobs at once, or for married filing jointly when your spouse works too. With its box checked, each job withholds as if its pay had half the usual standard deduction and brackets.",
+    "Check it here only when it's checked on the W-4 you gave this employer."
+  ],
+  otFederal: OVERTIME_TAX_HELP,
+  otState: OVERTIME_TAX_HELP.slice(0, 3),
+  stateMode: [
+    ["A state: ", "worked out the way withholding does for that state, from a year's pay: its 2026 standard deduction, exemptions, brackets, and credits (Oklahoma's from its own withholding tables, and Arizona's from the share picked on its Form A-4). A state's payroll tables can differ by a little, so compare with a paystub: Extra state withholding can even it out."],
+    ["A percentage: ", "a flat share of pay. From a paystub: its state tax over its state taxable wages."],
+    "States with no tax on pay (Alaska, Florida, Nevada, New Hampshire, South Dakota, Tennessee, Texas, Washington, and Wyoming) say so in the list.",
+    "A city or county tax on pay (like Pennsylvania's local earned income tax, Ohio's and Michigan's city taxes, Maryland's and Indiana's county taxes, or New York City's) goes in City or county tax, as a percentage."
+  ]
+};
+
+// A "?" explanation's content (see BudgetUI.helpList)
+const helpList = (items) => BudgetUI.helpList(items);
+
+// A "?" for a part of the form that isn't one field (Pay Change, Pay By Event Title): { button, box }, the box showing
+// or hiding the explanation wherever it's put
+let calendarHelpCount = 0;
+function helpToggle(label, items) {
+  const box = BudgetUI.element("div", "fieldHelp calendarHelp");
+  box.id = `calendarHelp${++calendarHelpCount}`;
+  box.hidden = true;
+  box.append(helpList(items));
+  const button = BudgetUI.element("button", "fieldHelpButton", "?");
+  button.type = "button";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.setAttribute("aria-controls", box.id);
+  button.setAttribute("aria-expanded", "false");
+  button.addEventListener("click", () => {
+    box.hidden = !box.hidden;
+    button.setAttribute("aria-expanded", String(!box.hidden));
+  });
+  return { button, box };
+}
+
+const PAY_CHANGE_HELP = [
+  "A pay change is your pay from a paycheck on: a raise, a new deduction, a new W-4, or a new schedule. Paychecks before it keep the pay they had, so use one instead of changing the first paycheck's pay (change that only to fix a mistake).",
+  "It only needs what changed: a box left blank stays what it was before it. It starts with the first paycheck on or after its Starts on day.",
+  "Each one has its own tab here. Tap a tab to see or change it, and Delete This Change takes one away."
+];
+const TITLE_RULES_HELP = [
+  "A title rule pays the shifts with its words in their titles another way: Training at $18.00 an hour, Charge at $2.00 more an hour, PTO as paid time off, or a per diem of $50.00 a shift.",
+  "A rule can have its own hourly and night rates, an extra per hour, an extra per shift (taxed, or tax-free like a per diem), a multiplier, its own unpaid break, and the days it's on (From and To).",
+  "Hours worked count toward overtime. Paid time off (like vacation) is paid at its rate, but never counts toward overtime.",
+  "The first rule whose words are in a shift's title is the one it uses, so put the more exact ones first."
+];
 // Picks that change which boxes show (the form is drawn again when one changes)
 const PAY_REDRAWS = ["payEvery", "period", "fedMode"];
-const TAX_NOTE = "Taxes here are estimates of what's withheld (the 2026 IRS tables for a W-4, and a state's own tables), not a tax return. Your employer's payroll decides your real paycheck.";
+const TAX_NOTE = "Taxes here are estimates of what's withheld (the 2026 IRS tables for a W-4, and each state's 2026 rates), not a tax return. Your employer's payroll decides your real paycheck.";
 
 // A version's own settings (what it fills in), without its day
 function definedSettings(version) {
@@ -289,11 +406,15 @@ function openCalendarPanel(id, origin) {
       versionBar.setAttribute("aria-label", "Pay changes");
       const crystalRow = BudgetUI.element("div", "calendarCrystals");
       const versionArea = BudgetUI.element("div", "calendarVersion");
-      payPart.append(versionBar, crystalRow, versionArea, BudgetUI.element("p", "panelHint", TAX_NOTE));
+      const payChangeHelp = helpToggle("What a pay change is", PAY_CHANGE_HELP);
+      payPart.append(versionBar, payChangeHelp.box, crystalRow, versionArea, BudgetUI.element("p", "panelHint", TAX_NOTE));
 
       // Pay by event title
       const rulesPart = BudgetUI.element("fieldset", "calculatorSection calendarPart");
-      rulesPart.append(BudgetUI.element("legend", "", "Pay By Event Title"));
+      const rulesHelp = helpToggle("What title rules do", TITLE_RULES_HELP);
+      const rulesLegend = BudgetUI.element("legend", "", "Pay By Event Title");
+      rulesLegend.append(rulesHelp.button);
+      rulesPart.append(rulesLegend, rulesHelp.box);
       const rulesList = BudgetUI.element("div", "calendarRules");
       const addRule = settingsButton("Add Title Rule", "calendarAddRule", () => {
         if (draft.rules.length >= Calendars.MAX_RULES) return BudgetUI.showToast(`A calendar can have up to ${Calendars.MAX_RULES} title rules.`, true);
@@ -322,6 +443,15 @@ function openCalendarPanel(id, origin) {
       const aheadRow = BudgetUI.element("div", "frequencyRow");
       aheadRow.append(aheadCount, aheadUnit);
       const ahead = BudgetUI.field("Look ahead", aheadRow, { hint: "Paychecks paid further past today aren't added yet (a schedule that far out may not be done). Their shifts still show." });
+      BudgetUI.addFieldHelp(only.el, "Which events are shifts", helpList([
+        "Words, with commas between them: an event with any of them in its title is a shift, and other events aren't. Blank: every event with a start and end time is a shift (all-day events never are, except bonuses).",
+        "Leave out events with does the opposite: words like Day off, Requested off, or Meeting keep an event from being a shift.",
+        "Events that overlap count once, as one shift, so no time is counted twice."
+      ]));
+      BudgetUI.addFieldHelp(ahead, "What look ahead does", helpList([
+        "How far past today a paycheck's payday can be for it to go on your budget. Schedules further out often aren't final, so a paycheck waits until its payday is this close (21 days to start).",
+        "Its shifts still show in Paychecks And Shifts before then."
+      ]));
       const eventsPart = calendarFieldset("Which Events Count", [only.el, skip.el, bonusWord.el, ahead]);
       aheadCount.addEventListener("input", () => aheadCount.classList.toggle("isWrong", !/^\d*$/.test(aheadCount.value.trim())));
       [only.input, skip.input, bonusWord.input, aheadCount].forEach(input => input.addEventListener("input", schedulePreview));
@@ -380,7 +510,7 @@ function openCalendarPanel(id, origin) {
           versionArea.querySelector("input.dateInput")?.focus({ preventScroll: true });
         });
         change.title = "Pay that changes from a paycheck on, like a raise or a new deduction";
-        versionBar.append(change);
+        versionBar.append(change, payChangeHelp.button);
         drawCrystals();
         drawVersionForm();
       }
@@ -437,7 +567,11 @@ function openCalendarPanel(id, origin) {
           const summary = BudgetUI.element("summary", "", sectionName);
           if (changed > 0) summary.append(BudgetUI.element("span", "calendarGroupNote", ` (${changed} changed)`));
           const boxes = BudgetUI.element("div", "calendarGroupBoxes");
-          for (const spec of specs) boxes.append(payBox(spec, version, before, later));
+          for (const spec of specs) {
+            const box = payBox(spec, version, before, later);
+            if (PAY_HELP[spec.key]) BudgetUI.addFieldHelp(box, `What ${box.querySelector(".fieldLabel")?.textContent || spec.label} means`, helpList(PAY_HELP[spec.key]));
+            boxes.append(box);
+          }
           group.append(summary, boxes);
           // (Only a tap is kept: the toggle that opening it here sets off isn't one)
           group.dataset.drawn = String(group.open);
@@ -524,7 +658,7 @@ function openCalendarPanel(id, origin) {
           const options = typeof spec.options === "function" ? spec.options() : spec.options;
           if (spec.key === "stateMode") {
             // (A state's tables are "table" with the state's code)
-            const value = version.stateMode === undefined ? undefined : version.stateMode === "table" ? `table:${version.stateTable || Object.keys(Calendars.STATE_TABLES)[0]}` : version.stateMode;
+            const value = version.stateMode === undefined ? undefined : version.stateMode === "table" ? `table:${version.stateTable || "OK"}` : version.stateMode;
             const beforeValue = before.stateMode === "table" ? `table:${before.stateTable}` : before.stateMode;
             const box = BudgetUI.element("select", "selectInput");
             box.dataset.key = "stateMode";

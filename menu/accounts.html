@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=79f52e09ee">
+    <link rel="stylesheet" href="/stylesheet.css?v=a7c1d9edd1">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=4b3fdd8d2c">
-    <link rel="stylesheet" href="/themes.css?v=acc2bf9792">
+    <link rel="stylesheet" href="/budgetStyle.css?v=fb11019b06">
+    <link rel="stylesheet" href="/themes.css?v=a6bf52e1de">
     <title>Prismal Budget - Other Accounts</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -108,20 +108,28 @@
           <ul>
             <li>Tap an account to type in what's in it today, like the $3,000 already in your savings. That doesn't add an entry, so your calendar, tracker, and Search stay the same. Money owed, like on a credit card, is a Negative balance: tap Negative before or after typing it.</li>
             <li>From there, its entries add to it, so changing, moving, or deleting one changes the balance too. The panel also shows its latest entries and the ones coming up.</li>
-            <li>Tap an account, and under its name, balance, interest, and Max, <strong>Entries</strong> lists every entry made on it (on the calendar, in History, and in Upcoming), newest first, with what each put in or took out, in a box that scrolls (one with a note is underlined). Tap one to change it, like an entry on a zoomed day, and the list follows. Its balance follows too, unless you typed a new one (Save only sets the balance when you did).</li>
-            <li><strong>Max</strong> (optional, in the account's panel): the most it can hold, like a credit card's limit. Its balance then shows over it, like $500.00/$2000.00.</li>
+            <li>Tap an account, and under its name, balance, Max, interest, and escrow, <strong>Entries</strong> lists every entry made on it (on the calendar, in History, and in Upcoming), newest first, with what each put in or took out, in a box that scrolls (one with a note is underlined). Tap one to change it, like an entry on a zoomed day, and the list follows. Its balance follows too, unless you typed a new one (Save only sets the balance when you did).</li>
+            <li><strong>Max</strong> (optional, right under the balance in the account's panel): the most it can hold, like a credit card's limit. Its balance then shows over it, like $500.00/$2000.00. A line sets the balance and Max apart from the interest under them, and another line the interest from the escrow.</li>
             <li>If an account ever drifts from the real one, tap it and type in the real balance.</li>
           </ul>
 
           <h4>Interest</h4>
           <ul>
-            <li>For a credit card, a loan, or savings that earn interest, tap the account, turn on <strong>Add interest</strong>, and type its yearly rate (its APR, like 24.99 or 6.125, decimals and all).</li>
+            <li>For a credit card, a loan, or savings that earn interest, tap the account, turn on <strong>Add interest</strong>, and type its yearly rate (its APR, like 24.99 or 6.125, decimals and all; for savings, its interest rate, not its APY, which already counts the compounding). The ? beside Interest says how to set it up for a credit card, a mortgage, a car or student loan, or savings.</li>
             <li><strong>Compounds</strong> is how often interest starts earning interest of its own: <strong>Daily</strong> (most credit cards and savings: each day earns a 365th of the rate on the balance and the interest so far), <strong>Monthly</strong>, <strong>Every 3 months</strong>, or <strong>Yearly</strong> (on its day of the month, that often: a twelfth of the rate for each month since), or <strong>Doesn't compound</strong> (only the balance earns it, never the interest added to it). Your statement or loan papers say which.</li>
             <li><strong>Added</strong> is how often it's added to the balance (every month, every 3 months, every 6 months, or every year), and <strong>On day</strong> the day of the month (a shorter month uses its last day), like a statement's closing day.</li>
             <li>A balance below $0 goes further below, and one above $0 grows. Each time it's added shows in the account's entries as % Interest, and counts in its balance and In 6 Months.</li>
-            <li><strong>Separate Interest</strong> (a switch under the interest's choices): off, interest is added to the balance, like a credit card's. On, it's a balance of its own, like a mortgage's: the panel shows <strong>Interest today</strong> beside the balance (type either one in), Other Accounts shows it under the balance, only the balance earns interest, and a payment toward the account pays the interest first, then the balance. Everything that adds balances up (the totals, In 6 Months, Bob, Goals) counts the two together.</li>
-            <li>Typing a new balance (or interest balance), or changing the rate or any of its choices, starts the count again from that day, with the interest so far kept in the balance (or in the interest balance). Turn the switch off to stop it. Interest set up before these choices keeps working as it did: monthly, on the day of the month it started.</li>
+            <li><strong>Separate Interest</strong> (a switch under the interest's choices): off, interest is added to the balance, like a credit card's. On, it's a balance of its own, like a mortgage's: the panel shows <strong>Interest today</strong> right under the switch (type it in, or the balance; its ? says what it's for and how to use it), Other Accounts shows it under the balance, only the balance earns interest, and a payment toward the account pays the interest first, then the balance. Everything that adds balances up (the totals, In 6 Months, Bob, Goals) counts the two together.</li>
+            <li>Typing a new balance (or interest balance), or changing the rate, any of its choices, or the escrow, starts the count again from that day, with the interest so far kept in the balance (or in the interest balance). The interest added next still counts from the last time it was added, the way a bank adds a month's interest at its end, so typing a balance partway through a month loses none of it, and neither does an account added partway through one. Turn the switch off to stop it. Interest set up before these choices keeps working as it did: monthly, on the day of the month it started.</li>
             <li>To see when a balance owed is paid off, and what paying extra saves, open the <strong>Debt Calculator</strong> (in the Menu) and pick the account.</li>
+          </ul>
+
+          <h4>Escrow</h4>
+          <ul>
+            <li>For a mortgage (or another loan that collects for taxes and insurance), turn on <strong>Take out escrow</strong>, right above Entries, and type the escrow part of the monthly payment and the day the payment is due. Its ? says what escrow is.</li>
+            <li>Each month on that day, the escrow comes due. A payment toward the account (a Transfer or Hidden entry with it picked) pays the interest owed first (with Separate Interest), then the escrow due, and only what's left lowers the balance, so the balance follows just the principal. The escrow part leaves the account for the home's taxes and insurance, and shows in its entries as Escrow.</li>
+            <li>A payment short of the interest and escrow due pays what it can, in that order, and the escrow still due shows in the panel until a payment covers it. The amount usually changes once a year, after the lender's escrow review: change it here when it does.</li>
+            <li>A mortgage, all together: its rate, Compounds Monthly, added every month on the payment's due day, Separate Interest on, and its escrow.</li>
           </ul>
 
           <h4>Edit</h4>

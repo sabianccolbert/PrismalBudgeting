@@ -609,7 +609,7 @@ const Calendars = (() => {
     preTaxMedicalPercent: 0, preTaxMedicalFixed: 0, preTaxRetirementPercent: 0, preTaxRetirementFixed: 0, retirementBeforeState: true,
     ficaPercent: 7.65,
     fedMode: "percent", federalPercent: 0, fedFiling: "single", fedStep2: false, fedDependents: 0, fedOtherIncome: 0, fedDeductions: 0, fedExtra: 0,
-    stateMode: "percent", statePercent: 0, stateTable: "", stateFiling: "single", stateAllowances: 0, stateExtra: 0,
+    stateMode: "percent", statePercent: 0, stateTable: "", stateFiling: "single", stateAllowances: 0, stateElected: 2, stateExtra: 0, localPercent: 0,
     otFederal: "taxed", otState: "taxed",
     postTaxPercent: 0, postTaxFixed: 0, nontaxableReimbursements: 0
   };
@@ -660,6 +660,7 @@ const Calendars = (() => {
     if (key === "nightFrom" || key === "nightTo") return isTime(value) ? value : undefined;
     if (key === "premiumWord") return String(value).replace(/\s+/g, " ").trim().slice(0, 60) || undefined;
     if (key === "stateTable") return Object.prototype.hasOwnProperty.call(STATE_TABLES, value) ? value : undefined;
+    if (key === "stateElected") return STATE_TABLES.AZ.elected.choices.includes(value) ? value : undefined;
     if (key === "retirementBeforeState" || key === "fedStep2") return typeof value === "boolean" ? value : undefined;
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
     if (key === "periodLag") return Math.min(60, Math.round(value));
@@ -1155,9 +1156,57 @@ const Calendars = (() => {
     }
   };
 
-  // States' withholding tables, by their postal code: { name, years: { year: { allowance (per allowance), single,
-  // married: [at least, tax at that amount, percent over it] } }, round: "dollar" (the state says to round to the dollar) }
+  // Every state's (and DC's) tax on pay, by its postal code, picked under State tax. Either:
+  //   - years: the state's own withholding tables ({ year: { allowance (per allowance), single, married: [at least, tax
+  //     at that amount, percent over it] } }), with round: "dollar" when the state says to round to the dollar
+  //   - rules: its 2026 income tax, the way withholding works it out from a year's pay: { single, married (brackets: [at
+  //     least, percent over it]; married left out: the same as single), deduction ([single, married]: its standard
+  //     deduction), exemption ([single, married]: personal exemptions, taken off the pay), credit ([single, married]:
+  //     personal credits, taken off the tax), dependent (taken off the pay for each dependent or allowance), dependentCredit
+  //     (taken off the tax for each), federal (true: the year's federal tax comes off the pay too; a number: up to that
+  //     much of it), phaseOut ({ percent, from: [single, married] }: the credits shrink by that percent of the pay past
+  //     from) }
+  //   - none: no tax on pay
+  //   - elected: the employee picks a share of pay to withhold (choices, in %, and the one to start: Arizona's A-4)
+  // Figures are 2026's (Tax Foundation's table, and Georgia's and Arkansas's cuts later in 2026); a table's year can be
+  // added as a state publishes it (tableYear picks it by a paycheck's year).
   const STATE_TABLES = {
+    AL: { name: "Alabama", rules: { single: [[0, 2], [500, 4], [3000, 5]], married: [[0, 2], [1000, 4], [6000, 5]], deduction: [3000, 8500], exemption: [1500, 3000], dependent: 1000, federal: true } },
+    AK: { name: "Alaska", none: true },
+    AZ: { name: "Arizona", elected: { choices: [0.5, 1, 1.5, 2, 2.5, 3, 3.5], start: 2 } },
+    AR: { name: "Arkansas", rules: { single: [[0, 0], [5600, 2], [11200, 3], [16000, 3.4], [26400, 3.7]], deduction: [2470, 2470], credit: [29, 58], dependentCredit: 29 } },
+    CA: { name: "California", rules: { single: [[0, 1], [11079, 2], [26264, 4], [41452, 6], [57542, 8], [72724, 9.3], [371479, 10.3], [445771, 11.3], [742953, 12.3], [1000000, 13.3]], married: [[0, 1], [22158, 2], [52528, 4], [82904, 6], [115084, 8], [145448, 9.3], [742958, 10.3], [891542, 11.3], [1000000, 12.3], [1485906, 13.3]], deduction: [5540, 11080], credit: [153, 306], dependentCredit: 475 } },
+    CO: { name: "Colorado", rules: { single: [[0, 4.4]], deduction: [16100, 32200] } },
+    CT: { name: "Connecticut", rules: { single: [[0, 2], [10000, 4.5], [50000, 5.5], [100000, 6], [200000, 6.5], [250000, 6.9], [500000, 6.99]], married: [[0, 2], [20000, 4.5], [100000, 5.5], [200000, 6], [400000, 6.5], [500000, 6.9], [1000000, 6.99]], exemption: [15000, 24000] } },
+    DE: { name: "Delaware", rules: { single: [[0, 0], [2000, 2.2], [5000, 3.9], [10000, 4.8], [20000, 5.2], [25000, 5.55], [60000, 6.6]], deduction: [3250, 6500], credit: [110, 220], dependentCredit: 110 } },
+    DC: { name: "District of Columbia", rules: { single: [[0, 4], [10000, 6], [40000, 6.5], [60000, 8.5], [250000, 9.25], [500000, 9.75], [1000000, 10.75]], deduction: [16100, 32200] } },
+    FL: { name: "Florida", none: true },
+    GA: { name: "Georgia", rules: { single: [[0, 4.99]], deduction: [15000, 30000], dependent: 5000 } },
+    HI: { name: "Hawaii", rules: { single: [[0, 1.4], [9600, 3.2], [14400, 5.5], [19200, 6.4], [24000, 6.8], [36000, 7.2], [48000, 7.6], [125000, 7.9], [175000, 8.25], [225000, 9], [275000, 10], [325000, 11]], married: [[0, 1.4], [19200, 3.2], [28800, 5.5], [38400, 6.4], [48000, 6.8], [72000, 7.2], [96000, 7.6], [250000, 7.9], [350000, 8.25], [450000, 9], [550000, 10], [650000, 11]], deduction: [4400, 8800], exemption: [1144, 2288], dependent: 1144 } },
+    ID: { name: "Idaho", rules: { single: [[0, 0], [4811, 5.3]], married: [[0, 0], [9622, 5.3]], deduction: [16100, 32200] } },
+    IL: { name: "Illinois", rules: { single: [[0, 4.95]], exemption: [2925, 5850], dependent: 2925 } },
+    IN: { name: "Indiana", rules: { single: [[0, 2.95]], exemption: [1000, 2000], dependent: 1000 } },
+    IA: { name: "Iowa", rules: { single: [[0, 3.8]], deduction: [16100, 32200], credit: [40, 80], dependentCredit: 40 } },
+    KS: { name: "Kansas", rules: { single: [[0, 5.2], [23000, 5.58]], married: [[0, 5.2], [46000, 5.58]], deduction: [3605, 8240], exemption: [9160, 18320], dependent: 2320 } },
+    KY: { name: "Kentucky", rules: { single: [[0, 3.5]], deduction: [3360, 3360] } },
+    LA: { name: "Louisiana", rules: { single: [[0, 3]], deduction: [12875, 25750] } },
+    ME: { name: "Maine", rules: { single: [[0, 5.8], [27399, 6.75], [64849, 7.15]], married: [[0, 5.8], [54849, 6.75], [129749, 7.15]], deduction: [8350, 16700], exemption: [5300, 10600], dependentCredit: 305 } },
+    MD: { name: "Maryland", rules: { single: [[0, 2], [1000, 3], [2000, 4], [3000, 4.75], [100000, 5], [125000, 5.25], [150000, 5.5], [250000, 5.75], [500000, 6.25], [1000000, 6.5]], married: [[0, 2], [1000, 3], [2000, 4], [3000, 4.75], [150000, 5], [175000, 5.25], [225000, 5.5], [300000, 5.75], [600000, 6.25], [1200000, 6.5]], deduction: [3350, 6700], exemption: [3200, 6400], dependent: 3200 } },
+    MA: { name: "Massachusetts", rules: { single: [[0, 5], [1083150, 9]], exemption: [4400, 8800], dependent: 1000 } },
+    MI: { name: "Michigan", rules: { single: [[0, 4.25]], exemption: [5900, 11800], dependent: 5900 } },
+    MN: { name: "Minnesota", rules: { single: [[0, 5.35], [33310, 6.8], [109430, 7.85], [203150, 9.85]], married: [[0, 5.35], [48700, 6.8], [193480, 7.85], [337930, 9.85]], deduction: [15300, 30600], dependent: 5300 } },
+    MS: { name: "Mississippi", rules: { single: [[0, 0], [10000, 4]], deduction: [2300, 4600], exemption: [6000, 12000], dependent: 1500 } },
+    MO: { name: "Missouri", rules: { single: [[0, 0], [1348, 2], [2696, 2.5], [4044, 3], [5392, 3.5], [6740, 4], [8088, 4.5], [9436, 4.7]], deduction: [16100, 32200] } },
+    MT: { name: "Montana", rules: { single: [[0, 4.7], [47500, 5.65]], married: [[0, 4.7], [95000, 5.65]], deduction: [16100, 32200] } },
+    NE: { name: "Nebraska", rules: { single: [[0, 2.46], [4130, 3.51], [24760, 4.55]], married: [[0, 2.46], [8250, 3.51], [49530, 4.55]], deduction: [8850, 17700], credit: [176, 352], dependentCredit: 176 } },
+    NV: { name: "Nevada", none: true },
+    NH: { name: "New Hampshire", none: true },
+    NJ: { name: "New Jersey", rules: { single: [[0, 1.4], [20000, 1.75], [35000, 3.5], [40000, 5.53], [75000, 6.37], [500000, 8.97], [1000000, 10.75]], married: [[0, 1.4], [20000, 1.75], [50000, 2.45], [70000, 3.5], [80000, 5.53], [150000, 6.37], [500000, 8.97], [1000000, 10.75]], exemption: [1000, 2000], dependent: 1500 } },
+    NM: { name: "New Mexico", rules: { single: [[0, 1.5], [5500, 3.2], [16500, 4.3], [33500, 4.7], [66500, 4.9], [210000, 5.9]], married: [[0, 1.5], [8000, 3.2], [25000, 4.3], [50000, 4.7], [100000, 4.9], [315000, 5.9]], deduction: [16100, 32200], dependent: 4000 } },
+    NY: { name: "New York", rules: { single: [[0, 3.9], [8500, 4.4], [11700, 5.15], [13900, 5.4], [80650, 5.9], [215400, 6.85], [1077550, 9.65], [5000000, 10.3], [25000000, 10.9]], married: [[0, 3.9], [17150, 4.4], [23600, 5.15], [27900, 5.4], [161550, 5.9], [323200, 6.85], [2155350, 9.65], [5000000, 10.3], [25000000, 10.9]], deduction: [8000, 16050], dependent: 1000 } },
+    NC: { name: "North Carolina", rules: { single: [[0, 3.99]], deduction: [12750, 25500] } },
+    ND: { name: "North Dakota", rules: { single: [[0, 0], [48475, 1.95], [244825, 2.5]], married: [[0, 0], [80975, 1.95], [298075, 2.5]], deduction: [16100, 32200] } },
+    OH: { name: "Ohio", rules: { single: [[0, 0], [26050, 2.75]], exemption: [2400, 4800], dependent: 2400 } },
     OK: {
       name: "Oklahoma",
       round: "dollar",
@@ -1168,8 +1217,50 @@ const Calendars = (() => {
           married: [[0, 0, 0], [20200, 0, 2.5], [22500, 57.5, 3.5], [27100, 218.5, 4.5]]
         }
       }
-    }
+    },
+    OR: { name: "Oregon", rules: { single: [[0, 4.75], [4550, 6.75], [11400, 8.75], [125000, 9.9]], married: [[0, 4.75], [9100, 6.75], [22800, 8.75], [250000, 9.9]], deduction: [2910, 5820], credit: [256, 512], dependentCredit: 256, federal: 8250 } },
+    PA: { name: "Pennsylvania", rules: { single: [[0, 3.07]] } },
+    RI: { name: "Rhode Island", rules: { single: [[0, 3.75], [82050, 4.75], [186450, 5.99]], deduction: [11200, 22400], exemption: [5250, 10500], dependent: 5250 } },
+    SC: { name: "South Carolina", rules: { single: [[0, 0], [3640, 3], [18230, 6]], deduction: [8350, 16700], dependent: 4930 } },
+    SD: { name: "South Dakota", none: true },
+    TN: { name: "Tennessee", none: true },
+    TX: { name: "Texas", none: true },
+    UT: { name: "Utah", rules: { single: [[0, 4.5]], credit: [966, 1932], dependentCredit: 127, phaseOut: { percent: 1.3, from: [18213, 36426] } } },
+    VT: { name: "Vermont", rules: { single: [[0, 3.35], [49400, 6.6], [119700, 7.6], [249700, 8.75]], married: [[0, 3.35], [82500, 6.6], [199450, 7.6], [304000, 8.75]], deduction: [7650, 15300], exemption: [5300, 10600], dependent: 5300 } },
+    VA: { name: "Virginia", rules: { single: [[0, 2], [3000, 3], [5000, 5], [17000, 5.75]], deduction: [8750, 17500], exemption: [930, 1860], dependent: 930 } },
+    WA: { name: "Washington", none: true },
+    WV: { name: "West Virginia", rules: { single: [[0, 2.22], [10000, 2.96], [25000, 3.33], [40000, 4.44], [60000, 4.82]], exemption: [2000, 4000], dependent: 2000 } },
+    WI: { name: "Wisconsin", rules: { single: [[0, 3.5], [15110, 4.4], [51950, 5.3], [332720, 7.65]], married: [[0, 3.5], [20150, 4.4], [69260, 5.3], [443630, 7.65]], deduction: [13960, 25840], exemption: [700, 1400], dependent: 700 } },
+    WY: { name: "Wyoming", none: true }
   };
+
+  // The tax on an amount from rules' brackets ([at least, percent over it], in order)
+  function marginalTax(brackets, amount) {
+    let tax = 0;
+    for (let i = 0; i < brackets.length; i++) {
+      const [from, percent] = brackets[i];
+      const to = i + 1 < brackets.length ? brackets[i + 1][0] : Infinity;
+      if (amount > from) tax += (Math.min(amount, to) - from) * percent / 100;
+    }
+    return tax;
+  }
+
+  // A state's tax for a year's pay by its rules (see STATE_TABLES): the pay less its deductions and exemptions (and the
+  // federal tax, where it comes off), through its brackets, less its credits (shrinking past phaseOut's pay). filing: 0
+  // single, 1 married; dependents: the allowances or dependents typed; federalYear: the year's federal tax.
+  function stateTaxFromRules(rules, yearPay, filing, dependents, federalYear) {
+    const pick = (pair) => (Array.isArray(pair) ? pair[filing] : 0);
+    const federalOff = rules.federal === true ? federalYear : typeof rules.federal === "number" ? Math.min(federalYear, rules.federal) : 0;
+    const taxable = Math.max(0, yearPay - pick(rules.deduction) - pick(rules.exemption) - dependents * (rules.dependent || 0) - federalOff);
+    let credits = pick(rules.credit) + dependents * (rules.dependentCredit || 0);
+    if (rules.phaseOut) credits = Math.max(0, credits - Math.max(0, yearPay - rules.phaseOut.from[filing]) * rules.phaseOut.percent / 100);
+    return Math.max(0, marginalTax(filing && rules.married ? rules.married : rules.single, taxable) - credits);
+  }
+
+  // Social Security's wage base (the most of a year's pay it's taken from), by year, and the pay past which Medicare adds
+  // 0.9% (the Additional Medicare Tax payroll withholds)
+  const SOCIAL_SECURITY_WAGE_BASE = { 2025: 176100, 2026: 184500 };
+  const EXTRA_MEDICARE_FROM = 200000;
 
   // A table's year: the paycheck's own, or the closest one there is
   function tableYear(years, year) {
@@ -1185,15 +1276,20 @@ const Calendars = (() => {
     return row[1] + (amount - row[0]) * row[2] / 100;
   }
 
-  // A paycheck's taxes and deductions from its gross pay and its parts: { medical, retirement, fica, federal, state, post,
-  // reimbursed, takeHome }
-  function paycheckTaxes(check, version, year) {
+  // A paycheck's taxes and deductions from its gross pay and its parts: { medical, retirement, fica, federal, state (with
+  // its city or county tax), post, reimbursed, takeHome, ficaWages (the pay FICA counted, for the year's total) }.
+  // yearWages: the pay FICA counted on the paychecks before it in its year (Social Security stops at its wage base, and
+  // Medicare adds 0.9% past EXTRA_MEDICARE_FROM).
+  function paycheckTaxes(check, version, year, yearWages = 0) {
     const gross = check.gross;
     const medical = roundCents(gross * version.preTaxMedicalPercent / 100 + version.preTaxMedicalFixed);
     const retirement = roundCents(gross * version.preTaxRetirementPercent / 100 + version.preTaxRetirementFixed);
     const ficaBase = Math.max(0, gross - medical);
     const medicarePercent = Math.min(version.ficaPercent, 1.45);
-    const fica = roundCents(roundCents(ficaBase * (version.ficaPercent - medicarePercent) / 100) + roundCents(ficaBase * medicarePercent / 100));
+    const wageBase = tableYear(SOCIAL_SECURITY_WAGE_BASE, year);
+    const socialSecurityWages = Math.max(0, Math.min(ficaBase, wageBase - yearWages));
+    const extraMedicareWages = medicarePercent > 0 ? Math.max(0, yearWages + ficaBase - Math.max(yearWages, EXTRA_MEDICARE_FROM)) : 0;
+    const fica = roundCents(roundCents(socialSecurityWages * (version.ficaPercent - medicarePercent) / 100) + roundCents(ficaBase * medicarePercent / 100) + roundCents(extraMedicareWages * 0.9 / 100));
     const overtimeOut = (choice) => (choice === "none" ? check.overtime : choice === "extra" ? check.overtimeExtra : 0);
     const periods = PAY_PERIODS_PER_YEAR[version.payEvery];
 
@@ -1214,23 +1310,33 @@ const Calendars = (() => {
       federal = roundCents(roundCents(Math.max(0, tentative - version.fedDependents / periods) + version.fedExtra) + roundCents(supplemental * tables.supplemental / 100));
     }
 
-    // State
+    // State: a percentage, or the state's own way (see STATE_TABLES), and a city or county tax on top (a percentage)
     let state = 0;
     const stateBase = Math.max(0, gross - medical - (version.retirementBeforeState ? retirement : 0) - overtimeOut(version.otState));
+    const table = version.stateMode === "table" ? STATE_TABLES[version.stateTable] : null;
     if (version.stateMode === "percent") {
       state = roundCents(stateBase * version.statePercent / 100 + version.stateExtra);
-    } else if (version.stateMode === "table" && STATE_TABLES[version.stateTable]) {
-      const tables = STATE_TABLES[version.stateTable];
-      const yearTable = tableYear(tables.years, year);
+    } else if (table && table.years) {
+      const yearTable = tableYear(table.years, year);
       const annual = Math.max(0, stateBase * periods - version.stateAllowances * yearTable.allowance);
       const perCheck = bracketTax(yearTable[version.stateFiling], annual) / periods;
-      state = tables.round === "dollar" ? Math.round(perCheck) + Math.round(version.stateExtra) : roundCents(perCheck + version.stateExtra);
+      state = table.round === "dollar" ? Math.round(perCheck) + Math.round(version.stateExtra) : roundCents(perCheck + version.stateExtra);
+    } else if (table && table.elected) {
+      const share = table.elected.choices.includes(version.stateElected) ? version.stateElected : table.elected.start;
+      state = roundCents(stateBase * share / 100 + version.stateExtra);
+    } else if (table && table.rules) {
+      const filing = version.stateFiling === "married" ? 1 : 0;
+      const yearTax = stateTaxFromRules(table.rules, stateBase * periods, filing, version.stateAllowances, federal * periods);
+      state = roundCents(yearTax / periods + version.stateExtra);
+    } else if (table && table.none) {
+      state = roundCents(version.stateExtra);
     }
+    if (version.localPercent > 0) state = roundCents(state + stateBase * version.localPercent / 100);
 
     const post = roundCents(gross * version.postTaxPercent / 100 + version.postTaxFixed);
     const reimbursed = roundCents(version.nontaxableReimbursements + check.extrasFree);
     const takeHome = roundCents(gross - medical - retirement - fica - federal - state - post + reimbursed);
-    return { medical, retirement, fica, federal, state, post, reimbursed, takeHome };
+    return { medical, retirement, fica, federal, state, post, reimbursed, takeHome, ficaWages: ficaBase };
   }
 
   //#endregion
@@ -1289,8 +1395,9 @@ const Calendars = (() => {
       problems.push("A night rate is filled in, but not the night hours it's for. Fill in Night hours (from and to), under Pay.");
     }
 
-    // Each paycheck's totals
+    // Each paycheck's totals (in order, so each one knows its year's pay before it: see paycheckTaxes)
     const details = [];
+    const yearWages = new Map();
     for (const check of worked.checks) {
       const pieces = worked.pieces.filter(piece => piece.check === check);
       const bonuses = worked.bonuses.filter(bonus => bonus.check === check);
@@ -1320,7 +1427,9 @@ const Calendars = (() => {
         allowances: roundCents(version.taxableAllowances)
       };
       parts.gross = roundCents(parts.regular + parts.overtime + parts.premium + parts.paidOff + parts.bonuses + parts.extras + parts.allowances);
-      const taxes = paycheckTaxes(parts, version, check.payDate.getFullYear());
+      const year = check.payDate.getFullYear();
+      const taxes = paycheckTaxes(parts, version, year, yearWages.get(year) || 0);
+      yearWages.set(year, (yearWages.get(year) || 0) + taxes.ficaWages);
       let takeHome = taxes.takeHome;
       if (takeHome < 0) {
         problems.push(`The paycheck on ${showDate(check.payDate)} comes to less than $0 after its deductions, so it counts as $0.00. Check the fixed amounts under Pay.`);
