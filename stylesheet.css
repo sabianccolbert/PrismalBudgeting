@@ -509,7 +509,7 @@ button:disabled {
 /*========================================*
  *  9) HEADER
  *========================================*
- *  Every page's header: the logo and the page's name (Home and its tabs: Prismal Budget, with its tagline) at the
+ *  Every page's header: the logo and the page's name (Home and its tabs: Prismal Planning, with its tagline) at the
  *  left, and its buttons at the right, each an icon over its name on a glass tile.
  */
 header {
@@ -581,7 +581,7 @@ header .logo {
   opacity: 0.85;
 }
 
-/* A page's name over "Prismal Budget" (Settings, the menu's pages, and the rest) */
+/* A page's name over "Prismal Planning" (Settings, the menu's pages, and the rest) */
 header .stacked {
   justify-content: center;
   gap: 0.3em;
@@ -848,11 +848,11 @@ html.tabSlide #transitionContainer:not(.ready) > footer {
 }
 
 .noJs:not(.frontPage) body::before {
-  content: "Prismal Budget needs JavaScript to work. Please turn on JavaScript in your browser's settings, then reload this page.";
+  content: "Prismal Planning needs JavaScript to work. Please turn on JavaScript in your browser's settings, then reload this page.";
 }
 
 .noStorage body::before {
-  content: "Prismal Budget needs to keep a little data in your browser (that's how it keeps you signed in), and this browser is blocking it. Allow cookies and site data for this site in your browser's settings, then reload this page.";
+  content: "Prismal Planning needs to keep a little data in your browser (that's how it keeps you signed in), and this browser is blocking it. Allow cookies and site data for this site in your browser's settings, then reload this page.";
 }
 
 .noJs body::before,

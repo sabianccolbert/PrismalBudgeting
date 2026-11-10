@@ -2,19 +2,19 @@
 <!-- The public pages (see robots.txt). Update lastmod when a page changes. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://prismalbudget.org/</loc>
+    <loc>https://prismalplanning.org/</loc>
     <lastmod>2026-11-09</lastmod>
   </url>
   <url>
-    <loc>https://prismalbudget.org/how-it-works.html</loc>
+    <loc>https://prismalplanning.org/how-it-works.html</loc>
     <lastmod>2026-11-09</lastmod>
   </url>
   <url>
-    <loc>https://prismalbudget.org/login.html</loc>
+    <loc>https://prismalplanning.org/login.html</loc>
     <lastmod>2026-11-09</lastmod>
   </url>
   <url>
-    <loc>https://prismalbudget.org/privacy%20and%20terms.html</loc>
+    <loc>https://prismalplanning.org/privacy%20and%20terms.html</loc>
     <lastmod>2026-11-09</lastmod>
   </url>
 </urlset>

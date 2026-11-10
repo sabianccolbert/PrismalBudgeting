@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Site notes for keeping prismalbudget.org running: how it's hosted and set up (GitHub Pages, Cloudflare, DNS, email, the
+<!-- Site notes for keeping prismalplanning.org running: how it's hosted and set up (GitHub Pages, Cloudflare, DNS, email, the
      API), how a release goes out, and what to check when something goes wrong. Only reached by its address: nothing links
      to it, it isn't in the sitemap, and search engines are asked to leave it out. It loads no scripts, so it opens even
      when the rest of the site has trouble. It's in the public repo too, so it never holds passwords, keys, or tokens, or
@@ -11,9 +11,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="dark">
-    <title>Prismal Budget - Site Notes</title>
-    <link rel="stylesheet" href="/stylesheet.css?v=6b9c464ecf">
-    <link rel="stylesheet" href="/budgetStyle.css?v=6f54d70791">
+    <title>Prismal Planning - Site Notes</title>
+    <link rel="stylesheet" href="/stylesheet.css?v=bbc049464e">
+    <link rel="stylesheet" href="/budgetStyle.css?v=47bb6b3b1d">
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
   </head>
   <body>
@@ -23,7 +23,7 @@
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <div class="brandText stacked">
             <h1>Site Notes</h1>
-            <h2>For keeping prismalbudget.org running</h2>
+            <h2>For keeping prismalplanning.org running</h2>
           </div>
         </div>
         <nav class="navButtons" aria-label="Pages">
@@ -38,8 +38,8 @@
 
           <section id="about" aria-labelledby="aboutTitle">
             <h2 id="aboutTitle">What This Page Is</h2>
-            <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Budget Works</a>.</p>
-            <p>Last checked: November 9, 2026 (site version 11.09.2026.A).</p>
+            <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Planning Works</a>.</p>
+            <p>Last checked: November 9, 2026 (site version 11.09.2026.B).</p>
           </section>
 
           <section id="map" aria-labelledby="mapTitle">
@@ -48,14 +48,14 @@
               <table>
                 <thead><tr><th>Part</th><th>Where</th></tr></thead>
                 <tbody>
-                  <tr><td>Website</td><td>GitHub Pages, from the <code>main</code> branch of the GitHub repo <code>sabianccolbert/PrismalBudgeting</code> (work happens on <code>Testing</code>, then merges in). The repo's <code>CNAME</code> file holds the custom domain, <code>prismalbudget.org</code>. GitHub Pages publishes every file except folders starting with <code>_</code> (like <code>_tools</code>).</td></tr>
-                  <tr><td>Domain, DNS, and the network in front of the site</td><td>Cloudflare: the zone <code>prismalbudget.org</code> (Free plan; its name servers are <code>nancy.ns.cloudflare.com</code> and <code>santino.ns.cloudflare.com</code>). The site's records are proxied (orange cloud), so the addresses the world sees are Cloudflare's, and Cloudflare's rules (section 4) apply to every page.</td></tr>
+                  <tr><td>Website</td><td>GitHub Pages, from the <code>main</code> branch of the GitHub repo <code>sabianccolbert/PrismalBudgeting</code> (work happens on <code>Testing</code>, then merges in). The repo's <code>CNAME</code> file holds the custom domain, <code>prismalplanning.org</code>. GitHub Pages publishes every file except folders starting with <code>_</code> (like <code>_tools</code>).</td></tr>
+                  <tr><td>Domain, DNS, and the network in front of the site</td><td>Cloudflare: the zone <code>prismalplanning.org</code> (Free plan; its name servers are <code>nancy.ns.cloudflare.com</code> and <code>santino.ns.cloudflare.com</code>). The site's records are proxied (orange cloud), so the addresses the world sees are Cloudflare's, and Cloudflare's rules (section 4) apply to every page.</td></tr><tr><td>The old address</td><td><code>prismalbudget.org</code>, the site's address until November 9, 2026, is a Cloudflare zone too. A Worker there (<code>old-domain/</code> in the API repo) sends every request on to the same page here. The domain is paid through September 22, 2027 and is meant to lapse then: delete that Worker and the zone first.</td></tr>
                   <tr><td>API</td><td>A Cloudflare Worker, <code>prismal-budget-api</code>, at <code>https://prismal-budget-api.prismalbudget.workers.dev</code> (on workers.dev, its own address, so section 4's caching and header rules don't apply to it). Its code is in the private repo <code>sabianccolbert/prismal-budget-api</code> (branch <code>testing</code>). Every budget is in its Cloudflare D1 database, <code>prismal-budget-db</code> (the Worker's binding <code>prismal_budget_db</code>). A schedule runs it every 5 minutes (daily reminders, and the Privacy Policy update emails).</td></tr>
-                  <tr><td>Email in</td><td>Google Workspace: <code>admin@prismalbudget.org</code>.</td></tr>
-                  <tr><td>Email out (verification links, password resets, notices, policy updates)</td><td>Resend, sending as <code>admin@prismalbudget.org</code>.</td></tr>
+                  <tr><td>Email in</td><td>Google Workspace: <code>admin@prismalplanning.org</code>.</td></tr>
+                  <tr><td>Email out (verification links, password resets, notices, policy updates)</td><td>Resend, sending as <code>admin@prismalplanning.org</code>.</td></tr>
                   <tr><td>Analytics</td><td>Google Analytics 4 (<code>Javascript/Analytics.js</code>) and Cloudflare Web Analytics (Cloudflare adds its own small script to pages).</td></tr>
                   <tr><td>The person check on Create Account</td><td>Cloudflare Turnstile: its site key is in <code>Javascript/Login.js</code>, and its other half is one of the Worker's secrets.</td></tr>
-                  <tr><td>Spreadsheets shared with admin@prismalbudget.org</td><td>Read through Google Drive with the admin@ Google account's access, which the Worker holds as secrets.</td></tr>
+                  <tr><td>Spreadsheets shared with admin@prismalplanning.org</td><td>Read through Google Drive with the admin@ Google account's access, which the Worker holds as secrets.</td></tr>
                   <tr><td>Connected calendars</td><td>Read by the Worker from each calendar's own subscription link (no account or secret of ours involved), and worked out in the browser (<code>Javascript/Calendars.js</code>). The federal and state withholding tables in that file are by year: a new year's tables go in when the IRS (Publication 15-T) and the state publish them, and until then the latest year's are used.</td></tr>
                 </tbody>
               </table>
@@ -88,7 +88,7 @@
           <section id="cloudflare" aria-labelledby="cloudflareTitle">
             <h2 id="cloudflareTitle">4. Cloudflare's Settings</h2>
             <ul>
-              <li><strong>DNS:</strong> <code>prismalbudget.org</code> and <code>www</code> point at GitHub Pages, proxied (GitHub's custom domain help lists its addresses). <code>www</code> and plain <code>http://</code> are sent on to <code>https://prismalbudget.org</code> by GitHub (the 301 comes from GitHub, so Cloudflare's Always Use HTTPS stays off).</li>
+              <li><strong>DNS:</strong> <code>prismalplanning.org</code> and <code>www</code> point at GitHub Pages, proxied (GitHub's custom domain help lists its addresses). <code>www</code> and plain <code>http://</code> are sent on to <code>https://prismalplanning.org</code> by GitHub (the 301 comes from GitHub, so Cloudflare's Always Use HTTPS stays off).</li>
               <li><strong>Configuration Rule "GitHub DNS renewal":</strong> for the path <code>/.well-known/acme-challenge/</code>, SSL is off, so GitHub Pages can renew its HTTPS certificate for the custom domain. Without it, the certificate stops renewing, and GitHub's Pages settings show a certificate problem.</li>
               <li><strong>Cache Rules:</strong> addresses with <code>?v=</code> are cached 30 days (edge and browser); pages (paths ending in <code>.html</code> or in nothing) and <code>/Javascript/Boot.js</code> aren't stored at the edge.</li>
               <li><strong>Transform Rules (response headers):</strong> <code>Cache-Control: no-cache</code> for pages and <code>Boot.js</code>, and "Security Headers" (section 5).</li>
@@ -125,10 +125,10 @@ X-XSS-Protection: 0</code></pre>
               <table>
                 <thead><tr><th>Name</th><th>Type</th><th>For</th></tr></thead>
                 <tbody>
-                  <tr><td><code>prismalbudget.org</code>, <code>www</code></td><td>A, AAAA (proxied)</td><td>The website, on GitHub Pages</td></tr>
-                  <tr><td><code>prismalbudget.org</code></td><td>MX</td><td>Google Workspace's mail servers (<code>aspmx.l.google.com</code> first, then <code>alt1</code> to <code>alt4</code>)</td></tr>
-                  <tr><td><code>prismalbudget.org</code></td><td>TXT</td><td>SPF, <code>v=spf1 include:_spf.google.com ~all</code> (Google Workspace sends as the domain), and two <code>google-site-verification</code> records (Google proving the domain is ours)</td></tr>
-                  <tr><td><code>_dmarc</code></td><td>TXT</td><td><code>v=DMARC1; p=reject; sp=reject; adkim=s; aspf=r; rua=mailto:admin@prismalbudget.org</code>: mail claiming to be from the domain that fails its checks is refused, and the daily reports go to admin@</td></tr>
+                  <tr><td><code>prismalplanning.org</code>, <code>www</code></td><td>A, AAAA (proxied)</td><td>The website, on GitHub Pages</td></tr>
+                  <tr><td><code>prismalplanning.org</code></td><td>MX</td><td>Google Workspace's mail servers (<code>aspmx.l.google.com</code> first, then <code>alt1</code> to <code>alt4</code>)</td></tr>
+                  <tr><td><code>prismalplanning.org</code></td><td>TXT</td><td>SPF, <code>v=spf1 include:_spf.google.com ~all</code> (Google Workspace sends as the domain), and two <code>google-site-verification</code> records (Google proving the domain is ours)</td></tr>
+                  <tr><td><code>_dmarc</code></td><td>TXT</td><td><code>v=DMARC1; p=reject; sp=reject; adkim=s; aspf=r; rua=mailto:admin@prismalplanning.org</code>: mail claiming to be from the domain that fails its checks is refused, and the daily reports go to admin@</td></tr>
                   <tr><td><code>google._domainkey</code></td><td>TXT</td><td>Google Workspace's DKIM key (signs mail sent from Gmail)</td></tr>
                   <tr><td><code>resend._domainkey</code></td><td>TXT</td><td>Resend's DKIM key (signs the site's account emails)</td></tr>
                   <tr><td><code>send</code></td><td>MX, TXT</td><td>Resend's sending address (bounces come back there, with its own SPF)</td></tr>

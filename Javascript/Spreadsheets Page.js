@@ -42,7 +42,7 @@ window.workspaceReady.then(async (loaded) => {
 const SHEET_FIELD_KEYS = ["date", "title", "type", "account", "amount"];
 const SHEET_SIGNS = [{ key: "written", label: "As Written" }, { key: "costs", label: "All Costs" }, { key: "gains", label: "All Gains" }];
 const SHEET_PREVIEW_LINES = 8;
-const SHARING_EMAIL = "admin@prismalbudget.org";
+const SHARING_EMAIL = "admin@prismalplanning.org";
 
 // Add Spreadsheet, the verification note's button, and redrawing after every change
 function wireSheets() {
@@ -559,8 +559,8 @@ function sharingHelp() {
     list.append(li);
   };
   item("Anyone with the link: ", "in Google Sheets, tap Share, then set General access to Anyone with the link (Viewer). In Excel (OneDrive), tap Share and pick Anyone with the link can view. Dropbox links work too. Then copy the link here.");
-  item(`Or share it with ${SHARING_EMAIL}: `, `in Google Sheets (or a file in Google Drive), tap Share and add ${SHARING_EMAIL} as a Viewer, from the Google account that uses your Prismal Budget email (or one whose email you added under Other Emails, in Settings under Email). Then only you can connect it, and it doesn't need to be public.`);
-  item("Keep the rest private: ", "anyone with a public link can see the whole spreadsheet. So make a separate spreadsheet with just what Prismal Budget needs, filled from your main one (in Google Sheets, =IMPORTRANGE(\"main spreadsheet's link\", \"Bills!A2:C50\") brings those cells over and keeps them up to date), and connect that one.");
+  item(`Or share it with ${SHARING_EMAIL}: `, `in Google Sheets (or a file in Google Drive), tap Share and add ${SHARING_EMAIL} as a Viewer, from the Google account that uses your Prismal Planning email (or one whose email you added under Other Emails, in Settings under Email). Then only you can connect it, and it doesn't need to be public.`);
+  item("Keep the rest private: ", "anyone with a public link can see the whole spreadsheet. So make a separate spreadsheet with just what Prismal Planning needs, filled from your main one (in Google Sheets, =IMPORTRANGE(\"main spreadsheet's link\", \"Bills!A2:C50\") brings those cells over and keeps them up to date), and connect that one.");
   item("Apple Numbers: ", "it can't share a spreadsheet other sites can read, so keep it in Google Sheets or Excel (in Numbers, File > Export To > Excel).");
   content.append(list);
   return content;

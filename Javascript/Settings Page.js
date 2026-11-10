@@ -710,7 +710,7 @@ function pushBlockedReason() {
   if (!reminderSettings.push.available) return "Push notifications aren't set up on the server yet.";
   if (!PushNotifications.supported()) {
     return PushNotifications.needsHomeScreen()
-      ? "On iPhone and iPad, add Prismal Budget to your Home Screen first (tap Share, then Add to Home Screen), then open it from there to turn these on."
+      ? "On iPhone and iPad, add Prismal Planning to your Home Screen first (tap Share, then Add to Home Screen), then open it from there to turn these on."
       : "This browser doesn't support push notifications.";
   }
   return Notification.permission === "denied" ? PUSH_BLOCKED_TEXT : "";
@@ -994,7 +994,7 @@ document.addEventListener("visibilitychange", async () => {
   BudgetUI.showToast("Your email is verified, so you can connect spreadsheets and calendars (Menu, then Spreadsheets & Calendars) and add other emails now.");
 });
 
-// Prismal Budget is for people 18 and older. The birth date given when signing up can be fixed here (like a
+// Prismal Planning is for people 18 and older. The birth date given when signing up can be fixed here (like a
 // typo), never to one under 18 (the API checks it too).
 const MIN_AGE = 18;
 const MAX_AGE = 120;
@@ -1003,8 +1003,8 @@ const MAX_AGE = 120;
 // this device's date format.
 function renderAge() {
   const status = account.birthdate
-    ? `Prismal Budget is for people ${MIN_AGE} and older. Typed the wrong birth date when you signed up? Fix it here.`
-    : `Prismal Budget is for people ${MIN_AGE} and older. Add your birth date here.`;
+    ? `Prismal Planning is for people ${MIN_AGE} and older. Typed the wrong birth date when you signed up? Fix it here.`
+    : `Prismal Planning is for people ${MIN_AGE} and older. Add your birth date here.`;
   document.getElementById("ageStatus").textContent = status;
   document.getElementById("ageInput").value = account.birthdate ? showDate(createSafeMidnight(account.birthdate, true)) : "";
 }
@@ -1021,7 +1021,7 @@ async function changeAge(event) {
   let age = now.getFullYear() - date.getFullYear();
   if (now.getMonth() < date.getMonth() || (now.getMonth() === date.getMonth() && now.getDate() < date.getDate())) age--;
   if (age < 0 || age > MAX_AGE) return BudgetUI.showToast("Enter your birth date.", true);
-  if (age < MIN_AGE) return BudgetUI.showToast(`Prismal Budget is for people ${MIN_AGE} and older.`, true);
+  if (age < MIN_AGE) return BudgetUI.showToast(`Prismal Planning is for people ${MIN_AGE} and older.`, true);
   if (birthdate === account.birthdate) return;
   setFormBusy(form, true);
   const result = await budgetApi("/api/account/birthdate", { birthdate });
@@ -1131,11 +1131,11 @@ function setFormBusy(form, busy) {
 // =====================================================================
 // Another email of the account's owner: we email it a link, and once it's opened (the login page checks it), the email
 // signs in to the account (with its password, and Forgot Password sends its link there), and spreadsheets its Google
-// account shares with admin@prismalbudget.org can be connected. Each one shows whether it's confirmed or waiting (with
+// account shares with admin@prismalplanning.org can be connected. Each one shows whether it's confirmed or waiting (with
 // Send Again), and Remove. Adding one needs the account's own email verified first.
 
 const MAX_OTHER_EMAILS = 5;
-const SHARING_EMAIL = "admin@prismalbudget.org";
+const SHARING_EMAIL = "admin@prismalplanning.org";
 
 // The list, and Add Email (once the account's own email is verified)
 function renderOtherEmails() {
@@ -1498,7 +1498,7 @@ function renderAnalytics() {
     status.textContent = "Off for this device. Google Analytics doesn't load here.";
     buttons.append(settingsButton("Turn On", "primary", () => setAnalytics(true)));
   } else {
-    status.textContent = "On. Google Analytics counts page visits, which helps improve Prismal Budget. It never sees your budget, and links' private codes are left out. You can turn it off for this device.";
+    status.textContent = "On. Google Analytics counts page visits, which helps improve Prismal Planning. It never sees your budget, and links' private codes are left out. You can turn it off for this device.";
     buttons.append(settingsButton("Turn Off", "danger", () => setAnalytics(false)));
   }
 }
@@ -1692,7 +1692,7 @@ const SETTINGS_SIGNIN_ERRORS = {
   cancelled: "Connecting was cancelled.",
   expired: "That took too long. Please try again.",
   failed: "That didn't go through. Please try again.",
-  taken: "That account already signs in to another Prismal Budget account, so it can't be connected here too.",
+  taken: "That account already signs in to another Prismal Planning account, so it can't be connected here too.",
   other: "That isn't the account connected here. Confirm with the one that's connected."
 };
 

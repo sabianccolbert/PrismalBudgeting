@@ -168,7 +168,7 @@ window.Passkeys = (() => {
       case "SecurityError":
         return onIpAddress ? IP_ADDRESS_TEXT : "Passkeys don't work at this web address.";
       case "NotSupportedError":
-        return "This device can't make a passkey Prismal Budget can use.";
+        return "This device can't make a passkey Prismal Planning can use.";
       case "AbortError":
         return "";
       default:

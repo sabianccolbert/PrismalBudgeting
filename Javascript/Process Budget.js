@@ -4805,7 +4805,7 @@ const connectionNoun = (connection) => (connection?.kind === "calendar" ? "Calen
 const connectionBasis = (connection) => JSON.stringify([connection.link, connection.fields, connection.pay ?? null]);
 
 // In a shared budget, each page reads the connections it can (Spreadsheets.js and Calendars.js refresh):
-//   - A spreadsheet shared only with Prismal Budget's Google account opens just for the emails of whoever connected it,
+//   - A spreadsheet shared only with Prismal Planning's Google account opens just for the emails of whoever connected it,
 //     so only that account's pages read it (readsConnection)
 //   - A read that fails is kept in the budget (as the connection's problem) only from that account's pages too: another
 //     account's failure is about that account (like an email that isn't verified yet), not the connection

@@ -2,12 +2,12 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=6b9c464ecf">
+    <link rel="stylesheet" href="/stylesheet.css?v=bbc049464e">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=6f54d70791">
+    <link rel="stylesheet" href="/budgetStyle.css?v=47bb6b3b1d">
     <link rel="stylesheet" href="/themes.css?v=0e56d3f317">
-    <title>Prismal Budget - Settings</title>
-    <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
+    <title>Prismal Planning - Settings</title>
+    <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -18,11 +18,11 @@
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Budget - Settings">
-    <meta property="og:description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
-    <meta property="og:image" content="https://prismalbudget.org/Favicon/og-image.jpg">
+    <meta property="og:title" content="Prismal Planning - Settings">
+    <meta property="og:description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalplanning.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://prismalbudget.org">
+    <meta property="og:url" content="https://prismalplanning.org">
     <!-- Modern Favicons -->
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
@@ -43,7 +43,7 @@
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <div class="brandText stacked">
             <h1>Settings</h1>
-            <h2 translate="no">Prismal Budget</h2>
+            <h2 translate="no">Prismal Planning</h2>
           </div>
         </div>
         <nav class="navButtons" aria-label="Pages">
@@ -67,7 +67,7 @@
         <!-- The account's budgets and the ones shared with it (Budgets.js renderManager, Settings Page.js) -->
         <section id="budgets" class="budgetCard settingsCard" aria-labelledby="budgetsHeading" hidden>
           <h3 id="budgetsHeading">Budgets</h3>
-          <p>Keep more than one budget, each with its own calendar, entries, Equity, and Bob, and share any of yours with other Prismal Budget accounts. The list above the buttons at the top of every page switches between them.</p>
+          <p>Keep more than one budget, each with its own calendar, entries, Equity, and Bob, and share any of yours with other Prismal Planning accounts. The list above the buttons at the top of every page switches between them.</p>
           <div id="budgetManager"></div>
           <div class="panelButtons">
             <button id="newBudgetButton" type="button" class="budgetButton primary">New Budget</button>
@@ -104,7 +104,7 @@
             <ul class="settingsList settingsNotes">
               <li>Its title shows what it's about (like 🗓️🔔⛔️ Check Budget), and its lines say why. An entry's reminder shows the entry's title and its day; the rest never show amounts or entry titles. Tapping it opens the budget it's about.</li>
               <li>Each device is turned on by itself, from that device, and right after you sign in, Home asks once whether to turn them on there.</li>
-              <li>On an iPhone or iPad (iOS 16.4 or later), add Prismal Budget to your Home Screen first (Share, then Add to Home Screen), and turn these on from there.</li>
+              <li>On an iPhone or iPad (iOS 16.4 or later), add Prismal Planning to your Home Screen first (Share, then Add to Home Screen), and turn these on from there.</li>
               <li>The days come from your budget as it was the last time it was opened or changed on any device (from today through the 28 days after the calendar, and the days of entries' reminders), so opening it now and then keeps them up to date.</li>
               <li>Send Test sends one right away. Turn Off stops them on this device (so does turning off this site's notifications in your device's settings).</li>
             </ul>
@@ -117,7 +117,7 @@
             <input id="calendarUrl" class="linkInput" type="text" readonly aria-label="Calendar link" hidden>
             <div id="calendarButtons" class="panelButtons"></div>
             <ul class="settingsList settingsNotes">
-              <li>Each event's title shows what it's about (like 🗓️⛔️ Check Budget), and its notes spell it out, with a link to Prismal Budget. Like push notifications, only an entry's reminder shows its title.</li>
+              <li>Each event's title shows what it's about (like 🗓️⛔️ Check Budget), and its notes spell it out, with a link to Prismal Planning. Like push notifications, only an entry's reminder shows its title.</li>
               <li>To add it: Apple Calendar opens it with the Apple Calendar button. In Google Calendar, use the Google Calendar button, or on a computer, Other calendars, then From URL, and paste the link. In Outlook, use Add calendar, then Subscribe from web.</li>
               <li>Calendar apps check the link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
               <li>Keep the link private: anyone who has it can see your reminder days (and the titles of entries with a reminder). New Link makes a new one (the old one stops working), and Turn Off stops the events.</li>
@@ -130,7 +130,7 @@
              Custom's window) -->
         <section id="themeView" class="budgetCard settingsCard" aria-labelledby="themeHeading">
           <h3 id="themeHeading">Theme</h3>
-          <p>How Prismal Budget looks on this device: its colors, corners, background, stars, and icons. Each device keeps its own, even on the same budget.</p>
+          <p>How Prismal Planning looks on this device: its colors, corners, background, stars, and icons. Each device keeps its own, even on the same budget.</p>
           <div id="themeChoices" class="choiceList themeChoices" role="radiogroup" aria-labelledby="themeHeading"></div>
           <p class="panelHint">Custom makes one of your own, starting from any of the others. This device keeps it, even when you sign out or pick another theme: tap Custom to bring it back, and tap it again while it's on to change it. The login page and the front page look like Prismal (the login page keeps your theme when Quick Entry's Home opens it).</p>
           <!-- How the Quick Entry icon looks on this device's home screen (Settings Page.js, Quick Icon.js) -->
@@ -139,7 +139,7 @@
 
         <section id="languageView" class="budgetCard settingsCard" aria-labelledby="languageHeading">
           <h3 id="languageHeading">Language And Dates</h3>
-          <p>Prismal Budget is in English, and your browser can show it in your language:</p>
+          <p>Prismal Planning is in English, and your browser can show it in your language:</p>
           <ul class="settingsList">
             <li>🌐 Chrome or Edge: tap ⋮ (or right-click the page) and pick Translate.</li>
             <li>🧭 Safari: tap aA (or the translate button) in the address bar, then Translate.</li>
@@ -211,7 +211,7 @@
             </form>
             <!-- More emails of yours, each confirmed by a link we email it (Settings Page.js) -->
             <h4 class="settingsSubheading">Other Emails</h4>
-            <p id="otherEmailsStatus">Add another email of yours, and open the link we send it. Then it signs in to your account too (with your password), and spreadsheets its Google account shares with admin@prismalbudget.org can be connected.</p>
+            <p id="otherEmailsStatus">Add another email of yours, and open the link we send it. Then it signs in to your account too (with your password), and spreadsheets its Google account shares with admin@prismalplanning.org can be connected.</p>
             <ul id="otherEmailList" class="sheetEmailList" hidden></ul>
             <div class="panelButtons">
               <button id="addOtherEmailButton" type="button" class="budgetButton primary">Add Email</button>
@@ -355,14 +355,14 @@
           <h4>Your Account</h4>
           <ul>
             <li><strong>Email:</strong> change it here (with your password). A new email gets a link to verify it, and until it's verified, spreadsheets and calendars can't be connected or read. Send Verification Email sends a new link.</li>
-            <li><strong>Other Emails:</strong> add another email of yours (up to 5), and open the link we send it (it works for 24 hours). Once it's confirmed, you can sign in with it too (and use it for Forgot Password), and spreadsheets its Google account shares with admin@prismalbudget.org can be connected. Remove one to stop both. Adding one needs your own email verified first.</li>
+            <li><strong>Other Emails:</strong> add another email of yours (up to 5), and open the link we send it (it works for 24 hours). Once it's confirmed, you can sign in with it too (and use it for Forgot Password), and spreadsheets its Google account shares with admin@prismalplanning.org can be connected. Remove one to stop both. Adding one needs your own email verified first.</li>
             <li><strong>Quick Entry icons:</strong> turn off Show balances on Quick Entry icons, and they stop showing In Bank, the lowest it gets, and your Equity accounts' balances (just their names), on every icon.</li>
-            <li><strong>Birth Date:</strong> Prismal Budget is for people 18 and older. If you typed the wrong birth date when you signed up, fix it here: type it, or pick it with the calendar button.</li>
+            <li><strong>Birth Date:</strong> Prismal Planning is for people 18 and older. If you typed the wrong birth date when you signed up, fix it here: type it, or pick it with the calendar button.</li>
             <li>Change your password, add passkeys, turn off Quick Entry icons, sign out everywhere, download your data, or delete your account.</li>
             <li><strong>Upload A Backup:</strong> pick a file Download My Data saved (one with more than one budget asks which), and it goes into the budget that's open: for each part of the budget it has (History, Home's Calendar, Upcoming, Recurring Entries, Equity, Goals, Bob's Page, Tracker, Connected Spreadsheets And Calendars, Paycheck Calculator, Notes, and Change Logs), pick one: <strong>Prefer Current Data</strong> keeps yours where the two clash (like an entry with the same title and type on the same day) and adds the rest from the backup; <strong>Prefer Uploaded Data</strong> does the same, but the backup's wins where they clash; <strong>Remove Current Data</strong> puts the backup's in place of yours. Parts the backup doesn't have stay as they are. Undo can't take it back, so the window offers Download My Data first.</li>
             <li><strong>Sounds:</strong> turn Music (a quiet bed of far-off twinkles, with a clearer few now and then) and Sound effects (a soft crystal sound for what you tap) on or off for this device. They mix with your own audio instead of stopping it.</li>
             <li><strong>Quick Entry Icon</strong> (under Theme): how the icon looks when Quick Entry is added to this device's home screen. Pick its Colors (one from each theme, and your Custom one), then its Icon: the usual Prismal picture, a minimal one, a blank one (just the colors), an emoji you type, or an image you upload. It's kept on this device with the theme, even when you sign out. An icon already on a home screen keeps the look it was added with: tap Quick Entry on Home and add it again for the new one.</li>
-            <li><strong>Theme:</strong> how Prismal Budget looks on this device. Tap one to switch, or Custom (at the end) to make your own: start from any theme, pick five colors (the background, the cards, the words, the glow, and what's chosen) and the corners, font, stars, and icons, and watch it change behind the window; Save Theme keeps it. The login page and the front page always look like Prismal.</li>
+            <li><strong>Theme:</strong> how Prismal Planning looks on this device. Tap one to switch, or Custom (at the end) to make your own: start from any theme, pick five colors (the background, the cards, the words, the glow, and what's chosen) and the corners, font, stars, and icons, and watch it change behind the window; Save Theme keeps it. The login page and the front page always look like Prismal.</li>
             <li><strong>Reduced Motion:</strong> Hold the starfield still keeps the stars where they are, and Turn off other animations stops pages sliding, windows growing out of their buttons, days zooming, and cards floating, on this device. If your device asks for less motion in its own settings, both are on already.</li>
             <li>Connected spreadsheets and calendars have their own page: open the menu, then Spreadsheets &amp; Calendars.</li>
           </ul>
