@@ -572,7 +572,7 @@ const Spreadsheets = (() => {
   // #region ENTRIES
   // =====================================================================
 
-  const LABELS = { date: "Date", title: "Title", amount: "Amount", type: "Refraction Type", account: "Other Account" };
+  const LABELS = { date: "Date", title: "Title", amount: "Amount", type: "Refraction Type", account: "Equity Account" };
   const KEEP_DAYS_BEFORE = 100; // Entries kept from before today (Bob's Big Bills card looks for ones like them)
   const KEEP_DAYS_AFTER = 800;
   const MAX_ENTRIES = 3000;
@@ -611,13 +611,13 @@ const Spreadsheets = (() => {
     const typedAccount = !isLinked(fields.account) ? String(fields.account?.value || "").trim() : "";
     const typedTitle = !isLinked(fields.title) ? String(fields.title?.value || "").replace(/\s+/g, " ").trim() : "";
     const typedAmount = !isLinked(fields.amount) ? Number(fields.amount?.value) : NaN;
-    // (A typed amount can be a percent of the Other Account's balance instead: a % entry, see PERCENT_MARK)
+    // (A typed amount can be a percent of the Equity account's balance instead: a % entry, see PERCENT_MARK)
     const typedPercent = !isLinked(fields.amount) && fields.amount?.percent === true;
     const sign = isLinked(fields.amount) ? fields.amount.sign : "written";
     if (!isLinked(fields.amount) && !Number.isFinite(typedAmount)) return stop("Type the amount, or tap ➕ next to Amount to pick its cells.");
     if (!isLinked(fields.amount) && Math.abs(typedAmount) > (typedPercent ? MAX_PERCENT : MAX_AMOUNT)) return stop(typedPercent ? `A percent can be up to ${MAX_PERCENT}%.` : AMOUNT_TOO_BIG);
     if (typedPercent && !typedAccount && !isLinked(fields.account)) return stop(PERCENT_NEEDS_ACCOUNT);
-    if (typedAccount && !accounts.has(cleanString(typedAccount))) return stop(`The Other Account "${typedAccount}" isn't one of yours anymore. Pick another, or add it on the Other Accounts page.`);
+    if (typedAccount && !accounts.has(cleanString(typedAccount))) return stop(`The Equity account "${typedAccount}" isn't one of yours anymore. Pick another, or add it on the Equity page.`);
     if (!isLinked(fields.title) && !typedTitle && !typedAccount) return stop("Type a title, or tap ➕ next to Title to pick its cells.");
 
     const entries = [];
@@ -673,14 +673,14 @@ const Spreadsheets = (() => {
         type = type || "❗️";
       }
 
-      // The account's name as it's written on Other Accounts, so the entry reads "Title → Savings" (any capitals typed)
+      // The account's name as it's written on Equity, so the entry reads "Title → Savings" (any capitals typed)
       let account = typedAccount ? accounts.get(cleanString(typedAccount)) : "";
       if (read.account) {
         const accountCell = valueAt("account", i);
         const name = cellText(accountCell.cell);
         account = name ? accounts.get(cleanString(name)) : "";
         if (account === undefined) {
-          problem(`${accountCell.ref} names an Other Account, "${name}", that you don't have. Add it on the Other Accounts page, or fix the cell.`);
+          problem(`${accountCell.ref} names an Equity account, "${name}", that you don't have. Add it on the Equity page, or fix the cell.`);
           continue;
         }
       }
@@ -689,7 +689,7 @@ const Spreadsheets = (() => {
         continue;
       }
 
-      // The entry keeps its own title, with its Other Account after it ("Payday → Savings"); with no title, it's
+      // The entry keeps its own title, with its Equity account after it ("Payday → Savings"); with no title, it's
       // the account's name
       let title = typedTitle;
       if (read.title) {
@@ -702,12 +702,12 @@ const Spreadsheets = (() => {
       }
 
       if (percent !== null && !account) {
-        problem(`${read.amount ? valueAt("amount", i).ref : dateCell.ref}'s amount is a percent, which needs an Other Account (it's a percent of the account's balance). Name one, or make it an amount.`);
+        problem(`${read.amount ? valueAt("amount", i).ref : dateCell.ref}'s amount is a percent, which needs an Equity account (it's a percent of the account's balance). Name one, or make it an amount.`);
         continue;
       }
 
       if (date < keepFrom || date > keepTo) continue;
-      // (Its own title without the arrows that mark an Other Account, like a typed one, see TITLE_ARROW: "Refund ← Store"
+      // (Its own title without the arrows that mark an Equity account, like a typed one, see TITLE_ARROW: "Refund ← Store"
       // would otherwise read as a Transfer from an account called Store)
       const ownTitle = capitalize(splitAccount(title.replace(/\s+/g, " ").trim()).title.replace(/\s*[←→]\s*/g, " ").trim()).slice(0, MAX_TITLE);
       const fullTitle = withAccount(ownTitle, account);

@@ -6,16 +6,17 @@
 //     that's on. Each card's render returns its highlight (see CARDS), and a new card needs one too.
 //   - Every card has a help button (a "?" in a circle) to the right of its title, with a short, clear note on what the
 //     card is for (its help, see CARDS). A new card needs one too.
-//   - Data and Accounts always run. Every other card has an on/off switch, starts off, and works nothing out while it's
-//     off. Which are on is kept with the budget (Bob's page in Process Budget.js), so every device shows the same.
+//   - Data always runs. Every other card has an on/off switch, starts off, and works nothing out while it's off. Which are
+//     on is kept with the budget (Bob's page in Process Budget.js), so every device shows the same.
 //   - A card that's on (but Wavelength Planning) has a Warnings switch beside its own: with it on, the card's highlight,
 //     when it needs a look, shows on Bob's card on Home (bobWarnings), which moves over the calendar until it's okayed.
 //     A new card that can need a look gets one too (BOB_WARNING_CARDS in Process Budget.js).
 //   - Anything that shows from a tap (a table, a list) opens in a floating window (BudgetUI.openPanel), not in the page.
 //
-// The cards, top to bottom: Bob's highlights; Data (what every card below works from); Accounts (each account now and
-// on a day picked, interest too); Goals; Wavelength Planning (a spectrum of what each wavelength cost); then one for
-// each of his tips: Payday, Spending Pace, Big Bills, Weekly Check, Catchup Entries, and Refunds.
+// The cards, top to bottom: Bob's highlights; Data (what every card below works from, with Equity's window: each account
+// now and on a day picked, interest too, and a line graph at the bottom of each window that can have one); Goals;
+// Wavelength Planning (a spectrum of what each wavelength cost); then one for each of his tips: Payday, Spending Pace, Big
+// Bills, Weekly Check, Catchup Entries, and Refunds.
 
 // =====================================================================
 // #region SETUP
@@ -32,10 +33,10 @@ const CATCHUP_LIMIT = 100;      // Catchup Entries speaks up when the last 30 da
 const CATCHUP_DAYS = 30;
 const REFUND_DAYS = 30;         // Refunds looks this far back for purchases
 const REFUNDS_SHOWN = 5;
-const AHEAD_YEARS = 10;         // Accounts and Goals look up to this far ahead
+const AHEAD_YEARS = 10;         // Equity and Goals look up to this far ahead
 const PURPOSE_DAYS = 30;        // Wavelength Planning starts on this many days, through today...
 const PURPOSE_AHEAD_DAYS = 730; // ...and looks up to two years ahead, like Search
-const ACCOUNTS_DAY_KEY = "prismal_bob_accounts_day"; // The day this device picked for Accounts (Layout.js keeps it)
+const ACCOUNTS_DAY_KEY = "prismal_bob_accounts_day"; // The day this device picked for Equity's window (Layout.js keeps it)
 
 // Each card under the highlights: its id (its switch's, see BOB_CARDS in Process Budget.js), title, help (what its "?"
 // shows), setup(card) (what it keeps while the page is open, like its date boxes: returned to go above what it shows), and
@@ -44,27 +45,20 @@ const CARDS = [
   {
     id: "data",
     title: "Data",
-    help: "What Bob works everything out from: your History, paydays, spending, and bills ahead. The cards below use these numbers. Tap a row with › to see what's behind it.",
+    help: "What Bob works everything out from: your History, paydays, spending, and bills ahead. The cards below use these numbers. Tap a row with › to see what's behind it, with a line graph at the bottom of the ones that can have one: pick a later day there to see what your budget expects.",
     render: renderDataCard
-  },
-  {
-    id: "accounts",
-    title: "Accounts",
-    help: "What In Bank, each Other Account, and the Total hold now, and what your budget says they'll hold on the day picked at the top (counting recurring entries, connected spreadsheets, Upcoming, and interest). This device remembers the day.",
-    setup: setupAccountsCard,
-    render: renderAccountsCard
   },
   {
     id: "goals",
     title: "Goals",
-    help: "Amounts for In Bank, the Total, or an Other Account to reach, by a day if you like. Bob works out what to set aside from each payday to get there, and warns you when one is in danger. A credit card's can be $0.00: paid off.",
+    help: "Amounts for In Bank, the Total, or an Equity account to reach, by a day if you like. Bob works out what to set aside from each payday to get there, and warns you when one is in danger. A credit card's can be $0.00: paid off.",
     setup: setupGoalsCard,
     render: renderGoalsCard
   },
   {
     id: "purposes",
     title: "Wavelength Planning",
-    help: "Once it's on, every entry form asks which wavelength a title's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Wavelengths names them). The spectrum adds up what each cost between the days picked, long wavelengths at the left to short at the right; tap a stretch to see its titles.",
+    help: "Once it's on, every entry form asks which wavelength a title's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Add Or Change Wavelengths makes them). The spectrum adds up what each cost between the days picked, long wavelengths at the left to short at the right; tap a stretch to see its titles.",
     setup: setupPurposesCard,
     render: renderPurposesCard
   },
@@ -125,16 +119,22 @@ if (window.PAGE === "bob") {
     buildPage();
     renderPage();
     showLinkedCard();
+    openLinkedWindow();
   });
 }
 
-// A link here with a day (Search's Go To Accounts: /menu/bob.html?day=YYYY-MM-DD#accountsCard) shows the Accounts card on
+// A link here with a day (Search's Go To Equity: /menu/bob.html?day=YYYY-MM-DD&open=equity#dataCard) shows Equity's window on
 // that day: it's the day this device remembers for it from then on (ACCOUNTS_DAY_KEY)
 function takeLinkedDay() {
   const text = new URLSearchParams(location.search).get("day");
   const day = text ? createSafeMidnight(text, true) : null;
   if (!day || isNaN(day.getTime()) || day <= today || day > aheadLimit()) return;
   try { localStorage.setItem(ACCOUNTS_DAY_KEY, formatToMMDDYYYY(day)); } catch (e) {}
+}
+
+// A link that says open=equity opens Equity's window, from Data's row
+function openLinkedWindow() {
+  if (new URLSearchParams(location.search).get("open") === "equity") openEquityWindow(document.getElementById("dataCard") || document.body);
 }
 
 // The card a link's #spot names comes into view once the page has slid in (its cards are made after the budget loads,
@@ -378,7 +378,7 @@ function renderDataCard(card, shared) {
   const inBank = inBankToday();
   const spent = purchases.reduce((total, purchase) => total - purchase.amount, 0);
   const dayCount = (date) => getDayDifference(date, today);
-  // (What Accounts, Goals, Wavelength Planning, and Refunds work from too)
+  // (What Goals, Wavelength Planning, and Refunds work from too)
   const summaries = shared.summaries();
   const accountsTotal = Math.round(summaries.reduce((sum, summary) => sum + summary.today, 0) * 100) / 100;
   const goals = accountsData?.goals || [];
@@ -391,10 +391,10 @@ function renderDataCard(card, shared) {
   list.append(
     dataRow("History", oldest ? `From ${showDate(oldest)}` : "None yet",
       oldest ? (spending.enough ? `${HISTORY_MONTHS} months or more: enough for every card` : `Payday and Spending Pace need ${HISTORY_MONTHS} months of it`) : "Each week moves into History as it passes"),
-    dataRow("In Bank today", formatMoney(inBank), "", { amount: inBank }),
-    dataRow("Lowest in bank after today", formatMoney(lowest.amount), `On ${showDay(lowest.date)}`, { amount: lowest.amount }),
-    dataRow("Other Accounts today", formatMoney(accountsTotal), `${summaries.length} ${summaries.length === 1 ? "account" : "accounts"}; with In Bank, the Total is ${formatMoney(inBank + accountsTotal)}`,
-      { amount: accountsTotal, open: (origin) => openAccountsDataWindow(origin, summaries) }),
+    dataRow("In Bank today", formatMoney(inBank), "", { amount: inBank, open: (origin) => openGraphWindow(origin, "In Bank", "In Bank at the end of each day, from History and the calendar. Pick a later day to see what your budget expects.", inBankGraph("In Bank Over Time")) }),
+    dataRow("Lowest in bank after today", formatMoney(lowest.amount), `On ${showDay(lowest.date)}`, { amount: lowest.amount, open: (origin) => openGraphWindow(origin, "Lowest In Bank", `The lowest In Bank gets from today through the 28 days after the calendar is ${formatMoney(lowest.amount)}, on ${showDate(lowest.date)}. Pick a later day to see it on the graph.`, inBankGraph("In Bank Over Time")) }),
+    dataRow("Equity", formatMoney(accountsTotal), `${summaries.length} ${summaries.length === 1 ? "account" : "accounts"} today; with In Bank, the Total is ${formatMoney(inBank + accountsTotal)}`,
+      { amount: accountsTotal, open: (origin) => openEquityWindow(origin) }),
     dataRow("Goals", String(goals.length), goals.length ? goals.map(goalName).slice(0, 3).join(", ") + (goals.length > 3 ? ", and more" : "") : "None set yet",
       goals.length ? { open: (origin) => openGoalsDataWindow(origin, goals) } : {}),
     dataRow("Titles on a wavelength", String(onWavelength), wavelengthList().map(wave => wave.name).join(", "),
@@ -407,16 +407,20 @@ function renderDataCard(card, shared) {
     dataRow("Usually spent between paychecks", payday.average === null ? "--" : formatMoney(payday.average),
       payday.average === null ? `Needs ${HISTORY_MONTHS} months of History` : `In the ${payday.span} days from a payday, besides recurring bills`),
     dataRow(`Catchup entries, last ${CATCHUP_DAYS} days`, formatMoney(catchup.total), `${catchup.entries.length} ${catchup.entries.length === 1 ? "entry" : "entries"}`,
-      { open: (origin) => openEntriesWindow(origin, `Catchup Entries, Last ${CATCHUP_DAYS} Days`, catchup.entries, `None in the last ${CATCHUP_DAYS} days.`) }),
+      { open: (origin) => openEntriesWindow(origin, `Catchup Entries, Last ${CATCHUP_DAYS} Days`, catchup.entries, `None in the last ${CATCHUP_DAYS} days.`, () => runningGraph("Catchup Entries, Added Up", "Catchups", CATCHUP_DAYS, catchupsBetween, "None in these days.")) }),
     dataRow(`Big bills, next ${BILL_DAYS} days`, String(bills.length), bills[0] ? `The first: ${capitalize(bills[0].title)} on ${showDay(bills[0].date)}` : "None",
-      { open: (origin) => openEntriesWindow(origin, `Big Bills, Next ${BILL_DAYS} Days`, bills, `None in the next ${BILL_DAYS} days.`) }),
+      { open: (origin) => openEntriesWindow(origin, `Big Bills, Next ${BILL_DAYS} Days`, bills, `None in the next ${BILL_DAYS} days.`, () => runningGraph("Big Bills, Added Up", "Big bills", 0, (first, until) => bigBills().filter(bill => bill.date >= first && bill.date <= until), `Pick a later day, up to ${BILL_DAYS} days from today, to see the bills ahead added up.`)) }),
     dataRow(`Purchases, last ${REFUND_DAYS} days`, formatMoney(spent), `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} added by hand or with Quick Entry`,
-      { open: (origin) => openEntriesWindow(origin, `Purchases, Last ${REFUND_DAYS} Days`, purchases, `None in the last ${REFUND_DAYS} days.`) }),
+      { open: (origin) => openEntriesWindow(origin, `Purchases, Last ${REFUND_DAYS} Days`, purchases, `None in the last ${REFUND_DAYS} days.`, () => runningGraph("Purchases, Added Up", "Purchases", REFUND_DAYS, purchasesBetween, "None in these days.")) }),
     dataRow("Purchases still to come", formatMoney(comingSpent), lowest.date > today ? `${coming.length} by the lowest day, ${showDay(lowest.date)}` : "None before the lowest day",
-      { open: (origin) => openEntriesWindow(origin, "Purchases Still To Come", coming, "None before the lowest day.") })
+      { open: (origin) => openEntriesWindow(origin, "Purchases Still To Come", coming, "None before the lowest day.", () => runningGraph("Purchases Still To Come, Added Up", "Purchases", 0, purchasesBetween, "Pick a later day to see what's planned, added up.")) })
   );
   card.results.replaceChildren(list);
-  return { text: `In Bank is ${formatMoney(inBank)} today, and the lowest it gets is ${formatMoney(lowest.amount)} on ${showDay(lowest.date)}.`, warn: lowest.amount < 0 };
+  // (And where everything will be on the day this device picked for Equity's window)
+  const day = readAccountsDay();
+  const ahead = equityFigures(day, shared.projection(), summaries);
+  const interestNote = ahead.hasInterest && ahead.total.interest !== 0 ? `, with ${formatMoney(ahead.total.interest)} in interest by then` : "";
+  return { text: `In Bank is ${formatMoney(inBank)} today, and the lowest it gets is ${formatMoney(lowest.amount)} on ${showDay(lowest.date)}. On ${showDate(day)}, In Bank will be ${formatMoney(ahead.rows[0].then)} and the Total ${formatMoney(ahead.total.then)}${interestNote}.`, warn: lowest.amount < 0 || ahead.rows[0].then < 0 };
 }
 
 // One of Data's rows: what it is (and a note under it), and its figure. One with more behind it (open: opens it, given
@@ -609,16 +613,21 @@ function recurringEachMonth() {
 // Catchup entries (titled Catchup or Catch Up, as costs; never Hidden, which doesn't change In Bank) in the last 30 days:
 // { total (what they took, above $0), entries: [{ date, title, amount }] newest first }
 function catchupEntries() {
+  const entries = catchupsBetween(addDays(today, -(CATCHUP_DAYS - 1)), today).sort((a, b) => b.date - a.date);
+  return { total: Math.round(-entries.reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100, entries };
+}
+
+// Those Catchup entries from `from` through `to`: [{ date, title, amount }]
+function catchupsBetween(from, to) {
   const entries = [];
-  eachDay(addDays(today, -(CATCHUP_DAYS - 1)), today, (date, lines) => {
+  eachDay(from, to, (date, lines) => {
     for (const text of lines) {
       const line = readLine(text);
       if (line.blank || line.system || line.amount >= 0 || getSpecialType(line.sprite) === "✖️") continue;
       if (/^catch ?up$/.test(line.clean)) entries.push({ date, title: line.title, amount: line.amount });
     }
   });
-  entries.sort((a, b) => b.date - a.date);
-  return { total: Math.round(-entries.reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100, entries };
+  return entries;
 }
 
 // Purchases from `from` through `to`: Regular costs added by hand or with a Quick Entry icon (not from a recurring entry or
@@ -709,9 +718,23 @@ function bigBills() {
 // #region WINDOWS (what's behind a figure, floating over the page)
 // =====================================================================
 
+// A floating window with only a note and a line graph (see Line Graph.js)
+function openGraphWindow(origin, title, intro, graph) {
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title,
+    build(form, panel) {
+      form.addEventListener("submit", (event) => event.preventDefault()); // (Enter in its date box: nothing to send)
+      form.append(BudgetUI.element("p", "panelHint", intro), graph.el, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+    }
+  });
+}
+
 // A floating window with a table in a box that scrolls, and a note over it: columns (titles), rows (each a list of
-// cells: text, or { text, amount } for an amount, red or green by its sign)
-function openTableWindow(origin, { title, intro = "", columns, rows, empty = "Nothing to show." }) {
+// cells: text, or { text, amount } for an amount, red or green by its sign), and at the bottom, when it can have one, a
+// line graph (graph: makes it, see Line Graph.js)
+function openTableWindow(origin, { title, intro = "", columns, rows, empty = "Nothing to show.", graph = null }) {
   BudgetUI.openPanel({
     origin,
     size: "large",
@@ -720,6 +743,7 @@ function openTableWindow(origin, { title, intro = "", columns, rows, empty = "No
       form.addEventListener("submit", (event) => event.preventDefault()); // (Nothing to send)
       if (intro) form.append(BudgetUI.element("p", "panelHint", intro));
       form.append(rows.length > 0 ? tableBox(columns, rows) : BudgetUI.element("p", "panelText", empty));
+      if (graph) form.append(graph().el);
       form.append(BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
     }
   });
@@ -747,13 +771,14 @@ function tableBox(columns, rows) {
 // An amount's cell (see tableBox)
 const amountCell = (amount) => ({ text: formatMoney(amount), amount });
 
-// Entries in a window: each one's day, title, and amount
-function openEntriesWindow(origin, title, entries, empty) {
+// Entries in a window: each one's day, title, and amount (graph: makes the line graph at the bottom)
+function openEntriesWindow(origin, title, entries, empty, graph = null) {
   openTableWindow(origin, {
     title,
     columns: ["Day", "Entry", "Amount"],
     rows: entries.map(entry => [showDate(entry.date), capitalize(String(entry.title)), amountCell(entry.amount)]),
-    empty
+    empty,
+    graph
   });
 }
 
@@ -764,21 +789,8 @@ function openRecurringWindow(origin, recurring) {
     intro: `About ${formatMoney(recurring.costs)} a month in bills and ${formatMoney(recurring.gains)} in gains (transfers left out), from how often each one lands.`,
     columns: ["Entry", "How Often", "Amount", "A Month"],
     rows: recurring.rows.map(row => [capitalize(row.title), row.frequency, amountCell(row.amount), amountCell(row.monthly)]),
-    empty: "No recurring entries yet. Add them on the Recurring Entries page."
-  });
-}
-
-// Each Other Account today: its balance, the most it can hold, and its interest (what Accounts and Goals work from)
-function openAccountsDataWindow(origin, summaries) {
-  openTableWindow(origin, {
-    title: "Other Accounts Today",
-    intro: "Each account's balance today, the most it can hold, and its interest. Accounts and Goals work out what's ahead from these.",
-    columns: ["Account", "Today", "Max", "Interest"],
-    rows: summaries.map(summary => {
-      const max = accountMax(accountsData.list[summary.index]);
-      return [summary.name, amountCell(summary.today), max === null ? "--" : formatMoney(max), summary.interest ? describeInterest(summary.interest) : "None"];
-    }),
-    empty: "No Other Accounts yet."
+    empty: "No recurring entries yet. Add them on the Recurring Entries page.",
+    graph: recurringGraph
   });
 }
 
@@ -789,7 +801,8 @@ function openGoalsDataWindow(origin, goals) {
     intro: "What each goal is for, its amount, and the day to reach it by. Goals works out what reaching each one takes.",
     columns: ["Goal", "For", "Amount", "By"],
     rows: goals.map(goal => [goalName(goal), goalTarget(goal) || "--", amountCell(goal.amount), goal.date ? showStoredDate(goal.date) : "--"]),
-    empty: "No goals yet."
+    empty: "No goals yet.",
+    graph: () => goalsGraph(goals)
   });
 }
 
@@ -800,7 +813,8 @@ function openWavelengthsDataWindow(origin) {
     title: "Titles On A Wavelength",
     intro: "How many titles are on each wavelength. Every entry with a title shares its title's wavelength.",
     columns: ["Wavelength", "Titles"],
-    rows: wavelengthList().map(wave => [wave.name, String(purposes.filter(id => id === wave.id).length)])
+    rows: wavelengthList().map(wave => [wave.name, String(purposes.filter(id => id === wave.id).length)]),
+    graph: wavelengthsGraph
   });
 }
 
@@ -821,7 +835,8 @@ function openPaydaysWindow(origin, spending, payday) {
     intro: "A payday is a Regular gain from a recurring entry or a connected spreadsheet. The amount is what went out from it, besides recurring bills.",
     columns: ["Payday", "", "Spent"],
     rows,
-    empty: `No paydays in the last ${HISTORY_MONTHS} months or the next ${PAYDAY_LOOK} days.`
+    empty: `No paydays in the last ${HISTORY_MONTHS} months or the next ${PAYDAY_LOOK} days.`,
+    graph: () => paydaysGraph(payday.span)
   });
 }
 
@@ -846,64 +861,26 @@ function openWeeksWindow(origin, spending) {
     intro: "Regular costs that didn't come from a recurring entry or a connected spreadsheet, 7 days at a time.",
     columns: ["Days", "Spent"],
     rows,
-    empty: "Nothing in History or on the calendar yet."
+    empty: "Nothing in History or on the calendar yet.",
+    graph: spentGraph
   });
 }
 
 //#endregion
 
 // =====================================================================
-// #region ACCOUNTS
+// #region EQUITY (Data's Equity window)
 // =====================================================================
-// A table of In Bank, each Other Account, and the Total: what each holds now, what it will on the day in the box at the
-// top of its column (this device remembers it), and the interest from now to then (a column that only shows when an
-// account has interest).
+// In Bank, each Equity account, and the Total: what each holds now and the most it can hold, what it will on the day in the box at
+// the top of its column (this device remembers it), and each one's interest: what it gets from now to then and how it's
+// worked out (a column that only shows when an account has interest). Under them, a graph of all of it.
 
-function setupAccountsCard(card) {
-  const table = BudgetUI.element("table", "dataTable bobAccounts");
-  const head = table.createTHead().insertRow();
-  const input = BudgetUI.element("input", "dateInput");
-  input.type = "text";
-  input.inputMode = "numeric";
-  input.placeholder = datePattern();
-  input.translate = false;
-  input.value = showDate(readAccountsDay());
-  input.setAttribute("aria-label", "The day to work the balances out to");
-  const dayRow = BudgetUI.element("div", "dateRow");
-  dayRow.append(input, BudgetUI.datePickerButton(input, "Balances On", { min: addDays(today, 1), max: aheadLimit() }));
-  const dayHead = BudgetUI.element("th", "dayHead");
-  dayHead.append(dayRow);
-  head.append(BudgetUI.element("th", "", "Account"), BudgetUI.element("th", "", "Now"), dayHead, BudgetUI.element("th", "interestHead", "Interest"));
-  table.createTBody();
-  const note = BudgetUI.element("p", "panelHint bobAccountsNote");
-  input.addEventListener("change", () => {
-    const day = parseTypedDate(input.value);
-    if (isNaN(day.getTime()) || day <= today || day > aheadLimit()) {
-      note.textContent = `Pick a day after today, up to ${showDate(aheadLimit())}.`;
-      note.classList.add("isError");
-      return;
-    }
-    try { localStorage.setItem(ACCOUNTS_DAY_KEY, formatToMMDDYYYY(createSafeMidnight(day))); } catch (e) {}
-    renderPage();
-  });
-  card.accounts = { table, input, note };
-  const box = BudgetUI.element("div", "bobAccountsBox");
-  box.append(BudgetUI.spanHeaderBar(table));
-  const wrap = BudgetUI.element("div", "bobAccountsWrap");
-  wrap.append(box, note);
-  return wrap;
-}
-
-// The table's rows as the budget stands, and the highlight: In Bank and the Total on the day picked
-function renderAccountsCard(card, shared) {
-  const { table, input, note } = card.accounts;
-  const day = readAccountsDay();
-  if (document.activeElement !== input) input.value = showDate(day);
-  const projection = shared.projection();
-  const summaries = new Map(shared.summaries().map(summary => [summary.index, summary]));
-  const hasInterest = [...summaries.values()].some(summary => summary.interest);
+// The figures on a day (projection: projectBudget, through at least that day): { rows: [{ name, now, then, max, interest,
+// rate, about }], total, hasInterest }
+function equityFigures(day, projection, summaryList) {
+  const summaries = new Map(summaryList.map(summary => [summary.index, summary]));
+  const hasInterest = summaryList.some(summary => summary.interest);
   const round = (amount) => Math.round(amount * 100) / 100;
-
   const rows = [{ name: "In Bank", now: inBankToday(), then: projection.inBankOn(day), interest: null }];
   for (const account of accountRows()) {
     const summary = summaries.get(account.index);
@@ -913,7 +890,8 @@ function renderAccountsCard(card, shared) {
       max: accountMax(account.row),
       then: projection.accountOn(account.index, day),
       interest: summary?.interest ? projection.interestBetween(account.index, today, day) : null,
-      rate: summary?.interest?.rate
+      rate: summary?.interest?.rate,
+      about: summary?.interest ? describeInterest(summary.interest) : ""
     });
   }
   const total = {
@@ -923,29 +901,303 @@ function renderAccountsCard(card, shared) {
     interest: hasInterest ? round(rows.reduce((sum, row) => sum + (row.interest || 0), 0)) : null,
     isTotal: true
   };
-
-  const body = table.tBodies[0];
-  body.replaceChildren(...[...rows, total].map(row => {
-    const tr = BudgetUI.element("tr", row.isTotal ? "totalRow" : "");
-    tr.append(BudgetUI.noTranslate(BudgetUI.element("td", "titleCell", row.name)));
-    const now = BudgetUI.noTranslate(BudgetUI.element("td", `amountCell ${BudgetUI.amountClass(row.now)}`, formatMoney(row.now)));
-    if (row.max) now.append(BudgetUI.element("span", "accountMax", `/${formatMoney(row.max)}`));
-    const interest = BudgetUI.noTranslate(BudgetUI.element("td", `amountCell interestCell${row.interest === null ? "" : " " + BudgetUI.amountClass(row.interest)}`, row.interest === null ? "--" : formatMoney(row.interest)));
-    if (row.rate) interest.append(BudgetUI.element("span", "interestRate", `${row.rate}% a year`));
-    tr.append(now, BudgetUI.noTranslate(BudgetUI.element("td", `amountCell ${BudgetUI.amountClass(row.then)}`, formatMoney(row.then))), interest);
-    return tr;
-  }));
-  table.classList.toggle("noInterest", !hasInterest);
-  note.classList.remove("isError");
-  note.textContent = hasInterest
-    ? `The day at the top of its column counts everything planned until then. Interest is what each account gets (or pays, below $0) from today through ${showDate(day)}.`
-    : "The day at the top of its column counts everything planned until then: recurring entries, connected spreadsheets, and Upcoming.";
-  const interestNote = hasInterest && total.interest !== 0 ? `, with ${formatMoney(total.interest)} in interest by then` : "";
-  return { text: `On ${showDate(day)}, In Bank will be ${formatMoney(rows[0].then)} and the Total ${formatMoney(total.then)}${interestNote}.`, warn: rows[0].then < 0 };
+  return { rows, total, hasInterest };
 }
 
-// The day Accounts works the balances out to: the one this device picked (while it's still after today), or 6 months
-// from today, like Other Accounts' In 6 Months
+// Data's Equity window: the table, with the day it works out to in its column's head, and a graph at the bottom
+function openEquityWindow(origin) {
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "Equity",
+    build(form, panel) {
+      form.addEventListener("submit", (event) => event.preventDefault()); // (Enter in the date box: nothing to send)
+      const table = BudgetUI.element("table", "dataTable bobAccounts");
+      const head = table.createTHead().insertRow();
+      const input = BudgetUI.element("input", "dateInput");
+      input.type = "text";
+      input.inputMode = "numeric";
+      input.placeholder = datePattern();
+      input.translate = false;
+      input.setAttribute("aria-label", "The day to work the balances out to");
+      const dayRow = BudgetUI.element("div", "dateRow");
+      dayRow.append(input, BudgetUI.datePickerButton(input, "Balances On", { min: addDays(today, 1), max: aheadLimit() }));
+      const dayHead = BudgetUI.element("th", "dayHead");
+      dayHead.append(dayRow);
+      head.append(BudgetUI.element("th", "", "Account"), BudgetUI.element("th", "", "Now"), dayHead, BudgetUI.element("th", "interestHead", "Interest"));
+      table.createTBody();
+      const note = BudgetUI.element("p", "panelHint bobAccountsNote");
+      const box = BudgetUI.element("div", "bobAccountsBox");
+      box.append(BudgetUI.spanHeaderBar(table));
+      const graph = equityGraph();
+
+      const draw = () => {
+        const day = readAccountsDay();
+        if (document.activeElement !== input) input.value = showDate(day);
+        const summaryList = accountSummaries();
+        const { rows, total, hasInterest } = equityFigures(day, projectBudget(day, summaryList), summaryList);
+        table.tBodies[0].replaceChildren(...[...rows, total].flatMap(row => {
+          const tr = BudgetUI.element("tr", row.isTotal ? "totalRow" : "");
+          tr.append(BudgetUI.noTranslate(BudgetUI.element("td", "titleCell", row.name)));
+          const now = BudgetUI.noTranslate(BudgetUI.element("td", `amountCell ${BudgetUI.amountClass(row.now)}`, formatMoney(row.now)));
+          if (row.max) now.append(BudgetUI.element("span", "accountMax", `/${formatMoney(row.max)}`));
+          const interest = BudgetUI.noTranslate(BudgetUI.element("td", `amountCell interestCell${row.interest === null ? "" : " " + BudgetUI.amountClass(row.interest)}`, row.interest === null ? "--" : formatMoney(row.interest)));
+          if (row.rate) interest.append(BudgetUI.element("span", "interestRate", `${row.rate}% a year`));
+          tr.append(now, BudgetUI.noTranslate(BudgetUI.element("td", `amountCell ${BudgetUI.amountClass(row.then)}`, formatMoney(row.then))), interest);
+          if (!row.about) return [tr];
+          // (How it's worked out, on its own line under the account)
+          const about = BudgetUI.element("tr", "interestAbout");
+          const words = BudgetUI.element("td", "", row.about);
+          words.colSpan = 4;
+          about.append(words);
+          return [tr, about];
+        }));
+        table.classList.toggle("noInterest", !hasInterest);
+        note.classList.remove("isError");
+        note.textContent = hasInterest
+          ? `Now is each balance today, over the most it can hold when it has a Max. The day at the top of its column counts everything planned until then. Interest is what each account gets (or pays, below $0) from today through ${showDate(day)}, and how it's worked out.`
+          : "Now is each balance today, over the most it can hold when it has a Max. The day at the top of its column counts everything planned until then: recurring entries, connected spreadsheets, and Upcoming.";
+      };
+      input.addEventListener("change", () => {
+        const day = parseTypedDate(input.value);
+        if (isNaN(day.getTime()) || day <= today || day > aheadLimit()) {
+          note.textContent = `Pick a day after today, up to ${showDate(aheadLimit())}.`;
+          note.classList.add("isError");
+          return;
+        }
+        try { localStorage.setItem(ACCOUNTS_DAY_KEY, formatToMMDDYYYY(createSafeMidnight(day))); } catch (e) {}
+        draw();
+        renderPage();
+      });
+      const follow = () => {
+        if (!panel.panel.isConnected || panel.panel.classList.contains("isClosing")) return document.removeEventListener("budget:updated", follow);
+        draw();
+        graph.draw();
+      };
+      document.addEventListener("budget:updated", follow);
+      form.append(BudgetUI.element("p", "panelHint", "What In Bank, each Equity account, and the Total hold now, and what your budget says they'll hold on the day picked at the top of the column (counting recurring entries, connected spreadsheets, Upcoming, and interest). This device remembers the day."), box, note, graph.el, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+      draw();
+    }
+  });
+}
+
+//#endregion
+
+// =====================================================================
+// #region GRAPHS (at the bottom of Data's windows, see Line Graph.js)
+// =====================================================================
+// Each graph's lines for a stretch of days. Days up to today come from History and the calendar, and later ones from what the
+// budget has planned (projectBudget), so a day picked after today shows what's expected.
+
+const GRAPH_LOOK_BACK = 90; // How many days before today (or the day picked, when it's earlier) a graph starts
+
+// A graph's first day, for the day it runs through
+const graphStart = (until, days = GRAPH_LOOK_BACK) => addDays(until < today ? until : today, -days);
+
+// Every day from first through until
+function daysBetween(first, until) {
+  const days = [];
+  for (let day = first; day <= until; day = addDays(day, 1)) days.push(day);
+  return days;
+}
+
+// In Bank on each past day the budget has, as a Map(day's time -> amount)
+function knownInBank() {
+  const known = new Map();
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 0; c < 7; c++) {
+      const cell = String(historyData[r][c] ?? "");
+      const date = cell.trim() ? createSafeMidnight(cell.split("\n")[0].trim(), true) : null;
+      const inBank = date && !isNaN(date.getTime()) ? readInBank(cell) : null;
+      if (inBank !== null) known.set(date.getTime(), inBank);
+    }
+  }
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      const inBank = readInBank(calendarData[r][c]);
+      if (inBank !== null) known.set(gridDates[r][c].getTime(), inBank);
+    }
+  }
+  return known;
+}
+
+// Where everything stands on each day from first through until: { days, inBank(day), account(index, day), total(day), accounts:
+// the Equity accounts [{ index, name }] }
+function equityOverTime(first, until) {
+  const summaries = accountSummaries();
+  const projection = projectBudget(until > today ? until : today, summaries);
+  const known = knownInBank();
+  const inBank = (day) => (known.has(day.getTime()) ? known.get(day.getTime()) : day > today ? projection.inBankOn(day) : null);
+  const account = (index, day) => projection.accountOn(index, day);
+  const accounts = summaries.map(summary => ({ index: summary.index, name: summary.name }));
+  const total = (day) => Math.round(((inBank(day) ?? 0) + accounts.reduce((sum, item) => sum + account(item.index, day), 0)) * 100) / 100;
+  return { days: daysBetween(first, until), inBank, account, total, accounts };
+}
+
+// In Bank's line (days before the budget's first have nothing to draw)
+function inBankLine(first, until) {
+  const over = equityOverTime(first, until);
+  return [{ name: "In Bank", points: over.days.map(date => ({ date, value: over.inBank(date) })).filter(point => point.value !== null) }];
+}
+
+// A window's In Bank graph
+const inBankGraph = (label) => LineGraph.create({ label, from: (until) => graphStart(until), max: aheadLimit(), series: inBankLine });
+
+// Equity's graph: In Bank, the Total, and each account with something in it
+function equityGraph() {
+  return LineGraph.create({
+    label: "Equity Over Time",
+    from: (until) => graphStart(until),
+    max: aheadLimit(),
+    series(first, until) {
+      const over = equityOverTime(first, until);
+      const line = (name, value) => ({ name, points: over.days.map(date => ({ date, value: value(date) })).filter(point => point.value !== null) });
+      const accounts = over.accounts.map(item => line(item.name, (date) => over.account(item.index, date))).filter(item => item.points.some(point => point.value !== 0));
+      return [line("In Bank", over.inBank), line("Total", over.total), ...accounts];
+    }
+  });
+}
+
+// Each goal's balance over time (a goal for nothing in particular has no balance to draw)
+function goalsGraph(goals) {
+  return LineGraph.create({
+    label: "Goals Over Time",
+    from: (until) => graphStart(until),
+    max: aheadLimit(),
+    series(first, until) {
+      const over = equityOverTime(first, until);
+      const valueOf = (goal, date) => {
+        if (goal.kind === "inBank") return over.inBank(date);
+        if (goal.kind === "total") return over.total(date);
+        const account = over.accounts.find(item => cleanString(item.name) === cleanString(goal.account));
+        return account ? over.account(account.index, date) : null;
+      };
+      return goals.filter(goal => goal.kind !== "none").map(goal => ({ name: goalName(goal), points: over.days.map(date => ({ date, value: valueOf(goal, date) })).filter(point => point.value !== null) }));
+    }
+  });
+}
+
+// Amounts added up as the days go: one point a day from first through until, from items [{ date, amount }] (each counted as a
+// positive amount)
+function runningLine(name, items, first, until) {
+  const byDay = new Map();
+  for (const item of items) byDay.set(item.date.getTime(), (byDay.get(item.date.getTime()) || 0) + Math.abs(item.amount));
+  let sum = 0;
+  return { name, points: daysBetween(first, until).map(date => {
+    sum += byDay.get(date.getTime()) || 0;
+    return { date, value: Math.round(sum * 100) / 100 };
+  }) };
+}
+
+// A graph of amounts added up from its first day (days: how far before today, or the day picked, it starts)
+const runningGraph = (label, name, days, itemsBetween, emptyNote) => LineGraph.create({
+  label,
+  from: (until) => graphStart(until, days),
+  max: aheadLimit(),
+  series(first, until) {
+    const items = itemsBetween(first, until);
+    return items.length > 0 ? [runningLine(name, items, first, until)] : [];
+  },
+  emptyNote
+});
+
+// Amounts added up a week at a time: one point at each week's end, from items [{ date, amount }]
+function weeklyPoints(items, first, until) {
+  const weeks = new Map();
+  for (const item of items) {
+    const week = Math.floor(getDayDifference(item.date, first) / 7);
+    weeks.set(week, (weeks.get(week) || 0) + Math.abs(item.amount));
+  }
+  const points = [];
+  for (let week = 0; addDays(first, week * 7) <= until; week++) {
+    const end = addDays(first, week * 7 + 6);
+    points.push({ date: end < until ? end : until, value: Math.round((weeks.get(week) || 0) * 100) / 100 });
+  }
+  return points;
+}
+
+// What went out each week, besides recurring bills
+const spentGraph = () => LineGraph.create({
+  label: "Spent Each Week",
+  from: (until) => graphStart(until),
+  max: aheadLimit(),
+  series: (first, until) => [{ name: "Spent", points: weeklyPoints(purchasesBetween(first, until), first, until) }],
+  note: "Purchases added by hand or with Quick Entry: a day after today only counts what's already planned."
+});
+
+// What went out in the days after each payday, besides recurring bills
+const paydaysGraph = (span) => LineGraph.create({
+  label: "Spent After Each Payday",
+  from: (until) => graphStart(until, 120),
+  max: aheadLimit(),
+  series(first, until) {
+    const paydays = paydaysBetween(first, until);
+    const purchases = purchasesBetween(first, addDays(until, span));
+    return [{ name: "Spent", points: paydays.map(date => ({
+      date,
+      value: Math.round(purchases.reduce((sum, purchase) => (purchase.date >= date && purchase.date < addDays(date, span) ? sum - purchase.amount : sum), 0) * 100) / 100
+    })) }];
+  },
+  emptyNote: "No paydays in these days.",
+  note: "A day after today only counts what's already planned."
+});
+
+// What the recurring entries came to each month: the bills and the gains (transfers left out), one point at each month's start
+const recurringGraph = () => LineGraph.create({
+  label: "Recurring Entries Each Month",
+  from(until) {
+    const start = addMonths(until < today ? until : today, -6);
+    return new Date(start.getFullYear(), start.getMonth(), 1);
+  },
+  max: addDays(today, PURPOSE_AHEAD_DAYS),
+  series(first, until) {
+    const months = new Map();
+    const start = new Date(first.getFullYear(), first.getMonth(), 1);
+    for (let month = start; month <= until; month = new Date(month.getFullYear(), month.getMonth() + 1, 1)) months.set(month.getTime(), { date: month < first ? first : month, costs: 0, gains: 0 });
+    // (Whole months: the last one counts what's planned for the rest of it)
+    eachEntryBetween(first, new Date(until.getFullYear(), until.getMonth() + 1, 0), (date, text) => {
+      const line = readLine(text);
+      if (line.blank || line.system || entryMark(line.sprite) !== RECURRING_MARK || isTransferEntry(line.sprite)) return;
+      const month = months.get(new Date(date.getFullYear(), date.getMonth(), 1).getTime());
+      if (!month) return;
+      if (line.amount < 0) month.costs -= line.amount;
+      else month.gains += line.amount;
+    });
+    const list = [...months.values()];
+    const line = (name, key) => ({ name, points: list.map(month => ({ date: month.date, value: Math.round(month[key] * 100) / 100 })) });
+    return [line("Bills", "costs"), line("Gains", "gains")];
+  }
+});
+
+// What each wavelength cost each week
+const wavelengthsGraph = () => LineGraph.create({
+  label: "Each Wavelength, Week By Week",
+  from: (until) => graphStart(until),
+  max: addDays(today, PURPOSE_AHEAD_DAYS),
+  series(first, until) {
+    const weeks = []; // For each week: titleKey -> { total, purpose }
+    eachEntryBetween(first, until, (date, text) => {
+      const line = readLine(text);
+      if (line.blank || line.system || !line.title || line.amount === 0) return;
+      const key = titleKey(line.title);
+      if (!key) return;
+      const week = Math.floor(getDayDifference(date, first) / 7);
+      weeks[week] = weeks[week] || new Map();
+      const known = weeks[week].get(key) || { total: 0, purpose: purposeOf(line.title) };
+      known.total += line.amount;
+      weeks[week].set(key, known);
+    });
+    return wavelengthList().map(wave => ({
+      name: wave.name,
+      points: weeklyPoints(weeks.flatMap((titles, week) => (titles ? [{ date: addDays(first, week * 7), amount: [...titles.values()].reduce((sum, item) => (item.purpose === wave.id && item.total < 0 ? sum + item.total : sum), 0) }] : [])), first, until)
+    }));
+  }
+});
+
+//#endregion
+
+// The day Equity's window works the balances out to: the one this device picked (while it's still after today), or 6 months
+// from today, like the Equity page's In 6 Months
 function readAccountsDay() {
   let stored = null;
   try { stored = localStorage.getItem(ACCOUNTS_DAY_KEY); } catch (e) {}
@@ -954,12 +1206,12 @@ function readAccountsDay() {
   return addMonths(today, AHEAD_MONTHS);
 }
 
-// The furthest Accounts and Goals look
+// The furthest Equity and Goals look
 function aheadLimit() {
   return addMonths(today, 12 * AHEAD_YEARS);
 }
 
-// The furthest day Accounts and Goals need the budget worked out through: Accounts' day, and each goal still to reach's
+// The furthest day Equity and Goals need the budget worked out through: Equity's day, and each goal still to reach's
 // day (or as far as they look, for one without a day)
 function furthestDay() {
   let furthest = readAccountsDay();
@@ -1021,7 +1273,7 @@ function renderGoalsCard(card, shared) {
 function goalPlan(goal, shared) {
   const balance = goal.kind === "none" ? null : goalBalance(goal);
   if (goal.kind === "none") return { tone: "", status: "", balance, note: "Tap it to pick what it's for, and Bob works out how to get there." };
-  if (balance === null) return { tone: "", status: "", balance, note: `${goal.account} isn't one of your Other Accounts anymore. Tap it to pick another.` };
+  if (balance === null) return { tone: "", status: "", balance, note: `${goal.account} isn't one of your Equity accounts anymore. Tap it to pick another.` };
   if (balance >= goal.amount) return { tone: "reached", status: "Reached", balance, note: `${goalTarget(goal)} has ${formatMoney(balance)}: it's there.` };
 
   const projection = shared.projection();
@@ -1115,7 +1367,7 @@ function neededEachPayday(goal, short, paydays, until, projection) {
   return Math.ceil(high * 100) / 100;
 }
 
-// Why a goal is in danger, or "": setting aside for an Other Account would take In Bank below $0 (the money comes out of
+// Why a goal is in danger, or "": setting aside for an Equity account would take In Bank below $0 (the money comes out of
 // it), or spending that much less is more than usually goes out between paychecks (for In Bank or the Total)
 function goalDanger(goal, per, paydays, until, projection, shared) {
   if (goal.kind === "account") {
@@ -1181,8 +1433,8 @@ function goalShare(goal, balance) {
   return Math.max(0, Math.min(99, Math.floor((balance - from) / (goal.amount - from) * 100)));
 }
 
-// New goal (index null) or change one: a title of its own if you like, what it's for (In Bank, the Total, or an Other
-// Account, each with what it holds under its name), its amount (or a % of what it's for today, which stays that amount),
+// New goal (index null) or change one: a title of its own if you like, what it's for (In Bank, the Total, or an Equity
+// account, each with what it holds under its name), its amount (or a % of what it's for today, which stays that amount),
 // and a day to reach it by, if it has one
 function openGoalPanel(origin, index = null) {
   const existing = index === null ? null : (accountsData?.goals || [])[index];
@@ -1191,7 +1443,7 @@ function openGoalPanel(origin, index = null) {
     size: "small",
     title: existing ? "Change Goal" : "New Goal",
     build(form, panel) {
-      const intro = BudgetUI.element("p", "panelHint", "An amount for In Bank, the Total, or an Other Account to reach, like $2000.00 in Savings, or a credit card at $0.00 (a blank amount). Bob works out what reaching it takes.");
+      const intro = BudgetUI.element("p", "panelHint", "An amount for In Bank, the Total, or an Equity account to reach, like $2000.00 in Savings, or a credit card at $0.00 (a blank amount). Bob works out what reaching it takes.");
       const title = BudgetUI.textField({ label: "Title", value: existing ? existing.title : "", placeholder: "Vacation, emergency fund...", optional: true, maxLength: MAX_TITLE });
       const amount = BudgetUI.amountField({ label: "Amount", amount: existing ? existing.amount : null, percent: existing ? existing.percent : null, signs: BudgetUI.BALANCE_SIGNS });
       const accounts = otherAccounts();
@@ -1201,7 +1453,7 @@ function openGoalPanel(origin, index = null) {
       const todayIn = (kind) => formatMoney(goalBalance({ kind, account: "" }) ?? 0);
       const target = BudgetUI.choiceList([
         { key: "inBank", label: "In Bank", detail: todayIn("inBank") },
-        { key: "total", label: "Total", detail: `${todayIn("total")}, In Bank and every Other Account` },
+        { key: "total", label: "Total", detail: `${todayIn("total")}, In Bank and every Equity account` },
         ...accounts.map(account => BudgetUI.accountChoice(account, `account:${account.name}`))
       ], picked, null, "What it's for");
       target.el.classList.add("accountChoices");
@@ -1255,11 +1507,11 @@ const purposeBoxes = new Set(); // Every From and To pair showing them (the card
 function setupPurposesCard(card) {
   purposeRange = { from: addDays(today, -(PURPOSE_DAYS - 1)), to: today };
   card.purposes = purposeDateBoxes();
-  const edit = BudgetUI.element("button", "budgetButton wavelengthsButton", "Wavelengths");
+  const edit = BudgetUI.element("button", "budgetButton wavelengthsButton", "Add Or Change Wavelengths");
   edit.type = "button";
   edit.addEventListener("click", () => openWavelengthsWindow(edit));
   const controls = BudgetUI.element("div", "wavelengthControls");
-  controls.append(card.purposes.el, edit);
+  controls.append(card.purposes.el, edit, BudgetUI.element("p", "panelHint wavelengthsHint", `Needs, Wants, and Future are only a start. Add your own (up to ${MAX_WAVELENGTHS}), rename them, or take some out with the button above.`));
   return controls;
 }
 
@@ -1336,6 +1588,7 @@ function eachEntryBetween(from, to, visit) {
   const last = to < limit ? to : limit;
   const first = from > nextFourStart ? from : nextFourStart;
   if (last < first) return;
+  percentBasesThrough(last);
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
   const sheetDays = sheetEntriesByDay(first, last);
@@ -1597,7 +1850,7 @@ function openUnsortedWindow(origin) {
       const draw = () => {
         const totals = purposeTotals(purposeRange.from, purposeRange.to);
         summary.textContent = totals.unsorted.length > 0
-          ? `What these titles cost from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}. Tap a wavelength to put a title on it (every entry with that title gets it).`
+          ? `What these titles cost from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}. Tap a wavelength under a title to put it on that one (every entry with that title gets it), then go on to the next.`
           : "Every title in these days is on a wavelength.";
         list.replaceChildren(...totals.unsorted.map(title => {
           const item = BudgetUI.element("li", "purposeTitle hasChoices");
@@ -1645,7 +1898,7 @@ function openWavelengthsWindow(origin) {
       const rows = wavelengthList().map(wave => ({ id: wave.id, name: wave.name }));
       const onIt = (id) => Object.values(accountsData?.bob?.purposes || {}).filter(purpose => purpose === id).length;
       const list = BudgetUI.element("ol", "wavelengthEditor");
-      const add = BudgetUI.element("button", "budgetButton wavelengthAdd", "Add A Wavelength");
+      const add = BudgetUI.element("button", "budgetButton primary wavelengthAdd", "Add A Wavelength");
       add.type = "button";
       const draw = (focusAt = -1) => {
         list.replaceChildren(...rows.map((row, at) => {
@@ -1691,9 +1944,9 @@ function openWavelengthsWindow(origin) {
         draw(rows.length - 1);
       });
       form.append(
-        BudgetUI.element("p", "panelText", `Name your wavelengths, from 1 to ${MAX_WAVELENGTHS}, in order: the first is the longest wavelength (red), and the last the shortest (violet). Every entry form's buttons follow them.`),
-        list,
+        BudgetUI.element("p", "panelText", `These are yours to change. Tap Add A Wavelength to make your own, type over a name to rename it, use the arrows to put them in order (the first is the longest wavelength, red, and the last the shortest, violet), or × to take one out. You can have from 1 to ${MAX_WAVELENGTHS}, and every entry form's buttons follow them.`),
         add,
+        list,
         BudgetUI.buttonRow([
           { label: "Save", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }

@@ -1350,7 +1350,7 @@ const Calendars = (() => {
   const SCHEDULE_DAYS = 35; // The schedule shows shifts this far past today, even past the look ahead
   const DEFAULT_TITLE = "Paycheck";
 
-  // The connection's entries' title, refraction type, and Other Account (typed in, like a spreadsheet's typed parts), and
+  // The connection's entries' title, refraction type, and Equity account (typed in, like a spreadsheet's typed parts), and
   // what's wrong with them (any problem here keeps every entry off: they'd land in the wrong place)
   function entryParts(connection) {
     const fields = connection.fields || {};
@@ -1360,7 +1360,7 @@ const Calendars = (() => {
     const typedAccount = typed(fields.account);
     const account = typedAccount ? accounts.get(cleanString(typedAccount)) : "";
     const problems = [];
-    if (account === undefined) problems.push(`The Other Account "${typedAccount}" isn't one of yours anymore. Pick another, or add it on the Other Accounts page.`);
+    if (account === undefined) problems.push(`The Equity account "${typedAccount}" isn't one of yours anymore. Pick another, or add it on the Equity page.`);
     if (account && type === "❗️") problems.push(`Its paychecks go to ${account}, but they're Regular. Make them Hidden or Transfer, so they can change the account.`);
     const ownTitle = capitalize(splitAccount(typed(fields.title) || (account ? "" : DEFAULT_TITLE)).title.replace(/\s*[←→]\s*/g, " ").trim()).slice(0, MAX_TITLE);
     return { type, title: withAccount(ownTitle, account || ""), problems };

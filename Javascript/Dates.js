@@ -150,6 +150,12 @@ function showDate(date) {
   return format === "dmy" ? `${dd}/${mm}/${date.getFullYear()}` : `${mm}/${dd}/${date.getFullYear()}`;
 }
 
+// A day with its weekday, shortened: "Fri 11/12/2026"
+function showWeekdayDate(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+  return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()]} ${showDate(date)}`;
+}
+
 // A day without its year: "10/05", "05/10", or "10-05"
 function showDay(date) {
   if (!(date instanceof Date) || isNaN(date.getTime())) return "";

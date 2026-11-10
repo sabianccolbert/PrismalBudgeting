@@ -3,7 +3,7 @@
 // while signed in) and can only queue entries, which the budget adds the next time it opens on the device that made
 // the icon, or which wait on its Home to be added or deleted on another device (see holdQuickEntries in Process
 // Budget.js), and change or delete the ones it queued until a budget has
-// loaded them (see WAITING ENTRIES). Besides those, it only gets In Bank today and the lowest it gets (shown at the top), the Other Accounts'
+// loaded them (see WAITING ENTRIES). Besides those, it only gets In Bank today and the lowest it gets (shown at the top), the Equity accounts'
 // names and balances, for the account picker, and the account's prisms (preset entries, see PRISMS), which it can
 // change. Each icon adds to the budget that was open when it was made. Keys stop working when the password changes, or
 // once their account can't open that budget anymore. Nothing on the site links here. Opened without a key, or with
@@ -21,7 +21,7 @@ const quickKey = quickParams.get("key") || "";
 const QUICK_TYPE_NAMES = Object.fromEntries(Object.entries(QUICK_ENTRY_TYPES).map(([name, sprite]) => [sprite, name]));
 let quickUsername = null;
 let quickBudget = null; // The name of the budget the icon adds to, when its account has more than one (the API's check says)
-let quickAccounts = []; // The budget's Other Accounts for the account picker: [{ name, balance, max }] (see showQuickAccounts)
+let quickAccounts = []; // The budget's Equity accounts for the account picker: [{ name, balance, max }] (see showQuickAccounts)
 let quickPrisms = [];   // The account's prisms, in order: [{ title, amount, type }] (see PRISMS)
 let quickWavelengths = null; // The budget's wavelengths ([{ id, name }]) when the form asks for one (Bob's card for it is on; the API's check says)
 const QUICK_NOTE_MAX = 20000; // The longest note an entry from here can have (the API keeps the same limit)
@@ -42,7 +42,9 @@ document.documentElement.classList.toggle("watchView", onWatch);
 // link so the saved icon opens straight to the form
 if (quickKey && quickParams.has("setup")) {
   document.getElementById("setupCard").hidden = false;
-  history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(quickKey)}`);
+  // (With this device's theme in it: a phone's home screen app can keep its own storage, and starts from this link)
+  const look = window.Themes ? Themes.lookQuery() : "";
+  history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(quickKey)}${look ? `&${look}` : ""}`);
 }
 
 // Home (and Back) go on when this browser is signed in, and straight to the login page when it isn't: not to the front
@@ -53,18 +55,24 @@ if (quickKey && quickParams.has("setup")) {
 // Home when the browser is signed in.
 const quickHomeLink = document.querySelector('.navButtons a[href="/"]:not(#quickBack)');
 const quickBackLink = document.getElementById("quickBack");
+// (The login page keeps this page's theme on the way: Themes.lookQuery in Boot.js)
+const quickLogin = () => {
+  const look = window.Themes ? Themes.lookQuery() : "";
+  return look ? `/login.html?${look}` : "/login.html";
+};
 if (quickHomeLink && RUNNING_AS_APP) {
   quickHomeLink.target = "_blank";
   quickHomeLink.rel = "noopener";
-  quickHomeLink.setAttribute("href", "/login.html");
+  quickHomeLink.setAttribute("href", quickLogin());
 }
-if (quickHomeLink && !RUNNING_AS_APP && !signedInNow()) quickHomeLink.setAttribute("href", "/login.html");
+if (quickHomeLink && !RUNNING_AS_APP && !signedInNow()) quickHomeLink.setAttribute("href", quickLogin());
 quickHomeLink?.addEventListener("click", () => {
-  if (!RUNNING_AS_APP) quickHomeLink.setAttribute("href", signedInNow() ? "/" : "/login.html");
+  if (!RUNNING_AS_APP) quickHomeLink.setAttribute("href", signedInNow() ? "/" : quickLogin());
 });
 quickBackLink?.addEventListener("click", () => {
-  if (!signedInNow()) quickBackLink.setAttribute("href", "/login.html");
+  if (!signedInNow()) quickBackLink.setAttribute("href", quickLogin());
 });
+window.QuickIcon?.apply(); // This device's look for the icon, in the links a phone reads when it's added to its home screen
 
 checkQuickKey();
 
@@ -177,7 +185,7 @@ async function addQuickEntry(panel, fields) {
   openQuickEntryForm(); // A fresh form for the next one
 }
 
-// The form's entry as the API keeps it: { title (with its Other Account, and the one a Transfer comes from), type, amount,
+// The form's entry as the API keeps it: { title (with its Equity account, and the one a Transfer comes from), type, amount,
 // date: "YYYY-MM-DD", and placeholder: true for a placeholder (until: the day it's deleted after, "YYYY-MM-DD", when one
 // was picked), percent for a % amount (see PERCENT_MARK in Process Budget.js), whose amount is
 // what it comes to with the account's balance today; the budget works it out again for its day, purpose: its title's
@@ -222,7 +230,7 @@ function keyStopped() {
 // =====================================================================
 // A prism is an entry someone adds often, saved with the budget (the API's /api/quick/prisms, one list per
 // account, so every icon has the same ones). It keeps any of a title, an amount, and a refraction type (an
-// Other Account is its title with Hidden or Transfer), but at least one. Tapping it puts those into New
+// Equity account is its title with Hidden or Transfer), but at least one. Tapping it puts those into New
 // Entry and leaves the rest to fill in. Add Prism turns New Entry into New Prism; Edit Prisms drags them
 // into order (≡) and deletes them (×). Every change saves the whole list.
 
@@ -283,6 +291,12 @@ function prismEditRow(prism, index) {
   handle.title = "Hold and drag to move";
   handle.setAttribute("aria-label", `Move ${label}`);
   handle.addEventListener("pointerdown", (event) => startPrismDrag(event, item));
+  BudgetUI.keyMoves(handle, index, quickPrisms.length, async (to) => {
+    const next = [...quickPrisms];
+    next.splice(to, 0, next.splice(index, 1)[0]);
+    await savePrisms(next);
+    document.querySelectorAll("#prismList .prismHandle")[to]?.focus({ preventScroll: true });
+  });
   const remove = BudgetUI.element("button", "panelClose prismDelete", "×");
   remove.type = "button";
   remove.setAttribute("aria-label", `Delete ${label}`);
@@ -313,7 +327,7 @@ function applyPrism(prism) {
   fields.fill({ title: prism.title, amount: prism.amount, percent: prism.percent ?? null, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "", placeholder: !!prism.placeholder });
   // An account renamed or deleted since the prism was saved isn't in the list, so it says to pick one
   if (prism.account && !quickAccounts.some(account => cleanString(account.name) === cleanString(prism.account))) {
-    BudgetUI.showToast(`${prism.account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
+    BudgetUI.showToast(`${prism.account} isn't one of your Equity accounts anymore. Pick one under Equity Account, or leave it as None.`, true);
   }
   highlightForm();
   const next = [fields.inputs.title, fields.inputs.amount].find(input => !input.value.trim());
@@ -343,7 +357,7 @@ async function savePrismFromForm(panel, fields) {
   const amount = percent !== null ? null : typedAmount;
   if (Number.isNaN(amount)) return panel.setError("Enter an amount, like 12.50, or leave it blank.");
   if (amount !== null && Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-  // The title and the Other Account are kept apart, so the title is never the account's name unless it was typed
+  // The title and the Equity account are kept apart, so the title is never the account's name unless it was typed
   const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null, ...(placeholder ? { placeholder: true } : {}), ...(percent ? { percent } : {}) };
   if (!prism.title && prism.amount === null && !prism.percent && !prism.type && !prism.account) {
     return panel.setError("Fill in or pick at least one thing for this prism: a title, an amount, a type, or an account.");
@@ -584,7 +598,7 @@ function changeWaiting(item) {
   openQuickEntryForm("change", { title, amount: item.amount, percent: item.percent ?? null, sprite: QUICK_ENTRY_TYPES[item.type] || "", account, from, placeholder: !!item.placeholder, until: until && !isNaN(until.getTime()) ? until : null, reminder: typeof item.remind === "number" ? item.remind : undefined, purpose: item.purpose, note: typeof item.note === "string" ? item.note : "" }, item);
   // An account renamed or deleted since isn't in the list, so it says to pick one
   if (account && !quickAccounts.some(known => cleanString(known.name) === cleanString(account))) {
-    BudgetUI.showToast(`${account} isn't one of your Other Accounts anymore. Pick one under Other Account, or leave it as None.`, true);
+    BudgetUI.showToast(`${account} isn't one of your Equity accounts anymore. Pick one under Equity Account, or leave it as None.`, true);
   }
   highlightForm();
 }

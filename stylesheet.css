@@ -48,7 +48,7 @@
  *
  * 15) FLOATING CARDS
  *
- *  Themes (Settings: Prismal, Professional, Dark, Spooky, Elements, Poison, Blue, Fall, Winter, Festive, Floral, Digital)
+ *  Themes (Settings: Prismal, Professional, Dark, Spooky, Elements, Poison, Blue, Fall, Winter, Festive, Floral, Digital, Love, Clovers, Playful, Mechanical)
  *  are in themes.css: each one sets the tokens in section 1 again, and changes a few rules of its own (its header lists
  *  everything a new theme needs).
  *
@@ -1084,6 +1084,33 @@ input {
 input[type="password"] {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   letter-spacing: 0.12em;
+}
+
+/* Where the Tab key is, in the theme's own color (what styles its own focus goes by that), and the link past the header that's
+   only there for the Tab key */
+:focus-visible {
+  outline: 2px solid var(--GLOW_EDGE);
+  outline-offset: 2px;
+}
+
+.cell-content:focus-visible {
+  outline-offset: -2px;
+}
+
+.skipLink {
+  position: fixed;
+  top: -5em;
+  left: 0.6em;
+  z-index: 10000;
+  padding: 0.5em 1em;
+  color: var(--TEXT_BRIGHT);
+  background: var(--LIST_FILL);
+  border: 1px solid var(--GLASS_LINE_BRIGHT);
+  border-radius: 8px;
+}
+
+.skipLink:focus {
+  top: 0.6em;
 }
 
 /* The box being typed in has a bright edge (GRADIENT BORDERS' boxes, at the end), and nothing else moves or glows */

@@ -44,8 +44,21 @@ const THEME_INFO = [
   { key: "festive", name: "Festive", about: "Red, green, gold, and lights" },
   { key: "floral", name: "Floral", about: "Pastel flowers" },
   { key: "digital", name: "Digital", about: "Blocky, black and green" },
+  { key: "love", name: "Love", about: "Pastel pinks, reds, and hearts" },
+  { key: "clovers", name: "Clovers", about: "Dark green, light grey, and clovers" },
+  { key: "playful", name: "Playful", about: "Spring pastels, eggs, and chicks" },
+  { key: "mechanical", name: "Mechanical", about: "Steel, brass, and gears" },
   { key: "custom", name: "Custom", about: "Your own" }
 ];
+// What the Quick Entry icon can show, and the biggest image it reads (it's cut down to the icon's size)
+const QUICK_ICON_CHOICES = [
+  { key: "prismal", label: "Prismal" },
+  { key: "minimal", label: "Minimal" },
+  { key: "blank", label: "Blank" },
+  { key: "emoji", label: "Emoji" },
+  { key: "image", label: "Image" }
+];
+const MAX_ICON_FILE = 15 * 1024 * 1024;
 const CUSTOM_COLORS = [
   { part: "background", label: "Background" },
   { part: "cards", label: "Cards" },
@@ -57,7 +70,7 @@ const CUSTOM_PARTS = [
   { part: "corners", label: "Corners", options: [["theme", "The theme's"], ["small", "Small"], ["sharp", "Sharp"]] },
   { part: "font", label: "Font", options: [["theme", "The theme's"], ["prismal", "Prismal's"], ["plain", "Plain"], ["sharp", "Sharp"], ["rounded", "Rounded"], ["digital", "Digital"]] },
   { part: "stars", label: "Stars", options: [["theme", "The theme's"], ["stars", "Stars"], ["dots", "Dots"], ["embers", "Embers and bats"], ["elements", "Elements"], ["bubbles", "Bubbles"],
-    ["leaves", "Leaves"], ["snow", "Snow"], ["ornaments", "Ornaments"], ["flowers", "Flowers"], ["pixels", "Pixels"]] },
+    ["leaves", "Leaves"], ["snow", "Snow"], ["ornaments", "Ornaments"], ["flowers", "Flowers"], ["pixels", "Pixels"], ["hearts", "Hearts"], ["clovers", "Clovers"], ["eggs", "Eggs"], ["gears", "Gears"]] },
   { part: "icons", label: "Icons", options: [["theme", "The theme's"], ["gray", "Gray"], ["glowing", "Glowing"]] }
 ];
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";
@@ -400,6 +413,7 @@ function wireThemes() {
     return button;
   }));
   renderThemes();
+  wireQuickIcon();
 }
 
 // Which one is picked, and Custom's swatch in its own colors once there is one
@@ -515,6 +529,7 @@ function openCustomTheme(origin) {
         }
         kept = true;
         renderThemes();
+        document.dispatchEvent(new CustomEvent("quickicon:colors"));
         panel.close();
         BudgetUI.showToast("Your Custom theme is on, on this device.");
       });
@@ -530,6 +545,116 @@ function openCustomTheme(origin) {
       Themes.preview(draft);
     }
   });
+}
+
+//#endregion
+
+// =====================================================================
+// #region QUICK ENTRY ICON (this device)
+// =====================================================================
+// Under Theme: how the Quick Entry icon looks on this device's home screen. Colors has one for each theme (and the Custom one
+// this device keeps), and Icon the site's usual picture, a minimal one, a blank one (just the colors), an emoji typed in, or
+// an uploaded image. Each change is drawn and kept right away (Quick Icon.js).
+
+function wireQuickIcon() {
+  const holder = document.getElementById("quickIconEditor");
+  if (!holder || !window.QuickIcon) return;
+  let chosen = QuickIcon.settings();
+
+  const preview = BudgetUI.element("img", "quickIconPreview");
+  preview.alt = "How the Quick Entry icon will look";
+  preview.src = chosen.picture || "/Favicon/apple-touch-icon.png";
+
+  // Draws what's picked, shows it, and keeps it (only the latest of several quick changes counts)
+  let latest = 0;
+  async function redraw() {
+    const mine = ++latest;
+    let picture = "";
+    try {
+      picture = await QuickIcon.draw(chosen);
+    } catch (error) {
+      BudgetUI.showToast("That icon couldn't be drawn. Please try another one.", true);
+      return;
+    }
+    if (mine !== latest) return;
+    chosen.picture = picture;
+    preview.src = picture || "/Favicon/apple-touch-icon.png";
+    if (!QuickIcon.save(chosen)) BudgetUI.showToast("This browser isn't keeping site data, so the icon can't be saved.", true);
+  }
+
+  // Colors: a button for each theme (Custom's once there is one), its swatch over its name
+  const colorChoices = BudgetUI.element("div", "choiceList themeChoices quickIconColors");
+  colorChoices.setAttribute("role", "radiogroup");
+  colorChoices.setAttribute("aria-label", "The icon's colors");
+  function drawColorChoices() {
+    const custom = Themes.custom();
+    if (chosen.colors === "custom" && !custom) chosen.colors = "prismal";
+    colorChoices.replaceChildren(...THEME_INFO.filter(theme => theme.key !== "custom" || custom).map(theme => {
+      const button = BudgetUI.element("button", "budgetButton choice themeChoice");
+      button.type = "button";
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", String(theme.key === chosen.colors));
+      const swatch = BudgetUI.element("span", "themeSwatch");
+      swatch.dataset.swatch = theme.key;
+      if (theme.key === "custom") swatch.style.background = `linear-gradient(135deg, ${custom.background} 0%, ${custom.cards} 40%, ${custom.glow} 75%, ${custom.chosen} 100%)`;
+      button.append(swatch, BudgetUI.element("span", "choiceName", theme.name));
+      button.addEventListener("click", () => {
+        chosen.colors = theme.key;
+        colorChoices.querySelectorAll(".themeChoice").forEach(other => other.setAttribute("aria-checked", String(other === button)));
+        redraw();
+      });
+      return button;
+    }));
+  }
+
+  // Icon: what's on it, with the emoji's box or the image's button under it while one of those is picked
+  const emoji = BudgetUI.textField({ label: "Emoji", value: chosen.emoji, placeholder: "Type one, like 🍕", maxLength: 16 });
+  emoji.input.addEventListener("input", () => {
+    chosen.emoji = QuickIcon.firstCharacter(emoji.input.value);
+    redraw();
+  });
+  const file = BudgetUI.element("input", "quickIconFile");
+  file.type = "file";
+  file.accept = "image/png,image/jpeg,image/webp,image/gif";
+  file.setAttribute("aria-label", "Upload an image for the icon");
+  const upload = BudgetUI.element("div", "quickIconUpload");
+  const uploadNote = BudgetUI.element("p", "panelHint", "It's cut to a square from its middle, and stays on this device.");
+  upload.append(file, uploadNote);
+  file.addEventListener("change", async () => {
+    const picked = file.files[0];
+    if (!picked) return;
+    if (picked.size > MAX_ICON_FILE) return BudgetUI.showToast("That image is too big. Pick one under 15 MB.", true);
+    try {
+      chosen.image = await QuickIcon.readImage(picked);
+    } catch (error) {
+      return BudgetUI.showToast("That image couldn't be read. Pick a PNG or JPEG.", true);
+    }
+    redraw();
+  });
+  const showIconParts = () => {
+    emoji.el.hidden = chosen.icon !== "emoji";
+    upload.hidden = chosen.icon !== "image";
+  };
+  const icons = BudgetUI.segmented(QUICK_ICON_CHOICES, chosen.icon, (key) => {
+    chosen.icon = key;
+    showIconParts();
+    redraw();
+  });
+  showIconParts();
+
+  // (A new Custom theme changes Custom's button, and an icon in its colors)
+  document.addEventListener("quickicon:colors", () => {
+    drawColorChoices();
+    if (chosen.colors === "custom") redraw();
+  });
+  drawColorChoices();
+  if (chosen.colors === "custom") redraw();
+
+  const top = BudgetUI.element("div", "quickIconTop");
+  const words = BudgetUI.element("div", "quickIconWords");
+  words.append(BudgetUI.element("h4", "", "Quick Entry Icon"), BudgetUI.element("p", "panelHint", "How the icon looks when Quick Entry is added to this device's home screen. This device keeps it with its theme, even when you sign out. An icon that's already there keeps the look it was added with: tap Quick Entry on Home and add it again for the new one."));
+  top.append(preview, words);
+  holder.replaceChildren(top, BudgetUI.field("Colors", colorChoices), BudgetUI.field("Icon", icons.el), emoji.el, upload);
 }
 
 //#endregion
@@ -1145,14 +1270,14 @@ document.addEventListener("visibilitychange", async () => {
 // #region SIGNED-IN DEVICES (Quick Entry icons and their balances, Sign Out Everywhere)
 // =====================================================================
 
-// Whether Quick Entry icons show balances: In Bank today, the lowest it gets, and the Other Accounts' balances (a
+// Whether Quick Entry icons show balances: In Bank today, the lowest it gets, and the Equity accounts' balances (a
 // setting of the account, so every icon follows it; off, they show the accounts' names only)
 function renderQuickBalances() {
   const toggle = document.getElementById("quickBalancesSwitch");
   toggle.checked = account.quickBalances !== false;
   document.getElementById("quickBalancesNote").textContent = toggle.checked
-    ? "Quick Entry icons show In Bank today, the lowest it gets, and your Other Accounts' balances."
-    : "Off: Quick Entry icons don't show In Bank or any balances, just your Other Accounts' names (to pick one).";
+    ? "Quick Entry icons show In Bank today, the lowest it gets, and your Equity accounts' balances."
+    : "Off: Quick Entry icons don't show In Bank or any balances, just your Equity accounts' names (to pick one).";
 }
 
 // The switch was flipped: saved with the account (the icons follow it the next time they're opened or add an entry)
@@ -1180,7 +1305,7 @@ function renderQuickIcons() {
     status.textContent = "Quick Entry icons: none right now. The Quick Entry button on Home makes one for a phone's home screen.";
     return;
   }
-  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see your Other Accounts (for its account picker) and, unless they're off below, In Bank today, the lowest it gets, and the accounts' balances, and keep your prisms, but nothing else.`;
+  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see your Equity accounts (for its account picker) and, unless they're off below, In Bank today, the lowest it gets, and the accounts' balances, and keep your prisms, but nothing else.`;
   buttons.append(settingsButton(count === 1 ? "Turn Off The Icon" : "Turn Off Icons", "danger", turnOffQuickIcons));
 }
 

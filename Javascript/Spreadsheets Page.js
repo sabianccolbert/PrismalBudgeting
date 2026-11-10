@@ -37,7 +37,7 @@ window.workspaceReady.then(async (loaded) => {
 // grows into the entry form once the spreadsheet opens: each part of an entry has a yellow ➕ that opens a
 // second panel to pick its tab and cells, and all but the date can be typed in instead.
 
-// The parts of an entry, in the order the form shows them (the refraction type and Other Account before the amount, which can
+// The parts of an entry, in the order the form shows them (the refraction type and Equity account before the amount, which can
 // be a % of the account)
 const SHEET_FIELD_KEYS = ["date", "title", "type", "account", "amount"];
 const SHEET_SIGNS = [{ key: "written", label: "As Written" }, { key: "costs", label: "All Costs" }, { key: "gains", label: "All Gains" }];
@@ -195,7 +195,7 @@ function openSheetPanel(id, origin) {
       titleInput.type = "text";
       titleInput.placeholder = "Rent, paycheck...";
       titleInput.maxLength = MAX_TITLE;
-      // Amount, typed, with Cost / Gain (or a % of the Other Account picked, see PERCENT_MARK in Process Budget.js)
+      // Amount, typed, with Cost / Gain (or a % of the Equity account picked, see PERCENT_MARK in Process Budget.js)
       const typedValue = typeof draft.fields.amount?.value === "number" ? draft.fields.amount.value : null;
       const typedPercent = draft.fields.amount?.percent === true;
       const amount = BudgetUI.amountField({ amount: typedPercent ? null : typedValue, percent: typedPercent ? typedValue : null });
@@ -207,7 +207,7 @@ function openSheetPanel(id, origin) {
         showAccountRow();
         updatePreview();
       });
-      // Other Account, picked: one for every entry
+      // Equity account, picked: one for every entry
       const account = BudgetUI.element("select", "selectInput accountSelect");
       account.append(new Option("None", ""), ...accountNames.map(accountName => new Option(accountName, accountName)));
       account.value = accountNames.includes(draft.fields.account?.value) ? draft.fields.account.value : "";
@@ -218,7 +218,7 @@ function openSheetPanel(id, origin) {
       rows.title = sheetFieldRow("title", titleInput, "Each entry's title, or type one for all of them.");
       rows.amount = sheetFieldRow("amount", amountControl, "Each entry's amount, or type one for all of them.", sign.el);
       rows.type = sheetFieldRow("type", type.el, "Regular, Hidden, or Transfer (an empty cell is Regular), or pick one for all of them.");
-      rows.account = sheetFieldRow("account", account, "An Other Account's name (an empty cell is none), or pick one for all of them. For Hidden and Transfer entries.");
+      rows.account = sheetFieldRow("account", account, "An Equity account's name (an empty cell is none), or pick one for all of them. For Hidden and Transfer entries.");
       BudgetUI.addFieldHelp(rows.type.el, "What the refraction types do", refractionTypesHelp());
 
       // Its entries can all be placeholders (they land from today on, so it's always offered)
@@ -295,7 +295,7 @@ function openSheetPanel(id, origin) {
         if (row.linkedExtra) row.linkedExtra.hidden = !linked;
       }
 
-      // Other Account shows for Hidden and Transfer (or when either comes from cells)
+      // Equity account shows for Hidden and Transfer (or when either comes from cells)
       function showAccountRow() {
         const typeLinked = Spreadsheets.isLinked(draft.fields.type);
         const accountLinked = Spreadsheets.isLinked(draft.fields.account);
@@ -575,8 +575,8 @@ function refractionTypesHelp() {
     list.append(li);
   };
   item("❗️", "Regular", "a normal cost or gain. It changes In Bank.");
-  item("✖️", "Hidden", "spent or received outside your budget's account, like cash. In Bank stays the same; an Other Account changes by its amount.");
-  item("⭕️", "Transfer", "money moving between your own accounts. It changes In Bank, but isn't a cost or gain; an Other Account gets the opposite amount.");
+  item("✖️", "Hidden", "spent or received outside your budget's account, like cash. In Bank stays the same; an Equity account changes by its amount.");
+  item("⭕️", "Transfer", "money moving between your own accounts. It changes In Bank, but isn't a cost or gain; an Equity account gets the opposite amount.");
   return list;
 }
 

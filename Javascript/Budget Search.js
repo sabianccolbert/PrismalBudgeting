@@ -9,7 +9,7 @@ wireSearch(); // Works right away (a search before the budget loads says it's st
 // The query whose results are showing (null for none), to look again after a change
 let shownSearch = null;
 
-// Suggestions for a title's Tracker button follow the tracker's rows, and the Other Account filter the accounts
+// Suggestions for a title's Tracker button follow the tracker's rows, and the Equity account filter the accounts
 window.workspaceReady.then((loaded) => { if (loaded) { fillTrackerRowTitles(); fillAccountFilter(); } });
 document.addEventListener("budget:updated", () => {
   if (!workspaceLoaded) return;
@@ -33,13 +33,13 @@ function refreshSearchResults() {
   }
 }
 
-// The Other Account filter: any, none, or one of the accounts (keeping the one picked while it's still there)
+// The Equity account filter: any, none, or one of the accounts (keeping the one picked while it's still there)
 function fillAccountFilter() {
   const select = document.getElementById("searchAccount");
   if (!select) return;
   const picked = select.value;
   const names = typeof accountsData !== "undefined" && accountsData ? accountRows().map(account => account.name) : [];
-  select.replaceChildren(new Option("Any account", ""), new Option("No Other Account", "none"), ...names.map(name => new Option(name, name)));
+  select.replaceChildren(new Option("Any account", ""), new Option("No Equity Account", "none"), ...names.map(name => new Option(name, name)));
   select.value = picked === "none" || names.includes(picked) ? picked : "";
 }
 
@@ -124,7 +124,7 @@ function wireSearch() {
   if (pageAddButton) pageAddButton.replaceWith(terms.addButton);
   else form.querySelector(".searchDates")?.prepend(terms.addButton);
 
-  // Filters: one refraction type, and one Other Account (or entries with none). A list can't show the type's
+  // Filters: one refraction type, and one Equity account (or entries with none). A list can't show the type's
   // image (only the device's own emoji), so types are in words.
   const filters = BudgetUI.element("div", "searchFilters");
   const typeFilter = BudgetUI.element("select", "selectInput");
@@ -133,7 +133,7 @@ function wireSearch() {
   typeFilter.append(new Option("Any type", ""), ...[...REFRACTION_NAMES].map(([sprite, name]) => new Option(name, sprite)));
   const accountFilter = BudgetUI.element("select", "selectInput");
   accountFilter.id = "searchAccount";
-  accountFilter.setAttribute("aria-label", "Other Account");
+  accountFilter.setAttribute("aria-label", "Equity Account");
   filters.append(typeFilter, accountFilter);
   form.querySelector(".searchDates")?.before(filters);
   fillAccountFilter();
@@ -203,7 +203,7 @@ function fillTrackerRowTitles() {
 // unless a tracker row that counts transfers found them. Tapping a result (anywhere but its checkbox) opens its options,
 // the same as on a zoomed day: one in History keeps the balances, and one that would land by itself after the calendar
 // (a recurring entry's or a connected spreadsheet's, still to come) goes into Upcoming for its day once it's changed. A
-// search that looks past today ends with Go To Accounts (goToAccounts).
+// search that looks past today ends with Go To Equity (goToEquity).
 function renderSearchResults({ results, from, to, searchingFor, toDay }) {
   const container = document.getElementById("searchResults");
   container.replaceChildren();
@@ -224,7 +224,7 @@ function renderSearchResults({ results, from, to, searchingFor, toDay }) {
 
   if (results.length === 0) {
     container.appendChild(BudgetUI.element("p", "searchMessage", "No entries found."));
-    goToAccounts(container, toDay);
+    goToEquity(container, toDay);
     return;
   }
 
@@ -269,7 +269,7 @@ function renderSearchResults({ results, from, to, searchingFor, toDay }) {
     checkbox.dataset.amount = result.amount;
     checkbox.setAttribute("aria-label", `Count ${result.title}`);
     checkCell.appendChild(checkbox);
-    tr.appendChild(BudgetUI.element("td", "", showDate(result.date)));
+    tr.appendChild(BudgetUI.element("td", "searchDate", showWeekdayDate(result.date)));
     const amountCell = BudgetUI.element("td", "amountCell", formatMoney(result.amount));
     if (result.amount > 0) amountCell.classList.add("positive");
     if (result.amount < 0) amountCell.classList.add("negative");
@@ -283,6 +283,7 @@ function renderSearchResults({ results, from, to, searchingFor, toDay }) {
     if (lineHasNote(result.date, line)) entryCell.classList.add("hasNote");
     BudgetUI.noTranslate(tr); // Dates, amounts, and entries show as they are
     tr.classList.add("clickable");
+    BudgetUI.makePressable(tr);
     tr.addEventListener("click", (event) => {
       if (event.target.closest("input, td:first-child")) return; // (Its checkbox)
       BudgetUI.openEntryOptions(entryCell, line, result.date, { inHistory: result.date < gridStartDate });
@@ -309,17 +310,17 @@ function renderSearchResults({ results, from, to, searchingFor, toDay }) {
   const scroll = BudgetUI.element("div", "dataScroll searchScroll");
   scroll.appendChild(tableEl);
   container.appendChild(scroll);
-  goToAccounts(container, toDay);
+  goToEquity(container, toDay);
 }
 
-// A search that looks past today ends with Go To Accounts: Bob's Accounts card (on his page), with every balance on the
-// search's To day (up to the 10 years it looks ahead)
-function goToAccounts(container, toDay) {
+// A search that looks past today ends with Go To Equity: the Equity window on Bob's page, with every balance on the search's
+// To day (up to the 10 years it looks ahead)
+function goToEquity(container, toDay) {
   if (!(toDay instanceof Date) || isNaN(toDay.getTime()) || toDay <= today) return;
   const furthest = addMonths(today, 120);
-  const link = BudgetUI.element("a", "budgetButton searchAccounts", "Go To Accounts");
-  link.href = `/menu/bob.html?day=${formatToYMD(toDay > furthest ? furthest : toDay)}#accountsCard`;
-  link.title = `Every account's balance on ${showDate(toDay > furthest ? furthest : toDay)}, on Bob's Accounts card`;
+  const link = BudgetUI.element("a", "budgetButton searchAccounts", "Go To Equity");
+  link.href = `/menu/bob.html?day=${formatToYMD(toDay > furthest ? furthest : toDay)}&open=equity#dataCard`;
+  link.title = `Every account's balance on ${showDate(toDay > furthest ? furthest : toDay)}, in the Equity window on Bob's page`;
   const row = BudgetUI.element("div", "panelButtons searchAccountsRow");
   row.append(link);
   container.append(row);

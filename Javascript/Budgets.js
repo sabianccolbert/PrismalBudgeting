@@ -438,7 +438,7 @@ window.Budgets = (() => {
       stacked: !!(listPanel && listPanel.panel.isConnected && !listPanel.panel.classList.contains("isClosing")),
       title: "New Budget",
       build(form, panel) {
-        form.append(el("p", "panelText", "It starts empty, with its own calendar, entries, Other Accounts, and Bob. You can share it once it's made."));
+        form.append(el("p", "panelText", "It starts empty, with its own calendar, entries, Equity, and Bob. You can share it once it's made."));
         const name = BudgetUI.textField({ label: "Name", placeholder: "Like Household or Vacation" });
         name.input.maxLength = 30;
         form.append(name.el, BudgetUI.buttonRow([

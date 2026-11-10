@@ -127,8 +127,8 @@ function calendarItem(connection) {
 // =====================================================================
 // #region ITS PANEL
 // =====================================================================
-// The link first (Open Calendar reads it), then, once it's open: its name, the paychecks' title, refraction type, Other
-// Account, and Placeholder switch (like a spreadsheet's typed parts), the pay (one version for each time it changed:
+// The link first (Open Calendar reads it), then, once it's open: its name, the paychecks' title, refraction type, Equity
+// account, and Placeholder switch (like a spreadsheet's typed parts), the pay (one version for each time it changed:
 // Pay Change adds one, and blank boxes in a later one are the one before it's), pay by event title, which events
 // count, and what it all comes to.
 
@@ -379,18 +379,18 @@ function openCalendarPanel(id, origin) {
       section.hidden = !existing;
       const name = BudgetUI.textField({ label: "Name", value: existing ? existing.name : "", placeholder: "Work, Second job...", maxLength: MAX_SHEET_NAME });
 
-      // The paychecks: title, refraction type, Other Account (for Hidden and Transfer), and Placeholder
+      // The paychecks: title, refraction type, Equity account (for Hidden and Transfer), and Placeholder
       const fields = existing?.fields || {};
       const accountNames = otherAccounts().map(account => account.name);
       const title = BudgetUI.textField({ label: "Paychecks' title", value: String(fields.title?.value ?? ""), placeholder: Calendars.DEFAULT_TITLE, maxLength: MAX_TITLE, hint: `Each paycheck's entry is called this. Blank: ${Calendars.DEFAULT_TITLE}.` });
       const type = BudgetUI.segmented(BudgetUI.REFRACTION_TYPES, ["❗️", "✖️", "⭕️"].includes(fields.type?.value) ? fields.type.value : "❗️", () => { showAccountRow(); schedulePreview(); });
-      const typeField = BudgetUI.field("Refraction Type", type.el, { hint: "Regular for pay that goes into your budget's account. Hidden, with an Other Account, for pay that goes somewhere else." });
+      const typeField = BudgetUI.field("Refraction Type", type.el, { hint: "Regular for pay that goes into your budget's account. Hidden, with an Equity account, for pay that goes somewhere else." });
       BudgetUI.addFieldHelp(typeField, "What the refraction types do", refractionTypesHelp());
       const account = BudgetUI.element("select", "selectInput accountSelect");
       account.append(new Option("None", ""), ...accountNames.map(accountName => new Option(accountName, accountName)));
       account.value = accountNames.includes(fields.account?.value) ? fields.account.value : "";
       account.addEventListener("change", schedulePreview);
-      const accountField = BudgetUI.field("Other Account", account, { hint: "The account its paychecks change, for Hidden and Transfer." });
+      const accountField = BudgetUI.field("Equity Account", account, { hint: "The account its paychecks change, for Hidden and Transfer." });
       const placeholder = BudgetUI.placeholderField({
         checked: !!existing?.placeholder,
         hint: "Every paycheck it adds is a placeholder: a stand-in, since a paycheck worked out ahead is an estimate. They count like any entry and show in yellow, and each is deleted once its day passes."
@@ -481,7 +481,7 @@ function openCalendarPanel(id, origin) {
         primary.textContent = !opened ? "Open Calendar" : (existing ? "Save" : "Save Calendar");
       }
 
-      // Other Account shows for Hidden and Transfer
+      // Equity account shows for Hidden and Transfer
       function showAccountRow() {
         accountField.hidden = !BudgetUI.isAccountType(type.value()) || accountNames.length === 0;
       }
