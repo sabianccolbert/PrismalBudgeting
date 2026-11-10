@@ -52,9 +52,12 @@ const BudgetUI = (() => {
     const panel = element("section", `budgetPanel ${size}${floating ? " floating" : ""}${panelsUnder.length > 0 ? " stacked" : ""}`);
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", title);
+    if (!inline) panel.setAttribute("aria-modal", "true");
+    panel.tabIndex = -1; // (Focus can start on the window itself, so a screen reader says what it is)
 
     const header = element("header", "panelHeader");
-    header.appendChild(element("h3", "", title));
+    header.setAttribute("role", "none");
+    header.appendChild(element("h2", "", title));
     const closeButton = element("button", "panelClose", "×");
     closeButton.type = "button";
     closeButton.setAttribute("aria-label", "Close");
@@ -97,6 +100,8 @@ const BudgetUI = (() => {
     if (buttons) buttons.parentNode.insertBefore(error, buttons);
     else form.append(error);
     closeButton.addEventListener("click", () => closePanel());
+    // The Tab key stays in a floating window: past its last control it goes back to its first
+    if (!inline) panel.addEventListener("keydown", (event) => keepTabInside(event, panel));
 
     // Floating panels go in the screen layer (Layout.js): each opens on the part of the page that's on the screen, then
     // stays put on the page, which can be scrolled and pinch-zoomed with it (the layer isn't in the page's
@@ -127,6 +132,8 @@ const BudgetUI = (() => {
       const firstField = form.querySelector("input:not([type=checkbox]):not(:disabled):not([data-skip-focus]), textarea:not(:disabled), select:not(:disabled)");
       if (firstField) firstField.focus({ preventScroll: true });
     }
+    // (Nothing in it took the focus, like on a phone: the window does, so it's read out and the Tab key starts in it)
+    if (!inline && !panel.contains(document.activeElement)) panel.focus({ preventScroll: true });
 
     currentPanel = api;
     return api;
@@ -153,7 +160,10 @@ const BudgetUI = (() => {
       under.panel.classList.remove("isUnder");
       currentPanel = under;
       if (api.origin && under.panel.contains(api.origin) && api.origin.isConnected) api.origin.focus({ preventScroll: true });
+      return;
     }
+    // (Back to what opened it, so the Tab key and a screen reader carry on from there)
+    if (!immediate && !api.inline && api.origin?.isConnected) api.origin.focus?.({ preventScroll: true });
   }
 
   // Close every open panel, stacked ones too
@@ -276,7 +286,7 @@ const BudgetUI = (() => {
   // Amount with a Cost/Gain toggle (or another pair of names for the two signs: BALANCE_SIGNS for a balance, which
   // starts on + instead). It's typed like a cash register (cashRegister below), and an amount of 0 shows as a blank
   // box with 0.00 as its hint. value(): signed number, null when blank (callers count that as 0), NaN when unreadable.
-  // An entry's amount can be a % of the Other Account picked instead (see PERCENT_MARK in Process Budget.js): a $ / %
+  // An entry's amount can be a % of the Equity account picked instead (see PERCENT_MARK in Process Budget.js): a $ / %
   // switch shows while the account field allows it (setPercentAllowed; never with allowPercent false, like for a day
   // that passed), and percent starts it on % (signed). isPercent(): % is picked. percent(): the signed percent typed,
   // null when blank, NaN when unreadable.
@@ -294,12 +304,14 @@ const BudgetUI = (() => {
     if (percent) sign = Math.sign(percent);
     const toggle = segmented([{ key: -1, label: signs[0] }, { key: 1, label: signs[1] }], sign, (key) => setSign(key));
     const percentInput = element("input", "amountInput percentInput");
+    const signListeners = [];
     // Cost (-1) or Gain (1); a gain's box shows green
     function setSign(key) {
       sign = key;
       toggle.set(key);
       input.classList.toggle("positive", sign > 0); // Positive entries show green
       percentInput.classList.toggle("positive", sign > 0);
+      signListeners.forEach(listener => listener(key));
     }
     setSign(sign);
     cashRegister(input, setSign); // Typing - or + flips the toggle instead
@@ -322,7 +334,7 @@ const BudgetUI = (() => {
     let unit = percent ? "%" : "$";
     const unitToggle = segmented([{ key: "$", label: "$" }, { key: "%", label: "%" }], unit, (key) => setUnit(key));
     unitToggle.el.classList.add("unitToggle");
-    unitToggle.el.setAttribute("aria-label", "Dollars or a percent of the Other Account");
+    unitToggle.el.setAttribute("aria-label", "Dollars or a percent of the Equity account");
     unitToggle.el.hidden = true;
     const isPercent = () => unit === "%" && !unitToggle.el.hidden;
     function showUnit() {
@@ -342,6 +354,9 @@ const BudgetUI = (() => {
       el: field(label, row, { optional, hint }),
       input,
       setSign,
+      // Which sign is picked (-1 or 1), and listener(sign) runs whenever it changes
+      sign: () => sign,
+      onSign: (listener) => signListeners.push(listener),
       value() {
         if (input.value.trim() === "") return null;
         const number = readMoneyInput(input.value); // "4,50" is 4.50 (see Process Budget.js)
@@ -437,8 +452,8 @@ const BudgetUI = (() => {
       list.appendChild(li);
     };
     item("❗️", "Regular", "a normal cost or gain. It changes In Bank, and the tracker counts it.");
-    item("✖️", "Hidden", "money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same. With an Other Account picked, that account changes by the same amount: a cost takes from it, and a gain adds to it.");
-    item("⭕️", "Transfer", "money moving between your own accounts, like depositing cash. It changes In Bank, but it isn't a cost or gain, so the day's Gains and Costs leave it out, and in the tracker only the Transfers row (and rows set to count transfers) count it. With an Other Account picked, that account gets the opposite: a cost here adds to it, and a gain takes from it.");
+    item("✖️", "Hidden", "money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same. With an Equity account picked, that account changes by the same amount: a cost takes from it, and a gain adds to it.");
+    item("⭕️", "Transfer", "money moving between your own accounts, like depositing cash. It changes In Bank, but it isn't a cost or gain, so the day's Gains and Costs leave it out, and in the tracker only the Transfers row (and rows set to count transfers) count it. With an Equity account picked, that account gets the opposite: a cost here adds to it, and a gain takes from it.");
     if (allowAuto) item("", "Auto", "uses the type of an entry with this title already on that day, or Regular if there isn't one.");
     else list.appendChild(element("li", "", "Recurring entries show these behind a ✔️ (✔️ is Regular), and connected spreadsheets' entries behind a ➕."));
     return list;
@@ -477,6 +492,24 @@ const BudgetUI = (() => {
     fieldEl.insertBefore(help, fieldEl.children[1].nextSibling);
   }
 
+  // A table row that opens something, for keyboards: a stop for the Tab key that Enter or Space presses (Layout.js's ACCESSIBILITY)
+  function makePressable(row) {
+    row.tabIndex = 0;
+    row.dataset.pressable = "1";
+  }
+
+  // A ≡ handle for keyboards: a stop for the Tab key whose up and down arrow keys move its item (at, of count), and move(to) does it
+  function keyMoves(handle, at, count, move) {
+    handle.tabIndex = 0;
+    handle.setAttribute("role", "button");
+    handle.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      event.preventDefault();
+      const to = at + (event.key === "ArrowUp" ? -1 : 1);
+      if (to >= 0 && to < count) move(to);
+    });
+  }
+
   // Buttons where exactly one is picked (like segmented's), each with its words and, when it has one, a second line under
   // them (an account's balance). options: [{ key, label, detail (the second line, or none), negative (the detail is below
   // $0, so it's red), own (the person's words, kept out of the browser's translation) }]. onChange(key) runs when one is
@@ -512,7 +545,7 @@ const BudgetUI = (() => {
     return { el: group, value: () => current, set, setOptions };
   }
 
-  // An Other Account in a choiceList: its name, with its balance today under it (and the most it can hold, when it has a
+  // An Equity account in a choiceList: its name, with its balance today under it (and the most it can hold, when it has a
   // max: "$500.00/$2000.00"), or just its name when there's no balance to show (Quick Entry with balances off)
   function accountChoice({ name, balance = null, max = null }, key = name) {
     const hasBalance = typeof balance === "number";
@@ -520,7 +553,7 @@ const BudgetUI = (() => {
     return { key, label: name, own: true, detail, negative: hasBalance && balance < 0 };
   }
 
-  // A dropdown for choices with a second line (an Other Account's balance, see accountChoice), which a select box can't
+  // A dropdown for choices with a second line (an Equity account's balance, see accountChoice), which a select box can't
   // show: a box with the picked one in it and, under it while it's open, the list of them, each its words over its
   // second line. A tap or a click (or Enter, Space, or an arrow key) opens it, and a tap, Enter, or Space picks;
   // Escape, Tab, or a tap anywhere else closes it, and typing a name's first letters moves to it. options, onChange,
@@ -661,12 +694,12 @@ const BudgetUI = (() => {
     return { el: wrap, value: () => current, set, setOptions, close };
   }
 
-  // The Other Account an entry moves money into or out of, shown while Hidden or Transfer is picked. It's picked on
+  // The Equity account an entry moves money into or out of, shown while Hidden or Transfer is picked. It's picked on
   // its own and never changes the title: the entry is saved as "Title → Account" (withAccount in Process Budget.js).
   // Only a picked account links the entry: a title that's an account's name doesn't pick it. A Transfer changes the
   // account by the opposite of its amount (the money moved from or to In Bank), a Hidden entry by its own amount
   // (accountChange). It's a dropdown of the accounts, each with its balance today on a second line (accountChoice).
-  // A Transfer with an account picked can come From another Other Account instead of In Bank (a second dropdown, In Bank
+  // A Transfer with an account picked can come From another Equity account instead of In Bank (a second dropdown, In Bank
   // to start): then that account plays In Bank's part ("Move ← Savings → HSA", see fromAccount), and In Bank doesn't
   // change. accounts: in order, [{ name, balance, max }], or just names.
   // amount: the form's amountField. type(): the picked refraction type. account and from: picked to start.
@@ -675,9 +708,9 @@ const BudgetUI = (() => {
   function accountField({ accounts = [], amount, type = () => "⭕️", account = "", from = "" }) {
     let list = [];
     let shown = false; // Hidden or Transfer is picked (see setVisible)
-    const choices = dropdownList([], "", () => describe(), "Other Account");
+    const choices = dropdownList([], "", () => describe(), "Equity Account");
     choices.el.classList.add("accountDropdown");
-    const wrapper = field("Other Account", choices.el, { optional: true });
+    const wrapper = field("Equity Account", choices.el, { optional: true });
     const fromChoices = dropdownList([], "", () => describe(), "From");
     fromChoices.el.classList.add("accountDropdown");
     const fromField = field("From", fromChoices.el);
@@ -997,7 +1030,7 @@ const BudgetUI = (() => {
     picker.el.classList.add("purposeChoices");
     noTranslate(picker.el); // (Their own names)
     const hint = lookup
-      ? "Every entry with this title shares it. Bob's Wavelength Planning card adds up what each one costs."
+      ? "Every entry with this title shares it. Bob's Wavelength Planning card adds up what each one costs, and its Add Or Change Wavelengths button makes your own."
       : "Every entry with this title shares it. Left unpicked, the title keeps the one it has.";
     const el = field("Wavelength", picker.el, { hint });
     el.classList.add("purposeField");
@@ -1234,6 +1267,7 @@ const BudgetUI = (() => {
       const button = element("button", "budgetButton", option.label);
       button.type = "button";
       button.setAttribute("role", "radio");
+      if (option.name) button.setAttribute("aria-label", option.name); // (What a screen reader says for a symbol)
       button.addEventListener("click", () => {
         set(option.key);
         if (onChange) onChange(option.key);
@@ -1250,7 +1284,7 @@ const BudgetUI = (() => {
     return { el: group, value: () => current, set };
   }
 
-  // The New Entry form's fields: title, optional refraction type, for Hidden or Transfer the Other Account it moves money
+  // The New Entry form's fields: title, optional refraction type, for Hidden or Transfer the Equity account it moves money
   // into or out of (accounts: [{ name, balance, max }], or names), then the amount (cost or gain: with an account, it can
   // be a % of it, which is why the account comes first), date, Placeholder (for a day from today on), and its
   // Wavelength (purposes: whether to ask, see purposeField; purposeLookup: null where there's no budget to look in,
@@ -1258,7 +1292,7 @@ const BudgetUI = (() => {
   // match. Its note (noteEl, see noteField) goes under the form's buttons. noteMax: the longest a note can be (0 for no
   // limit). read(): { entry: { title, amount, date, sprite, placeholder, purpose, note } } when it's filled in right,
   // otherwise
-  //   { error }. The title carries the Other Account picked: "Title → Account" (or just the account's name when no title
+  //   { error }. The title carries the Equity account picked: "Title → Account" (or just the account's name when no title
   //   is typed).
   // values(): what's in it now, filled in or not: { title, amount (signed, null when blank, NaN when
   //   unreadable), sprite ("" for Auto), account ("" for none), date (null when blank, undefined when it isn't a day),
@@ -1266,7 +1300,7 @@ const BudgetUI = (() => {
   // fill({ title, amount, sprite, account, placeholder, purpose, note }): puts these in, leaving the fields they don't
   //   have as they are (the Quick Entry page's prisms). dateEl and purposeEl: those fields, for a form that doesn't need
   //   them.
-  // setAccounts(accounts): new balances for the Other Account list (the Quick Entry page's, after an Undo or Redo)
+  // setAccounts(accounts): new balances for the Equity account list (the Quick Entry page's, after an Undo or Redo)
   function newEntryFields({ date = today, accounts = [], purposes = bobCardOn("purposes"), purposeLookup = purposeOf, wavelengths = null, noteMax = 0 } = {}) {
     const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas...", maxLength: MAX_TITLE });
     const amount = amountField();
@@ -1349,13 +1383,13 @@ const BudgetUI = (() => {
   // An entry's options (an entry tapped on a zoomed day on Home or History, in Upcoming, an account's Entries, or Search's
   // results): line is the entry as its day stores it ("❗️ -$4.50 Coffee") on date. Its title (see renameEntry in Process
   // Budget.js: any entry before today, and from today on one that doesn't land by itself from a recurring entry or a
-  // connected spreadsheet), its refraction type and Other Account, Set to or Add to it, Move to another day, whether it's a
+  // connected spreadsheet), its refraction type and Equity account, Set to or Add to it, Move to another day, whether it's a
   // placeholder (for a day from today on), its reminder (for a day after today), its title's Wavelength (once Bob's card
   // for it is on), Delete, and its note (under the buttons). Changing its type or account takes it off as it is and puts it on as the new one,
   // adding into an entry already on that day with the same title and type (changeEntryKind). One that lands
   // by itself on a day after the calendar (Search's, which isn't in the budget yet) goes into Upcoming for that day once
   // it's changed, the way a changed day on the calendar does. inHistory: a day in History, where the same changes keep
-  // the balances (In Bank, and the Other Accounts'; see changeHistoryEntry) and it only moves to another day in History.
+  // the Equity accounts' balances (see changeHistoryEntry). Moving an entry off a day before today asks first (confirmPastMove),
   // stacked: it opens over the panel that's open (an account's Entries), which comes back when it closes. The panel
   // shows the whole entry, however long its title.
   function openEntryOptions(origin, line, date, { lineIndex = 1, inHistory = false, stacked = false } = {}) {
@@ -1377,18 +1411,24 @@ const BudgetUI = (() => {
       build(form, panel) {
         const display = renderEntryLine(line, lineIndex, date);
         display.classList.add("panelEntry");
-        // An entry for an Other Account changes it: a Transfer by the opposite amount, a Hidden entry by its own (and a
-        // Transfer from another Other Account changes that one by its amount, and In Bank not at all)
+        // An entry for an Equity account changes it: a Transfer by the opposite amount, a Hidden entry by its own (and a
+        // Transfer from another Equity account changes that one by its amount, and In Bank not at all)
         const account = linkedAccount(parts[0], title);
         const source = account ? fromAccount(parts[0], title) : null;
         const accountNote = !account ? null : element("p", "panelHint", source
-          ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, and ${source.name} gets its amount, since the money moves between them. In Bank doesn't change.`
+          ? `${account.name} (Equity) gets the opposite of this entry's amount, and ${source.name} gets its amount, since the money moves between them. In Bank doesn't change.`
           : refraction === "⭕️"
-            ? `${account.name} (Other Accounts) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
-            : `${account.name} (Other Accounts) changes by this entry's amount, and In Bank doesn't.`);
-        const historyNote = inHistory
-          ? element("p", "panelHint", "This day is in History, so changing this entry doesn't change In Bank or your Other Accounts' balances. The tracker and Search count the change.")
-          : null;
+            ? `${account.name} (Equity) gets the opposite of this entry's amount, since the money moves between it and In Bank.`
+            : `${account.name} (Equity) changes by this entry's amount, and In Bank doesn't.`);
+        // What a change here does to In Bank (see IN BANK AND THE LAST CATCHUP in Process Budget.js)
+        const catchupDay = date < today ? lastCatchupDay() : null;
+        const heldByCatchup = !!catchupDay && date <= catchupDay;
+        const accountsStay = inHistory ? " Your Equity accounts' balances today stay as they are." : "";
+        const historyNote = heldByCatchup
+          ? element("p", "panelHint", `Your last Catchup is on ${showDate(catchupDay)}, so a change on this day doesn't change In Bank.${accountsStay} The tracker and Search count the change.`)
+          : inHistory
+            ? element("p", "panelHint", `${catchupDay ? `This day is after your last Catchup (${showDate(catchupDay)})` : "You don't have a Catchup entry yet"}, so a change on this day changes In Bank from this day on.${accountsStay} The tracker and Search count the change.`)
+            : null;
 
         let mode = "set";
         const amount = amountField({ label: "Amount", amount: currentAmount, percent: currentPercent, allowPercent: !inHistory && date >= today });
@@ -1403,10 +1443,10 @@ const BudgetUI = (() => {
           }
         );
         const moveTo = inHistory
-          ? dateField({ label: "Move to", optional: true, min: oldestHistoryDay(), max: addDays(gridStartDate, -1), hint: "Another day in History: type it, or use the calendar button to pick one." })
+          ? dateField({ label: "Move to", optional: true, min: oldestHistoryDay(), hint: "Any day from History's first on, even one still to come: type it, or use the calendar button to pick one." })
           : dateField({ label: "Move to", optional: true });
 
-        // Its title of its own (the Other Account stays after it), where it can change
+        // Its title of its own (the Equity account stays after it), where it can change
         const { title: ownTitle, account: ownAccount } = splitAccount(title);
         const titleBox = renamable
           ? textField({ label: "Title", value: ownTitle, placeholder: ownAccount ? "None of its own" : "Coffee, paycheck, gas...", maxLength: MAX_TITLE })
@@ -1414,7 +1454,7 @@ const BudgetUI = (() => {
         if (titleBox) titleBox.input.dataset.skipFocus = "1";
         const titleNote = renamable ? null : element("p", "panelHint", "Its title comes from its recurring entry or connected spreadsheet, so from today on it's changed there.");
 
-        // Its refraction type and Other Account can change too. Then it comes off as it is and goes on as the new
+        // Its refraction type and Equity account can change too. Then it comes off as it is and goes on as the new
         // one, adding into an entry already on that day with the same title and type.
         const type = refractionField({ value: refraction, allowAuto: false, onChange: (key) => accountPicker.setVisible(isAccountType(key)) });
         const accountPicker = accountField({ accounts: otherAccounts(), amount, type: () => type.value(), account: account ? account.name : "", from: source ? source.name : "" });
@@ -1431,9 +1471,10 @@ const BudgetUI = (() => {
         const reminder = reminderField({ days: currentReminder });
         const showPlaceholder = () => {
           const move = moveTo.value();
-          placeholder.setDate(move instanceof Date ? move : date);
-          reminder.setDate(inHistory ? null : move instanceof Date ? move : date);
-          if (inHistory && !wasPlaceholder) placeholder.el.hidden = true;
+          const target = move instanceof Date ? move : date;
+          placeholder.setDate(target);
+          reminder.setDate(target);
+          if (inHistory && !wasPlaceholder && target < today) placeholder.el.hidden = true;
         };
         moveTo.input.addEventListener("input", showPlaceholder);
         moveTo.input.addEventListener("change", showPlaceholder);
@@ -1493,10 +1534,10 @@ const BudgetUI = (() => {
             if (Math.abs(total) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
             const newTitle = withAccount(newOwn, newAccount, newFrom);
             // "→ Savings" has no title of its own, so it can't leave its account without one
-            if (!newTitle) return panel.setError(titleBox ? "Give the entry a title, or keep its Other Account." : "This entry has no title of its own, so it needs an Other Account. To take it off, tap Delete.");
+            if (!newTitle) return panel.setError(titleBox ? "Give the entry a title, or keep its Equity account." : "This entry has no title of its own, so it needs an Equity account. To take it off, tap Delete.");
             const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, ...(newUntil !== undefined ? { until: newUntil } : {}), purpose: newPurpose, note: newNote, reminder: newReminder };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
-            return submit(panel, () => changeKind(kind));
+            return send(kind, () => changeKind(kind));
           }
 
           const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder, purpose: newPurpose, note: newNote, reminder: newReminder };
@@ -1526,8 +1567,14 @@ const BudgetUI = (() => {
             return panel.close();
           }
 
-          submit(panel, () => changeEntry(change));
+          send(change, () => changeEntry(change));
         });
+
+        // A change is saved, after asking first when it moves the entry off a day before today
+        function send(change, work) {
+          if (change.moveDate && date < today) confirmPastMove(form.querySelector('button[type="submit"]') || moveTo.input, () => submit(panel, work));
+          else submit(panel, work);
+        }
 
         // Delete: it comes off its day (one that landed there by itself leaves a $0.00 temp)
         function deleteEntry() {
@@ -1538,11 +1585,43 @@ const BudgetUI = (() => {
     });
   }
 
+  // What the "?" in the window that asks about moving an entry off a day before today explains
+  const CATCHUP_HELP = [
+    ["What makes one: ", "tapping In Bank on a zoomed day and typing what your bank says adds a Regular entry titled Catchup on that day for the difference, so In Bank matches your bank."],
+    ["What it does: ", "that day's In Bank is then what your bank said. A change to a day before today, on or before your last Catchup, leaves In Bank as it is, since your bank already counted whatever really happened."],
+    ["After it: ", "a change to a day after your last Catchup changes In Bank from that day on, and so does a change to today or a later day. With no Catchup yet, every change does."],
+    ["An entry moved: ", "it leaves In Bank as it is on its old day when that day is on or before your last Catchup, and it counts on its new day when that day is after your last Catchup, or today or later."]
+  ];
+
+  // An entry is about to move off a day before today: a window over the form says what happens to In Bank (with a "?" on
+  // Catchup entries), and Okay (only) goes on with the move
+  function confirmPastMove(origin, okay) {
+    openPanel({
+      origin,
+      size: "small",
+      stacked: true,
+      title: "Moving This Entry",
+      build(form, panel) {
+        const note = field("In Bank", element("p", "panelText", 'The "In Bank" amount for any day before the last "Catchup" entry will not be changed.'));
+        addFieldHelp(note, "What a Catchup entry is, and how it works", helpList(CATCHUP_HELP));
+        form.append(note, buttonRow([
+          { label: "Okay", kind: "primary", type: "submit" },
+          { label: "Cancel", onClick: () => panel.close() }
+        ]));
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          panel.close();
+          okay();
+        });
+      }
+    });
+  }
+
   // New Entry (Home's button, and a zoomed day's + on Home or History, with that day in its date box): title, refraction
-  // type (Auto to start), for Hidden or Transfer an Other Account, the amount (cost or gain), date, Placeholder, Remind me
+  // type (Auto to start), for Hidden or Transfer an Equity account, the amount (cost or gain), date, Placeholder, Remind me
   // (for a day after today), once Bob's card for it is on, its Wavelength, and a note under its buttons. A day has one
   // entry per title, type,
-  // and Other Account, so when one is already there (its own, or a recurring or connected spreadsheet's entry landing
+  // and Equity account, so when one is already there (its own, or a recurring or connected spreadsheet's entry landing
   // there), the form says so and asks whether to add the new amount to it or set it to the new amount. Either way a
   // recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on the calendar.
   function openNewEntry(origin, { date = today } = {}) {
@@ -1559,7 +1638,10 @@ const BudgetUI = (() => {
         matchBox.append(matchNote, modeToggle.el);
         const matchField = field("Already on that day", matchBox);
         matchField.hidden = true;
-        form.append(...fields.els, matchField, buttonRow([
+        // (A day before today, on or before the last Catchup: see IN BANK AND THE LAST CATCHUP in Process Budget.js)
+        const keptNote = element("p", "panelHint");
+        keptNote.hidden = true;
+        form.append(...fields.els, matchField, keptNote, buttonRow([
           { label: "Add Entry", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }
         ]), fields.noteEl);
@@ -1571,6 +1653,8 @@ const BudgetUI = (() => {
           if (panel.panel.classList.contains("isBusy")) return;
           const { title, sprite, account, from, date: picked } = fields.values();
           const day = picked || date;
+          keptNote.hidden = !(day instanceof Date) || !bankKeptOn(day);
+          if (!keptNote.hidden) keptNote.textContent = `Your last Catchup is on ${showDate(lastCatchupDay())}, so an entry on this day won't change In Bank.`;
           match = title && !hasTitleArrow(title) ? entryOnDay(withAccount(title, account, from), sprite, day) : null;
           matchField.hidden = !match;
           if (!match) return;
@@ -1618,6 +1702,19 @@ const BudgetUI = (() => {
     const spot = calendarSpot(date);
     const current = spot ? readInBank(calendarData[spot.r][spot.c]) : null;
     if (current === null) return;
+    // (A Catchup keeps In Bank from changing on the days before it, so an older day's stays as it is)
+    const catchup = date < today ? lastCatchupDay() : null;
+    if (catchup && date < catchup) {
+      openPanel({
+        origin: lineEl,
+        size: "small",
+        title: `${showDay(date)} In Bank`,
+        build(form, panel) {
+          form.append(element("p", "panelText", `Your last Catchup is on ${showDate(catchup)}, so In Bank on the days before it stays as it is. To match your bank, tap In Bank on that day or a later one.`), buttonRow([{ label: "Okay", kind: "primary", onClick: () => panel.close() }]));
+        }
+      });
+      return;
+    }
     openPanel({
       origin: lineEl,
       size: "small",
@@ -1807,10 +1904,17 @@ const BudgetUI = (() => {
   // the other. A longer note stays longer, so there's time to read it (4.5 to 12 seconds).
   let toastStack = null;
   function showToast(message, isWarning = false) {
-    if (!toastStack || !toastStack.isConnected) toastStack = onScreen(element("div", "toastStack"), true);
+    // (A live region has to be there before its words are, for a screen reader to say them)
+    const firstOne = !toastStack || !toastStack.isConnected;
+    if (firstOne) {
+      toastStack = onScreen(element("div", "toastStack"), true);
+      toastStack.setAttribute("role", "status");
+      toastStack.setAttribute("aria-live", "polite");
+    }
+    const stack = toastStack;
     const toast = element("div", `budgetToast${isWarning ? " warning" : ""}`, message);
-    toast.setAttribute("role", "status");
-    toastStack.appendChild(toast);
+    if (firstOne) requestAnimationFrame(() => stack.appendChild(toast));
+    else stack.appendChild(toast);
     const shownMs = Math.min(12000, Math.max(4500, String(message).length * 60));
     setTimeout(() => toast.classList.add("leaving"), shownMs);
     setTimeout(() => toast.remove(), shownMs + 500);
@@ -1852,6 +1956,8 @@ const BudgetUI = (() => {
     termList,
     aliasField,
     segmented,
+    keyMoves,
+    makePressable,
     newEntryFields,
     openNewEntry,
     openEntryOptions,

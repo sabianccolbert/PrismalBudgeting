@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=a7c1d9edd1">
+    <link rel="stylesheet" href="/stylesheet.css?v=6b9c464ecf">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=fb11019b06">
-    <link rel="stylesheet" href="/themes.css?v=a6bf52e1de">
+    <link rel="stylesheet" href="/budgetStyle.css?v=6f54d70791">
+    <link rel="stylesheet" href="/themes.css?v=0e56d3f317">
     <title>Prismal Budget - Tracker</title>
     <meta name="description" content="Prismal Budget is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -82,8 +82,8 @@
             <li>The table fits your screen, even on a phone: a long row title goes on two lines.</li>
             <li>In a row's panel, each alias has its own line: type the entry title, then pick All, Costs, or Gains. Typing a comma (or pressing Enter) starts the next one.</li>
             <li>Rows leave out ⭕️ Transfers, since most transfers aren't real costs or gains. In a row's panel, turn on its "Count ⭕️ Transfers in this row" switch for a row that should count them (its title then starts with ⭕️).</li>
-            <li>✖️ Hidden entries always count, like any other entry, even ones for your Other Accounts.</li>
-            <li>A ⭕️ Transfer for an Other Account (like moving money into Savings) is still a transfer, so only rows set to count transfers count it.</li>
+            <li>✖️ Hidden entries always count, like any other entry, even ones for your Equity accounts.</li>
+            <li>A ⭕️ Transfer for an Equity account (like moving money into Savings) is still a transfer, so only rows set to count transfers count it.</li>
             <li>If more than one row has the same alias, each of those rows counts it.</li>
             <li>To see the entries behind a row, search for its title with its Tracker button in Home's (or History's) Search.</li>
           </ul>
@@ -96,7 +96,7 @@
           <ul>
             <li><strong>Costs</strong> and <strong>Gains</strong> add up every cost and every gain (✖️ Hidden ones too), except ⭕️ Transfers. They fill in by themselves.</li>
             <li><strong>Transfers</strong> adds up every ⭕️ Transfer and lists their titles, so transfers never land in Undefined. It fills in by itself.</li>
-            <li><strong>Interest</strong>, just under Transfers, adds up the interest your Other Accounts get (below $0 is interest paid, like a credit card's) and lists the accounts it came from. Interest isn't an entry, so no other row counts it. It counts from the day each account's interest last started counting (typing a new balance, or changing its interest, starts it again). It fills in by itself.</li>
+            <li><strong>Interest</strong>, just under Transfers, adds up the interest your Equity accounts get (below $0 is interest paid, like a credit card's) and lists the accounts it came from. Interest isn't an entry, so no other row counts it. It counts from the day each account's interest last started counting (typing a new balance, or changing its interest, starts it again). It fills in by itself.</li>
             <li><strong>Undefined</strong> lists the entry titles that no row counts yet, and adds them up. ⭕️ Transfers never go there: they're in the Transfers row (and in any row set to count them). If you add an alias to a row but Undefined still lists it, the alias only counts Costs or only Gains, so entries of the other kind aren't counted yet. For example, if an alias for John counts Gains, costs titled John are still undefined.</li>
           </ul>
 

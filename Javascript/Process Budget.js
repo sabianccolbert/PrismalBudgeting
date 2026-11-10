@@ -1,7 +1,7 @@
 // Process Budget: the budget itself, for every page that shows one. Loading the open budget from the API (an account can
 // have several, and budgets shared with it: Budgets.js says which) and saving what changed to that same one, the daily
 // update that brings it up to today, every change (calendar entries, recurring entries, the
-// tracker, Other Accounts, connected spreadsheets, Quick Entry), the budget math, Bob's message on Home and his page's
+// tracker, Equity, connected spreadsheets, Quick Entry), the budget math, Bob's message on Home and his page's
 // settings, Search, Undo and Redo, and the helpers the pages share (dates, amounts, titles). Pages draw from it and redraw
 // on its "budget:updated" event.
 
@@ -17,7 +17,7 @@ let futureData = null;
 let historyData = null;
 let searchData = null;
 let calculatorData = null;
-let accountsData = null; // Other Accounts: { version, list: [[...]], equity: {...} } (see normalizeApiAccounts)
+let accountsData = null; // Equity: { version, list: [[...]], equity: {...} } (see normalizeApiAccounts)
 let logsData = null;     // Change Logs (the spreadsheet's "Form Entries" tab), newest first
 let sheetsData = null;   // Connected spreadsheets: { version, list: [connection] } (see CONNECTED SPREADSHEETS)
 let notesData = null;    // Entries' notes: { version, entries, recurring } (see ENTRY NOTES)
@@ -34,7 +34,7 @@ const TABLE_SHAPES = {
   history:    { cols: 7, minRows: 1 },  // [0] column titles, then one row per week (newest first)
   search:     { cols: 4, minRows: 3 },  // [0]-[2] search summary
   calculator: { cols: 2, minRows: 21 }, // [r][1] values read by the paycheck calculator
-  accounts:   { cols: 16, minRows: 1 }, // Other Accounts: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest (and escrow) since, max, compounds, added every, added on, "separate" | "", interest balance when it started counting, escrow a month, escrow's day, escrow due when it started counting, interest counted from]
+  accounts:   { cols: 17, minRows: 1 }, // Equity: [0] column titles, then [name, balance, "default" | "cash" | "", starting amount, interest rate, interest (and escrow) since, max, compounds, added every, added on, "separate" | "", interest balance when it started counting, escrow a month, escrow's day, escrow due when it started counting, interest counted from, kind ("car", "mortgage", "credit", "debit", or "" for other)]
   account:    { cols: 3, minRows: 3 },  // Each LLC equity table: 3 header rows, then [date, amount, title]
   logs:       { cols: 10, minRows: 1 }  // [0] column titles, then [time, duration, action, 4 details, status, what it changed (for its Undo, see CHANGE LOG UNDO), who made it]
 };
@@ -46,10 +46,10 @@ const MAX_AMOUNT = 1000000000;
 const AMOUNT_TOO_BIG = "Amounts can be up to $1,000,000,000.";
 const MAX_TITLE = 100;
 
-// An entry for an Other Account keeps its own title, with the account after an arrow: "Payday Transfer → Savings"
+// An entry for an Equity account keeps its own title, with the account after an arrow: "Payday Transfer → Savings"
 // (see splitAccount). One with no title of its own is just the account's name, like "Savings".
 const ACCOUNT_ARROW = "→";
-// A Transfer can come from another Other Account instead of In Bank, kept before the account it goes to: "Move ← Savings
+// A Transfer can come from another Equity account instead of In Bank, kept before the account it goes to: "Move ← Savings
 // → HSA" (see fromAccount)
 const FROM_ARROW = "←";
 const MAX_ENTRY_TITLE = 233; // A title (100), the account it comes from (60), the account it goes to (60), and the arrows
@@ -291,7 +291,7 @@ async function budgetIsGone(response) {
 }
 
 // The budget as /api/data/load sent it, into the page's tables, with its revision and its waiting quick entries'
-// signature (see LIVE UPDATES). Returns the stored Other Accounts as they were (to tell whether setting them up changed
+// signature (see LIVE UPDATES). Returns the stored Equity as they were (to tell whether setting them up changed
 // them).
 function readLoadedTables(data) {
   dataRevision = Number.isInteger(data.revision) ? data.revision : null;
@@ -415,13 +415,16 @@ async function performDailyUpdate() {
   let placeholdersRemoved = 0;
   // Days from a month after the budget was last used only get Upcoming entries and In Bank
   let lightFromTime = fullCatchUpEnd(lastActiveDay || lastDailyUpdate).getTime();
+  // The last Catchup, as the saved calendar has it: a placeholder that comes off a day at or before it leaves In Bank as it
+  // is (see IN BANK AND THE LAST CATCHUP)
+  const catchup = lastCatchupDay(calendarData, historyData, oldGridStart);
   let sheetDays = sheetEntriesByDay(lastDailyUpdate, new Date(Math.min(yesterday.getTime(), lightFromTime - 1)));
-  // % entries (see PERCENT_MARK) on the days that scrolled in while away are worked out one day at a time, from the Other
-  // Accounts' balances when the budget was last worked out (a saved day's already were)
+  // % entries (see PERCENT_MARK) on the days that scrolled in while away are worked out one day at a time, from the Equity
+  // accounts' balances when the budget was last worked out (a saved day's already were)
   let percents = hasPercentEntries() ? percentRunner(accountBalancesToday(), addDays(lastDailyUpdate, 1), accountSummaries(lastDailyUpdate, oldGridStart)) : null;
   // Placeholders kept past their own day (into History) whose last day has passed go first, and History's In Bank goes on
   // without them, so every saved day after works its In Bank out again
-  const historyDropped = dropHistoryPlaceholders();
+  const historyDropped = dropHistoryPlaceholders(catchup);
   if (historyDropped > 0) {
     placeholdersRemoved += historyDropped;
     rechain = true;
@@ -459,9 +462,11 @@ async function performDailyUpdate() {
       // once that day passes, see dropHistoryPlaceholders for History's)
       let kept = dropPlaceholders(cell.text, cell.date);
       if (kept.dropped > 0) {
+        const held = !cell.isNew && !!catchup && cell.date <= catchup;
+        if (held) holdBank(cell.date, dayMath(cell.text.split("\n")).bankChange - dayMath(kept.text.split("\n")).bankChange);
         cell.text = kept.text;
         placeholdersRemoved += kept.dropped;
-        if (!cell.isNew) rechain = true;
+        if (!cell.isNew && !held) rechain = true;
       }
 
       if (percents && cellTime > missedFromTime) {
@@ -492,7 +497,7 @@ async function performDailyUpdate() {
       // Keep the balance chain going: saved cells already have In Bank (until a placeholder came off one), new ones need it
       if (cell.isNew || rechain) {
         if (lastInBank === null) lastInBank = readLatestHistoryInBank();
-        let math = applyCellBudgetMath(cell.text, lastInBank);
+        let math = applyCellBudgetMath(cell.text, lastInBank, bankHoldOn(cell.date));
         cell.text = math.text;
         lastInBank = math.inBank;
       } else {
@@ -537,8 +542,9 @@ async function performDailyUpdate() {
 
 // History's placeholders whose last day has passed (ones kept past their own day, see placeholderEnds) come off, and each
 // History day's In Bank from the first one's day on is what it would have been without them (the calendar goes on from the
-// newest). Returns how many came off.
-function dropHistoryPlaceholders() {
+// newest), except for one on or before catchup (the last Catchup's day, or null: see IN BANK AND THE LAST CATCHUP), which
+// leaves In Bank as it is. Returns how many came off.
+function dropHistoryPlaceholders(catchup = null) {
   const days = []; // Every History day, oldest first
   for (let r = historyData.length - 1; r >= 1; r--) {
     for (let c = 0; c < 7; c++) {
@@ -554,7 +560,7 @@ function dropHistoryPlaceholders() {
     const kept = lines.filter((text, l) => {
       const line = readLine(text);
       if (l === 0 || line.blank || line.system || !placeholderExpired(line.sprite, date)) return true;
-      if (getSpecialType(line.sprite) !== "✖️" && !line.fromOther) shift = Math.round((shift + line.amount) * 100) / 100;
+      if (getSpecialType(line.sprite) !== "✖️" && !line.fromOther && !(catchup && date <= catchup)) shift = Math.round((shift + line.amount) * 100) / 100;
       dropped++;
       return false;
     });
@@ -702,11 +708,12 @@ function readLatestHistoryInBank() {
   return inBank === null ? 0 : inBank;
 }
 
-// One cell's In Bank / Gains / Costs lines, using the same math as writeBudgetMath
-function applyCellBudgetMath(cellText, lastInBank) {
+// One cell's In Bank / Gains / Costs lines, using the same math as writeBudgetMath (hold: its day's, see IN BANK AND THE
+// LAST CATCHUP)
+function applyCellBudgetMath(cellText, lastInBank, hold = 0) {
   let lines = cellText.split("\n");
   let { gains, costs, bankChange } = dayMath(lines);
-  let inBank = Math.round((lastInBank + bankChange) * 100) / 100;
+  let inBank = Math.round((lastInBank + bankChange + hold) * 100) / 100;
   let finalLines = [lines[0]];
   finalLines.push((inBank < 0 ? "⛔️ " : "✅ ") + formatMoney(inBank) + " In Bank");
   if (gains > 0) finalLines.push(`❇️ ${formatMoney(gains)} Gains`);
@@ -774,7 +781,7 @@ mirrors the old onFormSubmit flow:
   5. log it to Change Logs, save, and tell the page to re-render ("budget:updated")
 Changes run one at a time (the spreadsheet used a script lock). A change that fails part
 way is rolled back, so half-finished data is never saved.
-Other Accounts (like Savings) start from an amount set on their page, and are changed by Hidden and Transfer
+Equity accounts (like Savings) start from an amount set on their page, and are changed by Hidden and Transfer
 entries with the account picked, see OTHER ACCOUNTS below.
 */
 
@@ -867,7 +874,7 @@ function keepEntryDetails(result, change) {
   return result;
 }
 
-// An entry's title after a change: its new one (a new type or Other Account's newTitle, or a rename's own title with its
+// An entry's title after a change: its new one (a new type or Equity account's newTitle, or a rename's own title with its
 // account after it), or the one it had
 function changedTitle(change) {
   if (change.newTitle !== undefined) return change.newTitle;
@@ -893,7 +900,7 @@ function entryChange(change) {
   return result;
 }
 
-// An entry gets a new title of its own (change.renameTo; its Other Account stays after it). On a day from today on, an
+// An entry gets a new title of its own (change.renameTo; its Equity account stays after it). On a day from today on, an
 // entry that lands by itself (a recurring entry's or a connected spreadsheet's or calendar's, or a temp of one) keeps its
 // title: it's changed on the Recurring Entries or Spreadsheets & Calendars page instead. Any entry on a day before today
 // can be renamed (in History too). It stays what it was (its type, mark, %, and placeholder), unless an entry with the
@@ -952,7 +959,7 @@ function landsByItself(title, sprite, date) {
   return !!scheduledHit(title, date, special);
 }
 
-// A calendar entry's refraction type or Other Account changed (and maybe its amount and day too). change: { title,
+// A calendar entry's refraction type or Equity account changed (and maybe its amount and day too). change: { title,
 // sprite, date (the entry as it is), newTitle ("Payday → HSA"), newSprite, amount (the new signed amount), percent (a %
 // amount instead, signed), moveDate, placeholder, until (its last day, as unique() takes it) }. It comes off its day the way Delete takes it off (one that landed by
 // itself leaves a $0.00 temp), then goes on as the new one, adding into an entry already there with that title and type
@@ -992,23 +999,148 @@ function describeKindChange(change) {
 }
 
 // An entry on a day in History changed from History's zoomed day: changeCalendarEntry's change (Set to, Add to it, Move
-// to, Delete), or changeEntryKind's (one with newTitle: its refraction type or Other Account). History is a record of
-// what happened, so the balances it led to stay as they are: In Bank doesn't change (each History day keeps its own In
-// Bank line, and the calendar goes on from the newest one), and neither does any Other Account's balance today
-// (keepAccountBalances). It can only move to another day in History. The tracker and Search count the change. Can be
-// undone, and undoing it keeps the balances too.
+// to, Delete), or changeEntryKind's (one with newTitle: its refraction type or Equity account). What it does to In Bank is
+// the rule for every day before today (see IN BANK AND THE LAST CATCHUP), and no Equity account's balance today changes
+// (keepAccountBalances). It can move to any day from History's first on: moved to a day after today, it hasn't happened
+// yet, so the accounts' balances today go without it, and they follow it on its new day. The tracker and Search count
+// the change. Can be undone, and undoing it keeps the balances too.
 function changeHistoryEntry(change) {
   const isKind = change.newTitle !== undefined;
   const dates = [change.date, change.moveDate].filter(Boolean);
   const label = isKind ? describeKindChange(change) : describeEntryChange(change);
+  const keepBalances = !change.moveDate || change.moveDate <= today;
   return runBudgetAction("", () => {
-    if (dates.some(date => date >= gridStartDate || !historyHasDay(date))) {
-      throw new BudgetInputError(`An entry in History can only move to another day in History (${showDate(oldestHistoryDay() || gridStartDate)} through ${showDate(addDays(gridStartDate, -1))}).`);
+    if (change.date >= gridStartDate || dates.some(date => date < gridStartDate && !historyHasDay(date))) {
+      throw new BudgetInputError(`An entry in History can move to any day from ${showDate(oldestHistoryDay() || gridStartDate)} on.`);
     }
     const balances = accountBalancesToday();
     const result = keepEntryDetails((isKind ? entryKindChange(change) : entryChange(change)) || {}, change);
-    return { ...result, afterRefresh: () => keepAccountBalances(balances) };
-  }, { label, dates, keepBalances: true });
+    return keepBalances ? { ...result, afterRefresh: () => keepAccountBalances(balances) } : result;
+  }, { label, dates, keepBalances });
+}
+
+/* ---------- In Bank and the last Catchup ---------- */
+// Typing what the bank says on a day (In Bank tapped on a zoomed day) makes a Catchup entry for the difference, and that
+// day's In Bank is then what the bank said. So a change to a day before today, on or before the last Catchup (the latest
+// one on or before today), leaves In Bank as it is on every day. A change to a day before today that's after it, or with
+// no Catchup at all, changes In Bank from that day on, and a change to today or a later day always does. A Catchup's own
+// change takes effect when it's the last one (or the last one is being added or taken off).
+// History's days keep their In Bank lines, so a change that counts moves them, from its day on. The calendar's are worked
+// out from their entries every time, so a change that doesn't count is held off by the day's hold: an amount added to the
+// day's In Bank (accountsData.bankHolds: { "MM/DD/YYYY": amount }), until its week goes into History with the In Bank it
+// had (pruneBankHolds).
+
+// Is an entry (read with readLine) a Catchup entry that changes In Bank?
+function isCatchupLine(line) {
+  return !line.blank && !line.system && line.amount !== 0 && /^catch ?up$/.test(line.clean) && getSpecialType(line.sprite) !== "✖️" && !line.fromOther;
+}
+
+// The last day on or before today with a Catchup entry, or null. calendar, history, calendarStart: another copy of them
+// (the budget's as it was before a change; the daily update's calendar is still the saved one).
+function lastCatchupDay(calendar = calendarData, history = historyData, calendarStart = gridStartDate) {
+  const hasCatchup = (cellText) => String(cellText ?? "").split("\n").slice(1).some(text => isCatchupLine(readLine(text)));
+  for (let r = 3; r >= 0; r--) {
+    for (let c = 6; c >= 0; c--) {
+      const day = addDays(calendarStart, r * 7 + c);
+      if (day <= today && hasCatchup(calendar[r]?.[c])) return day;
+    }
+  }
+  for (let r = 1; r < history.length; r++) {
+    for (let c = 6; c >= 0; c--) {
+      if (!hasCatchup(history[r][c])) continue;
+      const day = createSafeMidnight(String(history[r][c]).split("\n")[0].trim(), true);
+      if (!isNaN(day.getTime())) return day;
+    }
+  }
+  return null;
+}
+
+// Does a change on this day leave In Bank as it is?
+function bankKeptOn(date) {
+  const catchup = date < today ? lastCatchupDay() : null;
+  return !!catchup && date <= catchup;
+}
+
+// What a day's hold adds to its In Bank
+function bankHoldOn(date) {
+  return accountsData?.bankHolds?.[formatToMMDDYYYY(date)] ?? 0;
+}
+
+// Add to a day's hold
+function holdBank(date, amount) {
+  const holds = accountsData.bankHolds || {};
+  const key = formatToMMDDYYYY(date);
+  const total = Math.round(((holds[key] ?? 0) + amount) * 100) / 100;
+  if (total) holds[key] = total;
+  else delete holds[key];
+  if (Object.keys(holds).length > 0) accountsData.bankHolds = holds;
+  else delete accountsData.bankHolds;
+}
+
+// Days that have left the calendar don't need their holds: History keeps the In Bank they had
+function pruneBankHolds() {
+  const holds = accountsData?.bankHolds;
+  if (!holds) return;
+  for (const key of Object.keys(holds)) if (createSafeMidnight(key, true) < gridStartDate) delete holds[key];
+  if (Object.keys(holds).length === 0) delete accountsData.bankHolds;
+}
+
+// What a day's entries do to In Bank, the Catchups apart: { entries, catchups }
+function bankParts(cellText) {
+  let entries = 0;
+  let catchups = 0;
+  for (const text of String(cellText ?? "").split("\n").slice(1)) {
+    const line = readLine(text);
+    if (line.blank || line.system || getSpecialType(line.sprite) === "✖️" || line.fromOther) continue;
+    if (isCatchupLine(line)) catchups += line.amount;
+    else entries += line.amount;
+  }
+  return { entries, catchups };
+}
+
+// A change just made (before: the tables as they were, snapshotTables), before everything is worked out again: each day
+// before today that it changed follows the rule above
+function holdPastBank(before) {
+  const oldCalendar = JSON.parse(before.calendar);
+  const oldHistory = JSON.parse(before.history);
+  const known = [lastCatchupDay(oldCalendar, oldHistory), lastCatchupDay()].filter(Boolean);
+  const catchup = known.length > 0 ? new Date(Math.max(...known.map(day => day.getTime()))) : null;
+  const round = (amount) => Math.round(amount * 100) / 100;
+  // What changed on a day: { held (leaves In Bank as it is), counts (changes it from that day on) }
+  const split = (date, oldText, newText) => {
+    const was = bankParts(oldText);
+    const now = bankParts(newText);
+    const entries = round(now.entries - was.entries);
+    const catchups = round(now.catchups - was.catchups);
+    const entriesHeld = !!catchup && date <= catchup;
+    const catchupsHeld = !!catchup && date < catchup;
+    return { held: round((entriesHeld ? entries : 0) + (catchupsHeld ? catchups : 0)), counts: round((entriesHeld ? 0 : entries) + (catchupsHeld ? 0 : catchups)) };
+  };
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (gridDates[r][c] >= today) continue;
+      const { held } = split(gridDates[r][c], oldCalendar[r][c], calendarData[r][c]);
+      if (held !== 0) holdBank(gridDates[r][c], -held);
+    }
+  }
+  if (oldHistory.length !== historyData.length) return;
+  // (Oldest first: what counts moves that day's In Bank and every one after it)
+  let shift = 0;
+  for (let r = historyData.length - 1; r >= 1; r--) {
+    for (let c = 0; c < 7; c++) {
+      const text = String(historyData[r][c] ?? "");
+      const header = text.split("\n")[0].trim();
+      const date = header ? createSafeMidnight(header, true) : null;
+      if (!date || isNaN(date.getTime())) continue;
+      if (text !== String(oldHistory[r][c] ?? "")) shift = round(shift + split(date, oldHistory[r][c], text).counts);
+      const inBank = shift !== 0 ? readInBank(text) : null;
+      if (inBank === null) continue;
+      const lines = text.split("\n");
+      const moved = round(inBank + shift);
+      lines[1] = `${moved < 0 ? "⛔️" : "✅"} ${formatMoney(moved)} In Bank`;
+      historyData[r][c] = lines.join("\n");
+    }
+  }
 }
 
 // History's first day, or null without History
@@ -1035,12 +1167,12 @@ function onCalendar(calendar, work) {
   }
 }
 
-// Each Other Account's balance today, as the budget last worked it out: account row -> amount
+// Each Equity account's balance today, as the budget last worked it out: account row -> amount
 function accountBalancesToday() {
   return new Map(accountRows().map(account => [account.index, parseAmount(account.row[1])]));
 }
 
-// After a change to History (worked out again: refreshBudgetData), each Other Account's balance today goes back to what
+// After a change to History (worked out again: refreshBudgetData), each Equity account's balance today goes back to what
 // it was (balances, from accountBalancesToday): its starting amount moves by the difference, so its entries stay as they
 // are. An account with interest or escrow whose interest or escrow that would change (an entry moved after it started
 // counting) starts counting again from today instead, like typing its balance does (accountEntry).
@@ -1143,7 +1275,7 @@ function saveAccount(fields, index = null) {
 }
 
 // Search bar. query: { terms: [{ title, match: "all" | "costs" | "gains" | "category" }], from, to, type (a refraction
-// type, or "" for any), account (an Other Account's name, "none", or "" for any) }.
+// type, or "" for any), account (an Equity account's name, "none", or "" for any) }.
 // Resolves with result.search. It looks through the calendar as it was before the change started, since
 // every change first takes the recurring entries off the calendar (to write them again after).
 function searchBudget(query) {
@@ -1277,7 +1409,7 @@ function quickEntryUndo(quick) {
   return isNaN(date.getTime()) ? null : { label: `quick entry ${describeQuickEntry(quick.entry)}`, dates: [date] };
 }
 
-// "Coffee (-$4.50) on 10/05" (or "Card → Visa (3%) on 10/05"), for the waiting list's notes and Undo
+// "Coffee (-$4.50) on 10/05" (or "Card → Rewards (3%) on 10/05"), for the waiting list's notes and Undo
 function describeQuickEntry(entry) {
   const date = createSafeMidnight(entry.date, true);
   const amount = typeof entry.percent === "number" ? showPercent(entry.percent) : formatMoney(entry.amount);
@@ -1392,6 +1524,7 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
     beginChangeLog(logType, requestedAt);
     stripRecurringEntries();
     result = change(snapshot) || {};
+    if (logType !== "📥 Upload Backup") holdPastBank(snapshot);
     refreshBudgetData();
     // A change can finish once everything is worked out again (History's changes keep the accounts' balances)
     if (result.afterRefresh) result.afterRefresh();
@@ -1639,7 +1772,7 @@ function unique(entry) {
     if (matched) source = matched;
   }
   let targetIncomingSpecial = getSpecialType(sprite);
-  // A % amount is its percent of the Other Account's balance on the day it goes on
+  // A % amount is its percent of the Equity account's balance on the day it goes on
   if (percent !== null) {
     if (!linkedAccount(targetIncomingSpecial, title)) throw new BudgetInputError(PERCENT_NEEDS_ACCOUNT);
     if (dateMove < today) throw new BudgetInputError(PERCENT_PAST_DAY);
@@ -1753,7 +1886,7 @@ function unique(entry) {
           moveSprite = targetIncomingSpecial + virginMark;
         }
       }
-      // (A % entry needs its Other Account, and stays what it came to on a day that passed)
+      // (A % entry needs its Equity account, and stays what it came to on a day that passed)
       if (finalPercent !== null && (dateMove < today || !linkedAccount(moveSprite || "❗️", title))) finalPercent = null;
       if (finalPercent !== null || percentOf(moveSprite) !== null) moveSprite = percentSprite(moveSprite, finalPercent);
       // 7. Inject combined result back into target date
@@ -1975,7 +2108,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
 }
 
 // The entry a new one would go into on date (a day has one per title and type, see unique): the day's own entry with
-// this title (and Other Account: "Payday → Savings") and refraction type ("" for Auto: any type), or a recurring or
+// this title (and Equity account: "Payday → Savings") and refraction type ("" for Auto: any type), or a recurring or
 // connected spreadsheet's entry that lands there. { amount, sprite } or null. New Entry offers to set it or add to it.
 function entryOnDay(title, sprite, date) {
   const clean = cleanString(title);
@@ -2007,23 +2140,23 @@ function entryOnDay(title, sprite, date) {
 }
 
 /* ---------- Recurring entries (the old "Create/Change A Recurring Entry" form) ---------- */
-// Two recurring entries can share a title only when their refraction type or Other Account is different: one Regular,
+// Two recurring entries can share a title only when their refraction type or Equity account is different: one Regular,
 // one Hidden, and one Transfer can all be called Payday, and so can "Payday → Savings" and "Payday → HSA" (the account
 // picked is part of the title, see cleanString), the same way a day has one entry per title and type. So it's always
 // clear which recurring entry a day's entry came from. Making or changing one into a match for another is refused (the
-// existing one gets changed instead), and so is renaming an Other Account when that would make two match (accountEntry).
+// existing one gets changed instead), and so is renaming an Equity account when that would make two match (accountEntry).
 
 const REFRACTION_NAMES = new Map([["❗️", "Regular"], ["✖️", "Hidden"], ["⭕️", "Transfer"]]);
-const RECURRING_RULE = "Two recurring entries can't have the same title, refraction type, and Other Account";
+const RECURRING_RULE = "Two recurring entries can't have the same title, refraction type, and Equity account";
 
-// The row (other than exceptIndex) with this title (and Other Account) and refraction type, or -1
+// The row (other than exceptIndex) with this title (and Equity account) and refraction type, or -1
 function recurringTwin(title, special, exceptIndex = -1) {
   let clean = cleanString(title);
   return recurringData.findIndex((row, i) => i >= 2 && i !== exceptIndex && String(row[0]).trim() !== "-" &&
     cleanString(row[0]) === clean && getSpecialType(String(row[5] || "")) === special);
 }
 
-// Refuse a recurring entry whose title, Other Account, and refraction type another one already has. kept: the entry
+// Refuse a recurring entry whose title, Equity account, and refraction type another one already has. kept: the entry
 // being changed already matched it (two that match can't be made here, see recurringDuplicates), so it has to change
 // one of the three, or one of them goes.
 function refuseRecurringTwin(title, sprite, exceptIndex = -1, kept = false) {
@@ -2036,7 +2169,7 @@ function refuseRecurringTwin(title, sprite, exceptIndex = -1, kept = false) {
   throw new BudgetInputError(`There's already a ${type} recurring entry called ${recurringData[twin][0]}. ${RECURRING_RULE}, so tap that one in the list to change it, or pick another title, type, or account.`);
 }
 
-// Recurring entries that match an earlier one's title, Other Account, and refraction type, which can't be made here but
+// Recurring entries that match an earlier one's title, Equity account, and refraction type, which can't be made here but
 // a budget from before that rule can have: ["Rent (Regular)", ...]. The Recurring Entries page lists them to be fixed;
 // until then, on a day both land on, the first one does (see writeRecurring).
 function recurringDuplicates() {
@@ -2060,7 +2193,7 @@ function readFrequency(text) {
   return formatFrequency(frequency);
 }
 
-// Create a recurring entry (refused when one with its title, Other Account, and refraction type already exists).
+// Create a recurring entry (refused when one with its title, Equity account, and refraction type already exists).
 // fields: { title, sprite: "✔️" | "✔️✖️" | "✔️⭕️", amount: number, percent (signed, for a % amount instead; see
 //           PERCENT_MARK), frequency: "Every 2 Weeks" (blank = every month), startDate: Date | null (today), endDate:
 //           Date | "None" | null, placeholder: every day it lands on gets a placeholder, until: how many days after each
@@ -2098,7 +2231,7 @@ function recurringAmount(percent, amount, startDate, sprite, title) {
   return amountOn;
 }
 
-// Change the recurring entry that was clicked (every field comes from the edit panel). Its title, Other Account, and
+// Change the recurring entry that was clicked (every field comes from the edit panel). Its title, Equity account, and
 // type together can't match another recurring entry's.
 function editRecurringRow(index, fields) {
   let row = recurringData[index];
@@ -2126,7 +2259,7 @@ function editRecurringRow(index, fields) {
   let endDate = resolveEndDate(fields.endDate ?? "None", row[4]);
   let frequency = readFrequency(String(fields.frequency || "").trim() || row[3]);
 
-  // A new title, Other Account, or type takes the days that were changed for this entry along (moveRecurringTemps), and
+  // A new title, Equity account, or type takes the days that were changed for this entry along (moveRecurringTemps), and
   // the notes on its days from today on
   if (renamed && recurringTwin(oldTitle, oldSpecial, index) === -1) {
     moveRecurringTemps(cleanString(oldTitle), oldSpecial, title, newSpecial);
@@ -2285,7 +2418,7 @@ function describeAliases(text) {
     .join(", ");
 }
 
-/* ---------- Other Accounts ---------- */
+/* ---------- Equity ---------- */
 // Accounts outside the budget, like Savings. A Hidden or Transfer entry with the account picked ("Payday → Savings",
 // see linkedAccount) moves money into or out of it (see accountChange):
 //   - A Transfer moves money between the budget's account and this one, so the account gets the
@@ -2293,7 +2426,7 @@ function describeAliases(text) {
 //   - A Hidden entry happens in the account itself (In Bank never changes), so the account gets the
 //     same amount: a $50 Hidden cost takes $50 out of it, and a $3,000 Hidden gain puts $3,000 in.
 // An account's balance is its starting amount plus all of those changes, so changing, moving, or deleting one of
-// its entries changes it too. Typing a balance on the Other Accounts page changes the starting amount (no entry
+// its entries changes it too. Typing a balance on the Equity page changes the starting amount (no entry
 // is made). An account can also get interest (a credit card, a loan, or savings that earn it), compounding and added
 // how and when it says: see interestStepper; and escrow, like a mortgage's: see accountEscrow. accountsData.list: [0]
 // column titles, then [name, balance today (filled in by updateAccountBalances, so the Quick Entry page can show it),
@@ -2353,22 +2486,32 @@ function otherAccounts() {
   return accountRows().map(account => ({ name: account.name, balance: parseAmount(account.row[1]), max: accountMax(account.row) }));
 }
 
-// Every entry for an Other Account (account row index) on the calendar, in History, and in Upcoming, newest first (a
+// Every entry for an Equity account (account row index) on the calendar, in History, and in Upcoming, newest first (a
 // day's own order kept): [{ date, line (as its day stores it), change (what the account gets, see accountChange), place:
 // "calendar" | "history" | "upcoming" }]. A $0.00 blocker (which only keeps a recurring or spreadsheet entry off its day)
 // isn't one.
 function accountEntryLines(index) {
   const accounts = accountTitleMap();
   const found = [];
-  const add = (text, date, place) => {
-    const line = readLine(text);
-    if (!line.title || line.system || isNaN(date.getTime())) return;
-    if (line.amount === 0 && entryMark(line.sprite)) return;
+  eachEntryLine((text, line, date, place) => {
     const account = linkedAccount(line.sprite, line.title, accounts);
     if (account && account.index === index) found.push({ date, line: String(text).trim(), change: accountChange(line.sprite, line.amount), place });
     // (A Transfer from this account into another one)
     const from = account && line.fromOther ? fromAccount(line.sprite, line.title, accounts) : null;
     if (from && from.index === index) found.push({ date, line: String(text).trim(), change: line.amount, place });
+  });
+  return found.map((entry, order) => ({ ...entry, order })).sort((a, b) => b.date - a.date || a.order - b.order);
+}
+
+// Every entry on the calendar, in History, and in Upcoming: visit(its text as its day stores it, the same read with readLine,
+// its day, "calendar" | "history" | "upcoming"). A $0.00 blocker (which only keeps a recurring or spreadsheet entry off its
+// day) isn't one.
+function eachEntryLine(visit) {
+  const add = (text, date, place) => {
+    const line = readLine(text);
+    if (!line.title || line.system || isNaN(date.getTime())) return;
+    if (line.amount === 0 && entryMark(line.sprite)) return;
+    visit(text, line, date, place);
   };
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) String(calendarData[r][c] ?? "").split("\n").slice(1).forEach(text => add(text, gridDates[r][c], "calendar"));
@@ -2383,10 +2526,21 @@ function accountEntryLines(index) {
   for (const row of futureData.slice(1)) {
     if (String(row[0]).trim()) add(`${String(row[3]).trim()} ${formatMoney(parseAmount(row[1]))} ${String(row[0]).trim()}`, createSafeMidnight(row[2], true), "upcoming");
   }
+}
+
+// Every entry with a title and refraction type (a recurring entry's days), newest first: [{ date, line (as its day stores
+// it), place }]
+function titleEntryLines(titleText, sprite) {
+  const clean = cleanString(titleText);
+  const special = getSpecialType(String(sprite || ""));
+  const found = [];
+  eachEntryLine((text, line, date, place) => {
+    if (line.clean === clean && getSpecialType(line.sprite) === special) found.push({ date, line: String(text).trim(), place });
+  });
   return found.map((entry, order) => ({ ...entry, order })).sort((a, b) => b.date - a.date || a.order - b.order);
 }
 
-// The interest added to the Other Accounts through today, from the day each one's started counting (see runInterest):
+// The interest added to the Equity accounts through today, from the day each one's started counting (see runInterest):
 // [{ date, change, name (the account's) }], for the tracker's Interest row (updateAccountBalances fills it in)
 let interestAdded = [];
 
@@ -2462,7 +2616,7 @@ function accountChangesAhead() {
   return coming;
 }
 
-// A day's lines that change an Other Account: [{ account, change, sprite, title, amount (the entry's own) }] (see
+// A day's lines that change an Equity account: [{ account, change, sprite, title, amount (the entry's own) }] (see
 // linkedAccount and accountChange; a Transfer from another account changes that one too, see fromAccount). accounts:
 // accountTitleMap(), passed in by loops so it's built once.
 function accountLineChanges(cellText, accounts = accountTitleMap()) {
@@ -2489,7 +2643,7 @@ function accountTitleMap() {
   return byTitle;
 }
 
-// The account an entry changes, or null: a Hidden or Transfer entry with an Other Account picked, which is kept
+// The account an entry changes, or null: a Hidden or Transfer entry with an Equity account picked, which is kept
 // after its title ("Payday → Savings", or "→ Savings" with no title of its own). A title that's only an account's
 // name ("Savings") isn't for the account. titleText: the title as written. accounts: accountTitleMap(), passed in
 // by loops so it's built once.
@@ -2501,13 +2655,13 @@ function linkedAccount(sprite, titleText, accounts = accountTitleMap()) {
 }
 
 // How much an account entry changes its account: a Transfer the opposite of its amount (the money moved
-// from or to In Bank, or the Other Account it comes from), a Hidden entry its own amount (the money moved in the account
+// from or to In Bank, or the Equity account it comes from), a Hidden entry its own amount (the money moved in the account
 // itself). The API's readAccounts (src/quick.js) has to match it.
 function accountChange(sprite, amount) {
   return getSpecialType(String(sprite || "")) === "⭕️" ? -amount : amount;
 }
 
-// The Other Account a Transfer comes from instead of In Bank ("Move ← Savings → HSA": Savings), or null: one that comes
+// The Equity account a Transfer comes from instead of In Bank ("Move ← Savings → HSA": Savings), or null: one that comes
 // from In Bank, isn't a Transfer, or names an account that's gone. It plays In Bank's part: it changes by the entry's
 // own amount (a -$100.00 Transfer from Savings to HSA takes $100.00 out of Savings and puts it in HSA), and In Bank
 // doesn't change. accounts: accountTitleMap(), passed in by loops so it's built once.
@@ -2517,7 +2671,7 @@ function fromAccount(sprite, titleText, accounts = accountTitleMap()) {
   return account && from ? accounts.get(cleanString(from)) || null : null;
 }
 
-// Is it a Transfer from another Other Account (whether that account is still there or not)? Then it never changes In
+// Is it a Transfer from another Equity account (whether that account is still there or not)? Then it never changes In
 // Bank: an account that was deleted just stops changing, like any entry for it.
 function isFromOther(sprite, titleText) {
   if (getSpecialType(String(sprite || "")) !== "⭕️") return false;
@@ -2525,9 +2679,9 @@ function isFromOther(sprite, titleText) {
   return !!(account && from);
 }
 
-// Transfers move money between your own accounts (an Other Account's too), so they aren't costs or gains:
+// Transfers move money between your own accounts (an Equity account's too), so they aren't costs or gains:
 // the tracker only counts them in rows set to count transfers, Search starts them unchecked, and the
-// recurring summary leaves them out. Hidden entries are costs and gains, even ones for an Other Account.
+// recurring summary leaves them out. Hidden entries are costs and gains, even ones for an Equity account.
 function isTransferEntry(sprite) {
   return getSpecialType(String(sprite || "")) === "⭕️";
 }
@@ -2593,10 +2747,10 @@ function accountSummaries(interestUntil = gridEndDate, calendarStart = gridStart
   });
 }
 
-// How far ahead Other Accounts looks ("In 6 Months")
+// How far ahead Equity looks ("In 6 Months")
 const AHEAD_MONTHS = 6;
 
-// The budget AHEAD_MONTHS from today: In Bank that day, and each Other Account's balance (its interest too). summaries:
+// The budget AHEAD_MONTHS from today: In Bank that day, and each Equity account's balance (its interest too). summaries:
 // accountSummaries(). { inBank, accounts: Map(account row index -> balance) }
 function budgetAhead(summaries) {
   const until = addMonths(today, AHEAD_MONTHS);
@@ -2607,12 +2761,13 @@ function budgetAhead(summaries) {
 // The budget from today through until, a day at a time: the calendar's days as they are, and the days after it filled in
 // the way the daily update will fill them (Upcoming entries, then recurring and connected spreadsheets' entries; see
 // dayAfterCalendar). summaries: accountSummaries(), when the caller has them. Returns { until, summaries, inBank: [{ date,
-// amount }] (In Bank at the end of each day, today first), inBankOn(date), accountOn(index, date) (an Other Account's
+// amount }] (In Bank at the end of each day, today first), inBankOn(date), accountOn(index, date) (an Equity account's
 // balance at the end of date, its interest and escrow too; index: its row), interestBetween(index, from, to) (the
 // interest it gets after from, through to: below $0 is interest paid), accountParts(index) (what its balance comes from:
 // { start, interest, escrow, entries }, to work it out again with more entries, see accountExtras) }. Days after until
 // count as until.
 function projectBudget(until, summaries = accountSummaries()) {
+  percentBasesThrough(until);
   const accounts = accountTitleMap();
   const coming = new Map(summaries.map(summary => [summary.index, []]));
   const inBank = [];
@@ -2638,7 +2793,16 @@ function projectBudget(until, summaries = accountSummaries()) {
     return [summary.index, { ...parts, credits: extras.credits, escrowPaid: extras.escrow }];
   }));
   const round = (amount) => Math.round(amount * 100) / 100;
-  const through = (list, date) => list.reduce((total, item) => (item.date <= date ? total + item.change : total), 0);
+  // (An account's changes in day order, with the total after each, so its balance on any day is one quick lookup: a graph asks
+  // for thousands)
+  const changesOf = (account) => {
+    if (!account.changes) {
+      let total = 0;
+      const items = [...account.entries, ...account.credits, ...account.escrowPaid].sort((a, b) => a.date - b.date);
+      account.changes = { times: items.map(item => item.date.getTime()), totals: items.map(item => (total += item.change)) };
+    }
+    return account.changes;
+  };
   return {
     until,
     summaries,
@@ -2649,7 +2813,17 @@ function projectBudget(until, summaries = accountSummaries()) {
     },
     accountOn(index, date) {
       const account = byIndex.get(index);
-      return account ? round(account.start + through(account.entries, date) + through(account.credits, date) + through(account.escrowPaid, date)) : 0;
+      if (!account) return 0;
+      const { times, totals } = changesOf(account);
+      const time = date.getTime();
+      let low = 0;
+      let high = times.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (times[middle] <= time) low = middle + 1;
+        else high = middle;
+      }
+      return round(account.start + (low > 0 ? totals[low - 1] : 0));
     },
     interestBetween(index, from, to) {
       const account = byIndex.get(index);
@@ -2668,13 +2842,20 @@ function accountStart(row) {
   return text ? Math.round(parseAmount(text) * 100) / 100 : 0;
 }
 
+// The kinds of account, and the ones that are money owed: a balance paid past $0 earns nothing there (a lender doesn't pay
+// interest on an overpayment). A row's [16]; blank is any other kind.
+const ACCOUNT_KIND_KEYS = ["car", "mortgage", "credit", "debit"];
+const DEBT_KINDS = ["car", "mortgage", "credit"];
+const accountKind = (row) => (ACCOUNT_KIND_KEYS.includes(String(row?.[16] ?? "").trim()) ? String(row[16]).trim() : "other");
+
 // An account's interest: { rate (a year, in %), since (the day it started counting), from (the day the interest it gets
 // next counts from: since, or for a balance typed again between the days interest is added, the last of those days
 // before it, the way a bank adds a stretch's interest at its end, on the balances it had; see interestPeriodStart),
 // compound (how often it earns interest of its own: a key of INTEREST_COMPOUNDING), every (months between the days it's
 // added: INTEREST_EVERY), day (the day of the month it's added, 1 to 31: a shorter month's last day for one past it),
 // separate (Separate Interest: the interest added is kept apart from the balance, like a mortgage's, see accountState),
-// owed (with separate, the interest balance on the day it started counting) }, or null when it has none. Its row's [4],
+// owed (with separate, the interest balance on the day it started counting), debt (it's a kind that's money owed, see
+// DEBT_KINDS) }, or null when it has none. Its row's [4],
 // [5], [7], [8], [9], [10], [11], and [15]; blank ones are monthly, every month, the day of the month it started
 // counting, not separate, and counting from since.
 const MAX_INTEREST_RATE = 1000;
@@ -2703,7 +2884,8 @@ function accountInterest(row) {
     every: INTEREST_EVERY.includes(every) ? every : 1,
     day: Number.isInteger(day) && day >= 1 && day <= 31 ? day : since.getDate(),
     separate,
-    owed: separate ? Math.round(parseAmount(row?.[11]) * 100) / 100 : 0
+    owed: separate ? Math.round(parseAmount(row?.[11]) * 100) / 100 : 0,
+    debt: DEBT_KINDS.includes(accountKind(row))
   };
 }
 
@@ -2818,7 +3000,8 @@ function describeInterest(interest) {
 //   - Up to since (a stretch that started before the balance was typed again), it earns the same way, but interest added
 //     on one of its days was in the balance typed then, so it isn't added again (what was earned before it goes with it)
 // So a balance below $0 (money owed, like a credit card's) goes further below, and one above $0 grows. isAddDay(day):
-// is it one of the days interest is added?
+// is it one of the days interest is added? pay(change): money went in or out of the balance, and pays down the interest
+// added so far first ("simple" counts only the rest of the balance as earning), the way a lender applies a payment.
 function interestStepper(interest) {
   const rate = interest.rate; // (% a year: a dollar earns rate cents a year)
   const months = INTEREST_COMPOUNDING[interest.compound];
@@ -2840,11 +3023,14 @@ function interestStepper(interest) {
   let added = 0;             // Interest added so far
   let lastWorkedOut = from;  // ("monthly", "quarterly", "yearly") The day interest was last worked out
   return {
-    step(day, balance) {
+    step(day, balanceToday) {
       if (day <= from) return 0;
+      // (A debt paid past $0 earns nothing)
+      const owing = (amount) => (interest.debt ? Math.min(amount, 0) : amount);
+      const balance = owing(balanceToday);
       if (months === 0) earned += (balance + earned / 100) * rate / 365;
       // (With Separate Interest, the balance given has no interest added to it already)
-      else if (months === null) earned += (balance - (interest.separate ? 0 : added)) * rate / 365;
+      else if (months === null) earned += owing(balanceToday - (interest.separate ? 0 : added)) * rate / 365;
       else if (isEvery(day, months)) {
         const full = day >= addMonths(lastWorkedOut, months);
         earned += (balance + earned / 100) * rate * (full ? months : Math.round((day - lastWorkedOut) / 86400000) * 12 / 365) / 12;
@@ -2857,7 +3043,11 @@ function interestStepper(interest) {
       added += change;
       return change;
     },
-    isAddDay: (day) => isEvery(day, interest.every)
+    isAddDay: (day) => isEvery(day, interest.every),
+    pay(change) {
+      if (added < 0 && change > 0) added = Math.min(0, added + change);
+      else if (added > 0 && change < 0) added = Math.max(0, added + change);
+    }
   };
 }
 
@@ -2898,7 +3088,10 @@ function accountRunner(start, interest, escrow) {
       if (escrow && date > escrow.since && isEscrowDay(date, escrow)) state.dueEscrow(escrow.amount);
       return change;
     },
-    entry: (change, date) => state.entry(change, date)
+    entry(change, date) {
+      if (stepper && date > interest.since) stepper.pay(change);
+      return state.entry(change, date);
+    }
   };
 }
 
@@ -2947,14 +3140,14 @@ function interestCredits(start, entries, interest, until) {
 }
 
 /* ---------- Paying a balance off (the Debt Calculator) ---------- */
-// How long paying off a balance owed takes (a loan, a credit card), with interest worked out the way an Other Account's
+// How long paying off a balance owed takes (a loan, a credit card), with interest worked out the way an Equity account's
 // is (interestStepper): the same payment on a schedule from a first payment day, and what paying more does. For an
-// Other Account, its own pace too, from the budget (accountPayoff).
+// Equity account, its own pace too, from the budget (accountPayoff).
 
 // How often payments come: days apart, or null for every month (on the first payment's day of the month)
 const PAYMENT_FREQUENCIES = { weekly: 7, biweekly: 14, monthly: null };
 const PAYOFF_YEARS = 50;         // The longest a payoff is worked out for
-const ACCOUNT_PAYOFF_YEARS = 10; // How far ahead an account's own pace is looked at (like Bob's Accounts card)
+const ACCOUNT_PAYOFF_YEARS = 10; // How far ahead an account's own pace is looked at (like Equity's window on Bob's page)
 
 // The payment days from first, every `frequency` (a key of PAYMENT_FREQUENCIES), through until
 function paymentDays(first, frequency, until) {
@@ -2978,7 +3171,7 @@ function payOff({ owed, interest, payment, frequency, first, from, until = addMo
   const days = new Set(paymentDays(first, frequency, until).map(day => day.getTime()));
   const yearIn = addMonths(first, 12);
   const schedule = [];
-  let balance = -owed; // (Money owed is below $0, like an Other Account's)
+  let balance = -owed; // (Money owed is below $0, like an Equity account's)
   let addedSince = 0;
   let addedAll = 0;
   let paid = 0;
@@ -2992,6 +3185,7 @@ function payOff({ owed, interest, payment, frequency, first, from, until = addMo
     if (!days.has(day.getTime())) continue;
     const amount = Math.min(payment, round(-balance));
     balance = round(balance + amount);
+    stepper?.pay(amount);
     paid += amount;
     schedule.push({ date: day, payment: amount, interest: round(-addedSince), owed: round(-balance) });
     addedSince = 0;
@@ -3026,7 +3220,7 @@ function paymentToPayOffBy(options, by) {
   return high / 100;
 }
 
-// An Other Account's own pace back up to $0 from below (its row index), from today: its entries, the ones the budget
+// An Equity account's own pace back up to $0 from below (its row index), from today: its entries, the ones the budget
 // still has coming for ACCOUNT_PAYOFF_YEARS (projection: projectBudget, to that day), and its interest, and the same
 // with `extra` more on each payment day (paymentDays from first, every frequency). { owed (today, above $0 when it's
 // below), now: { paidOff, interest }, withExtra: { paidOff, interest } } (paidOff: the day it's back to $0, or null
@@ -3067,7 +3261,8 @@ function accountPayoff(index, projection, { extra = 0, frequency = "monthly", fi
 // default) }, or null for none; leave it out to keep it), owed (with Separate Interest: today's interest balance, apart
 // from balance; leave it out to keep it), max (the most it can hold, like a credit card's limit: a number, or null for
 // none; leave it out to keep it), escrow ({ amount (each month), day (of the month it's due; left out: the day interest
-// is added, or today's) }, or null for none; leave it out to keep it) }. A new name goes on its entries and tracker
+// is added, or today's) }, or null for none; leave it out to keep it), kind ("car", "mortgage", "credit", "debit", or
+// "other"; leave it out to keep it) }. A new name goes on its entries and tracker
 // aliases too, so they stay with it. A balance sets the starting amount so today's balance comes out to it (the entries
 // stay as they are). A new balance, new interest, or new escrow starts interest and escrow counting from today, with the
 // interest so far kept in today's balance (with Separate Interest, in its interest balance; turned off, that goes into
@@ -3124,6 +3319,7 @@ function accountEntry(fields, index, calendar = calendarData) {
   }
   const escrowChanged = !!escrow !== !!oldEscrow || (!!escrow && (escrow.amount !== oldEscrow.amount || escrow.day !== oldEscrow.day));
   const escrowColumns = (due) => (escrow ? [formatMoney(escrow.amount), String(escrow.day), due > 0 ? formatMoney(due) : ""] : ["", "", ""]);
+  const kindColumn = fields.kind === undefined ? undefined : ACCOUNT_KIND_KEYS.includes(fields.kind) ? fields.kind : "";
 
   formEntryRow[3] = "Account: " + name;
   formEntryRow[4] = "";
@@ -3134,7 +3330,7 @@ function accountEntry(fields, index, calendar = calendarData) {
     // (Its interest counts from the last day it was added, see lastMonthDay)
     const periodStart = settings ? lastMonthDay(settings.day, today) : null;
     const row = [name, formatMoney(total), "", total ? formatMoney(total) : "", rate ? String(rate) : "", rate || escrow ? formatToMMDDYYYY(today) : "", maxText,
-      ...(settings ? settings.columns : ["", "", ""]), ...separateColumns(interestOwed), ...escrowColumns(0), periodStart && periodStart < today ? formatToMMDDYYYY(periodStart) : ""];
+      ...(settings ? settings.columns : ["", "", ""]), ...separateColumns(interestOwed), ...escrowColumns(0), periodStart && periodStart < today ? formatToMMDDYYYY(periodStart) : "", kindColumn ?? ""];
     list.push(row);
     formEntryRow[2] = "🏦 New Account";
     if (balance || interestOwed) formEntryRow[5] = "Balance: " + formatMoney(balance || 0) + (separate ? ` and ${formatMoney(interestOwed)} in interest` : "");
@@ -3153,6 +3349,7 @@ function accountEntry(fields, index, calendar = calendarData) {
     formEntryRow[4] = "Renamed From: " + oldName;
   }
   row[0] = name;
+  if (kindColumn !== undefined) row[16] = kindColumn;
   formEntryRow[2] = "🏦 Change Account";
   const now = summary ? summary.today : 0;
   // (With Separate Interest, today's balance is in two parts: the interest balance, and the rest, which the form's Balance
@@ -3161,7 +3358,9 @@ function accountEntry(fields, index, calendar = calendarData) {
   const nowRest = Math.round((now - nowOwed) * 100) / 100;
   const oldRate = oldInterest ? oldInterest.rate : 0;
   const newRate = rate === undefined ? oldRate : rate;
-  const interestChanged = newRate !== oldRate || separate !== !!oldInterest?.separate || (!!settings && !!oldInterest && ["compound", "every", "day"].some(key => settings[key] !== oldInterest[key]));
+  // (A kind that's money owed earns nothing past $0, so a change of that counts as a change to its interest)
+  const debtChanged = !!oldInterest && kindColumn !== undefined && DEBT_KINDS.includes(kindColumn) !== oldInterest.debt;
+  const interestChanged = newRate !== oldRate || separate !== !!oldInterest?.separate || debtChanged || (!!settings && !!oldInterest && ["compound", "every", "day"].some(key => settings[key] !== oldInterest[key]));
   const targetOwed = separate ? owed ?? nowOwed : 0;
   const targetRest = balance ?? (separate ? nowRest : now);
   const balanceChanged = balance !== null && Math.abs((separate && oldInterest?.separate ? nowRest : now) - balance) >= 0.005 || (separate && Math.abs(targetOwed - nowOwed) >= 0.005);
@@ -3199,7 +3398,7 @@ function accountEntry(fields, index, calendar = calendarData) {
   return {};
 }
 
-// An entry's title with its Other Account's new name ("Payday → Savings" -> "Payday → Rainy Day", and "Move ← Savings →
+// An entry's title with its Equity account's new name ("Payday → Savings" -> "Payday → Rainy Day", and "Move ← Savings →
 // HSA" -> "Move ← Rainy Day → HSA"), or null when the entry isn't for that account (oldClean: the account's old name, as
 // compared)
 function renamedAccountTitle(sprite, text, oldClean, newName) {
@@ -3328,7 +3527,7 @@ function combineSameEntries(lines) {
   return kept;
 }
 
-// The same for Upcoming: entries on one day with the same title (its Other Account too) and type become one, whatever
+// The same for Upcoming: entries on one day with the same title (its Equity account too) and type become one, whatever
 // their marks or %, their amounts added (the mark stays if either had one, like combineSameEntries; a placeholder only if
 // both were, and a plain amount)
 function combineSameUpcoming() {
@@ -3350,11 +3549,11 @@ function combineSameUpcoming() {
 }
 
 /* ---------- Goals (Bob's Goals card) ---------- */
-// A goal is an amount for an Other Account, In Bank, or the Total (In Bank and every Other Account together, like Other
-// Accounts' Total today) to reach, by a day if it has one, with a title of its own if it has one. A credit card's can be
+// A goal is an amount for an Equity account, In Bank, or the Total (In Bank and every Equity account together, like Equity
+// accounts' Total today) to reach, by a day if it has one, with a title of its own if it has one. A credit card's can be
 // to climb from below $0 to $0 (paid off) or more. A % goal is that percent of what it's for on the day it's set, and
 // stays that amount (its percent is kept to show it). Bob's page lists them with how far along each one is, and works
-// out what reaching each one takes (Bob Page.js). They're kept with the Other Accounts (accountsData.goals): [{ title
+// out what reaching each one takes (Bob Page.js). They're kept with the Equity accounts (accountsData.goals): [{ title
 // ("" for none), kind: "inBank" | "total" | "account" ("none": one set before goals needed what they're for, kept until
 // it's changed), account (the account's name, for "account"), amount, percent (null for a plain amount), date (the day to
 // reach it by, "" for none), made (the day it was set), start (what it was for held then, so how far along it is counts
@@ -3426,11 +3625,11 @@ function goalEntry(fields, index, calendar = calendarData) {
   const title = capitalize(String(fields.title || "").replace(/\s+/g, " ").trim());
   if (title.length > MAX_TITLE) throw new BudgetInputError(`Titles can be up to ${MAX_TITLE} characters.`);
   const kind = fields.kind;
-  if (!["inBank", "total", "account"].includes(kind)) throw new BudgetInputError("Pick what it's for: In Bank, the Total, or one of your Other Accounts.");
+  if (!["inBank", "total", "account"].includes(kind)) throw new BudgetInputError("Pick what it's for: In Bank, the Total, or one of your Equity accounts.");
   let account = "";
   if (kind === "account") {
     const found = accountRows().find(known => known.clean === cleanString(fields.account));
-    if (!found) throw new BudgetInputError("Pick one of your Other Accounts.");
+    if (!found) throw new BudgetInputError("Pick one of your Equity accounts.");
     account = found.name;
   }
   const date = fields.date instanceof Date && !isNaN(fields.date.getTime()) ? createSafeMidnight(fields.date) : null;
@@ -3443,7 +3642,7 @@ function goalEntry(fields, index, calendar = calendarData) {
       goal.made = old.made;
     } else {
       const balance = goalBalance(goal, calendar);
-      if (balance === null) throw new BudgetInputError("A % goal is a percent of what it's for, so pick an Other Account, In Bank, or Total.");
+      if (balance === null) throw new BudgetInputError("A % goal is a percent of what it's for, so pick an Equity account, In Bank, or Total.");
       goal.amount = percentValue(percent, balance);
     }
   } else {
@@ -3708,7 +3907,7 @@ function saveWavelengths(list) {
 // spreadsheet's too, once it lands there), and a recurring entry's own (on its Recurring Entries form). They're kept in a
 // table of their own, so long notes never fill up the rest of the budget: notesData = { version: 1, entries: {
 // "YYYY-MM-DD|title as compared|type": note }, recurring: { "title as compared|type": note } } (type: regular, hidden, or
-// transfer; the title as compared keeps its Other Account, since a day has one entry per title, account, and type). A
+// transfer; the title as compared keeps its Equity account, since a day has one entry per title, account, and type). A
 // note goes wherever its entry goes (another day, title, type, or account; into an entry already there, the two notes are
 // put together), and it goes when its entry does (deleted, or a placeholder whose day passed, see dropStrayNotes). Undo
 // and Redo put a day's notes back with its entries. Every entry form has its note at the bottom (BudgetUI.noteField).
@@ -3818,7 +4017,7 @@ function addEntryNote(date, title, sprite, note, skipWhenFull = false) {
   logNoteChange(before, noteText("entries", key));
 }
 
-// Within a change to an entry: its note goes where it went (another day, title, type, or Other Account), after the note
+// Within a change to an entry: its note goes where it went (another day, title, type, or Equity account), after the note
 // of an entry it went into, and the form's note (change.note) takes its place; it goes when the entry is deleted. Its
 // reminder goes with it the same way (the form's, change.reminder: days before its day, or null for none, takes its
 // place), on a day after today (on any other, it goes); one it went into keeps its own when it had none.
@@ -3860,7 +4059,7 @@ function followRecurringNote(before, fields) {
   logNoteChange(old, own);
 }
 
-// Within a recurring entry's new title, Other Account, or type (after moveRecurringTemps): the notes on its days from
+// Within a recurring entry's new title, Equity account, or type (after moveRecurringTemps): the notes on its days from
 // `from` on go with it. A day that still has an entry of its own with the old title and type (one the recurring entry
 // didn't land on) keeps that entry's note.
 function moveDayNotes(oldTitle, oldSprite, newTitle, newSprite, from) {
@@ -4027,7 +4226,7 @@ function saveEntryExtras(date, title, sprite, { purpose, note, reminder } = {}) 
 // it comes with that day's reminder, as a push notification or on the calendar link (Settings), at the reminder time:
 // "🔔 Rent is in 3 days (Fri, Nov 27)" (see buildReminderPlan; the API words it). They're kept with the notes
 // (notesData.reminders: { "YYYY-MM-DD|title as compared|type": "3" }, keyed like the entry's note, see entryNoteKey),
-// and go wherever their entry goes, the same way (another day, title, type, or Other Account; with Undo and Redo too).
+// and go wherever their entry goes, the same way (another day, title, type, or Equity account; with Undo and Redo too).
 // One goes when its entry does, or once its day has come (dropStrayNotes). A recurring entry's or a connected
 // spreadsheet's day can have one too, like a note.
 
@@ -4126,7 +4325,7 @@ function remindedEntries() {
 const BACKUP_MAX_BYTES = 25 * 1024 * 1024; // The biggest file read (every part of a budget, with room to spare)
 const BACKUP_CHOICES = ["current", "uploaded", "remove"];
 // The tables a backup can fill, by the names its window gives them (Change Logs keep only their newest rows anyway)
-const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Other Accounts", tracker: "Tracker", sheets: "Connected Spreadsheets And Calendars", calculator: "Paycheck Calculator", notes: "Notes" };
+const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Equity", tracker: "Tracker", sheets: "Connected Spreadsheets And Calendars", calculator: "Paycheck Calculator", notes: "Notes" };
 
 // A Download My Data file's text, read and checked: { from: { username, downloaded (a Date, or null) }, budgets (the
 // names of the budgets the file has: its account's first budget, then its others), which (the one read), days: Map(day's
@@ -4253,7 +4452,7 @@ function mergeKeyed(current, uploaded, choice, same = (a, b) => JSON.stringify(a
   return { items: [...first, ...second.filter(([key]) => !taken.has(key))].map(([, item]) => item), clashes };
 }
 
-// An entry line's key on its day (a day has one entry per title, Other Account, and type)
+// An entry line's key on its day (a day has one entry per title, Equity account, and type)
 function dayLineKey(line) {
   const read = readLine(line);
   return `${read.clean}|${getSpecialType(read.sprite)}`;
@@ -4285,7 +4484,7 @@ function backupPlans(backup) {
       pool.get(date.getTime()).lines.push(line);
     }
     historyPlan(plan, pool);
-    calendarPlan(plan, pool);
+    calendarPlan(plan, pool, backup.accounts?.bankHolds);
   }
 
   if (backup.upcoming) {
@@ -4314,7 +4513,7 @@ function backupPlans(backup) {
     const mine = accountsData.list.slice(1).filter(usedRow);
     const theirs = backup.accounts.list.slice(1).filter(usedRow);
     const count = (choice) => mergeKeyed(keyed(mine, accountKey), keyed(theirs, accountKey), choice, (a, b) => JSON.stringify(a.slice(2)) === JSON.stringify(b.slice(2)) && cleanString(a[0]) === cleanString(b[0]));
-    plan("accounts", "Other Accounts", "accounts", mine.length, theirs.length, count(null).clashes, (choice) => {
+    plan("accounts", "Equity", "accounts", mine.length, theirs.length, count(null).clashes, (choice) => {
       const names = new Set();
       const rows = count(choice).items.filter(row => !names.has(cleanString(row[0])) && names.add(cleanString(row[0])));
       accountsData.list = [accountsData.list[0], ...rows];
@@ -4464,7 +4663,7 @@ function historyPlan(plan, pool) {
 
 // The calendar's part of a backup (see backupPlans): its days on the calendar now, with each one's own entries (the rest
 // land again, and the budget works out In Bank again)
-function calendarPlan(plan, pool) {
+function calendarPlan(plan, pool, holds) {
   const mine = new Map();
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) mine.set(gridDates[r][c].getTime(), ownEntryLines(calendarData[r][c]));
@@ -4482,6 +4681,8 @@ function calendarPlan(plan, pool) {
         calendarData[r][c] = [formatToMMDD(gridDates[r][c]), ...merged].join("\n");
       }
     }
+    // (A day's hold goes with the entries it was made for: see IN BANK AND THE LAST CATCHUP)
+    if (choice !== "current") for (const date of gridDates.flat()) holdBank(date, (holds?.[formatToMMDDYYYY(date)] ?? 0) - bankHoldOn(date));
   });
 }
 
@@ -4514,7 +4715,7 @@ function uploadBackup(backup, choices) {
 /* ---------- Connected spreadsheets ---------- */
 // Entries from the person's own spreadsheets (Google Sheets, Excel, ...), set up on the Spreadsheets & Calendars page. Each one says
 // which cells hold the dates (always from the spreadsheet), and where the titles, amounts, refraction types,
-// and Other Accounts come from: cells too, or one typed in for all of them. Spreadsheets.js reads them (each
+// and Equity accounts come from: cells too, or one typed in for all of them. Spreadsheets.js reads them (each
 // time Home or Settings opens) into entries kept here, and the budget writes those onto the calendar the same
 // way it writes recurring entries:
 //   - From today on, on the calendar only, behind a ➕ (➕❗️ Regular, ➕✖️ Hidden, ➕⭕️ Transfer), taken off
@@ -4913,7 +5114,7 @@ function uncommonSheetKeys() {
   return keys;
 }
 
-/* ---------- Edit mode: reorder, sections, delete (Recurring, Tracker, and Other Accounts) ---------- */
+/* ---------- Edit mode: reorder, sections, delete (Recurring, Tracker, and Equity) ---------- */
 
 // order: row indexes top to bottom. Rows left out (blank rows the page doesn't show) stay at the end.
 function reorderTableRows(tableName, order, movedIndex) {
@@ -5043,15 +5244,15 @@ function search(query, calendar = calendarData) {
     else targetsByTitle.set(target.clean, [...(targetsByTitle.get(target.clean) || []), target]);
   }
 
-  // Filters: one refraction type ("❗️", "✖️", or "⭕️"; "" is any), and one Other Account (its name, "none" for
+  // Filters: one refraction type ("❗️", "✖️", or "⭕️"; "" is any), and one Equity account (its name, "none" for
   // entries without one, or "" for any)
   let onlyType = ["❗️", "✖️", "⭕️"].includes(query.type) ? query.type : "";
   let accounts = accountTitleMap();
   let onlyAccount = String(query.account || "").trim();
   let accountFilter = onlyAccount === "none" ? "none" : onlyAccount ? accounts.get(cleanString(onlyAccount)) || null : "";
-  if (accountFilter === null) throw new BudgetInputError(`There's no Other Account called "${onlyAccount}".`);
+  if (accountFilter === null) throw new BudgetInputError(`There's no Equity account called "${onlyAccount}".`);
   if (onlyType) searchingFor += ` (${REFRACTION_NAMES.get(onlyType)} only)`;
-  if (accountFilter === "none") searchingFor += ", with no Other Account";
+  if (accountFilter === "none") searchingFor += ", with no Equity account";
   else if (accountFilter) searchingFor += `, for ${accountFilter.name}`;
 
   // An entry is found when a target for its title counts its amount: "Payday → Savings" is found by Payday,
@@ -5090,6 +5291,7 @@ function search(query, calendar = calendarData) {
   //    below), skipping days a Future Dates temp blocks. Projected up to two years ahead.
   if (toDate.getTime() > gridEndDate.getTime()) {
     let lastDay = new Date(Math.min(toDate.getTime(), addDays(today, 730).getTime()));
+    percentBasesThrough(lastDay);
     let firstDay = addDays(gridEndDate, 1);
     if (fromDate && fromDate.getTime() > firstDay.getTime()) firstDay = fromDate;
     let recurringRows = getParsedRecurringRows();
@@ -5212,7 +5414,7 @@ function searchTargets(terms) {
       targets.push({ clean: null, count: "all", withTransfers: true, onlyTransfers: true });
       continue;
     }
-    if (rowType === "interest") throw new BudgetInputError("The Interest row counts the interest your Other Accounts get, which isn't an entry, so Search can't find it. Each account's window on Other Accounts lists its interest.");
+    if (rowType === "interest") throw new BudgetInputError("The Interest row counts the interest your Equity accounts get, which isn't an entry, so Search can't find it. Each account's window on Equity lists its interest.");
     let withTransfers = String(row[0]).startsWith("⭕️");
     for (let alias of String(row[4] || "").split(",")) {
       let { clean, count } = parseAlias(alias);
@@ -5480,13 +5682,14 @@ function organizeCellEntries() {
 // In Bank, Gains, and Costs for every day (starting from History's last balance), the next-28-days
 // lines on the last day, and the home page's "Lowest in bank after today"
 function writeBudgetMath() {
+  pruneBankHolds();
   let lastInBank = readLatestHistoryInBank();
   let lowest = Infinity;
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 7; c++) {
       let lines = calendarData[r][c].split("\n");
       let { gains, costs, bankChange } = dayMath(lines);
-      let inBank = Math.round((lastInBank + bankChange) * 100) / 100;
+      let inBank = Math.round((lastInBank + bankChange + bankHoldOn(gridDates[r][c])) * 100) / 100;
       if (gridDates[r][c] >= today && inBank < lowest) lowest = inBank;
 
       let bankLine;
@@ -5523,8 +5726,8 @@ function writeBudgetMath() {
 // A day's Gains and Costs lines, and how much its entries change In Bank (lines: the day's cell, line by line):
 //   Regular entries are costs or gains, and change In Bank
 //   Hidden entries are costs or gains too, but happen outside the budget's account, so In Bank stays the same
-//   Transfers change In Bank, but aren't costs or gains (the money is still yours); one from another Other Account
-//   ("Move ← Savings → HSA") moves money between two Other Accounts, so it doesn't change In Bank either
+//   Transfers change In Bank, but aren't costs or gains (the money is still yours); one from another Equity account
+//   ("Move ← Savings → HSA") moves money between two Equity accounts, so it doesn't change In Bank either
 function dayMath(lines) {
   let gains = 0;
   let costs = 0;
@@ -5604,7 +5807,7 @@ function getPredictionData(lastInBank) {
 
     for (let f = 0; f < parsedFuture.length; f++) {
       // Hidden entries don't change In Bank (hidden recurring entries are skipped above), and neither do transfers from
-      // another Other Account
+      // another Equity account
       if (parsedFuture[f].time === currentTestTime && parsedFuture[f].special !== "✖️" && !parsedFuture[f].fromOther) dayTotal += parsedFuture[f].amt;
     }
 
@@ -5730,7 +5933,7 @@ function affirmationIndex(date) {
 }
 
 // Tracker sums (last 28 / 90 / 365 days) from the calendar and History, the Transfers and Undefined rows'
-// titles (every transfer's, and the ones no other row tracks), the Interest row (the Other Accounts' interest, see
+// titles (every transfer's, and the ones no other row tracks), the Interest row (the Equity accounts' interest, see
 // interestAdded, which isn't an entry), and the Recurring tab's monthly/yearly summary
 function updateTrackerTab() {
   let yearly = 0;
@@ -5866,7 +6069,7 @@ function updateTrackerTab() {
     }
   }
 
-  // The Interest row: each Other Account's interest added from 365 days ago through today (below $0 is interest paid),
+  // The Interest row: each Equity account's interest added from 365 days ago through today (below $0 is interest paid),
   // with the accounts it came from as its titles
   for (const credit of interestAdded) {
     const daysAgo = getDayDifference(today, credit.date) + 1;
@@ -6046,7 +6249,7 @@ function calculatorStore(name) {
 }
 
 // A preset's or the Debt Calculator's boxes, checked: each a number from 0 to MAX_AMOUNT or a short word (a pick, like an
-// Other Account's name or "monthly"), at most 20 of them
+// Equity account's name or "monthly"), at most 20 of them
 function readCalculatorValues(values) {
   const kept = {};
   for (const [box, value] of Object.entries(values || {}).slice(0, 20)) {
@@ -6363,9 +6566,9 @@ function normalizeApiTable(rawData, shape) {
   return rows;
 }
 
-// Rebuild the Other Accounts store: { version: 3, list, equity, coming, inBank, goals, bob }
+// Rebuild the Equity accounts store: { version: 3, list, equity, coming, inBank, goals, bob }
 //   list: [0] column titles, then [name, balance today, "default" | "cash" | "", starting amount, interest rate, interest
-//         since, max] (see Other Accounts in BUDGET LOGIC). Savings and Cash (MANDATORY_ACCOUNTS) are added if they're
+//         since, max] (see Equity in BUDGET LOGIC). Savings and Cash (MANDATORY_ACCOUNTS) are added if they're
 //         missing. Balances come only from entries, so a version 2 store's typed-in balance in [1] isn't kept.
 //   equity: the spreadsheet's business-version (LLC) equity tables, { tabName: table }, kept as stored
 //           (the website doesn't change them). A store without a version is only these tables.
@@ -6392,7 +6595,7 @@ function normalizeApiAccounts(rawData) {
 
   let list = normalizeApiTable(isCurrent ? parsed.list : [], TABLE_SHAPES.accounts);
   if (parsed.version === 2) list.forEach((row, i) => { if (i > 0) row[1] = formatMoney(0); });
-  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since", "Max", "Compounds", "Added Every", "Added On", "Separate Interest", "Interest Balance", "Escrow", "Escrow Day", "Escrow Due", "Interest From"];
+  list[0] = ["Account", "Balance", "Default", "Starting", "Interest", "Interest Since", "Max", "Compounds", "Added Every", "Added On", "Separate Interest", "Interest Balance", "Escrow", "Escrow Day", "Escrow Due", "Interest From", "Kind"];
   // Each mandatory account: the one marked as it, or one with its name that isn't marked, or a new one after the one
   // before it (a budget whose Savings was renamed to Cash keeps that one, and gets no second Cash)
   let after = 0;
@@ -6417,6 +6620,11 @@ function normalizeApiAccounts(rawData) {
   if (goals.length > 0) accounts.goals = goals; // (Goals, see goalEntry)
   const bob = isCurrent ? normalizeBob(parsed.bob, goals.length > 0) : null;
   if (bob) accounts.bob = bob; // (Bob's page, see normalizeBob)
+  // (What holds In Bank steady on days before the last Catchup, see IN BANK AND THE LAST CATCHUP)
+  if (isCurrent && parsed.bankHolds && typeof parsed.bankHolds === "object" && !Array.isArray(parsed.bankHolds)) {
+    const holds = Object.entries(parsed.bankHolds).filter(([day, amount]) => /^\d{2}\/\d{2}\/\d{4}$/.test(day) && Number.isFinite(amount) && amount !== 0);
+    if (holds.length > 0) accounts.bankHolds = Object.fromEntries(holds);
+  }
   return accounts;
 }
 
@@ -6535,8 +6743,8 @@ function extractTitle(line, clean = true) {
 }
 
 // One line of a day ("❗️ -$5.00 Coffee") read once: { sprite, amount, title (as written, "" without one),
-// clean (the title as compared, cleanString), titleClean (without its Other Account, titleKey), fromOther (a Transfer
-// from another Other Account, which never changes In Bank: see fromAccount), system (a line the budget writes itself: In
+// clean (the title as compared, cleanString), titleClean (without its Equity account, titleKey), fromOther (a Transfer
+// from another Equity account, which never changes In Bank: see fromAccount), system (a line the budget writes itself: In
 // Bank, Gains, Costs), blank }. Cached by its text: every change reads the same lines again (all of History, for the
 // tracker and the accounts), so each is only split up the first time.
 const lineCache = new Map();
@@ -6558,7 +6766,7 @@ function readLine(line) {
 // different. The invisible "show as emoji" characters (variation selectors, like the one after the circle
 // in ⭕️) are dropped first: they count as marks, so otherwise "⭕️Food" wouldn't compare as "Food".
 // The API's quick.js cleanTitle matches this. Cached: every change compares the same titles thousands of times.
-// An entry's Other Account is compared on its own: "Payday → Savings" is "payday → savings", so it's a different
+// An entry's Equity account is compared on its own: "Payday → Savings" is "payday → savings", so it's a different
 // entry from "Payday" or "Payday → HSA" (the tracker and Search compare titles without it, see titleKey).
 const cleanCache = new Map();
 function cleanString(title) {
@@ -6580,7 +6788,7 @@ function tidyTitle(text) {
   return tidy(/[^\p{L}\p{M}\p{N}\s]/gu) || tidy(/[^\p{L}\p{M}\p{N}\p{S}\s]/gu);
 }
 
-// A title as the tracker and Search compare it, without its Other Account: "Groceries → Cash" is "groceries", so
+// A title as the tracker and Search compare it, without its Equity account: "Groceries → Cash" is "groceries", so
 // the Groceries row counts it. One with no title of its own ("→ Savings") goes by the account's name.
 function titleKey(title) {
   const { title: own, account } = splitAccount(title);
@@ -6588,7 +6796,7 @@ function titleKey(title) {
 }
 
 // Each word's first letter (in any language) capitalized: "coffee shop" -> "Coffee Shop", "école" -> "École". An
-// Other Account after the title keeps its name as it is.
+// Equity account after the title keeps its name as it is.
 function capitalize(string) {
   const { title, account, from } = splitAccount(getParts(string).join(" "));
   const words = getParts(title).map(word => word.replace(/\p{L}/u, char => char.toUpperCase())).join(" ");
@@ -6596,7 +6804,7 @@ function capitalize(string) {
 }
 
 // "Payday Transfer → Savings" -> { title: "Payday Transfer", account: "Savings", from: "" }, "→ Savings" -> { title: "",
-// account: "Savings", from: "" }, and a Transfer from another Other Account, "Move ← Savings → HSA" -> { title: "Move",
+// account: "Savings", from: "" }, and a Transfer from another Equity account, "Move ← Savings → HSA" -> { title: "Move",
 // account: "HSA", from: "Savings" }; without an arrow, the whole text is the title and account and from are ""
 function splitAccount(text) {
   const value = ` ${String(text ?? "").trim()}`;
@@ -6609,9 +6817,9 @@ function splitAccount(text) {
   return from ? { title: before.slice(0, fromAt).trim(), account, from } : { title: before.trim(), account, from: "" };
 }
 
-// A typed title can't hold the arrows: they're what mark the Other Account picked (and the one a Transfer comes from,
+// A typed title can't hold the arrows: they're what mark the Equity account picked (and the one a Transfer comes from,
 // see withAccount), so a typed one would put the entry in an account without picking it
-const TITLE_ARROW = `Titles can't have ${ACCOUNT_ARROW} or ${FROM_ARROW} in them. To put an entry in an Other Account, pick the account under Other Account.`;
+const TITLE_ARROW = `Titles can't have ${ACCOUNT_ARROW} or ${FROM_ARROW} in them. To put an entry in an Equity account, pick the account under Equity Account.`;
 const hasTitleArrow = (text) => String(text ?? "").includes(ACCOUNT_ARROW) || String(text ?? "").includes(FROM_ARROW);
 
 // A Transfer can't come from the account it goes to (title: the entry's, with its accounts)
@@ -6621,9 +6829,9 @@ function refuseSameAccount(title) {
   if (from && cleanString(from) === cleanString(account)) throw new BudgetInputError(SAME_ACCOUNT);
 }
 
-// An entry's title with the Other Account picked for it, which never changes the title: "Payday → Savings", or
+// An entry's title with the Equity account picked for it, which never changes the title: "Payday → Savings", or
 // "→ Savings" with no title of its own. Only an entry with one is for an account (linkedAccount), even if its
-// title is an account's name. from: the Other Account a Transfer comes from instead of In Bank ("Move ← Savings → HSA",
+// title is an account's name. from: the Equity account a Transfer comes from instead of In Bank ("Move ← Savings → HSA",
 // see fromAccount), "" for In Bank; it needs an account to go to.
 function withAccount(title, account, from = "") {
   const own = String(title ?? "").replace(/\s+/g, " ").trim();
@@ -6752,8 +6960,8 @@ function placeholderSprite(sprite, placeholder) {
   return decoratedSprite(baseSprite(sprite), { placeholder: placeholder === true ? (placeholderPart(sprite) || true) : placeholder, percent: percentOf(sprite) });
 }
 
-// A % entry's amount is that percent of its Other Account's balance on its day (before that day's entries), so only an
-// entry with an Other Account can be one. It's worked out again with every change from today on (resolvePercentEntries),
+// A % entry's amount is that percent of its Equity account's balance on its day (before that day's entries), so only an
+// entry with an Equity account can be one. It's worked out again with every change from today on (resolvePercentEntries),
 // and once its day passes it stays what it came to (the daily update makes it a plain amount). It's kept as ％ and the
 // percent, signed like the amount (a cost's is below 0), after the entry's type and mark and before a placeholder's ⏳
 // ("⭕️％-3", "✔️⭕️％-3", "⭕️✔️％-3⏳"), which nothing reading those notices; the amount after it is what it comes to.
@@ -6797,7 +7005,7 @@ function percentValue(percent, base) {
   return Math.round(percent * Math.abs(base)) / 100;
 }
 
-const PERCENT_NEEDS_ACCOUNT = "A % amount is a percent of an Other Account's balance, so it needs Hidden or Transfer with an account picked under Other Account.";
+const PERCENT_NEEDS_ACCOUNT = "A % amount is a percent of an Equity account's balance, so it needs Hidden or Transfer with an account picked under Equity Account.";
 const PERCENT_PAST_DAY = "A % amount is worked out from today on, so it can't go on a day that already passed. Enter the amount instead.";
 
 // A percent as typed for an entry (signed like its amount): the number, checked, or null for none
@@ -6809,12 +7017,12 @@ function readPercent(value) {
   return percent;
 }
 
-// Each Other Account's balance at the start of every day from today on, from the last time the budget was worked out
+// Each Equity account's balance at the start of every day from today on, from the last time the budget was worked out
 // (resolvePercentEntries): { byDay: Map(day's time -> Map(account row index -> balance)), until (the last day), last
 // (Map: each balance after it) }. null while there are no % entries.
 let percentBases = null;
 
-// A % entry's amount on date: percent of its Other Account's balance at the start of that day, or null when it isn't
+// A % entry's amount on date: percent of its Equity account's balance at the start of that day, or null when it isn't
 // for an account (sprite and title: the entry's)
 function percentAmount(percent, date, sprite, title) {
   const account = linkedAccount(sprite, title);
@@ -6832,7 +7040,7 @@ function landingAmount(entry, date) {
   return entry.percent === null || entry.percent === undefined ? entry.amount : percentAmount(entry.percent, date, entry.sprite, entry.title) ?? entry.amount;
 }
 
-// Walks days in order, from firstDay, with each Other Account's balance (balances: Map(account row index -> its balance
+// Walks days in order, from firstDay, with each Equity account's balance (balances: Map(account row index -> its balance
 // at the start of firstDay)): each day's % entries are worked out from the balances that morning, then the day's
 // entries (and interest and escrow) go into them. day(text, date) returns the day's text with its % entries' amounts.
 // summaries: accountSummaries(), for the entries before firstDay.
@@ -6899,7 +7107,22 @@ function hasPercentEntries() {
     recurringData.some(row => marked(row?.[5])) || (sheetsData?.list || []).some(connection => connection.entries.some(entry => marked(entry[1])));
 }
 
-// Every % entry from today on comes to its percent of its Other Account's balance at the start of its day: the calendar's
+// The balances % entries work from, as far ahead as a look at the days to come needs (a graph can look years ahead): they go on
+// a day at a time from where resolvePercentEntries stopped
+function percentBasesThrough(until) {
+  if (!percentBases || until <= percentBases.until) return;
+  const first = addDays(percentBases.until, 1);
+  const recurringRows = getParsedRecurringRows();
+  const futureByDate = groupFutureRowsByDate();
+  const sheetDays = sheetEntriesByDay(first, until);
+  for (let day = first; day <= until; day = addDays(day, 1)) {
+    percentBases.byDay.set(day.getTime(), percentBases.runner.day(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), day).morning);
+  }
+  percentBases.until = until;
+  percentBases.last = new Map(percentBases.runner.balances);
+}
+
+// Every % entry from today on comes to its percent of its Equity account's balance at the start of its day: the calendar's
 // (in their cells), and Upcoming's (their stored amounts), through AHEAD_MONTHS from today (and the last Upcoming one).
 // The balances each day starts with are kept (percentBases) for what lands by itself (recurring and spreadsheets'
 // entries, see landingAmount) and the days after the calendar.
@@ -6934,7 +7157,7 @@ function resolvePercentEntries() {
   for (let day = nextFourStart; day <= until; day = addDays(day, 1)) {
     byDay.set(day.getTime(), runner.day(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), day).morning);
   }
-  percentBases = { byDay, until, last: new Map(runner.balances) };
+  percentBases = { byDay, until, last: new Map(runner.balances), runner };
 
   // Upcoming's % entries, from the balances just worked out
   for (const row of futureData.slice(1)) {
@@ -7388,6 +7611,39 @@ const ZOOM_CLOSE_MS = 320;
 const DAY_SLIDE_MS = 340;
 const ZOOM_EASING = 'cubic-bezier(0.33, 0, 0.2, 1)';
 
+// A day for keyboards and screen readers: a stop for the Tab key named by its date, In Bank, and how many entries it has, which
+// Enter or Space zooms in on (Layout.js's ACCESSIBILITY presses it). Zoomed, it's a group, and its entries and In Bank are stops of
+// their own. cellText: the day as its budget stores it.
+function labelDay(cell, date, cellText) {
+  const content = cell.querySelector('.cell-content');
+  if (!content) return;
+  const lines = String(cellText ?? '').split('\n').slice(1).map(text => readLine(text)).filter(line => !line.blank && !line.system);
+  const inBank = readInBank(cellText);
+  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+  content.dataset.label = `${weekday} ${showDate(date)}${date.getTime() === today.getTime() ? ', today' : ''}. ${inBank === null ? '' : `In Bank ${formatMoney(inBank)}. `}${lines.length} ${lines.length === 1 ? 'entry' : 'entries'}.`;
+  updateDayAccess(cell);
+}
+
+// A day's role as it is now, zoomed or not (see labelDay)
+function updateDayAccess(cell) {
+  const content = cell.querySelector('.cell-content');
+  if (!content || !content.dataset.label) return;
+  const open = cell.classList.contains('is-editing');
+  content.tabIndex = open ? -1 : 0;
+  content.setAttribute('role', open ? 'group' : 'button');
+  content.setAttribute('aria-label', content.dataset.label);
+  const inHistory = cell.dataset.row === undefined && cell.dataset.kind !== 'calendar';
+  content.querySelectorAll('.lineEntry, .lineInBank').forEach(line => {
+    if (open && !(inHistory && line.classList.contains('lineInBank'))) {
+      line.tabIndex = 0;
+      line.setAttribute('role', 'button');
+    } else {
+      line.removeAttribute('tabindex');
+      line.removeAttribute('role');
+    }
+  });
+}
+
 // A zoomed day's round buttons in its top right corner, for Home's days and History's: + (New Entry on that day) and ×
 // (close)
 function zoomDayButtons() {
@@ -7417,6 +7673,9 @@ function zoomDay(cell, animate = true) {
   activeEditCell = cell;
   const place = cell.getBoundingClientRect(); // Where it is before it's doubled
   cell.classList.add('is-editing');
+  updateDayAccess(cell);
+  // (It's read out, and the Tab key goes on to its entries; a day drawn again under an open window leaves the focus there)
+  if (animate && !document.querySelector('.budgetPanel')) cell.querySelector('.cell-content')?.focus({ preventScroll: true });
   if (!zoomBackdrop) {
     // In the page's own layer, just under the zoomed day (a backdrop in <body> would cover the day too)
     zoomBackdrop = document.createElement('div');
@@ -7442,6 +7701,8 @@ function closeZoomedDay(immediate = false) {
   if (zoomBackdrop) zoomBackdrop.classList.remove('shown');
   document.documentElement.classList.remove('dayZoomed');
   if (!cell) return;
+  // (The Tab key carries on from this day)
+  if (!immediate && (cell.contains(document.activeElement) || document.activeElement === document.body)) cell.querySelector('.cell-content')?.focus({ preventScroll: true });
   const finish = () => unzoomCell(cell);
   const scale = Number(cell.style.getPropertyValue('--zoom')) || 1;
   if (immediate || !cell.classList.contains('is-fullZoom') || !cell.animate || reducedMotion()) {
@@ -7469,6 +7730,7 @@ function unzoomCell(cell) {
   // from the middle of the screen, where the zoomed layout was, after it had already shrunk into place
   cell.style.transition = 'none';
   cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom', 'isZoomClosing');
+  updateDayAccess(cell);
   for (const property of ZOOM_PROPERTIES) cell.style.removeProperty(property);
   if (animation) animation.cancel(); // It held its last frame until now (fill: forwards)
   // Its first lines show again (a day that isn't zoomed would keep a zoomed day's scroll, hidden)
@@ -7618,6 +7880,7 @@ function fillGuestDay(td, day) {
   content.replaceChildren(fragment, zoomDayButtons());
   td.classList.toggle('isNegative', (readInBank(day.text) ?? 0) < 0);
   td.classList.toggle('isToday', day.date.getTime() === today.getTime());
+  labelDay(td, day.date, day.text);
 }
 
 // The calendar's last day's lines about the 28 days after it ("✅ $812.40 Lowest: 11/14", "✅ $905.10 Day 28 In Bank")
@@ -7698,9 +7961,13 @@ function slideToDay(step, dragged = 0) {
   from.zoomClose.onfinish = () => unzoomCell(from);
 }
 
-// On a zoomed day, the left and right arrow keys go to the day before and the next day (not while typing, or with a
-// panel open)
+// On a zoomed day, the left and right arrow keys go to the day before and the next day, and Escape closes it (not while
+// typing, or with a panel open)
 document.addEventListener('keydown', (e) => {
+  if (activeEditCell && e.key === 'Escape' && !document.querySelector('.budgetPanel, .datePicker')) {
+    closeZoomedDay();
+    return;
+  }
   if (!activeEditCell || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('.budgetPanel')) return;
   e.preventDefault();
@@ -8070,7 +8337,7 @@ function stepThroughHistory(direction) {
   const to = direction === "undo" ? "before" : "after";
   const changed = step.days.find(day => JSON.stringify(dayEntries(createSafeMidnight(day.date))) !== JSON.stringify(day[from]));
   if (changed || (step.equity && JSON.stringify(accountsData?.equity ?? null) !== step.equity[from])) {
-    const what = changed ? showDay(createSafeMidnight(changed.date)) : "your Other Accounts";
+    const what = changed ? showDay(createSafeMidnight(changed.date)) : "your Equity accounts";
     throw new StaleHistoryError(`That (${step.label}) can't be ${direction === "undo" ? "undone" : "redone"} anymore, because ${what} changed since.`, direction);
   }
   // (A change made in History keeps the accounts' balances, undone or redone too)
@@ -8227,7 +8494,7 @@ function historySpot(date, history = historyData) {
 // =====================================================================
 // Every change made through runBudgetAction keeps what it did with its Change Logs row ([8], as JSON), so the row's Undo
 // can take it back later, from any device: each day whose own entries it changed (on the calendar, in History, or in
-// Upcoming), the recurring entries, tracker rows, and Other Accounts it added or took off (a changed one is the old one
+// Upcoming), the recurring entries, tracker rows, and Equity it added or took off (a changed one is the old one
 // off and the new one on) or put in another order, the goals, Bob's settings, connected spreadsheets and calendars, and
 // calculators it changed, and the notes. Undo puts back what was there before, but only while everything the change
 // touched is still as it left it, so it never erases anything changed since (it says what changed instead), the same as
@@ -8253,7 +8520,7 @@ const RECORD_ROWS = {
     set: (rows) => { trackerData = rows; },
     key: (row) => JSON.stringify([row[0], String(row[0]).trim() === "-" ? row[1] : "", TRACKER_AUTO_ROWS.includes(cleanString(row[0])) ? "" : row[4], row[5] ?? ""])
   },
-  accounts: { headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; }, key: (row) => JSON.stringify(row.map((cell, i) => (i === 1 ? "" : cell))) }
+  accounts: { headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; }, key: (row) => JSON.stringify(Array.from({ length: TABLE_SHAPES.accounts.cols }, (_, i) => (i === 1 ? "" : row[i] ?? ""))) }
 };
 // Other parts kept whole: [what, get(), set(value)]
 const RECORD_VALUES = {
@@ -8446,7 +8713,7 @@ function staleRecordPart(record) {
     const now = dayEntries(createSafeMidnight(day.date, true));
     if (now === null || comparableLines(now) !== comparableLines(day.after)) return showDay(createSafeMidnight(day.date, true));
   }
-  const names = { recurring: "your Recurring Entries", tracker: "your tracker", accounts: "your Other Accounts" };
+  const names = { recurring: "your Recurring Entries", tracker: "your tracker", accounts: "your Equity accounts" };
   for (const change of record.rows) {
     const spec = RECORD_ROWS[change.table];
     const keys = spec.get().slice(spec.headerRows).map(spec.key);
@@ -8459,7 +8726,7 @@ function staleRecordPart(record) {
       counts.set(key, counts.get(key) - 1);
     }
   }
-  const parts = { goals: "your Goals", bob: "Bob's page", equity: "your Other Accounts", sheets: "your connected spreadsheets and calendars", calculator: "the calculators" };
+  const parts = { goals: "your Goals", bob: "Bob's page", equity: "your Equity accounts", sheets: "your connected spreadsheets and calendars", calculator: "the calculators" };
   for (const value of record.values) {
     if (JSON.stringify(RECORD_VALUES[value.part][0]()) !== JSON.stringify(value.after)) return parts[value.part];
   }

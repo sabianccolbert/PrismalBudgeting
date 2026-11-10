@@ -12,8 +12,8 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="dark">
     <title>Prismal Budget - Site Notes</title>
-    <link rel="stylesheet" href="/stylesheet.css?v=a7c1d9edd1">
-    <link rel="stylesheet" href="/budgetStyle.css?v=fb11019b06">
+    <link rel="stylesheet" href="/stylesheet.css?v=6b9c464ecf">
+    <link rel="stylesheet" href="/budgetStyle.css?v=6f54d70791">
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
   </head>
   <body>
@@ -39,7 +39,7 @@
           <section id="about" aria-labelledby="aboutTitle">
             <h2 id="aboutTitle">What This Page Is</h2>
             <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Budget Works</a>.</p>
-            <p>Last checked: November 4, 2026 (site version 11.04.2026.B).</p>
+            <p>Last checked: November 9, 2026 (site version 11.09.2026.A).</p>
           </section>
 
           <section id="map" aria-labelledby="mapTitle">
@@ -179,11 +179,31 @@ X-XSS-Protection: 0</code></pre>
               <li><code>Javascript/Layout.js</code>: what every page shares (sliding between pages, the footer, Help, floating windows and cards, signing out, the Quick Entry icon's app).</li>
               <li><code>Javascript/Budgets.js</code>: which budget a page opens, and the budget picker (the list, Share, New Budget) over the header's buttons.</li>
               <li><code>stylesheet.css</code> (the look's colors and shapes, as tokens, in its section 1), <code>budgetStyle.css</code> (the budget's pages), and <code>themes.css</code> (each theme setting those tokens again). Adding a theme: the top of <code>themes.css</code> lists everything a new one needs, in <code>Boot.js</code>, <code>themes.css</code>, <code>Active Starfield.js</code>, <code>Settings Page.js</code>, and the guides.</li>
+              <li><code>Javascript/Line Graph.js</code>: the line graph any window or page can use (Bob's Data windows, the top of the Debt Calculator). <code>Javascript/Quick Icon.js</code>: the picture a Quick Entry icon is added with.</li>
               <li><code>_tools/stamp.mjs</code> and <code>_tools/hooks/pre-commit</code>: fingerprints, and the check before each commit.</li>
               <li><code>CNAME</code>, <code>robots.txt</code>, <code>sitemap.xml</code>, <code>llms.txt</code>, and <code>404.html</code> (GitHub Pages shows it for any address it doesn't have).</li>
               <li><code>how-it-works.html</code>: the full guide to what the site does.</li>
               <li>This page, <code>future-proofing.html</code>: update it when any of these settings change.</li>
               <li>Signing in with Apple, Google, or Microsoft is built but on standby: its code is commented out, each place marked "On standby" (<code>Login.js</code>, <code>Settings Page.js</code>, <code>Layout.js</code>, <code>login.html</code>, <code>settings.html</code>, <code>stylesheet.css</code>, and the API). The private API repo's notes say what turning it on takes.</li>
+            </ul>
+          </section>
+
+          <section id="accessibility" aria-labelledby="accessibilityTitle">
+            <h2 id="accessibilityTitle">10. Accessibility (Keyboards And Screen Readers)</h2>
+            <p>Everything on the site has to work with only a keyboard, and make sense to a screen reader. What's built, and what anything new needs:</p>
+            <ul>
+              <li><strong>Every page:</strong> <code>setUpAccessibility</code> in <code>Javascript/Layout.js</code> (its ACCESSIBILITY region) adds the Skip to the page link and hides the starfield from screen readers, and it makes the header's logo the first heading on a page with no <code>h1</code> showing. A page needs one <code>main</code>, and headings that go down a level at a time.</li>
+              <li><strong>Tab order:</strong> it's the order things are in the page. Never give anything a <code>tabindex</code> above 0, and put a page's controls in the order they should be reached.</li>
+              <li><strong>Controls:</strong> use a real <code>button</code>, <code>a</code>, <code>input</code>, or <code>select</code> whenever you can. One that's only a symbol (like × or −) needs an <code>aria-label</code> (a <code>BudgetUI.segmented</code> choice takes <code>name</code>). A label has to start with, or contain, the words shown on it, for people who use voice control.</li>
+              <li><strong>Something that acts like a button but can't be one</strong> (a day, an entry on it, a table row): give it <code>tabindex="0"</code> and <code>role="button"</code>, or use <code>BudgetUI.makePressable</code> on a table row. Layout.js's keydown presses it on Enter or Space, unless its own handler has already called <code>preventDefault</code>.</li>
+              <li><strong>Calendar days:</strong> anything that draws a day calls <code>labelDay</code> (<code>Javascript/Process Budget.js</code>) with its date and its text, which names it. <code>updateDayAccess</code> makes a zoomed day's entries reachable, and takes that off again.</li>
+              <li><strong>Windows:</strong> use <code>BudgetUI.openPanel</code>, which marks them as dialogs, moves the focus in, keeps the Tab key inside, closes on Escape, and puts the focus back on its <code>origin</code>. Give it a real origin (what was tapped).</li>
+              <li><strong>Messages:</strong> use <code>BudgetUI.showToast</code> (spoken as it shows), or an element with <code>role="alert"</code> for an error. Text only a screen reader should get goes in the <code>srOnly</code> class.</li>
+              <li><strong>Pictures and graphs:</strong> an image that only decorates has <code>alt=""</code>. Color is never the only way something is told apart: costs have a minus sign, a graph's lines are named. <code>LineGraph</code> is spoken a day at a time, and comes with a table; a new kind of chart needs the same.</li>
+              <li><strong>Dragging:</strong> anything that can be dragged needs a way without dragging. A table's ≡ bar and a prism's, gem's, or crystal's handle move with the up and down arrow keys (<code>BudgetUI.keyMoves</code> for a new list).</li>
+              <li><strong>Sets of choices:</strong> <code>role="radiogroup"</code> with <code>role="radio"</code> buttons move with the arrow keys by themselves.</li>
+              <li><strong>Themes:</strong> words need a contrast of at least 4.5 to 1 (3 to 1 for large words) on every theme; the focus ring uses <code>--GLOW_EDGE</code>, so a new theme has to set it where it can be seen.</li>
+              <li><strong>To check a change:</strong> go through the page with only the keyboard, watching that the focus can always be seen and never gets lost; try a screen reader (VoiceOver on an iPhone or Mac, Narrator or NVDA on Windows, TalkBack on Android); and run axe-core on the page. axe-core will report the calendar's days under <code>label-content-name-mismatch</code>, on purpose: each day's name has its date and In Bank, not every entry on it.</li>
             </ul>
           </section>
 

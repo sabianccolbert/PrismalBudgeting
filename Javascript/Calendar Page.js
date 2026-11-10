@@ -185,7 +185,7 @@ async function takeHistoryStep(direction) {
 // =====================================================================
 // A new budget starts at $0, so its first step says what's in the bank: a ⭕️ Transfer titled Starting
 // Balance on today (it changes In Bank, but isn't a gain), and for savings, the default account's balance
-// (like typing it on Other Accounts: no entry, so it isn't counted as a gain). The card only shows the first time a
+// (like typing it on Equity: no entry, so it isn't counted as a gain). The card only shows the first time a
 // budget opens (the account's first sign-in, or a new budget: GETTING_STARTED_KEY in Process Budget.js), until the
 // starting balance and a recurring entry are there or it's hidden with ×.
 
@@ -240,7 +240,7 @@ function wireGettingStarted() {
   document.getElementById("startBalanceForm")?.addEventListener("submit", setStartingBalance);
   const bank = document.getElementById("startBalance");
   if (bank) {
-    const signs = BudgetUI.segmented([{ key: -1, label: "−" }, { key: 1, label: "+" }], 1, (key) => { startBalanceSign = key; });
+    const signs = BudgetUI.segmented([{ key: -1, label: "−", name: "Overdrawn" }, { key: 1, label: "+", name: "Not overdrawn" }], 1, (key) => { startBalanceSign = key; });
     signs.el.classList.add("startSign");
     signs.el.setAttribute("aria-label", "Overdrawn (−) or not (+)");
     bank.after(signs.el);
@@ -350,6 +350,7 @@ function renderCalendar() {
     td.classList.toggle("isToday", gridDates[r][c].getTime() === today.getTime());
     // (The 28 days after the calendar going below $0 turns the Lowest card red instead, see renderAfterCalendar)
     td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0);
+    labelDay(td, gridDates[r][c], calendarData[r][c]);
   });
 }
 
@@ -582,7 +583,7 @@ function openQuickEntrySetup(origin) {
       const named = budgetInfo && (budgetInfo.shared || !budgetInfo.owned || !budgetInfo.first) ? ` It adds to this budget, ${budgetInfo.name}.` : "";
       form.append(
         text(`Put an icon on your phone's home screen that opens a New Entry form, with no login needed.${named}`),
-        text("The icon can only add entries. Besides In Bank today and the lowest it gets, it never sees your budget, just your Other Accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, you turn icons off in Settings, or this budget is deleted or stops being shared with you, it stops working."),
+        text("The icon can only add entries. Besides In Bank today and the lowest it gets, it never sees your budget, just your Equity accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, you turn icons off in Settings, or this budget is deleted or stops being shared with you, it stops working."),
         text("The next page shows how to add it to your home screen on your phone (iPhone, Samsung, Pixel, OnePlus, and more), and its Help shows how to open it from an iPhone's Lock Screen or check In Bank on an Apple Watch. Use your browser itself, not Prismal Budget opened inside another app (like Gmail or Instagram)."),
         BudgetUI.buttonRow([
           { label: "Set It Up", kind: "primary", type: "submit" },

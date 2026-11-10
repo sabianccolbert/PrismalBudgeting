@@ -1175,7 +1175,7 @@ document.addEventListener("click", (EVENT) => {
 // card (Bob Page.js), its theme and Custom theme and its Reduced Motion switches (Boot.js), so the next sign-in here
 // looks the same, and whether push notifications were turned off here on purpose (Notifications.js).
 const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
-  "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off"];
+  "prismal_theme", "prismal_custom_theme", "prismal_quick_icon", "prismal_still_stars", "prismal_less_motion", "prismal_push_off"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));
@@ -1339,6 +1339,7 @@ function setupFloatingHelp(BUTTON, HELP) {
   CLOSE.addEventListener("click", () => closeHelp());
   HELP.prepend(CLOSE);
   HELP.helpButton = BUTTON;
+  HELP.addEventListener("keydown", (EVENT) => keepTabInside(EVENT, HELP));
 }
 
 // Open a page's Help: it zooms out of its button, over a dimmed page
@@ -1458,3 +1459,78 @@ function injectGlobalFooter() {
   }
   CONTAINER.appendChild(FOOTER);
 }
+
+
+/*======================================================================
+ * #region ACCESSIBILITY (keyboards and screen readers)
+ *====================================================================*/
+// What every page shares. Future Proofing's Accessibility section says what a new control or page needs.
+
+// The Tab key at either end of a floating window (BOX) goes around to its other end, so it stays in the window
+function keepTabInside(EVENT, BOX) {
+  if (EVENT.key !== "Tab") return;
+  const STOPS = [...BOX.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex="0"]')].filter(EL => !EL.disabled && EL.getClientRects().length > 0 && !EL.closest("[hidden], [inert]"));
+  if (STOPS.length === 0) return;
+  const FIRST = STOPS[0];
+  const LAST = STOPS[STOPS.length - 1];
+  if (EVENT.shiftKey && (document.activeElement === FIRST || document.activeElement === BOX)) {
+    EVENT.preventDefault();
+    LAST.focus();
+  } else if (!EVENT.shiftKey && document.activeElement === LAST) {
+    EVENT.preventDefault();
+    FIRST.focus();
+  }
+}
+
+// A link past the header for the Tab key, and the page's first heading when the page has none showing (Home and the login page's
+// are their logos)
+function setUpAccessibility() {
+  const MAIN = document.querySelector("main");
+  if (MAIN) {
+    MAIN.id = MAIN.id || "mainContent";
+    MAIN.tabIndex = -1;
+    const SKIP = document.createElement("a");
+    SKIP.className = "skipLink";
+    SKIP.href = `#${MAIN.id}`;
+    SKIP.textContent = "Skip to the page";
+    SKIP.addEventListener("click", (EVENT) => {
+      EVENT.preventDefault();
+      MAIN.focus({ preventScroll: false });
+    });
+    document.body.prepend(SKIP);
+  }
+  document.getElementById("constellations")?.setAttribute("aria-hidden", "true");
+  NOTE_LAYER.setAttribute("role", "region");
+  NOTE_LAYER.setAttribute("aria-label", "Messages");
+  const HAS_HEADING = [...document.querySelectorAll("h1")].some(HEADING => HEADING.getClientRects().length > 0);
+  const LOGO = HAS_HEADING ? null : document.querySelector("header .logo");
+  if (LOGO) {
+    LOGO.setAttribute("role", "heading");
+    LOGO.setAttribute("aria-level", "1");
+  }
+}
+setUpAccessibility();
+
+document.addEventListener("keydown", (EVENT) => {
+  if (EVENT.defaultPrevented || EVENT.ctrlKey || EVENT.metaKey || EVENT.altKey) return;
+  const TARGET = EVENT.target;
+  if (!(TARGET instanceof Element)) return;
+  // Enter or Space on something that acts like a button but isn't one (a day, its entries, a table row, a box that opens out)
+  if ((EVENT.key === "Enter" || EVENT.key === " ") && TARGET.matches('[role="button"]:not(button, a), [data-pressable]')) {
+    EVENT.preventDefault();
+    TARGET.click();
+    return;
+  }
+  // The arrow keys move through a set of radio buttons (Cost or Gain, a theme, an account's kind), picking the next
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(EVENT.key) || TARGET.getAttribute("role") !== "radio") return;
+  const GROUP = TARGET.closest('[role="radiogroup"]');
+  if (!GROUP) return;
+  const CHOICES = [...GROUP.querySelectorAll('[role="radio"]')].filter(CHOICE => !CHOICE.disabled);
+  const STEP = EVENT.key === "ArrowLeft" || EVENT.key === "ArrowUp" ? -1 : 1;
+  const NEXT = CHOICES[(CHOICES.indexOf(TARGET) + STEP + CHOICES.length) % CHOICES.length];
+  EVENT.preventDefault();
+  EVENT.stopPropagation();
+  NEXT.focus();
+  NEXT.click();
+}, false);
+/* #endregion ACCESSIBILITY */

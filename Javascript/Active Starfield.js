@@ -307,7 +307,15 @@ const THEME_LOOKS = {
   floral:       { sprites: [["blossom", "255, 158, 200"], ["blossom", "196, 170, 255"], ["blossom", "255, 196, 160"], ["petal", "255, 170, 205"], ["petal", "214, 190, 255"], ["heart", "255, 150, 190"]],
                   link: "214, 150, 190", ring: "236, 110, 170", paddle: "150, 70, 120", shade: "255, 238, 246" },
   digital:      { sprites: [["pixel", "0, 255, 136"], ["pixel", "125, 255, 185"], ["pixel", "0, 196, 106"], "bit0", "bit1"],
-                  link: "0, 120, 64", ring: "0, 255, 136", paddle: "125, 255, 185" }
+                  link: "0, 120, 64", ring: "0, 255, 136", paddle: "125, 255, 185" },
+  love:         { sprites: [["heart", "255, 120, 150"], ["heart", "230, 50, 80"], ["heart", "255, 175, 195"], ["petal", "255, 160, 180"]],
+                  link: "230, 150, 170", ring: "217, 41, 68", paddle: "150, 40, 70", shade: "255, 236, 241" },
+  clovers:      { sprites: [["clover", "155, 232, 168"], ["clover", "110, 200, 135"], ["fourLeaf", "190, 245, 200"], ["clover", "205, 213, 209"]],
+                  link: "60, 110, 82", ring: "190, 240, 200", paddle: "230, 238, 232" },
+  playful:      { sprites: [["egg", "255, 190, 90"], ["egg", "120, 200, 245"], ["egg", "255, 150, 190"], ["egg", "170, 225, 150"], "chick", ["bunny", "206, 188, 240"]],
+                  link: "170, 200, 235", ring: "240, 93, 150", paddle: "90, 80, 150", shade: "233, 247, 255" },
+  mechanical:   { sprites: [["gear", "176, 128, 74"], ["gear", "150, 156, 162"], ["nut", "130, 120, 108"], ["gear", "110, 100, 90"]],
+                  link: "96, 88, 78", ring: "196, 154, 90", paddle: "224, 218, 208" }
 };
 
 // A maple leaf's outline (a SPRITE_PX square, its stem at the bottom), and a holly leaf's (pointing right from its base)
@@ -336,6 +344,38 @@ function drawBit(C, ROWS) {
   ROWS.forEach((ROW, Y) => [...ROW].forEach((ON, X) => {
     if (ON === "1") C.fillRect(17 + X * 6, 11 + Y * 6, 5, 5);
   }));
+}
+
+// A clover in COLOR: its heart-shaped LEAVES around the middle, and a stem curving down
+function drawClover(C, COLOR, LEAVES) {
+  C.strokeStyle = `rgba(${COLOR}, 0.85)`;
+  C.lineWidth = 2.6;
+  C.lineCap = "round";
+  C.beginPath();
+  C.moveTo(32, 32);
+  C.quadraticCurveTo(35, 48, 44, 58);
+  C.stroke();
+  C.save();
+  C.translate(32, 32);
+  for (let LEAF = 0; LEAF < LEAVES; LEAF++) {
+    C.save();
+    C.rotate((LEAF * Math.PI * 2) / LEAVES);
+    C.beginPath();
+    C.moveTo(0, 0);
+    C.bezierCurveTo(-14, -8, -14, -24, -6, -24);
+    C.bezierCurveTo(-3, -24, 0, -21, 0, -17);
+    C.bezierCurveTo(0, -21, 3, -24, 6, -24);
+    C.bezierCurveTo(14, -24, 14, -8, 0, 0);
+    C.closePath();
+    const FILL = C.createLinearGradient(0, -24, 0, 0);
+    FILL.addColorStop(0, "rgba(255, 255, 255, 0.5)");
+    FILL.addColorStop(0.3, `rgb(${COLOR})`);
+    FILL.addColorStop(1, `rgb(${COLOR})`);
+    C.fillStyle = FILL;
+    C.fill();
+    C.restore();
+  }
+  C.restore();
 }
 
 // How each drawn sprite looks (on a SPRITE_PX square, centered), how big it is next to a star its size (scale), and
@@ -798,7 +838,141 @@ const SPRITE_KINDS = {
   } },
   // A 0 and a 1, in green blocks
   bit0: { scale: 1.5, level: true, draw(C) { drawBit(C, BIT_ROWS[0]); } },
-  bit1: { scale: 1.5, level: true, draw(C) { drawBit(C, BIT_ROWS[1]); } }
+  bit1: { scale: 1.5, level: true, draw(C) { drawBit(C, BIT_ROWS[1]); } },
+  // A clover in COLOR: three leaves, or four, and a stem
+  clover: { scale: 1.5, draw(C, COLOR) { drawClover(C, COLOR, 3); } },
+  fourLeaf: { scale: 1.6, draw(C, COLOR) { drawClover(C, COLOR, 4); } },
+  // A painted egg in COLOR, with a white stripe, a zigzag, and dots
+  egg: { scale: 1.4, upright: true, draw(C, COLOR) {
+    C.beginPath();
+    C.ellipse(32, 34, 16, 22, 0, 0, Math.PI * 2);
+    const SHELL = C.createLinearGradient(0, 12, 0, 56);
+    SHELL.addColorStop(0, "rgba(255, 255, 255, 0.92)");
+    SHELL.addColorStop(0.3, `rgb(${COLOR})`);
+    SHELL.addColorStop(1, `rgb(${COLOR})`);
+    C.fillStyle = SHELL;
+    C.fill();
+    C.strokeStyle = "rgba(90, 80, 150, 0.3)";
+    C.lineWidth = 1.2;
+    C.stroke();
+    C.save();
+    C.clip();
+    C.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    C.lineWidth = 3;
+    C.lineCap = "round";
+    C.beginPath();
+    C.moveTo(14, 30);
+    C.quadraticCurveTo(32, 38, 50, 30);
+    C.stroke();
+    C.lineWidth = 2.2;
+    C.beginPath();
+    C.moveTo(15, 44);
+    for (let STEP = 1; STEP <= 6; STEP++) C.lineTo(15 + STEP * 6, STEP % 2 ? 39 : 44);
+    C.stroke();
+    C.fillStyle = "rgba(255, 255, 255, 0.95)";
+    for (const [X, Y] of [[26, 20], [34, 18], [40, 23]]) {
+      C.beginPath();
+      C.arc(X, Y, 1.9, 0, Math.PI * 2);
+      C.fill();
+    }
+    C.restore();
+  } },
+  // A little yellow chick: a round body, its head, an eye, a beak, and a wing
+  chick: { scale: 1.3, upright: true, draw(C) {
+    C.fillStyle = "#ffd65c";
+    C.beginPath();
+    C.arc(32, 40, 16, 0, Math.PI * 2);
+    C.fill();
+    C.beginPath();
+    C.arc(40, 24, 11, 0, Math.PI * 2);
+    C.fill();
+    C.fillStyle = "#f0b93a";
+    C.beginPath();
+    C.ellipse(28, 40, 8, 6, 0.3, 0, Math.PI * 2);
+    C.fill();
+    C.fillStyle = "#ef8a2c";
+    C.beginPath();
+    C.moveTo(50, 22);
+    C.lineTo(58, 25);
+    C.lineTo(50, 28);
+    C.closePath();
+    C.fill();
+    C.fillStyle = "#3a2c5c";
+    C.beginPath();
+    C.arc(43, 22, 1.8, 0, Math.PI * 2);
+    C.fill();
+  } },
+  // A bunny's head in COLOR: two long ears, pink inside, and a face
+  bunny: { scale: 1.5, upright: true, draw(C, COLOR) {
+    C.fillStyle = `rgb(${COLOR})`;
+    for (const [X, TURN] of [[24, -0.14], [40, 0.14]]) {
+      C.beginPath();
+      C.ellipse(X, 18, 6, 15, TURN, 0, Math.PI * 2);
+      C.fill();
+    }
+    C.beginPath();
+    C.arc(32, 41, 15, 0, Math.PI * 2);
+    C.fill();
+    C.fillStyle = "#ffb6cc";
+    for (const [X, TURN] of [[24, -0.14], [40, 0.14]]) {
+      C.beginPath();
+      C.ellipse(X, 19, 2.8, 10, TURN, 0, Math.PI * 2);
+      C.fill();
+    }
+    C.beginPath();
+    C.arc(32, 44, 2.2, 0, Math.PI * 2);
+    C.fill();
+    C.fillStyle = "#3a2c5c";
+    for (const X of [26, 38]) {
+      C.beginPath();
+      C.arc(X, 38, 1.9, 0, Math.PI * 2);
+      C.fill();
+    }
+  } },
+  // A gear in COLOR: eight teeth around a ring with a hole, lighter on one side like metal
+  gear: { scale: 1.9, draw(C, COLOR) {
+    C.save();
+    C.translate(32, 32);
+    C.fillStyle = `rgb(${COLOR})`;
+    for (let TOOTH = 0; TOOTH < 8; TOOTH++) {
+      C.save();
+      C.rotate((TOOTH * Math.PI) / 4);
+      C.fillRect(-5, -28, 10, 11);
+      C.restore();
+    }
+    C.beginPath();
+    C.arc(0, 0, 20, 0, Math.PI * 2);
+    C.fill();
+    C.globalCompositeOperation = "source-atop";
+    const SHINE = C.createLinearGradient(-22, -22, 22, 22);
+    SHINE.addColorStop(0, "rgba(255, 245, 225, 0.45)");
+    SHINE.addColorStop(1, "rgba(0, 0, 0, 0.3)");
+    C.fillStyle = SHINE;
+    C.fillRect(-32, -32, 64, 64);
+    C.globalCompositeOperation = "destination-out";
+    C.beginPath();
+    C.arc(0, 0, 8, 0, Math.PI * 2);
+    C.fill();
+    C.restore();
+  } },
+  // A hex nut in COLOR
+  nut: { scale: 1.2, draw(C, COLOR) {
+    const CORNERS = Array.from({ length: 6 }, (_, AT) => [32 + 24 * Math.cos((AT * Math.PI) / 3), 32 + 24 * Math.sin((AT * Math.PI) / 3)]);
+    outline(C, CORNERS);
+    const FACE = C.createLinearGradient(10, 10, 54, 54);
+    FACE.addColorStop(0, `rgba(${COLOR}, 1)`);
+    FACE.addColorStop(1, "rgba(30, 26, 22, 1)");
+    C.fillStyle = FACE;
+    C.fill();
+    C.strokeStyle = "rgba(255, 245, 225, 0.35)";
+    C.lineWidth = 1.5;
+    C.stroke();
+    C.globalCompositeOperation = "destination-out";
+    C.beginPath();
+    C.arc(32, 32, 10, 0, Math.PI * 2);
+    C.fill();
+    C.globalCompositeOperation = "source-over";
+  } }
 };
 
 // Drawn sprites, by kind and color, so each is drawn once

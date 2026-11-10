@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.04.2026.B";
+  const SITE_VERSION = "11.09.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -24,30 +24,32 @@
   // the files loaded from here); the pre-commit hook refuses a commit whose fingerprints are out of date.
   // <stamp:files> (written by _tools/stamp.mjs)
   const FILE_VERSIONS = {
-    "/Javascript/Active Starfield.js": "5b11144ba0",
+    "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "3e5fc0808a",
-    "/Javascript/Budget Pages.js": "e13071832b",
-    "/Javascript/Budget Search.js": "ac9e964a18",
-    "/Javascript/Budget UI.js": "5dad0fae0e",
-    "/Javascript/Budgets.js": "f057170f61",
-    "/Javascript/Calendar Page.js": "818e1c32a9",
-    "/Javascript/Calendars Page.js": "2920b6ce87",
-    "/Javascript/Calendars.js": "22c035cd0d",
-    "/Javascript/Dates.js": "6431a1d8c3",
+    "/Javascript/Bob Page.js": "aeec73b776",
+    "/Javascript/Budget Pages.js": "ade681577d",
+    "/Javascript/Budget Search.js": "11ff6fc913",
+    "/Javascript/Budget UI.js": "e84f79f067",
+    "/Javascript/Budgets.js": "c2db8b0f00",
+    "/Javascript/Calendar Page.js": "f96d90c9f5",
+    "/Javascript/Calendars Page.js": "781d2c0641",
+    "/Javascript/Calendars.js": "b7ba7b529a",
+    "/Javascript/Dates.js": "331a3e1cb1",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "ff6a5154bb",
+    "/Javascript/Layout.js": "117f43e30c",
+    "/Javascript/Line Graph.js": "8dec370bf9",
     "/Javascript/Login.js": "9a21f84896",
     "/Javascript/Notifications.js": "facb1b76b2",
     "/Javascript/Passkeys.js": "e67395c634",
-    "/Javascript/Process Budget.js": "5e078a58f9",
-    "/Javascript/Quick Entry.js": "e97efdff03",
+    "/Javascript/Process Budget.js": "a1f0f15fd8",
+    "/Javascript/Quick Entry.js": "71bd536443",
+    "/Javascript/Quick Icon.js": "4851e4c76a",
     "/Javascript/Session.js": "988bbb66b5",
-    "/Javascript/Settings Page.js": "3c44bf1996",
+    "/Javascript/Settings Page.js": "d6e437d41f",
     "/Javascript/Sounds.js": "4cfba7dffa",
-    "/Javascript/Spreadsheets Page.js": "5e5152eca6",
-    "/Javascript/Spreadsheets.js": "e070c41e6f",
+    "/Javascript/Spreadsheets Page.js": "2f4ed612c0",
+    "/Javascript/Spreadsheets.js": "20d7771d80",
     "/Javascript/Sprites.js": "c6c86160d9",
     "/Javascript/Starfield Setup.js": "e86b316303",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
@@ -72,7 +74,8 @@
     "/Resources/Sprites/Regular.webp": "660dede305",
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",
-    "/Resources/Star.webp": "f2d3021d0b"
+    "/Resources/Star.webp": "f2d3021d0b",
+    "/themes.css": "0e56d3f317"
   };
   // </stamp:files>
 
@@ -241,10 +244,10 @@
   // out into the tokens on html itself (customTokens), and if they like, small or sharp corners, another font, other
   // stars, and gray or glowing icons (html's data-corners and data-icons, themes.css). (themes.css's header lists
   // everything a new theme needs.)
-  const THEMES = ["prismal", "professional", "dark", "spooky", "elements", "poison", "blue", "fall", "winter", "festive", "floral", "digital", "custom"];
+  const THEMES = ["prismal", "professional", "dark", "spooky", "elements", "poison", "blue", "fall", "winter", "festive", "floral", "digital", "love", "clovers", "playful", "mechanical", "custom"];
   const BASE_THEMES = THEMES.filter(theme => theme !== "custom");
   // The themes with dark words on light cards (html gets lightCards, as it does for a Custom theme with light cards)
-  const LIGHT_THEMES = ["professional", "winter", "floral"];
+  const LIGHT_THEMES = ["professional", "winter", "floral", "love", "playful"];
   const THEME_KEY = "prismal_theme";
   const CUSTOM_KEY = "prismal_custom_theme";
   // Each theme's five colors (Custom starts from them; the first is also what the browser paints around the page, like a
@@ -261,13 +264,17 @@
     winter:       { background: "#e3effb", cards: "#ffffff", words: "#0c2440", glow: "#3a9be0", chosen: "#2747c9" },
     festive:      { background: "#06190f", cards: "#103a24", words: "#fffaf0", glow: "#f2c14e", chosen: "#e63946" },
     floral:       { background: "#fde8f1", cards: "#fffcfe", words: "#3d1a35", glow: "#f472b6", chosen: "#9b6dff" },
-    digital:      { background: "#020805", cards: "#04160c", words: "#e4ffee", glow: "#00ff88", chosen: "#ffb000" }
+    digital:      { background: "#020805", cards: "#04160c", words: "#e4ffee", glow: "#00ff88", chosen: "#ffb000" },
+    love:         { background: "#ffe3ea", cards: "#fffbfc", words: "#44101f", glow: "#f27a94", chosen: "#d92944" },
+    clovers:      { background: "#0a2117", cards: "#163e2c", words: "#f2f6f3", glow: "#9be8a8", chosen: "#d6e0da" },
+    playful:      { background: "#e6f6ff", cards: "#fffef6", words: "#2a275a", glow: "#4aa8e0", chosen: "#f05d96" },
+    mechanical:   { background: "#141210", cards: "#34302d", words: "#f1ece4", glow: "#c49a5a", chosen: "#aab2ba" }
   };
   // A Custom theme's other choices ("theme": the one it starts from keeps its own)
   const CUSTOM_CHOICES = {
     corners: ["theme", "small", "sharp"],
     font: ["theme", "prismal", "plain", "sharp", "rounded", "digital"],
-    stars: ["theme", "stars", "dots", "embers", "elements", "bubbles", "leaves", "snow", "ornaments", "flowers", "pixels"],
+    stars: ["theme", "stars", "dots", "embers", "elements", "bubbles", "leaves", "snow", "ornaments", "flowers", "pixels", "hearts", "clovers", "eggs", "gears"],
     icons: ["theme", "gray", "glowing"]
   };
   const CUSTOM_FONTS = {
@@ -278,7 +285,7 @@
     digital: 'ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, "Roboto Mono", "DejaVu Sans Mono", monospace'
   };
   // Which theme's stars each Stars choice borrows (dots: Professional's on light cards, Dark's on dark ones)
-  const CUSTOM_STARS = { stars: "prismal", embers: "spooky", elements: "elements", bubbles: "poison", leaves: "fall", snow: "winter", ornaments: "festive", flowers: "floral", pixels: "digital" };
+  const CUSTOM_STARS = { stars: "prismal", embers: "spooky", elements: "elements", bubbles: "poison", leaves: "fall", snow: "winter", ornaments: "festive", flowers: "floral", pixels: "digital", hearts: "love", clovers: "clovers", eggs: "playful", gears: "mechanical" };
   const THEMED = !IS_PUBLIC || PAGE === "quick";
   const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -291,7 +298,38 @@
       return "prismal";
     }
   }
-  const shownTheme = () => (THEMED ? savedTheme() : "prismal");
+
+  // The look a link hands on (Quick Entry's Home, to the login page, and a Quick Entry icon's own address, for a phone
+  // whose home screen app keeps its own storage): { theme, custom (a Custom theme's parts) }, or null
+  let lookGiven = null;
+  function readLookGiven() {
+    if (PAGE !== "login" && PAGE !== "quick") return null;
+    const params = new URLSearchParams(location.search);
+    const theme = params.get("look");
+    if (!THEMES.includes(theme) || theme === "prismal") return null;
+    if (theme !== "custom") return { theme };
+    try {
+      return { theme, custom: tidyCustom(JSON.parse(params.get("custom") || "")) };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Does this device keep a theme of its own?
+  function keepsTheme() {
+    try {
+      return storage.getItem(THEME_KEY) !== null;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // The theme this page shows
+  function shownTheme() {
+    if (PAGE === "login") return lookGiven ? lookGiven.theme : "prismal";
+    if (PAGE === "quick" && lookGiven && !keepsTheme()) return lookGiven.theme;
+    return THEMED ? savedTheme() : "prismal";
+  }
 
   // A Custom theme with every part as it should be (what's missing or odd comes from the theme it starts from)
   function tidyCustom(custom) {
@@ -463,7 +501,7 @@
   // and the starfield's look
   function applyTheme() {
     const shown = previewing || shownTheme();
-    const custom = typeof shown === "object" ? shown : shown === "custom" ? savedCustom() || tidyCustom(null) : null;
+    const custom = typeof shown === "object" ? shown : shown === "custom" ? lookGiven?.custom || savedCustom() || tidyCustom(null) : null;
     const base = custom ? custom.base : shown;
     const root = document.documentElement;
     if (base === "prismal") delete root.dataset.theme;
@@ -488,6 +526,14 @@
     shownLook = starLook(custom, base);
     if (window.STARFIELD && typeof window.STARFIELD.setTheme === "function") window.STARFIELD.setTheme(shownLook.name, shownLook.colors);
   }
+  lookGiven = readLookGiven();
+  // (The login page has no theme of its own: its stylesheet comes only when a look is handed to it)
+  if (PAGE === "login" && lookGiven) {
+    const sheet = document.createElement("link");
+    sheet.rel = "stylesheet";
+    sheet.href = window.assetUrl("/themes.css");
+    document.head.appendChild(sheet);
+  }
   applyTheme();
 
   window.Themes = {
@@ -500,6 +546,14 @@
     // The Custom theme this device keeps (null when it has none yet), and one with every part as it should be
     custom: savedCustom,
     tidyCustom,
+    // What a link from this page adds to hand on its look ("look=fall", and a Custom theme's parts; "" for Prismal's)
+    lookQuery() {
+      const shown = shownTheme();
+      if (shown === "prismal") return "";
+      if (shown !== "custom") return `look=${shown}`;
+      const custom = lookGiven?.custom || savedCustom();
+      return custom ? `look=custom&custom=${encodeURIComponent(JSON.stringify(custom))}` : "";
+    },
     // The starfield's look on this page (Starfield Setup.js): { name, colors }
     starLook: () => shownLook,
     // Keeps THEME on this device and shows it (false when this browser won't keep it)
@@ -666,6 +720,10 @@
       if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Calendars.js");
       // Search (Home's and History's): before the page script, which opens it
       if (page === "home" || page === "history") scripts.push("/Javascript/Budget Search.js");
+      // The Quick Entry icon: Settings makes it, and the Quick Entry page puts it in its icon links
+      if (page === "settings" || page === "quick") scripts.push("/Javascript/Quick Icon.js");
+      // The line graphs (Bob's Data windows and the Debt Calculator)
+      if (page === "bob" || page === "payments") scripts.push("/Javascript/Line Graph.js");
       // Push notifications on this device: Settings turns them on and off, and Home asks once after a sign-in
       if (page === "home" || page === "settings") scripts.push("/Javascript/Notifications.js");
       // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings)
