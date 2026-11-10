@@ -19,7 +19,7 @@ const Spreadsheets = (() => {
   const MAX_COLUMNS = 16384; // Column XFD, the last one Excel has
   const MAX_UNZIPPED = 80000000; // A file inside the spreadsheet that would unzip bigger than this isn't read
   const MAX_TOTAL_UNZIPPED = 160000000; // ...and the files read from one spreadsheet, all together
-  const TOO_BIG_TO_READ = "That spreadsheet is too big to read. Connect a smaller one, like a new spreadsheet with just the cells for Prismal Budget.";
+  const TOO_BIG_TO_READ = "That spreadsheet is too big to read. Connect a smaller one, like a new spreadsheet with just the cells for Prismal Planning.";
 
   // A problem reading a spreadsheet. lasting: the server answered (like "not shared", or the account's email
   // isn't verified yet), so it's worth showing on the Spreadsheets & Calendars page; a dropped connection isn't (the next read

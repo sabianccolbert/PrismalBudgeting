@@ -391,7 +391,7 @@ async function savePrisms(list) {
   }
   if (!result.ok || !result.data || !Array.isArray(result.data.prisms)) {
     BudgetUI.showToast((result.data && result.data.error) ||
-      (result.status === 0 ? "Couldn't reach Prismal Budget, so the prisms weren't saved. Check your connection and try again." : "Couldn't save the prisms. Please try again."), true);
+      (result.status === 0 ? "Couldn't reach Prismal Planning, so the prisms weren't saved. Check your connection and try again." : "Couldn't save the prisms. Please try again."), true);
     renderPrisms();
     return false;
   }
@@ -694,7 +694,7 @@ function showQuickAnswer(data) {
 // Why a request didn't work: what the API said, or that it couldn't be reached
 function quickProblem(result) {
   return (result.data && result.data.error) ||
-    (result.status === 0 ? "Couldn't reach Prismal Budget. Check your connection and try again." : "That didn't work. Please try again.");
+    (result.status === 0 ? "Couldn't reach Prismal Planning. Check your connection and try again." : "That didn't work. Please try again.");
 }
 
 // The account picker's accounts as the API sent them, each with its balance (null when it isn't known) and the most it

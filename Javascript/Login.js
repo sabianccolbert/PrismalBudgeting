@@ -63,7 +63,7 @@ function passwordProblem(value) {
   return '';
 }
 
-// Prismal Budget is for people 18 and older (the API's readBirthdate): an account can't be made for anyone younger.
+// Prismal Planning is for people 18 and older (the API's readBirthdate): an account can't be made for anyone younger.
 // The birth date is typed in this device's date format (a 2-digit year is a past one: 90 is 1990), or picked on a
 // calendar (its button, from Dates.js, up to today), and goes to the API as YYYY-MM-DD.
 const MIN_AGE = 18;
@@ -91,7 +91,7 @@ function birthdateProblem(date) {
   let age = now.getFullYear() - date.getFullYear();
   if (now.getMonth() < date.getMonth() || (now.getMonth() === date.getMonth() && now.getDate() < date.getDate())) age--;
   if (age < 0 || age > MAX_AGE) return 'Enter your birth date.';
-  if (age < MIN_AGE) return `Prismal Budget is for people ${MIN_AGE} and older, so an account can't be made for someone younger.`;
+  if (age < MIN_AGE) return `Prismal Planning is for people ${MIN_AGE} and older, so an account can't be made for someone younger.`;
   return '';
 }
 
@@ -140,7 +140,7 @@ function forgetResetToken() {
 const ALL_GROUPS = ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'turnstile-group', 'passkey-group'];
 const MODES = {
   login: {
-    title: 'Sign In To Prismal Budget',
+    title: 'Sign In To Prismal Planning',
     groups: ['username-group', 'password-group', 'passkey-group'],
     primary: 'Login',
     toggle: 'New Account?',
@@ -150,7 +150,7 @@ const MODES = {
   },
   create: {
     title: 'Create Your Account',
-    hint: `Prismal Budget is for people ${MIN_AGE} and older.`,
+    hint: `Prismal Planning is for people ${MIN_AGE} and older.`,
     groups: ['username-group', 'email-group', 'age-group', 'password-group', 'verify-password-group', 'terms-group', 'turnstile-group'],
     primary: 'Create Account',
     toggle: 'Back to Login',
@@ -455,7 +455,7 @@ async function confirmSheetEmailLink(token) {
   const { ok, status, data } = await api('/api/sheets/emails/verify', { token });
   primaryBtn.disabled = false;
   if (ok && data.success) {
-    setStatus(`${data.email} is confirmed! It signs in to ${data.username} now (with that account's password), and spreadsheets it shares with admin@prismalbudget.org can be connected (Menu, then Spreadsheets & Calendars).`, true);
+    setStatus(`${data.email} is confirmed! It signs in to ${data.username} now (with that account's password), and spreadsheets it shares with admin@prismalplanning.org can be connected (Menu, then Spreadsheets & Calendars).`, true);
   } else if (data.expired) {
     setStatus("That link has expired, a newer one was sent, or the email was removed. Add it again in Settings, under Email (Other Emails), for a new link.");
   } else {
@@ -471,7 +471,7 @@ async function confirmSheetEmailLink(token) {
 // Cloudflare whether it passed. Each answer works once, so a new check starts after every try. The real site uses its
 // own key; anywhere else (like a copy on this computer) uses Cloudflare's test key, which always passes.
 
-const TURNSTILE_SITE_KEY = location.hostname === 'prismalbudget.org' ? '0x4AAAAAAFWoa5trvO9p87Ky' : '1x00000000000000000000AA';
+const TURNSTILE_SITE_KEY = location.hostname === 'prismalplanning.org' ? '0x4AAAAAAFWoa5trvO9p87Ky' : '1x00000000000000000000AA';
 const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 const TURNSTILE_WAIT_MS = 15000;
 const TURNSTILE_WAITING = "The check that you're a person hasn't finished. If a box shows above Create Account, tap it, then press Create Account again. (If nothing shows, a content blocker may be stopping it.)";
@@ -936,7 +936,7 @@ function showProviderSignup(signup) {
   setMode('provider');
   providerSignup = signup;
   const checked = signup.emailVerified && signup.email;
-  formHint.textContent = `Signing up with ${signup.name}${checked ? ` as ${signup.email}` : ''}. Pick a username and add your birth date: Prismal Budget is for people ${MIN_AGE} and older. You won't need a password (you can add one in Settings).`;
+  formHint.textContent = `Signing up with ${signup.name}${checked ? ` as ${signup.email}` : ''}. Pick a username and add your birth date: Prismal Planning is for people ${MIN_AGE} and older. You won't need a password (you can add one in Settings).`;
   formHint.classList.remove('hidden');
   const emailGroup = document.getElementById('email-group');
   emailGroup.classList.toggle('hidden', !!checked);

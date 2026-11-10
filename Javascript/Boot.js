@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.09.2026.A";
+  const SITE_VERSION = "11.09.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -30,26 +30,26 @@
     "/Javascript/Budget Pages.js": "ade681577d",
     "/Javascript/Budget Search.js": "11ff6fc913",
     "/Javascript/Budget UI.js": "e84f79f067",
-    "/Javascript/Budgets.js": "c2db8b0f00",
-    "/Javascript/Calendar Page.js": "f96d90c9f5",
+    "/Javascript/Budgets.js": "16c4641f91",
+    "/Javascript/Calendar Page.js": "661d27406e",
     "/Javascript/Calendars Page.js": "781d2c0641",
     "/Javascript/Calendars.js": "b7ba7b529a",
     "/Javascript/Dates.js": "331a3e1cb1",
     "/Javascript/Debug.js": "8ebdd719db",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "117f43e30c",
+    "/Javascript/Layout.js": "2cd5a2b83e",
     "/Javascript/Line Graph.js": "8dec370bf9",
-    "/Javascript/Login.js": "9a21f84896",
+    "/Javascript/Login.js": "6df6f52525",
     "/Javascript/Notifications.js": "facb1b76b2",
-    "/Javascript/Passkeys.js": "e67395c634",
-    "/Javascript/Process Budget.js": "a1f0f15fd8",
-    "/Javascript/Quick Entry.js": "71bd536443",
+    "/Javascript/Passkeys.js": "5bb712fb48",
+    "/Javascript/Process Budget.js": "355a1a752a",
+    "/Javascript/Quick Entry.js": "9f2dea8391",
     "/Javascript/Quick Icon.js": "4851e4c76a",
     "/Javascript/Session.js": "988bbb66b5",
-    "/Javascript/Settings Page.js": "d6e437d41f",
+    "/Javascript/Settings Page.js": "67fd96ae5d",
     "/Javascript/Sounds.js": "4cfba7dffa",
-    "/Javascript/Spreadsheets Page.js": "2f4ed612c0",
-    "/Javascript/Spreadsheets.js": "20d7771d80",
+    "/Javascript/Spreadsheets Page.js": "771fbbe59d",
+    "/Javascript/Spreadsheets.js": "30cbb8f933",
     "/Javascript/Sprites.js": "c6c86160d9",
     "/Javascript/Starfield Setup.js": "e86b316303",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
@@ -189,13 +189,13 @@
     }
   })();
 
-  // Home is the budget for anyone signed in, and the front page (what Prismal Budget is, with Sign In and
+  // Home is the budget for anyone signed in, and the front page (what Prismal Planning is, with Sign In and
   // Create Account) for anyone else, search engines included. index.html starts as the front page, so it
   // reads the same without JavaScript.
   const FRONT_PAGE = PAGE === "home" && !isLoggedIn;
   window.FRONT_PAGE = FRONT_PAGE;
   document.documentElement.classList.toggle("frontPage", FRONT_PAGE);
-  if (PAGE === "home" && !FRONT_PAGE) document.title = "Prismal Budget - Home";
+  if (PAGE === "home" && !FRONT_PAGE) document.title = "Prismal Planning - Home";
   const IS_PUBLIC = FRONT_PAGE || PUBLIC_PAGES.includes(PAGE);
   window.PUBLIC_PAGE = IS_PUBLIC;
 

@@ -368,7 +368,7 @@ window.Budgets = (() => {
       title: `Share ${budget.name}`,
       build(form, panel) {
         panel.panel.classList.add("budgetsPanel");
-        form.append(el("p", "panelText", "Type the username or email of their Prismal Budget account. Once they join, they can open this budget and see and change anything in it, like you can, its connected spreadsheets and calendars too. Only you can share it, rename it, or delete it."));
+        form.append(el("p", "panelText", "Type the username or email of their Prismal Planning account. Once they join, they can open this budget and see and change anything in it, like you can, its connected spreadsheets and calendars too. Only you can share it, rename it, or delete it."));
         const to = BudgetUI.textField({ label: "Username or email", placeholder: "Their username or email" });
         to.input.maxLength = 254;
         to.input.autocomplete = "off";

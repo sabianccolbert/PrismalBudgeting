@@ -1,4 +1,4 @@
-# Prismal Budget. The public pages are listed in the sitemap; everything else needs a sign-in.
+# Prismal Planning. The public pages are listed in the sitemap; everything else needs a sign-in.
 # The Quick Entry page stays crawlable on purpose: its own "noindex" tag is what keeps it out of
 # search results (a robots.txt block would hide that tag from search engines).
 User-agent: *
@@ -6,4 +6,4 @@ Disallow: /menu/
 Disallow: /settings.html
 Allow: /
 
-Sitemap: https://prismalbudget.org/sitemap.xml
+Sitemap: https://prismalplanning.org/sitemap.xml

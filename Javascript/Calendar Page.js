@@ -583,8 +583,8 @@ function openQuickEntrySetup(origin) {
       const named = budgetInfo && (budgetInfo.shared || !budgetInfo.owned || !budgetInfo.first) ? ` It adds to this budget, ${budgetInfo.name}.` : "";
       form.append(
         text(`Put an icon on your phone's home screen that opens a New Entry form, with no login needed.${named}`),
-        text("The icon can only add entries. Besides In Bank today and the lowest it gets, it never sees your budget, just your Equity accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Budget (and until then, its own Undo can take one back). If your password changes, you turn icons off in Settings, or this budget is deleted or stops being shared with you, it stops working."),
-        text("The next page shows how to add it to your home screen on your phone (iPhone, Samsung, Pixel, OnePlus, and more), and its Help shows how to open it from an iPhone's Lock Screen or check In Bank on an Apple Watch. Use your browser itself, not Prismal Budget opened inside another app (like Gmail or Instagram)."),
+        text("The icon can only add entries. Besides In Bank today and the lowest it gets, it never sees your budget, just your Equity accounts and their balances (so you can pick one) and your prisms (entries you save there to fill in quickly). Its entries show up here the next time you open Prismal Planning (and until then, its own Undo can take one back). If your password changes, you turn icons off in Settings, or this budget is deleted or stops being shared with you, it stops working."),
+        text("The next page shows how to add it to your home screen on your phone (iPhone, Samsung, Pixel, OnePlus, and more), and its Help shows how to open it from an iPhone's Lock Screen or check In Bank on an Apple Watch. Use your browser itself, not Prismal Planning opened inside another app (like Gmail or Instagram)."),
         BudgetUI.buttonRow([
           { label: "Set It Up", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }

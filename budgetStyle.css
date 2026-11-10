@@ -5788,7 +5788,7 @@ html.lightCards {
 }
 
 /*========================================*
- *  FRONT PAGE (index.html for anyone signed out): what Prismal Budget is, readable without JavaScript.
+ *  FRONT PAGE (index.html for anyone signed out): what Prismal Planning is, readable without JavaScript.
  *  html.frontPage (Boot.js) shows it, and Sign In and Create Account fixed to the window, instead of the
  *  budget.
  *========================================*/
@@ -5804,7 +5804,7 @@ html:not(.frontPage) .frontSignIn,
   font-size: clamp(15px, 3vmin, 19px);
 }
 
-/* The note at the very top: Prismal Budget isn't any other company with a similar name */
+/* The note at the very top: Prismal Planning isn't any other company with a similar name */
 .frontView .frontDisclaimer {
   max-width: 46em;
   margin: 0 auto 0.4em;

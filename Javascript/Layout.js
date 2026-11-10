@@ -1,4 +1,4 @@
-// Layout + page transitions for Prismal Budget.
+// Layout + page transitions for Prismal Planning.
 // This file owns navigation animations, bfcache hygiene, touch-safe tap handling, the screen layer floating
 // windows live in, floating Help, the footer, and signing out. Starfield is treated as a "passenger" that we
 // freeze/save during transitions.
@@ -1437,17 +1437,17 @@ function injectGlobalFooter() {
 
   FOOTER.innerHTML = `
     <hr>
-        <p><span translate="no">Prismal Budget™</span> and its logo are trademarked</p>
+        <p><span translate="no">Prismal Planning™</span> and its logo are trademarked</p>
         <p>Contact:
-        <a href="mailto:admin@prismalbudget.org">
-          admin<wbr>@prismalbudget.org
+        <a href="mailto:admin@prismalplanning.org">
+          admin<wbr>@prismalplanning.org
         </a>
         </p>
         <a href="/privacy and terms.html">
           Privacy Policy & Terms of Use
         </a>
         <a href="/how-it-works.html">
-          How Prismal Budget Works
+          How Prismal Planning Works
         </a>
   `;
 
