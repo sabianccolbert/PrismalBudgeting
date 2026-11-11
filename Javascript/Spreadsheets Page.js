@@ -1,14 +1,37 @@
-// Spreadsheets Page (Menu > Spreadsheets & Calendars): connected spreadsheets, whose entries land on the calendar. Add
+// Spreadsheets Page (Menu > Budgets, Calendars & Spreadsheets): connected spreadsheets, whose entries land on the calendar. Add
 // one, change it, turn it on or off, delete it, and see what's wrong with any of its cells (see CONNECTED SPREADSHEETS
 // in Process Budget.js, and Spreadsheets.js for the reading). Connecting one needs a verified email, so until it
 // is, the page says so and can email a new link. (Other emails, for spreadsheets shared from a Google account with
-// another email, are added in Settings, under Email.) The page's calendars are Calendars Page.js's.
+// another email, are added in Settings, under Email.) The page's connected calendars are Calendars Page.js's. Its first
+// two cards are the account's budgets (Budgets.js draws them: open, share, rename, delete, leave, and invitations) and
+// its Calendar Fractals (Fractals.js: each one's name, color, and entries).
 
 // =====================================================================
 // #region SETUP
 // =====================================================================
 
 let account = null; // From the API: { username, email, emailVerified, canEmail (emails are set up) }
+
+showBudgets();
+showFractals();
+
+// The Budgets card (it needs the server, not the budget, so it shows once the list is in)
+async function showBudgets() {
+  await Budgets.list();
+  Budgets.renderManager(document.getElementById("budgetManager"));
+  document.getElementById("newBudgetButton").addEventListener("click", (event) => Budgets.openNewBudget(event.currentTarget));
+  document.getElementById("budgets").hidden = false;
+  if (location.hash === "#budgets") document.getElementById("budgets").scrollIntoView();
+}
+
+// The Calendar Fractals card, once the calendar is in
+async function showFractals() {
+  await window.Fractals.load();
+  window.Fractals.renderManager(document.getElementById("fractalManager"));
+  document.getElementById("newFractalButton").addEventListener("click", (event) => window.Fractals.openFractal(event.currentTarget, null));
+  document.getElementById("fractals").hidden = false;
+  if (location.hash === "#fractals") document.getElementById("fractals").scrollIntoView();
+}
 
 window.workspaceReady.then(async (loaded) => {
   const status = document.getElementById("dataStatus");

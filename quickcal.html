@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <meta charset="UTF-8">
+    <!-- First, before anything loads: no request from this page says its address, which carries the key -->
+    <meta name="referrer" content="no-referrer">
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
+    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
+    <title>Prismal Planning - Quick Calendar</title>
+    <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Quick Calendar" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+    <!-- No Web App Manifest on purpose: phones would save the manifest's start page instead of this
+         page's link (which carries the key) when it's added to the home screen -->
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <div class="brandText">
+            <h2 class="logo">Quick Calendar</h2>
+          </div>
+        </div>
+        <nav class="navButtons" aria-label="Pages">
+          <a class="navButton" href="/">
+            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
+            <span>Home</span>
+          </a>
+        </nav>
+      </header>
+      <main>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <section id="setupCard" class="budgetCard settingsCard" aria-labelledby="setupHeading" hidden>
+          <h3 id="setupHeading">Add This Page To Your Home Screen</h3>
+          <div class="deviceGuide">
+            <div data-device="iphone">
+              <p class="deviceName">iPhone or iPad</p>
+              <p>In Safari, tap Share (on newer iPhones it can be under ⋯ first), then Add to Home Screen, then Add. Chrome on an iPhone works the same way: Share, then Add to Home Screen.</p>
+            </div>
+            <div data-device="samsung">
+              <p class="deviceName">Samsung Galaxy</p>
+              <p>In Samsung Internet, tap ☰ (bottom right), then Add page to, then Home screen. In Chrome, tap ⋮ (top right), then Add to Home screen, then Add.</p>
+            </div>
+            <div data-device="pixel oneplus motorola">
+              <p class="deviceName">Google Pixel, OnePlus, or Motorola</p>
+              <p>In Chrome, tap ⋮ (top right), then Add to Home screen, then Add (if it asks, pick the shortcut). Touch and hold the new icon to move it where you like.</p>
+            </div>
+            <div data-device="xiaomi">
+              <p class="deviceName">Xiaomi, Redmi, or POCO</p>
+              <p>In Chrome, tap ⋮ (top right), then Add to Home screen, then Add. If no icon shows up, let Chrome add one: Settings, Apps, Manage apps, Chrome, Other permissions, Home screen shortcuts (Allow), then try again.</p>
+            </div>
+            <div data-device="android other">
+              <p class="deviceName">Another Android phone</p>
+              <p>In Chrome, tap ⋮ (top right), then Add to Home screen. In Firefox or another browser, look for Add to Home screen in its menu.</p>
+            </div>
+            <div data-device="computer">
+              <p class="deviceName">A computer</p>
+              <p>Bookmark this page (Ctrl+D, or ⌘D on a Mac), or keep it in your bookmarks bar for one click.</p>
+            </div>
+          </div>
+          <p class="panelHint">Use the browser itself, not this page opened inside another app like Gmail, Instagram, or Facebook. If it's open inside one, use that app's menu (like ⋯) to open it in your browser first.</p>
+          <p class="panelHint">Then tap the new icon whenever you want to see your calendar or add to it. No login needed.</p>
+        </section>
+
+        <!-- New Calendar Entry, and how many entries this icon added that are still waiting to join the calendar (Quick
+             Calendar.js) -->
+        <div id="quickCalendarControls" class="controlsCard quickCalendarControls" hidden>
+          <button id="addEventButton" class="budgetButton primary" type="button">New Calendar Entry</button>
+          <p id="waitingNote" class="panelHint" role="status" hidden></p>
+        </div>
+        <div id="panelSlot"></div>
+
+        <!-- The calendar: any four weeks, from a year ago to five years from today, with the Calendar Fractals that are
+             checked (Quick Calendar.js fills in the days, and Fractals.js their entries) -->
+        <section id="calendarCard" class="budgetCard calendarCard" data-view="calendar" aria-labelledby="calendarTitle" hidden>
+          <h2 id="calendarTitle" class="srOnly">Calendar</h2>
+          <div class="calendarHeader">
+            <div class="calendarShows">
+              <button id="fractalPicker" class="budgetPicker fractalPicker" type="button"></button>
+            </div>
+            <div class="calendarNav">
+              <button id="calendarToday" class="budgetButton" type="button">Today</button>
+              <button id="calendarPrev" class="budgetButton calendarStep" type="button" aria-label="The month before">‹</button>
+              <span id="calendarMonth" class="calendarMonth" aria-live="polite"></span>
+              <button id="calendarNext" class="budgetButton calendarStep" type="button" aria-label="The next month">›</button>
+              <select id="calendarYear" class="selectInput calendarYear" aria-label="Year"></select>
+              <div class="dateRow calendarJump"><input id="calendarJump" class="dateInput" type="text" inputmode="numeric" aria-label="Go to a date"></div>
+            </div>
+          </div>
+          <table class="elastic-table">
+            <thead>
+              <tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+              </tr>
+              <tr>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+              </tr>
+              <tr>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+              </tr>
+              <tr>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+                <td><div class="cell-content"></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Quick Calendar Help</h3>
+          <p>This page shows your calendar with no login, and adds entries to it. It never shows your budget.</p>
+          <ul>
+            <li><strong>Calendar Fractals</strong> (above the calendar) lists your calendars: check the ones to show.</li>
+            <li><strong>Today</strong>, the month's ‹ and ›, the year, and the date box move the calendar. Days that passed are duller.</li>
+            <li><strong>Tap a day</strong> to zoom in on it: its entries show beside the hours, or as a list with its List switch on. Swipe it left or right for the next day or the day before.</li>
+            <li><strong>New Calendar Entry</strong> (or a zoomed day's +) adds an entry: its title, Calendar Fractal, when it starts and ends (or All day), travel time, where it is, whether it repeats, alerts, and a note.</li>
+            <li><strong>Waiting entries</strong> (with a dashed edge) are the ones this icon added that haven't joined your calendar yet. They join the next time Prismal Planning opens on the device that made this icon (on any other device, they wait on Home to be added). Until then, tap one here to change it or delete it.</li>
+            <li>Entries already on your calendar can be looked at here, and changed after signing in.</li>
+            <li>The icon stops working when your password changes, on Sign Out Everywhere, or when Quick Calendar icons are turned off in Settings.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

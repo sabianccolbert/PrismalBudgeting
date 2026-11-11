@@ -1,6 +1,7 @@
 // Calendar Page: the home page. "Lowest in bank after today", Bob's message (his card opens his page, and shows his
 // warnings over the calendar, see BOB'S WARNINGS), Upcoming, the calendar's day cells, and the new-entry / entry-options
-// panels.
+// panels. The calendar shows any four weeks, from a year before the budget began to five years from today (THE CALENDAR'S
+// HEADER moves it), with the budget's entries, the calendar's (Fractals.js), or both.
 // Zooming a day is handled in Process Budget.js (LAYOUT FUNCTIONS); tapping an entry inside a
 // zoomed day opens its options here.
 
@@ -19,13 +20,19 @@ window.workspaceReady.then((loaded) => {
   }
   renderHome();
   wireCalendar();
+  wireCalendarHeader();
   wireGettingStarted();
   wireUndoButtons();
   wireQuickWaiting();
   wireBobWarnings();
-  document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget));
+  // (New Entry starts as a budget entry; its two long buttons switch to a calendar entry)
+  document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget, { kind: "budget" }));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
-  wireLowestCard();
+  document.getElementById("quickCalendarButton")?.addEventListener("click", (event) => openQuickCalendarSetup(event.currentTarget));
+  // The calendar's entries come in after the budget's, so the budget never waits on them
+  window.Fractals.load().then((calendar) => {
+    if (!calendar) BudgetUI.showToast("Couldn't load your calendar's entries. Refresh to try again.", true);
+  });
   // Right after a sign-in: turn notifications on here? (once, above the Welcome card and the calendar)
   window.PushNotifications?.askAfterSignIn(document.getElementById("gettingStarted")).catch(error => console.warn("Couldn't check notifications on this device:", error));
 });
@@ -34,10 +41,28 @@ document.addEventListener("budget:updated", () => {
   if (workspaceLoaded) renderHome();
 });
 
+// The calendar's entries, the fractals checked, or what the calendar shows changed: the days draw again (a zoomed one
+// too, at its new size)
+document.addEventListener("fractals:changed", () => {
+  if (!workspaceLoaded) return;
+  renderCalendar();
+  renderCalendarWaiting();
+  if (activeEditCell) {
+    refreshGuestDay();
+    refitZoomedDay();
+  }
+});
+
+// Coming back to the page shows what another device (or someone sharing an entry) changed on the calendar meanwhile
+document.addEventListener("visibilitychange", () => {
+  if (workspaceLoaded && document.visibilityState === "visible") window.Fractals.load(true);
+});
+
 // Draw everything on Home from the budget
 function renderHome() {
   renderGettingStarted();
   renderQuickWaiting();
+  renderCalendarWaiting();
   renderCalendar();
   renderInfoRow();
   renderUndoButtons();
@@ -294,15 +319,29 @@ async function setStartingBalance(event) {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// The months the calendar covers, for its card: "October 2026", "October - November 2026", or
-// "December 2026 - January 2027"
-function calendarMonths() {
-  const first = gridDates[0][0];
-  const last = gridDates[3][6];
-  const month = (date, withYear) => MONTHS[date.getMonth()] + (withYear ? ` ${date.getFullYear()}` : "");
-  if (first.getFullYear() !== last.getFullYear()) return `${month(first, true)} - ${month(last, true)}`;
-  if (first.getMonth() !== last.getMonth()) return `${month(first, false)} - ${month(last, true)}`;
-  return month(first, true);
+// The four weeks showing. They start as the budget's own (this week's Sunday on, which the budget keeps as its
+// calendar); the calendar's header moves them to any four weeks in its range (calendarRange in Process Budget.js), where
+// each day is drawn from wherever the budget has it: History, its calendar, or the days after it as the daily update
+// will fill them in. viewAnchor: the day they were moved to show (it's in their first week); viewStart: their Sunday.
+let viewAnchor = null;
+let viewStart = null;
+
+// Are the four weeks showing the budget's own?
+const showsOwnWeeks = () => !viewStart || viewStart.getTime() === gridStartDate.getTime();
+
+// The day in one of the calendar's 28 spots
+const dayAt = (index) => (showsOwnWeeks() ? gridDates[Math.floor(index / 7)][index % 7] : addDays(viewStart, index));
+
+// Move the calendar so a day is in its first week (kept inside the calendar's range). A zoomed day closes first.
+function moveCalendar(date) {
+  const range = calendarRange();
+  const anchor = date < range.first ? range.first : date > range.last ? range.last : createSafeMidnight(date);
+  const latest = addDays(range.last, -27);
+  const start = addDays(anchor, -anchor.getDay());
+  viewAnchor = anchor;
+  viewStart = start > latest ? latest : start;
+  if (activeEditCell) closeZoomedDay(true);
+  renderCalendar();
 }
 
 // The last day's two lines about the 28 days after the calendar (writeBudgetMath in Process Budget.js writes them
@@ -318,28 +357,44 @@ function afterCalendarLine(line) {
   return null;
 }
 
-// Draw each day: date, system lines, then entries (one element per line so entries are tappable). The weekdays
-// over the days, and the months in the card's heading, come from the days themselves.
+// Draw each day: date, system lines, then entries (one element per line so entries are tappable), then the calendar's
+// entries (Fractals.js). The weekdays over the days come from the days themselves. The budget's own four weeks are
+// drawn from its calendar; moved anywhere else, each day is drawn from wherever the budget has it (fillGuestDay in
+// Process Budget.js), and its taps work the way that day's do there.
 function renderCalendar() {
-  const months = document.getElementById("calendarMonths");
-  if (months && gridDates[0]) months.textContent = calendarMonths();
-  document.querySelectorAll(".elastic-table thead th").forEach((th, c) => {
-    if (gridDates[0] && gridDates[0][c]) th.textContent = WEEKDAYS[gridDates[0][c].getDay()];
+  const own = showsOwnWeeks();
+  const mode = window.Fractals.view();
+  const card = document.querySelector(".calendarCard");
+  if (card) card.dataset.view = mode;
+  if (!gridDates[0]) return;
+  window.Fractals.prepare(formatToYMD(dayAt(0)), formatToYMD(dayAt(27)));
+  document.querySelectorAll(".elastic-table:not(.guestDays) thead th").forEach((th, c) => {
+    th.textContent = WEEKDAYS[dayAt(c).getDay()];
   });
 
-  const cells = document.querySelectorAll(".elastic-table td");
+  const cells = document.querySelectorAll(".elastic-table:not(.guestDays) td");
   cells.forEach((td, index) => {
     const r = Math.floor(index / 7);
     const c = index % 7;
     const content = td.querySelector(".cell-content");
-    if (!content || !calendarData[r]) return;
+    const date = dayAt(index);
+    if (!content) return;
+    if (!own) {
+      delete td.dataset.row;
+      delete td.dataset.col;
+      fillGuestDay(td, budgetDayAt(date) || { date, text: formatToMMDD(date), kind: "blank" });
+      return;
+    }
+    if (!calendarData[r]) return;
+    delete td.dataset.date;
+    delete td.dataset.kind;
     const isLastDay = r === 3 && c === 6;
 
     const fragment = document.createDocumentFragment();
     String(calendarData[r][c] ?? "").split("\n").forEach((line, l) => {
       if (isLastDay && afterCalendarLine(line)) return; // In the Lowest card instead
       // The first line is the day, shown in this device's date format
-      if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(gridDates[r][c]) : line, l, gridDates[r][c]));
+      if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(date) : line, l, date));
     });
 
     // Its round + (New Entry on that day) and × (close) show once it's zoomed (handled in Process Budget.js)
@@ -347,11 +402,15 @@ function renderCalendar() {
 
     td.dataset.row = r;
     td.dataset.col = c;
-    td.classList.toggle("isToday", gridDates[r][c].getTime() === today.getTime());
-    // (The 28 days after the calendar going below $0 turns the Lowest card red instead, see renderAfterCalendar)
-    td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0);
-    labelDay(td, gridDates[r][c], calendarData[r][c]);
+    td.classList.toggle("isToday", date.getTime() === today.getTime());
+    td.classList.toggle("isPast", date < today);
+    // (The 28 days after the calendar going below $0 turns the Lowest card red instead, see renderAfterCalendar. A day
+    // isn't red while the calendar shows only its own entries: the day's In Bank is hidden then.)
+    td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0 && mode !== "calendar");
+    labelDay(td, date, calendarData[r][c]);
+    window.Fractals.renderDay(td, date);
   });
+  renderCalendarNav();
 }
 
 // Taps on the calendar: filling a waiting date box, and an entry on a zoomed day
@@ -363,23 +422,222 @@ function wireCalendar() {
   calendarTable.addEventListener("click", (event) => {
     if (!BudgetUI.datePickActive()) return;
     const td = event.target.closest("td");
-    if (!td || td.dataset.row === undefined) return;
+    const time = td ? dayTime(td) : null;
+    if (time === null) return;
     event.stopPropagation();
     event.preventDefault();
-    BudgetUI.pickDate(gridDates[td.dataset.row][td.dataset.col], td);
+    BudgetUI.pickDate(new Date(time), td);
   }, true);
 
   // Tapping an entry inside a zoomed day opens its options (not while the day shrinks back: a tap then zooms it
-  // in again, see Process Budget.js)
+  // in again, see Process Budget.js). A day the calendar was moved to works like one zoomed in as a guest.
   calendarTable.addEventListener("click", (event) => {
     const lineEl = event.target.closest(".lineEntry, .lineInBank");
     if (!lineEl) return;
     const td = lineEl.closest("td");
     if (!td || !td.classList.contains("is-editing") || td.classList.contains("isZoomClosing")) return;
+    if (td.dataset.row === undefined) return guestEntryTap(event);
     if (lineEl.classList.contains("lineInBank")) BudgetUI.openInBankOptions(lineEl, gridDates[Number(td.dataset.row)][Number(td.dataset.col)]);
     else openEntryOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col), Number(lineEl.dataset.line));
   });
 }
+
+//#endregion
+
+// =====================================================================
+// #region THE CALENDAR'S HEADER (what it shows, the fractals, and moving it)
+// =====================================================================
+// At the left: three buttons for what the calendar shows ($ the budget, the calendar's entries, or both between them;
+// kept on this device), and Calendar Fractals, the list of calendars to check (Fractals.js). At the right: Today, the
+// month with ‹ and › (each moves to a month's first week), the year, and a date box with its calendar button (the
+// calendar moves so that day is in its first week).
+
+// The small calendar on a button (stylesheet.css .iconCalendar)
+function calendarIcon() {
+  const icon = BudgetUI.element("span", "buttonIcon iconCalendar");
+  icon.setAttribute("aria-hidden", "true");
+  return icon;
+}
+
+// The header's buttons: what the calendar shows, the fractal list, and the ways to move it (the year list runs over the
+// calendar's range)
+function wireCalendarHeader() {
+  const viewBox = document.getElementById("calendarView");
+  if (!viewBox) return;
+  const view = BudgetUI.segmented([
+    { key: "budget", label: "$", name: "Show the budget only" },
+    { key: "both", label: "$", name: "Show the budget and the calendar" },
+    { key: "calendar", label: "", name: "Show the calendar only" }
+  ], window.Fractals.view(), (key) => window.Fractals.setView(key));
+  view.el.setAttribute("aria-label", "What the calendar shows");
+  view.el.children[1].append(calendarIcon());
+  view.el.children[2].append(calendarIcon());
+  viewBox.replaceWith(view.el);
+  view.el.id = "calendarView";
+  view.el.classList.add("calendarView");
+  window.Fractals.wirePicker(document.getElementById("fractalPicker"));
+
+  const range = calendarRange();
+  const stepMonth = (step) => {
+    const anchor = viewAnchor || today;
+    moveCalendar(new Date(anchor.getFullYear(), anchor.getMonth() + step, 1));
+  };
+  document.getElementById("calendarPrev").addEventListener("click", () => stepMonth(-1));
+  document.getElementById("calendarNext").addEventListener("click", () => stepMonth(1));
+  document.getElementById("calendarToday").addEventListener("click", () => {
+    document.getElementById("calendarJump").value = "";
+    moveCalendar(today);
+  });
+  const year = document.getElementById("calendarYear");
+  for (let y = range.first.getFullYear(); y <= range.last.getFullYear(); y++) year.appendChild(new Option(String(y), String(y)));
+  year.addEventListener("change", () => {
+    const anchor = viewAnchor || today;
+    const lastDay = new Date(Number(year.value), anchor.getMonth() + 1, 0).getDate();
+    moveCalendar(new Date(Number(year.value), anchor.getMonth(), Math.min(anchor.getDate(), lastDay)));
+  });
+  const jump = document.getElementById("calendarJump");
+  jump.placeholder = datePattern();
+  jump.translate = false;
+  jump.after(BudgetUI.datePickerButton(jump, "date to go to", { min: range.first, max: range.last }));
+  const goToTyped = () => {
+    if (!jump.value.trim()) return;
+    const typed = parseTypedDate(jump.value);
+    if (isNaN(typed.getTime())) return BudgetUI.showToast("That isn't a date. Type one like the box shows, or use the calendar button.", true);
+    if (typed < range.first || typed > range.last) BudgetUI.showToast(`The calendar goes from ${showDate(range.first)} to ${showDate(range.last)}.`, true);
+    moveCalendar(typed);
+  };
+  jump.addEventListener("change", goToTyped);
+  jump.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    goToTyped();
+  });
+  renderCalendarNav();
+}
+
+// The header's month and year (the month of the day the calendar was moved to, or today's), and which of its buttons
+// can still go further
+function renderCalendarNav() {
+  const month = document.getElementById("calendarMonth");
+  if (!month) return;
+  const range = calendarRange();
+  const anchor = viewAnchor || today;
+  month.textContent = MONTHS[anchor.getMonth()];
+  document.getElementById("calendarYear").value = String(anchor.getFullYear());
+  document.getElementById("calendarPrev").disabled = new Date(anchor.getFullYear(), anchor.getMonth(), 0) < range.first;
+  document.getElementById("calendarNext").disabled = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1) > range.last;
+  document.getElementById("calendarToday").classList.toggle("isCurrent", showsOwnWeeks());
+}
+
+//#endregion
+
+// =====================================================================
+// #region QUICK CALENDAR ENTRIES TO ADD (from other devices' Quick Calendar icons)
+// =====================================================================
+// A calendar entry made with a Quick Calendar icon joins the calendar by itself on the device that made the icon. From
+// any other device's icon it waits here, with Add (it goes on the calendar) and Delete (it's gone, never added).
+
+function renderCalendarWaiting() {
+  const card = document.getElementById("calendarWaiting");
+  const list = document.getElementById("calendarWaitingList");
+  if (!card || !list) return;
+  const calendar = window.Fractals.data();
+  const waiting = calendar ? calendar.waiting : [];
+  card.hidden = waiting.length === 0;
+  list.replaceChildren(...waiting.map(calendarWaitingRow));
+}
+
+// One waiting calendar entry: its title over when it is, with Add and Delete
+function calendarWaitingRow(waiting) {
+  const row = BudgetUI.element("li", "waitingItem");
+  const text = BudgetUI.noTranslate(BudgetUI.element("span", "waitingText"));
+  text.append(BudgetUI.element("span", "waitingTitle", waiting.event.title), BudgetUI.element("span", "waitingDetails", window.Fractals.whenWords(waiting.event)));
+  const answer = async (add) => {
+    if (!add && !window.confirm(`Delete ${waiting.event.title}? It won't be added to your calendar.`)) return;
+    row.querySelectorAll("button").forEach(control => { control.disabled = true; });
+    const result = await window.Fractals.change("waiting", { id: waiting.id, add });
+    if (!result.ok) return BudgetUI.showToast(window.Fractals.problem(result, "That didn't work. Please try again."), true);
+    if (result.data.error) return BudgetUI.showToast(result.data.error, true);
+    BudgetUI.showToast(`${add ? "Added" : "Deleted"} ${waiting.event.title}.`);
+  };
+  const add = BudgetUI.element("button", "budgetButton primary waitingAdd", "Add");
+  add.type = "button";
+  add.setAttribute("aria-label", `Add ${waiting.event.title}`);
+  add.addEventListener("click", () => answer(true));
+  const remove = BudgetUI.element("button", "budgetButton danger waitingDelete", "Delete");
+  remove.type = "button";
+  remove.setAttribute("aria-label", `Delete ${waiting.event.title}`);
+  remove.addEventListener("click", () => answer(false));
+  row.append(text, add, remove);
+  return row;
+}
+
+//#endregion
+
+// =====================================================================
+// #region ONE ENTRY AFTER ANOTHER (an entry's window: its ‹ and ›, and swiping it)
+// =====================================================================
+// An entry's window (a budget entry's options, or a calendar entry's) moves on to the entry before it or after it, in
+// the order they show: a day's budget entries, then its calendar entries, then the next day's (whichever the calendar is
+// showing). The day of the entry it moves to zooms in under it.
+
+// A day's entries in the order they show: [{ kind: "budget", date, line, lineIndex, inHistory } | { kind: "event",
+// date, event, day (the day that occurrence starts) }]
+function entriesInOrder(date) {
+  const entries = [];
+  const mode = window.Fractals.view();
+  const day = mode === "calendar" ? null : budgetDayAt(date);
+  if (day && day.kind !== "blank") {
+    String(day.text).split("\n").forEach((line, lineIndex) => {
+      if (lineIndex === 0 || !line.trim() || isAfterCalendarLine(line)) return;
+      const parsed = readLine(line);
+      if (!parsed.blank && !parsed.system) entries.push({ kind: "budget", date, line, lineIndex, inHistory: day.kind === "history" });
+    });
+  }
+  if (mode !== "budget") {
+    for (const part of window.Fractals.eventsOn(date)) entries.push({ kind: "event", date, event: part.event, day: part.day });
+  }
+  return entries;
+}
+
+// Is this the entry a window was opened for?
+function isOpenEntry(entry, opened) {
+  if (entry.kind !== opened.kind) return false;
+  return entry.kind === "budget" ? entry.line === opened.line : entry.event.id === opened.id && entry.day === opened.day;
+}
+
+// Move from the entry a window is open for to the one before it (step -1) or after it (1), across days
+function stepEntry(opened, step) {
+  const range = calendarRange();
+  let date = activeEditCell && dayTime(activeEditCell) !== null ? new Date(dayTime(activeEditCell)) : opened.kind === "budget" ? opened.date : createSafeMidnight(opened.day);
+  let entries = entriesInOrder(date);
+  let index = entries.findIndex(entry => isOpenEntry(entry, opened));
+  if (index === -1) index = step > 0 ? -1 : entries.length;
+  index += step;
+  for (let tries = 0; index < 0 || index >= entries.length; tries++) {
+    date = addDays(date, step);
+    if (tries > 400 || date < range.first || date > range.last) return BudgetUI.showToast(`That's the ${step > 0 ? "last" : "first"} entry for a while.`);
+    entries = entriesInOrder(date);
+    index = step > 0 ? 0 : entries.length - 1;
+  }
+  const next = entries[index];
+  BudgetUI.closeAllPanels(true);
+  if (!activeEditCell || dayTime(activeEditCell) !== next.date.getTime()) zoomBudgetDay(next.date);
+  const cell = activeEditCell;
+  const shown = (node) => node.getClientRects().length > 0;
+  if (next.kind === "budget") {
+    const lineEl = cell ? [...cell.querySelectorAll(".lineEntry")].find(node => Number(node.dataset.line) === next.lineIndex) : null;
+    BudgetUI.openEntryOptions(lineEl || cell, next.line, next.date, { lineIndex: next.lineIndex, inHistory: next.inHistory });
+  } else {
+    const node = cell ? [...cell.querySelectorAll(".fractalEvent")].find(found => found.dataset.event === next.event.id && shown(found)) : null;
+    window.Fractals.openEvent(node || cell, next.event, next.day);
+  }
+}
+
+document.addEventListener("entry:opened", (event) => {
+  const opened = event.detail;
+  if (opened && opened.panel) window.Fractals.addSteps(opened.panel, (step) => stepEntry(opened, step));
+});
 
 //#endregion
 
@@ -421,67 +679,6 @@ function renderInfoRow() {
     item.appendChild(button);
     list.appendChild(item);
   }
-}
-
-// The Lowest card opens the 28 days after the calendar (a tap, or Enter or Space)
-function wireLowestCard() {
-  const card = document.querySelector(".lowestCard");
-  if (!card) return;
-  card.addEventListener("click", () => openAheadDays(card));
-  card.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    openAheadDays(card);
-  });
-}
-
-// "$1235" or "-$40": In Bank to the dollar, short enough for a day in the window's small squares
-function wholeDollars(amount) {
-  const dollars = Math.round(amount);
-  return `${dollars < 0 ? "-" : ""}$${Math.abs(dollars)}`;
-}
-
-// The Lowest card's window: the 28 days after the calendar (aheadDays in Process Budget.js), four weeks from Sunday like
-// History, each day with its date and In Bank as the daily update will have it (to the dollar; the lowest one ringed,
-// and one below $0 red), and the lowest and the 28th day's In Bank over them. Tapping a day closes it and zooms that day
-// in over the calendar, like any day there, to see its entries, add one, or change one (a change goes into Upcoming),
-// and to swipe on to the days before it.
-function openAheadDays(origin) {
-  const days = aheadDays();
-  if (days.length === 0) return;
-  BudgetUI.openPanel({
-    origin,
-    size: "large",
-    title: "The 28 Days After The Calendar",
-    build(form, panel) {
-      const lowest = days.reduce((low, day) => (day.inBank < low.inBank ? day : low), days[0]);
-      const last = days[days.length - 1];
-      const summary = BudgetUI.element("p", "panelText aheadSummary");
-      const amount = (value) => BudgetUI.noTranslate(BudgetUI.element("span", value < 0 ? "negative" : "", formatMoney(value)));
-      summary.append("Lowest: ", amount(lowest.inBank), ` on ${showDay(lowest.date)}. Day 28: `, amount(last.inBank), ".");
-      const table = BudgetUI.element("table", "aheadGrid");
-      const head = table.createTHead().insertRow();
-      for (let c = 0; c < 7; c++) head.appendChild(BudgetUI.element("th", "", ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][(days[0].date.getDay() + c) % 7]));
-      const body = table.createTBody();
-      let row = null;
-      days.forEach((day, index) => {
-        if (index % 7 === 0) row = body.insertRow();
-        const td = row.insertCell();
-        const button = BudgetUI.element("button", "aheadDay");
-        button.type = "button";
-        button.classList.toggle("isNegative", day.inBank < 0);
-        button.classList.toggle("isLowest", day === lowest);
-        button.setAttribute("aria-label", `${showDay(day.date)}: In Bank ${formatMoney(day.inBank)}${day === lowest ? ", the lowest" : ""}`);
-        button.append(BudgetUI.noTranslate(BudgetUI.element("span", "aheadDate", showDay(day.date))), BudgetUI.noTranslate(BudgetUI.element("span", "aheadInBank", wholeDollars(day.inBank))));
-        button.addEventListener("click", () => {
-          panel.close();
-          zoomBudgetDay(day.date);
-        });
-        td.appendChild(button);
-      });
-      form.append(summary, table, BudgetUI.element("p", "panelHint", "In Bank at the end of each day, counting your recurring entries, connected spreadsheets' and calendars' entries, and Upcoming entries (not Hidden ones). Tap a day to see its entries, add one, or change one."), BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
-    }
-  });
 }
 
 // The Lowest card's look past the calendar, from the last day's two lines (see afterCalendarLine): the day In Bank is
@@ -566,7 +763,7 @@ function renderBobWarnings() {
 // #region ENTRY PANELS
 // =====================================================================
 
-// (New Entry is BudgetUI.openNewEntry: History's days open it too)
+// (New Entry is BudgetUI.openNewEntry: a zoomed day's + opens it too)
 
 // Quick Entry Icon: makes a key (only while signed in) and opens the Quick Entry page with it in the
 // link, ready to add to the home screen. The icon then opens that New Entry form with no login. The key
@@ -611,8 +808,48 @@ function openQuickEntrySetup(origin) {
   });
 }
 
+// Quick Calendar Icon: makes a key (only while signed in) and opens the Quick Calendar page with it in the link, ready
+// to add to the home screen. The icon then opens the calendar with no login: it shows the calendar's entries and adds
+// new ones, which join the calendar the next time Prismal Planning opens on this device (or from Home's card on another).
+function openQuickCalendarSetup(origin) {
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "Quick Calendar Icon",
+    build(form, panel) {
+      const text = (line) => BudgetUI.element("p", "panelText", line);
+      form.append(
+        text("Put an icon on your phone's home screen that opens your calendar, with no login needed."),
+        text("The icon shows your calendar's entries (every Calendar Fractal, and the entries shared with you) and can add new ones. It never sees your budget. What it adds shows up here the next time you open Prismal Planning (and until then, the icon can still change one or take it back). If your password changes, or you turn icons off in Settings, it stops working."),
+        text("Anyone holding the phone can open it, so only make one on a phone you keep locked."),
+        BudgetUI.buttonRow([
+          { label: "Set It Up", kind: "primary", type: "submit" },
+          { label: "Cancel", onClick: () => panel.close() }
+        ])
+      );
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        panel.setError("");
+        panel.setBusy(true);
+        const result = await window.Fractals.call("/api/fractals/key", {});
+        if (!result.ok || !result.data || !result.data.key) {
+          panel.setBusy(false);
+          panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't set it up. Please try again.");
+          return;
+        }
+        // (This device's own icon: its entries join the calendar as soon as it loads here)
+        await window.Fractals.rememberIcon(result.data.key);
+        const url = `/quickcal.html?key=${encodeURIComponent(result.data.key)}&setup=1`;
+        if (typeof window.transitionTo === "function") window.transitionTo(url);
+        else window.location.href = url;
+      });
+    }
+  });
+}
+
 // Options for an entry tapped inside a zoomed day: set or add to the amount, change its type or account, move it, or
-// delete it (BudgetUI.openEntryOptions, which History shares)
+// delete it (BudgetUI.openEntryOptions, which a day drawn from History shares)
 function openEntryOptions(lineEl, r, c, lineIndex) {
   const line = String(calendarData[r][c]).split("\n")[lineIndex];
   if (line) BudgetUI.openEntryOptions(lineEl, line, gridDates[r][c], { lineIndex });

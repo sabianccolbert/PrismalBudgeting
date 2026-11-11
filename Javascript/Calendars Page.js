@@ -1,4 +1,4 @@
-// Calendars Page (the calendars on Menu > Spreadsheets & Calendars): connected calendars, whose shifts become paychecks on
+// Calendars Page (the calendars on Menu > Budgets, Calendars & Spreadsheets): connected calendars, whose shifts become paychecks on
 // the budget's calendar. Add one, change its pay, turn it on or off, delete it, and see its paychecks and shifts, worked
 // out like a paystub (Calendars.js reads them and works out the pay; CONNECTED SPREADSHEETS in Process Budget.js keeps
 // them). Like a spreadsheet, connecting one needs a verified email (Spreadsheets Page.js has the account and its note).
@@ -366,6 +366,24 @@ function openCalendarPanel(id, origin) {
       link.input.spellcheck = false;
       link.input.addEventListener("input", showPrimary);
       BudgetUI.addFieldHelp(link.el, "How to get the link", calendarLinkHelp());
+      // One of the account's own Calendar Fractals can be the calendar instead of a link: picked here, its link is kept
+      // as "prismal:fractal:<its number>" (Calendars.js reads it from the account's calendar)
+      const fractals = window.Fractals && window.Fractals.data() ? window.Fractals.data().fractals : [];
+      const source = BudgetUI.selectField({
+        label: "Calendar",
+        options: [{ value: 0, label: "A calendar link (Apple, Google, Outlook, a work app...)" }, ...fractals.map(fractal => ({ value: fractal.id, label: `Calendar Fractal: ${fractal.name}` }))],
+        value: fractals.some(fractal => fractal.id === Calendars.fractalOf(link.input.value)) ? Calendars.fractalOf(link.input.value) : 0,
+        hint: "A Calendar Fractal's shifts are the entries you add to it on Home. Only your account can read it, so in a budget you share, it's worked out on your devices."
+      });
+      source.el.hidden = fractals.length === 0;
+      link.el.hidden = Number(source.value()) !== 0;
+      source.input.addEventListener("change", () => {
+        const picked = Number(source.value());
+        link.el.hidden = picked !== 0;
+        if (picked !== 0) link.input.value = `prismal:fractal:${picked}`;
+        else if (Calendars.fractalOf(link.input.value)) link.input.value = "";
+        showPrimary();
+      });
       const openedNote = BudgetUI.element("p", "panelHint sheetOpened");
       openedNote.setAttribute("role", "status");
       const buttons = BudgetUI.buttonRow([
@@ -461,7 +479,7 @@ function openCalendarPanel(id, origin) {
       preview.setAttribute("aria-live", "polite");
 
       section.append(name.el, entryPart, payPart, rulesPart, eventsPart, preview);
-      form.append(link.el, openedNote, section, buttons);
+      form.append(source.el, link.el, openedNote, section, buttons);
       [title.input].forEach(input => input.addEventListener("input", schedulePreview));
       showAccountRow();
       drawVersions();

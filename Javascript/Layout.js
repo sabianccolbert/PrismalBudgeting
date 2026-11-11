@@ -543,9 +543,9 @@ const SLIDE_OUT_CLASSES = { left: "toLeft", right: "toRight", up: "toTop" };
 // signing out slides right, as if the login page sat to the left of the budget (and to the right of the front page,
 // so Sign In there slides left too). Between the budget's four pages, only what's under their tabs slides. The page
 // that opens slides in the same way the last one slid out (Boot.js reads the note transitionTo leaves).
-const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "payments", "logs", "bob"];
-const SIDE_PAGES = ["quick", "privacy"];
-const BUDGET_TABS = ["home", "recurring", "history", "accounts"];
+const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "payments", "logs"];
+const SIDE_PAGES = ["quick", "quickcal", "privacy"];
+const BUDGET_TABS = ["home", "recurring", "accounts", "bob"];
 
 // The way from page FROM to page TO: "left", "right", "up", "down", "tab", or null (anything else: the page slides
 // down and out, and the next one up into view)
@@ -1173,9 +1173,12 @@ document.addEventListener("click", (EVENT) => {
 // it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Entry icons it made or used
 // (their entries are added when the budget opens here, see holdQuickEntries), the day picked for Bob's Accounts
 // card (Bob Page.js), its theme and Custom theme and its Reduced Motion switches (Boot.js), so the next sign-in here
-// looks the same, and whether push notifications were turned off here on purpose (Notifications.js).
+// looks the same, whether push notifications were turned off here on purpose (Notifications.js), and what Home's
+// calendar shows here: the budget, the calendar, or both, which Calendar Fractals are checked, whether a zoomed day
+// lists its calendar entries, and the Quick Calendar icons this device made or used (Fractals.js).
 const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
-  "prismal_theme", "prismal_custom_theme", "prismal_quick_icon", "prismal_still_stars", "prismal_less_motion", "prismal_push_off"];
+  "prismal_theme", "prismal_custom_theme", "prismal_quick_icon", "prismal_still_stars", "prismal_less_motion", "prismal_push_off",
+  "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));

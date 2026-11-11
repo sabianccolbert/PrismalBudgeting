@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=bbc049464e">
+    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=47bb6b3b1d">
-    <link rel="stylesheet" href="/themes.css?v=0e56d3f317">
+    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
+    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -64,17 +64,6 @@
       <main>
         <p id="dataStatus" class="dataStatus">Loading...</p>
 
-        <!-- The account's budgets and the ones shared with it (Budgets.js renderManager, Settings Page.js) -->
-        <section id="budgets" class="budgetCard settingsCard" aria-labelledby="budgetsHeading" hidden>
-          <h3 id="budgetsHeading">Budgets</h3>
-          <p>Keep more than one budget, each with its own calendar, entries, Equity, and Bob, and share any of yours with other Prismal Planning accounts. The list above the buttons at the top of every page switches between them.</p>
-          <div id="budgetManager"></div>
-          <div class="panelButtons">
-            <button id="newBudgetButton" type="button" class="budgetButton primary">New Budget</button>
-          </div>
-          <p class="panelHint">Everyone a budget is shared with can open it and change anything in it. Only its owner can share it, rename it, or delete it, and your first budget can't be deleted.</p>
-        </section>
-
         <div id="settingsView" hidden>
           <!-- The reminders: which kinds this account gets (a switch for each), when, and with more than one budget, which
                budget they're about (Settings Page.js). They come as push notifications and on the calendar link, the two
@@ -124,6 +113,18 @@
             </ul>
           </section>
         </div>
+
+        <!-- The calendar's own links: one for every Calendar Fractal together, and one for each (Fractals.js renderLinks) -->
+        <section id="fractalLinksCard" class="budgetCard settingsCard" aria-labelledby="fractalLinksHeading" hidden>
+          <h3 id="fractalLinksHeading">Calendar Fractals' Links</h3>
+          <p>A private link to your calendar's entries that another calendar app (Apple Calendar, Google Calendar, Outlook, and most others) or a spreadsheet can subscribe to: one for every Calendar Fractal together, or one for each. It carries each entry's title, time, location, notes, alerts, and how it repeats.</p>
+          <div id="fractalLinks"></div>
+          <ul class="settingsList settingsNotes">
+            <li>The other calendar shows your entries. Changes made there don't come back here.</li>
+            <li>Calendar apps check a link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
+            <li>Keep a link private: anyone who has it can see those entries. New Link makes a new one (the old one stops working), and Turn Off ends it.</li>
+          </ul>
+        </section>
 
         <!-- This device's own choices: they don't need the server, so they show right away (Settings Page.js) -->
         <!-- This device's theme (Boot.js keeps it, themes.css draws it; Settings Page.js fills in a button for each, and
@@ -295,6 +296,9 @@
             <h3 id="devicesHeading">Signed-In Devices</h3>
             <p id="quickIconStatus"></p>
             <div id="quickIconButtons" class="panelButtons"></div>
+            <!-- Quick Calendar icons (Home's Quick Calendar button makes them): how many work, and Turn Off (Settings Page.js) -->
+            <p id="quickCalendarStatus" hidden></p>
+            <div id="quickCalendarButtons" class="panelButtons"></div>
             <!-- Whether Quick Entry icons show In Bank, the lowest, and the Equity accounts' balances (Settings Page.js) -->
             <label class="checkboxField settingsSwitch">
               <input id="quickBalancesSwitch" type="checkbox" class="pillSwitch" role="switch">
@@ -345,9 +349,10 @@
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Settings Help</h3>
 
-          <h4>Your Budgets</h4>
+          <h4>Reminders And Your Calendar</h4>
           <ul>
-            <li><strong>Budgets:</strong> every budget you have, your own and the ones shared with you, with invitations to Join or Decline. <strong>Open</strong> switches to one, <strong>Share</strong> invites someone to one of yours (by their username or email; once they join, they can open it and change anything in it, and Stop Sharing takes it back), <strong>Rename</strong> and <strong>Delete</strong> are for your own (your first budget can't be deleted), and <strong>Leave</strong> is for one shared with you. Only a budget's owner can share it. The name above the buttons at the top of every page switches between them too.</li>
+            <li><strong>Your budgets</strong> are on their own page now: open the menu, then Budgets, Calendars &amp; Spreadsheets. The name above the buttons at the top of every page switches between them too.</li>
+            <li><strong>Calendar Fractals' Links:</strong> a private link to your calendar's entries (every Calendar Fractal together, or one of them) that Apple Calendar, Google Calendar, Outlook, and spreadsheets can subscribe to. Make A Link shows it, with Copy and buttons that add it to Apple or Google Calendar; New Link makes a new one (the old one stops working), and Turn Off ends it. The other calendar shows your entries, and changes made there don't come back.</li>
             <li><strong>Reminders are about:</strong> with more than one budget, the Reminders card picks which one your reminders follow.</li>
             <li><strong>Reminders:</strong> a switch for each kind: 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start). They come as push notifications and on the calendar link, at the reminder time. Right after you sign in, Home asks once whether to turn notifications on there.</li>
           </ul>
@@ -357,6 +362,7 @@
             <li><strong>Email:</strong> change it here (with your password). A new email gets a link to verify it, and until it's verified, spreadsheets and calendars can't be connected or read. Send Verification Email sends a new link.</li>
             <li><strong>Other Emails:</strong> add another email of yours (up to 5), and open the link we send it (it works for 24 hours). Once it's confirmed, you can sign in with it too (and use it for Forgot Password), and spreadsheets its Google account shares with admin@prismalplanning.org can be connected. Remove one to stop both. Adding one needs your own email verified first.</li>
             <li><strong>Quick Entry icons:</strong> turn off Show balances on Quick Entry icons, and they stop showing In Bank, the lowest it gets, and your Equity accounts' balances (just their names), on every icon.</li>
+            <li><strong>Quick Calendar icons:</strong> Signed-In Devices says how many work. Turning them off stops every one, and deletes the entries still waiting from them.</li>
             <li><strong>Birth Date:</strong> Prismal Planning is for people 18 and older. If you typed the wrong birth date when you signed up, fix it here: type it, or pick it with the calendar button.</li>
             <li>Change your password, add passkeys, turn off Quick Entry icons, sign out everywhere, download your data, or delete your account.</li>
             <li><strong>Upload A Backup:</strong> pick a file Download My Data saved (one with more than one budget asks which), and it goes into the budget that's open: for each part of the budget it has (History, Home's Calendar, Upcoming, Recurring Entries, Equity, Goals, Bob's Page, Tracker, Connected Spreadsheets And Calendars, Paycheck Calculator, Notes, and Change Logs), pick one: <strong>Prefer Current Data</strong> keeps yours where the two clash (like an entry with the same title and type on the same day) and adds the rest from the backup; <strong>Prefer Uploaded Data</strong> does the same, but the backup's wins where they clash; <strong>Remove Current Data</strong> puts the backup's in place of yours. Parts the backup doesn't have stay as they are. Undo can't take it back, so the window offers Download My Data first.</li>
@@ -364,7 +370,7 @@
             <li><strong>Quick Entry Icon</strong> (under Theme): how the icon looks when Quick Entry is added to this device's home screen. Pick its Colors (one from each theme, and your Custom one), then its Icon: the usual Prismal picture, a minimal one, a blank one (just the colors), an emoji you type, or an image you upload. It's kept on this device with the theme, even when you sign out. An icon already on a home screen keeps the look it was added with: tap Quick Entry on Home and add it again for the new one.</li>
             <li><strong>Theme:</strong> how Prismal Planning looks on this device. Tap one to switch, or Custom (at the end) to make your own: start from any theme, pick five colors (the background, the cards, the words, the glow, and what's chosen) and the corners, font, stars, and icons, and watch it change behind the window; Save Theme keeps it. The login page and the front page always look like Prismal.</li>
             <li><strong>Reduced Motion:</strong> Hold the starfield still keeps the stars where they are, and Turn off other animations stops pages sliding, windows growing out of their buttons, days zooming, and cards floating, on this device. If your device asks for less motion in its own settings, both are on already.</li>
-            <li>Connected spreadsheets and calendars have their own page: open the menu, then Spreadsheets &amp; Calendars.</li>
+            <li>Connected spreadsheets and calendars have their own page: open the menu, then Budgets, Calendars &amp; Spreadsheets.</li>
           </ul>
         </section>
       </main>

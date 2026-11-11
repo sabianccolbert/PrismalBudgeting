@@ -2,23 +2,23 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=bbc049464e">
+    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=47bb6b3b1d">
-    <link rel="stylesheet" href="/themes.css?v=0e56d3f317">
-    <title>Prismal Planning - Spreadsheets &amp; Calendars</title>
+    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
+    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
+    <title>Prismal Planning - Budgets, Calendars &amp; Spreadsheets</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Prismal Sheets &amp; Calendars" />
+    <meta name="apple-mobile-web-app-title" content="Prismal Calendars" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Planning - Spreadsheets &amp; Calendars">
+    <meta property="og:title" content="Prismal Planning - Budgets, Calendars &amp; Spreadsheets">
     <meta property="og:description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta property="og:image" content="https://prismalplanning.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
@@ -42,7 +42,7 @@
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <div class="brandText stacked">
-            <h1>Spreadsheets &amp; Calendars</h1>
+            <h1>Budgets, Calendars &amp; Spreadsheets</h1>
             <h2 translate="no">Prismal Planning</h2>
           </div>
         </div>
@@ -64,6 +64,42 @@
       <main>
         <p id="dataStatus" class="dataStatus">Loading...</p>
 
+        <!-- The account's budgets and the ones shared with it (Budgets.js renderManager, Spreadsheets Page.js) -->
+        <section id="budgets" class="budgetCard settingsCard" aria-labelledby="budgetsHeading" hidden>
+          <h3 id="budgetsHeading">Budgets</h3>
+          <p>Keep more than one budget, each with its own calendar, entries, Equity, and Bob, and share any of yours with other Prismal Planning accounts. The list above the buttons at the top of every page switches between them.</p>
+          <div id="budgetManager"></div>
+          <div class="panelButtons">
+            <button id="newBudgetButton" type="button" class="budgetButton primary">New Budget</button>
+          </div>
+          <p class="panelHint">Everyone a budget is shared with can open it and change anything in it. Only its owner can share it, rename it, or delete it, and your first budget can't be deleted.</p>
+        </section>
+
+        <!-- The account's Calendar Fractals: its calendars, each a name and a color, whose entries show on Home's calendar
+             (Fractals.js renderManager) -->
+        <section id="fractals" class="budgetCard settingsCard" aria-labelledby="fractalsHeading" hidden>
+          <h3 id="fractalsHeading">Calendar Fractals</h3>
+          <p>Your calendars. Each one has a name and a color, and its entries show on Home's calendar in that color while it's checked in the Calendar Fractals list there. Add entries with New Entry on Home (Calendar Entry), or with a Quick Calendar icon.</p>
+          <div id="fractalManager"></div>
+          <div class="panelButtons">
+            <button id="newFractalButton" type="button" class="budgetButton primary">New Calendar Fractal</button>
+          </div>
+          <p class="panelHint">Deleting a fractal deletes its entries too (your last one can't be deleted). Each one's calendar link, for other calendar apps, is in <a href="/settings.html#fractalLinksCard">Settings</a>. A fractal with your work shifts can be connected below, to turn them into paychecks.</p>
+        </section>
+
+        <!-- Connected calendars: each one's button (change it), On/Off, Delete, and its paychecks and shifts, with what's
+             wrong under it (Calendars Page.js; reading them and working out their pay is Calendars.js) -->
+        <section id="calendarsView" class="budgetCard settingsCard" aria-labelledby="calendarsHeading" hidden>
+          <h3 id="calendarsHeading">Connected Calendars</h3>
+          <p>Keep your work shifts on a calendar (Apple, Google, Outlook, or a work scheduling app)? Connect it with your pay, and every paycheck its shifts come to lands on your calendar on its payday, behind a ➕, worked out like a paystub (overtime, night rates, deductions, and taxes), and following the calendar as shifts are added, moved, or deleted.</p>
+          <!-- Like spreadsheets, connecting one needs a verified email (the note above has the button) -->
+          <p id="calendarsVerify" class="panelHint calendarsVerify" role="status" hidden>Connecting a calendar needs a verified email too: see the note under Connected Spreadsheets, below.</p>
+          <ul id="calendarList" class="sheetList"></ul>
+          <div class="panelButtons">
+            <button id="addCalendarButton" type="button" class="budgetButton primary">Add Calendar</button>
+          </div>
+        </section>
+
         <!-- Connected spreadsheets: each one's button (change it), On/Off, and Delete, with what's wrong under it
              (Spreadsheets Page.js; reading them is Spreadsheets.js) -->
         <section id="sheetsView" class="budgetCard settingsCard" aria-labelledby="sheetsHeading" hidden>
@@ -84,23 +120,18 @@
           <p class="panelHint sheetsOtherEmails">Share spreadsheets with admin@prismalplanning.org from a Google account with another email? Add that email in <a href="/settings.html#email">Settings, under Email</a> (Other Emails), and open the link we send it. Then the spreadsheets it shares can be connected too.</p>
         </section>
 
-        <!-- Connected calendars: each one's button (change it), On/Off, Delete, and its paychecks and shifts, with what's
-             wrong under it (Calendars Page.js; reading them and working out their pay is Calendars.js) -->
-        <section id="calendarsView" class="budgetCard settingsCard" aria-labelledby="calendarsHeading" hidden>
-          <h3 id="calendarsHeading">Connected Calendars</h3>
-          <p>Keep your work shifts on a calendar (Apple, Google, Outlook, or a work scheduling app)? Connect it with your pay, and every paycheck its shifts come to lands on your calendar on its payday, behind a ➕, worked out like a paystub (overtime, night rates, deductions, and taxes), and following the calendar as shifts are added, moved, or deleted.</p>
-          <!-- Like spreadsheets, connecting one needs a verified email (the note above has the button) -->
-          <p id="calendarsVerify" class="panelHint calendarsVerify" role="status" hidden>Connecting a calendar needs a verified email too: see the note under Connected Spreadsheets.</p>
-          <ul id="calendarList" class="sheetList"></ul>
-          <div class="panelButtons">
-            <button id="addCalendarButton" type="button" class="budgetButton primary">Add Calendar</button>
-          </div>
-        </section>
-
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
-          <h3 id="helpTitle">Spreadsheets &amp; Calendars Help</h3>
+          <h3 id="helpTitle">Budgets, Calendars &amp; Spreadsheets Help</h3>
+
+          <h4>Budgets</h4>
+          <p>Every budget you have, your own and the ones shared with you, with invitations to Join or Decline. <strong>Open</strong> switches to one, <strong>Share</strong> invites someone to one of yours (by their username or email; once they join, they can open it and change anything in it, and Stop Sharing takes it back), <strong>Rename</strong> and <strong>Delete</strong> are for your own (your first budget can't be deleted), and <strong>Leave</strong> is for one shared with you. Only a budget's owner can share it. The name above the buttons at the top of every page switches between them too.</p>
+
+          <h4>Calendar Fractals</h4>
+          <p>Your calendars, each with a name and a color. Their entries show on Home's calendar in that color while they're checked in the Calendar Fractals list there. <strong>Edit</strong> changes one's name or color (or deletes it, with its entries; your last one can't be deleted), and <strong>New Calendar Fractal</strong> makes another. Each one's link for other calendar apps is in Settings. Add entries with New Entry on Home (its Calendar Entry button), or with a Quick Calendar icon.</p>
+
+          <h4>Spreadsheets</h4>
           <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
           <ol>
             <li>Verify your email first. We email a link when you make your account (it works for 24 hours), and Send Verification Email (on this page, or in Settings under Email) sends a new one. If it isn't in your inbox, check your spam folder.</li>
@@ -140,6 +171,7 @@
           <p>When a cell can't be read (like a date that isn't a date, or an Equity account you don't have), the box under that spreadsheet says which cell and how to fix it. The other entries still land.</p>
 
           <h4>Calendars</h4>
+          <p>The calendar can be one of your own Calendar Fractals (pick it under Calendar when you add one): then the shifts are the entries you add to it on Home. Only your account can read it, so in a budget you share, its paychecks are worked out on your devices.</p>
           <p>Connect the calendar your work shifts are on and fill in your pay, and each paycheck lands on your calendar on its payday, behind a ➕ (like ➕❗️ $950.00 Paycheck), at what it comes to after deductions and taxes.</p>
           <ol>
             <li>Verify your email first, like for a spreadsheet.</li>

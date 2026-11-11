@@ -542,7 +542,7 @@ html[data-theme="poison"] {
   --GLOW_SHADOW: 0 0 16px rgba(150, 60, 230, 0.55), inset 0 0 12px rgba(150, 60, 230, 0.25);
   --RECOMMENDED_FILL: linear-gradient(90deg, rgba(50, 150, 50, 0.65), rgba(130, 50, 200, 0.65));
   --DARK_BUTTON: rgba(10, 5, 16, 0.88);
-  --PICK_FILL: radial-gradient(ellipse at center, rgba(120, 255, 80, 0.4) 0%, rgba(60, 200, 40, 0.22) 50%, rgba(20, 100, 10, 0.08) 85%, transparent 100%);
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(120, 255, 80, 0.3) 0%, rgba(60, 200, 40, 0.18) 50%, rgba(20, 100, 10, 0.08) 85%, transparent 100%);
   --EDGE_GRADIENT: linear-gradient(135deg, #39ff14 0%, #7dff5a 55%, #c6ff3d 100%);
   --HOVER_GRADIENT: linear-gradient(160deg, rgba(46, 18, 72, 0.98) 0%, rgba(28, 12, 48, 0.98) 50%, rgba(16, 8, 30, 0.98) 100%);
   --FLOAT_SHADOW: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 26px rgba(120, 255, 80, 0.15);
@@ -643,7 +643,7 @@ html[data-theme="blue"] {
   --RECOMMENDED_FILL: linear-gradient(90deg, rgba(10, 80, 170, 0.95), rgba(24, 106, 200, 0.95));
   --DARK_BUTTON: rgba(14, 38, 80, 0.9);
   --DANGER_TEXT: #ffb3bd;
-  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 210, 90, 0.3) 0%, rgba(255, 170, 30, 0.22) 50%, rgba(160, 100, 0, 0.08) 85%, transparent 100%);
+  --PICK_FILL: radial-gradient(ellipse at center, rgba(255, 210, 90, 0.16) 0%, rgba(255, 170, 30, 0.12) 50%, rgba(160, 100, 0, 0.05) 85%, transparent 100%);
   --PLACEHOLDER_COLOR: rgba(200, 220, 245, 0.55);
   --EDGE_GRADIENT: linear-gradient(135deg, #ffb703 0%, #ffd166 55%, #fff3b0 100%);
   --HOVER_GRADIENT: linear-gradient(160deg, rgba(40, 90, 162, 0.98) 0%, rgba(30, 72, 138, 0.98) 50%, rgba(22, 58, 116, 0.98) 100%);
@@ -698,6 +698,11 @@ html[data-theme="blue"] :is(.navIcon, .tabIcon, .cardIcon img, .buttonIcon) {
 
 html[data-theme="blue"] .logoutButton span {
   color: #ffd166;
+}
+
+/* A chosen card's smaller line (like a theme's few words) is white, so it reads over the warm glow */
+html[data-theme="blue"] .choiceList .budgetButton[aria-checked="true"] .choiceDetail:not(.negative) {
+  color: var(--TEXT_BRIGHT);
 }
 
 html[data-theme="blue"] .lowestCard {
