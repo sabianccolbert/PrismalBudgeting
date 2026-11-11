@@ -1,4 +1,4 @@
-// Budget Search: Home's and History's Search (the same one on both). It finds entries by title in History,
+// Budget Search: Home's Search. It finds entries by title in History,
 // the calendar, Upcoming, and (with a To date after the calendar) recurring entries and connected spreadsheets'
 // entries still to come; see search() in Process Budget.js. The Search button opens it, floating over the
 // page, and its results show under it. Tapping a result opens its options, like an entry on a zoomed day, and the

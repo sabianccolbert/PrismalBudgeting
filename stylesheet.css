@@ -557,7 +557,7 @@ header .brand-icon {
   text-align: left;
 }
 
-/* The name: "Prismal" heavier than "Budget" */
+/* The name: "Prismal" heavier than "Planning" */
 header .logo {
   margin: 0;
   font-size: clamp(17px, 4.6vmin, 36px);
@@ -606,7 +606,7 @@ header .stacked h2 {
 }
 
 /* The narrowest phones have no room for the tagline beside the buttons, and a page's long name (like
-   Spreadsheets & Calendars) is a little smaller there, so it fits */
+   Budgets, Calendars & Spreadsheets) is a little smaller there, so it fits */
 @media (max-width: 339px) {
   .tagline {
     display: none;

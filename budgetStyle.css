@@ -62,7 +62,7 @@
 }
 
 /* A day that isn't zoomed (or magnified) cuts a line too long for it short, with "..." at its edge */
-.elastic-table td:not(.is-editing):not(.is-magnified) .cell-content > :not(.cell-action-btn):not(.historyDate) {
+.elastic-table td:not(.is-editing):not(.is-magnified) .cell-content > :not(.cell-action-btn) {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -617,14 +617,7 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   text-shadow: var(--TITLE_GLOW);
 }
 
-/* History: a week on each row, like the calendar's days (they zoom the same way). Each day shows just its date,
-   big, until it's zoomed or magnified; then it shows the day as it was (its full date, In Bank, and entries). */
-.elastic-table.historyGrid {
-  height: auto;
-  margin: 0 auto 4vmin;
-}
-
-/* The weekdays over the days (Home's calendar and History) */
+/* The weekdays over the days */
 .elastic-table th {
   height: 1px; /* As short as its words (the table's height goes to the days) */
   padding: 0 0 0.8vmin;
@@ -636,36 +629,9 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   color: var(--TEXT_DIM);
 }
 
-.historyGrid td {
-  height: max(11vmin, 46px);
-}
-
-.historyGrid .historyDate {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin: auto;
-  font-size: clamp(12px, 3.2vmin, 26px);
-  font-weight: bold;
-  line-height: 1.1;
-  color: var(--TEXT_BRIGHT);
-  text-shadow: var(--TITLE_GLOW);
-}
-
-.historyGrid .historyYear {
-  font-size: 0.6em;
-  font-weight: normal;
-  opacity: 0.7;
-}
-
-.historyGrid td:not(.is-editing):not(.is-magnified) .cell-content > :not(.historyDate):not(.cell-action-btn),
-.historyGrid td:is(.is-editing, .is-magnified) .historyDate {
-  display: none;
-}
-
 /* The guest row (Process Budget.js ONE DAY AFTER ANOTHER): seven days laid over a row of the page's days, for a day
-   the page doesn't have (History's on Home, the calendar's on History, and the 28 days after the calendar on both). Only
-   the one that's zoomed (or shrinking back) shows, or can be tapped. */
+   the four weeks showing don't have (one a zoomed day was swiped on to). Only the one that's zoomed (or shrinking back)
+   shows, or can be tapped. */
 .elastic-table.guestDays {
   position: absolute;
   height: auto;
@@ -679,9 +645,11 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   pointer-events: auto;
 }
 
-/* Only a calendar day's In Bank can be set (History's and the days after the calendar's can't) */
-.elastic-table.guestDays td:not([data-kind="calendar"]) .lineInBank {
+/* Only a day of the budget's own calendar can have its In Bank set (History's and the days after the calendar's
+   can't): a guest day, or a day of Home's calendar once it's moved, says which it is (data-kind) */
+.elastic-table td[data-kind]:not([data-kind="calendar"]) .lineInBank {
   pointer-events: none;
+  cursor: default;
 }
 
 /* Recurring Entries and Change Logs fit the screen, with no sideways scrolling: column titles can take two lines, and the
@@ -900,10 +868,10 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   background: var(--NEGATIVE_GLOW_FILL), var(--NEGATIVE_DAY_SOLID);
 }
 
-/* Entries are tappable once their day is zoomed, on Home and History (sized with the text, so they look the same at any
-   zoom), and so is the day's In Bank on Home (History's In Bank is a record) */
+/* Entries are tappable once their day is zoomed (sized with the text, so they look the same at any zoom), and so is
+   the day's In Bank (a day in History's is a record: see the guest row) */
 .elastic-table td.is-editing .lineEntry,
-.elastic-table:not(.historyGrid) td.is-editing .lineInBank {
+.elastic-table td.is-editing .lineInBank {
   pointer-events: auto;
   cursor: pointer;
   border-radius: 0.3em;
@@ -912,7 +880,7 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 }
 
 .elastic-table td.is-editing .lineEntry:hover,
-.elastic-table:not(.historyGrid) td.is-editing .lineInBank:hover {
+.elastic-table td.is-editing .lineInBank:hover {
   background: rgba(var(--TINT_RGB), 0.1);
 }
 
@@ -2125,10 +2093,6 @@ button.dropdownBox:focus-visible {
   margin-bottom: 1em;
 }
 
-.budgetCard.pageCard .elastic-table.historyGrid {
-  margin-bottom: 0.5em;
-}
-
 /* A page's icon and title (and a line under it) */
 .cardHeader {
   display: flex;
@@ -2247,109 +2211,6 @@ button.dropdownBox:focus-visible {
   width: clamp(44px, 9vmin, 64px);
   height: clamp(44px, 9vmin, 64px);
   border-radius: 14px;
-}
-
-/* The card opens the 28 days after the calendar (Calendar Page.js openAheadDays): it lights up like Bob's, and says so
-   at its bottom right */
-.lowestCard {
-  position: relative;
-  cursor: pointer;
-}
-
-.lowestCard:hover,
-.lowestCard:focus-visible {
-  border-color: var(--GLASS_LINE_BRIGHT);
-  box-shadow: var(--GLASS_SHADOW), var(--HOVER_SHADOW);
-  outline: none;
-}
-
-.lowestMore {
-  grid-column: 1 / -1;
-  justify-self: end;
-  margin-top: -0.2em;
-  font-size: 0.8em;
-  color: var(--TEXT_DIM);
-}
-
-/* The window: the lowest and the 28th day over four weeks of days, each a square with its date and In Bank (to the
-   dollar); one below $0 is red, and the lowest is ringed */
-.aheadSummary .negative {
-  color: var(--NEGATIVE_TEXT);
-}
-
-.aheadGrid {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: clamp(2px, 0.8vw, 6px);
-}
-
-.aheadGrid th {
-  padding: 0 0 0.3em;
-  font-size: 0.7em;
-  font-weight: normal;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--TEXT_DIM);
-}
-
-.aheadGrid td {
-  padding: 0;
-}
-
-.budgetButton.aheadDay,
-button.aheadDay {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2em;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 3.4em;
-  margin: 0;
-  padding: 0.35em 0.1em;
-  font: inherit;
-  color: var(--TEXT_BRIGHT);
-  background: var(--DAY_FILL);
-  border: 0;
-  border-radius: var(--DAY_RADIUS);
-  box-shadow: inset 0 0 0 1px var(--DAY_EDGE);
-  cursor: pointer;
-}
-
-button.aheadDay:hover,
-button.aheadDay:focus-visible {
-  background: var(--HOVER_GRADIENT);
-  outline: none;
-}
-
-button.aheadDay.isNegative {
-  background: var(--NEGATIVE_DAY_FILL);
-  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE);
-}
-
-button.aheadDay.isLowest {
-  box-shadow: inset 0 0 0 2px var(--PICK_EDGE), 0 0 10px rgba(var(--PICK_RGB), 0.45);
-}
-
-.aheadDate {
-  font-size: clamp(11px, 0.85em, 15px);
-  font-weight: bold;
-  line-height: 1.1;
-}
-
-.aheadInBank {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: clamp(9px, 0.72em, 13px);
-  font-variant-numeric: tabular-nums;
-  color: var(--TEXT_DIM);
-}
-
-button.aheadDay.isNegative .aheadInBank {
-  color: var(--NEGATIVE_ON_RED);
 }
 
 .lowestMain {
@@ -2681,14 +2542,15 @@ button.aheadDay.isNegative .aheadInBank {
  *  HOME: THE CALENDAR'S BUTTONS
  *========================================*/
 
-/* Undo over Redo at the left, New Entry (the prism) in the middle, and Search over Quick Entry at the right. Each
-   side's buttons are as wide as each other. */
+/* Undo over Redo at the left, New Entry (the prism) in the middle with Search (a round button) under it, and Quick
+   Entry over Quick Calendar at the right. Each side's buttons are as wide as each other. */
 .controlsCard.homeControls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   grid-template-areas:
-    "undo new search"
-    "redo new quick";
+    "undo new quick"
+    "redo new quickcal"
+    ".    search .";
   align-items: center;
   gap: clamp(6px, 1.4vmin, 14px) clamp(6px, 2vw, 28px);
   font-size: clamp(11px, 2.9vw, 16px);
@@ -2701,10 +2563,11 @@ button.aheadDay.isNegative .aheadInBank {
 
 .homeUndo   { grid-area: undo;   justify-self: start; width: min(100%, 10em); }
 .homeRedo   { grid-area: redo;   justify-self: start; width: min(100%, 10em); }
-.homeSearch { grid-area: search; justify-self: end;   width: min(100%, 17em); }
+.homeSearch { grid-area: search; justify-self: center; }
 .homeQuick  { grid-area: quick;  justify-self: end;   width: min(100%, 17em); }
+.homeQuickCalendar { grid-area: quickcal; }
 
-/* Phones: Undo and Redo only as wide as they need, so Search and Quick Entry get the rest */
+/* Phones: Undo and Redo only as wide as they need, so Quick Entry and Quick Calendar get the rest */
 @media (max-width: 560px) {
   .controlsCard.homeControls {
     grid-template-columns: auto auto minmax(0, 1fr);
@@ -2713,21 +2576,19 @@ button.aheadDay.isNegative .aheadInBank {
 
   .homeUndo,
   .homeRedo,
-  .homeSearch,
   .homeQuick {
     justify-self: stretch;
     width: auto;
   }
 }
 
-/* Search reads like a search box: its glass and magnifying glass, and its word at the left */
-.budgetButton.homeSearch {
-  justify-content: flex-start;
-  color: var(--TEXT_DIM);
-}
-
-.budgetButton.homeSearch:hover {
-  color: var(--TEXT_HOT);
+/* Search: just its magnifying glass, in a circle */
+.homeControls .budgetButton.homeSearch {
+  justify-content: center;
+  width: 2.6em;
+  height: 2.6em;
+  padding: 0;
+  border-radius: 50%;
 }
 
 /* Quick Entry glows: a blue-violet radial gradient from its center and a bright edge (a recommended button, .primary,
@@ -3242,6 +3103,499 @@ html.lessMotion .budgetPanel.prismFlash {
 }
 
 /*========================================*
+ *  HOME: THE CALENDAR'S HEADER, AND CALENDAR FRACTALS (Calendar Page.js, Fractals.js)
+ *========================================*/
+
+/* Over the calendar: at the left, what it shows ($ the budget, both, or the calendar's entries) and the Calendar
+   Fractals list; at the right, Today, the month with its ‹ and ›, the year, and a date to go to. On a phone the two
+   sides stack. */
+.calendarHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(6px, 1.4vmin, 12px) clamp(8px, 2vw, 20px);
+  margin: 0 0 clamp(8px, 1.6vmin, 16px);
+  padding: 0 clamp(2px, 0.6vw, 6px);
+  font-size: clamp(11px, 2.9vw, 15px);
+}
+
+.calendarShows,
+.calendarNav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+}
+
+.calendarNav {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.calendarHeader .budgetButton,
+.calendarHeader .selectInput,
+.calendarHeader .dateInput {
+  font-size: 1em;
+}
+
+.calendarHeader .budgetButton {
+  padding: 0.4em 0.75em;
+}
+
+/* The three buttons: $, $ with a calendar, and a calendar */
+.calendarView {
+  flex-wrap: nowrap;
+}
+
+.calendarView .budgetButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  min-width: 2.6em;
+  justify-content: center;
+  font-weight: bold;
+}
+
+/* Calendar Fractals: a glass button with a ▾, like the budget picker in the page's header */
+button.fractalPicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 0.4em 0.9em;
+  font-size: 1em;
+  line-height: 1.2;
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  box-shadow: var(--GLASS_SHADOW);
+}
+
+button.fractalPicker:hover,
+button.fractalPicker:focus-visible,
+button.fractalPicker[aria-expanded="true"] {
+  transform: none;
+  outline: none;
+  color: var(--TEXT_HOT);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+}
+
+/* Today glows while the calendar is on this week */
+.calendarNav .budgetButton.isCurrent {
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--GLOW_SHADOW);
+}
+
+.calendarNav .calendarStep {
+  min-width: 2.1em;
+  padding-left: 0.4em;
+  padding-right: 0.4em;
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+.calendarMonth {
+  min-width: 5.6em;
+  text-align: center;
+  font-size: 1.1em;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
+}
+
+.calendarNav .calendarYear {
+  width: auto;
+  min-width: 4.6em;
+}
+
+.calendarNav .calendarJump {
+  flex: 0 1 auto;
+  width: auto;
+}
+
+.calendarNav .calendarJump .dateInput {
+  width: 7.2em;
+}
+
+/* Days that passed are duller (not while one is zoomed or magnified) */
+.elastic-table td.isPast:not(.is-editing):not(.is-magnified) .cell-content {
+  opacity: 0.58;
+}
+
+/* What the calendar shows: with only the calendar's entries, the budget's lines are put away (a day keeps its date) */
+.calendarCard[data-view="calendar"] .elastic-table :is(.lineSystem, .lineEntry) {
+  display: none;
+}
+
+/* A calendar entry as a line: a block of its fractal's color (Fractals.js sets it, and black or white words to read on
+   it), with a small calendar, when it is, and its title */
+.lineEvent {
+  align-self: stretch;
+  box-sizing: border-box;
+  margin-top: 0.12em;
+  padding: 0 0.3em;
+  border-radius: 0.3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: none;
+}
+
+.lineEvent .eventTime {
+  font-weight: bold;
+}
+
+/* An entry a Quick Calendar icon added that hasn't joined the calendar yet (the Quick Calendar page shows them) */
+.fractalEvent.isWaiting {
+  outline: 1px dashed currentColor;
+  outline-offset: -2px;
+  opacity: 0.85;
+}
+
+/* The Quick Calendar page's New Calendar Entry, with how many entries are waiting beside it */
+.controlsCard.quickCalendarControls {
+  flex-wrap: wrap;
+  gap: 0.6em 1em;
+  margin-bottom: clamp(8px, 2vmin, 18px);
+}
+
+.quickCalendarControls .panelHint {
+  flex: 1 1 16em;
+  margin: 0;
+}
+
+/* The small calendar before an entry's words, drawn in the words' own color */
+.eventSprite {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.3em;
+  vertical-align: -0.14em;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='2.5'/%3E%3Cpath d='M3.5 9.5h17M8 3v4M16 3v4'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='2.5'/%3E%3Cpath d='M3.5 9.5h17M8 3v4M16 3v4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* A zoomed day's List switch and its times only show on a zoomed day; with List off, the times take the lines' place */
+.elastic-table td:not(.is-editing) :is(.dayListSwitch, .dayTimes) {
+  display: none;
+}
+
+.elastic-table td.is-editing:not(.eventsAsList) .cell-content > .lineEvent {
+  display: none;
+}
+
+.elastic-table td.is-editing :is(.fractalEvent, .dayListSwitch, .dayTimesScroll) {
+  pointer-events: auto;
+}
+
+.elastic-table td.is-editing .fractalEvent {
+  cursor: pointer;
+}
+
+.elastic-table td.is-editing .fractalEvent:hover,
+.elastic-table td.is-editing .fractalEvent:focus-visible {
+  filter: brightness(1.15);
+  outline: none;
+}
+
+.dayListSwitch {
+  align-self: flex-start;
+  margin: 0.3em 0 0.2em;
+  font-size: 0.85em;
+  text-shadow: none;
+}
+
+.dayListSwitch .pillSwitch {
+  --SWITCH_H: 22px;
+}
+
+/* (A computer's zoomed day is drawn at twice its size, so its switch is made half as big to match) */
+.elastic-table td.is-editing:not(.is-fullZoom) .dayListSwitch .pillSwitch {
+  zoom: 0.5;
+}
+
+.dayTimes {
+  align-self: stretch;
+  box-sizing: border-box;
+  margin-top: 0.2em;
+  text-shadow: none;
+}
+
+/* The entries that take all day, in a row over the times */
+.dayTimes .dayChip {
+  margin-bottom: 0.15em;
+}
+
+/* The times: the hours down the left and the blocks beside them. More blocks side by side than fit scroll sideways in
+   here; it's as tall as its hours, so the page scrolls, never the day. */
+.dayTimesScroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding: 0.6em 0 0.7em;
+}
+
+.dayTimesGrid {
+  position: relative;
+  display: flex;
+  min-width: 100%;
+  width: max-content;
+}
+
+.dayHours {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: 0 0 auto;
+  width: 3.6em;
+  background: var(--DAY_SOLID);
+}
+
+/* (Each label sits at its hour in the day's own text size, the same as the blocks, with smaller words inside it) */
+.dayHour {
+  position: absolute;
+  right: 0.45em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--TEXT_DIM);
+  transform: translateY(-50%);
+}
+
+.dayHour span {
+  font-size: 0.72em;
+}
+
+/* A faint line at each hour */
+.dayBlocks {
+  position: relative;
+  flex: 1 1 auto;
+  background: repeating-linear-gradient(to bottom, rgba(var(--TINT_RGB), 0.16) 0, rgba(var(--TINT_RGB), 0.16) 1px, transparent 1px, transparent 2.2em);
+  border-bottom: 1px solid rgba(var(--TINT_RGB), 0.16);
+}
+
+/* An entry's block: from its column's left edge to the right edge, over the ones before it (a little of what's under it
+   shows through), with a dark edge so they tell apart */
+.timeBlock,
+.timeTravel {
+  position: absolute;
+  right: 0;
+  box-sizing: border-box;
+  border-radius: 0.35em;
+}
+
+.timeBlock {
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.1em 0.35em;
+  overflow: hidden;
+  line-height: 1.15;
+  box-shadow: 0 0 0 1px rgba(var(--SHADE_RGB), 0.55);
+}
+
+.timeBlockTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: bold;
+}
+
+.timeBlockTime {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8em;
+  opacity: 0.85;
+}
+
+/* Travel time: dimmer, above the block, with a dashed edge */
+.timeTravel {
+  border: 1px dashed rgba(var(--TINT_RGB), 0.5);
+  border-bottom: none;
+  border-radius: 0.35em 0.35em 0 0;
+}
+
+/* A phone's zoomed day draws the day inside a screen-wide box: its calendar entries stay as wide as the day */
+.elastic-table td.is-editing.is-fullZoom .cell-content > :is(.lineEvent, .dayTimes) {
+  align-self: flex-start;
+  width: calc(var(--dayW, 100%) - 8px * var(--zoomText, 1));
+  max-width: none;
+}
+
+.elastic-table td.is-editing.is-fullZoom .cell-content > .dayTimes {
+  overflow: visible;
+}
+
+/* The Calendar Fractals list (a small window under the picker), and a fractal's color */
+.fractalItem .fractalCheck {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.5em;
+  min-width: 0;
+  padding: 0.45em 0.6em;
+  cursor: pointer;
+}
+
+.fractalItem .fractalCheck input {
+  flex-shrink: 0;
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0;
+  accent-color: var(--LINK_LIGHT);
+}
+
+.fractalSwatch {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.35em;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(var(--TINT_RGB), 0.45);
+  vertical-align: -0.06em;
+}
+
+.fractalCheck .fractalSwatch {
+  margin-right: 0;
+}
+
+.fractalColors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45em;
+}
+
+button.fractalColor {
+  width: 1.9em;
+  height: 1.9em;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(var(--TINT_RGB), 0.35);
+  cursor: pointer;
+}
+
+button.fractalColor[aria-checked="true"] {
+  border-color: var(--TEXT_BRIGHT);
+  box-shadow: 0 0 10px rgba(var(--TINT_RGB), 0.7);
+}
+
+.fractalColorBox {
+  width: 2.6em;
+  height: 2em;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* A calendar entry's window: New Entry's two long buttons, its title in its fractal's color, and its fields */
+.entryKind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5em;
+  margin-bottom: 0.4em;
+}
+
+.entryKind .budgetButton {
+  padding: 0.6em 0.5em;
+  font-size: 1em;
+}
+
+.eventHeading {
+  padding: 0.35em 0.6em;
+  border-radius: 8px;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+
+.eventNotes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.budgetPanel .dateRow .timeInput {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 6.4em;
+}
+
+.repeatBox,
+.alertBox,
+.shareBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.alertRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.alertRows:empty {
+  display: none;
+}
+
+.shareRow {
+  display: flex;
+  gap: 0.5em;
+}
+
+.shareRow .textInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The ‹ and › beside an entry window's ×: the entry before, and the next */
+.panelHeader .panelStep {
+  margin-right: 0.15em;
+}
+
+/* Settings' calendar links: each link in a box, with Copy and the calendar apps' buttons */
+.fractalLink {
+  flex-wrap: wrap;
+}
+
+.fractalLinkBox {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  padding: 0 0.6em 0.6em;
+}
+
+.fractalLinkBox .textInput {
+  flex: 1 1 14em;
+  min-width: 0;
+}
+
+/* A picture as a page's icon (Bob's): it fills its tile */
+.cardIcon.pictureIcon img {
+  width: 100%;
+  height: 100%;
+  border-radius: 11px;
+  object-fit: cover;
+  filter: none;
+}
+
+/* The Bob tab's picture is round, and keeps its own colors */
+.tabIcon.tabPicture {
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 1;
+}
+
+/*========================================*
  *  RECURRING / TRACKER EDIT MODE
  *========================================*/
 
@@ -3687,7 +4041,7 @@ a.budgetButton:hover {
   margin: 1em 0 0.3em;
 }
 
-/* The Spreadsheets & Calendars page's note that other emails are added in Settings */
+/* The Budgets, Calendars & Spreadsheets page's line about other emails (they're added in Settings) */
 .budgetCard .sheetsOtherEmails {
   margin: 1em 0 0;
 }
@@ -3744,7 +4098,7 @@ a.budgetButton:hover {
   gap: 0.5em;
 }
 
-/* Connected spreadsheets (the Spreadsheets & Calendars page): each one's button, On/Off switch, and Delete, with a box
+/* Connected spreadsheets (the Budgets, Calendars & Spreadsheets page): each one's button, On/Off switch, and Delete, with a box
    under it when something needs a look */
 .sheetList {
   margin: 0.8em 0 1em;

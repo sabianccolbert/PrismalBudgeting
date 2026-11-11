@@ -33,7 +33,7 @@
   const AMBIENT_BED_MAX_S = 3.2;
   const AMBIENT_BED_SHARE = 0.3;
   const AMBIENT_BED_LOWPASS = 3800; // Hz: the bed's twinkles sound farther off
-  const MUSIC_PAGES = ["home", "recurring", "history", "accounts", "menu", "spreadsheets", "tracker", "calculator", "logs", "settings"];
+  const MUSIC_PAGES = ["home", "recurring", "accounts", "bob", "menu", "spreadsheets", "tracker", "calculator", "logs", "settings"];
 
   // This device's choices (Settings)
   const EFFECTS_KEY = "prismal_sound_effects"; // "off" when turned off

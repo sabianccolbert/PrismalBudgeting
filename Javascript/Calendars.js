@@ -1,4 +1,4 @@
-// Calendars: connected calendars (set up on the Spreadsheets & Calendars page, in the menu), whose shifts become
+// Calendars: connected calendars (set up on the Budgets, Calendars & Spreadsheets page, in the menu), whose shifts become
 // paychecks. The API downloads a calendar by its subscription link (its calendars.js), and it's read and worked out here;
 // the paychecks it finds land on the calendar like a connected spreadsheet's entries, behind a ➕ (CONNECTED SPREADSHEETS
 // in Process Budget.js says how, and keeps them).
@@ -7,7 +7,7 @@
 //     and most work scheduling apps share), with repeating events and time zones
 //   - workOut(calendar, connection): its shifts, the paychecks they make (pay, deductions, and taxes, paycheck by
 //     paycheck), the entries those make, and what's wrong with any of it
-//   - Home and the Spreadsheets & Calendars page read every calendar that's on again when they open (Home at most every
+//   - Home and the Budgets, Calendars & Spreadsheets page read every calendar that's on again when they open (Home at most every
 //     15 minutes per calendar, on this device), and the budget only changes when the paychecks did
 
 const Calendars = (() => {
@@ -25,18 +25,27 @@ const Calendars = (() => {
     }
   }
 
-  // The calendar behind a link, as text. Throws CalendarReadError.
+  // One of the account's own Calendar Fractals as a connected calendar's link: "prismal:fractal:<its number>"
+  // (Calendars Page.js makes it; fractalOf: that number, or 0 for any other link)
+  const FRACTAL_LINK = /^prismal:fractal:(\d+)$/;
+  const fractalOf = (link) => Number((FRACTAL_LINK.exec(String(link || "").trim()) || [])[1] || 0);
+
+  // The calendar behind a link, as text. A Calendar Fractal's comes from the account's own calendar (the API's
+  // fractals.js writes its entries as a calendar file), which only its own account can read. Throws CalendarReadError.
   async function readCalendarFile(link) {
     let token = null;
     try { token = localStorage.getItem("prismal_jwt"); } catch (e) {}
     if (!token) throw new CalendarReadError("You've been signed out. Please log in again.");
+    const fractal = fractalOf(link);
     let response;
     try {
-      response = await fetch(`${window.API_BASE_URL}/api/calendars/read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ link })
-      });
+      response = fractal
+        ? await fetch(`${window.API_BASE_URL}/api/fractals/ics?fractal=${fractal}`, { headers: { "Authorization": `Bearer ${token}` } })
+        : await fetch(`${window.API_BASE_URL}/api/calendars/read`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+          body: JSON.stringify({ link })
+        });
     } catch (err) {
       throw new CalendarReadError("Couldn't reach the server. Please try again.");
     }
@@ -47,10 +56,11 @@ const Calendars = (() => {
     if (!response.ok) {
       let message = "";
       try { message = (await response.json()).error || ""; } catch (e) {}
+      if (fractal && response.status === 404) throw new CalendarReadError("That Calendar Fractal can only be read by the account it belongs to (or it was deleted).", true);
       const lasting = response.status === 400 || response.status === 403 || response.status === 413;
       throw new CalendarReadError(message || "Couldn't read that calendar just now. Please try again.", lasting);
     }
-    return response.text();
+    return fractal ? (await response.json()).ics : response.text();
   }
 
   //#endregion
@@ -1532,7 +1542,9 @@ const Calendars = (() => {
     if (typeof workspaceLoaded === "undefined" || !workspaceLoaded || !sheetsData) return null;
     const reads = lastReads();
     const now = Date.now();
-    const due = sheetsData.list.filter(connection => connection.kind === "calendar" && connection.on && (force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
+    // (A Calendar Fractal only its own account can read: in a shared budget, only the pages of whoever connected it read it)
+    const readable = (connection) => !fractalOf(connection.link) || !budgetIsShared() || connectedHere(connection);
+    const due = sheetsData.list.filter(connection => connection.kind === "calendar" && connection.on && readable(connection) && (force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
     if (due.length === 0) return null;
     const results = await Promise.all(due.map(readConnection));
     // (A read that dropped isn't counted, so the next visit tries it again)
@@ -1566,7 +1578,7 @@ const Calendars = (() => {
     try { localStorage.setItem(READS_KEY, JSON.stringify(kept)); } catch (e) {}
   }
 
-  // Home and the Spreadsheets & Calendars page keep them up to date: when they open, and when they come back into view
+  // Home and the Budgets, Calendars & Spreadsheets page keep them up to date: when they open, and when they come back into view
   const KEEPS_UP = ["home", "spreadsheets"];
   if (KEEPS_UP.includes(window.PAGE) && window.workspaceReady) {
     window.workspaceReady.then((loaded) => {
@@ -1582,6 +1594,7 @@ const Calendars = (() => {
   return {
     CalendarReadError,
     readCalendarFile,
+    fractalOf,
     parseCalendar,
     eventsBetween,
     workOut,

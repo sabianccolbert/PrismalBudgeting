@@ -1,8 +1,8 @@
 // Budgets: which budget a page opens, and the budget picker above the header's buttons on every signed-in page. The
 // picker shows the budget that's open; tapping it drops down the account's budgets and the ones shared with it (each opens
 // with a tap), its invitations (Join or Decline), and New Budget. Each budget the account owns has a small Share beside
-// it; one shared with the account doesn't (only its owner can share it, and the API refuses anyone else too). Settings'
-// Budgets card does the rest: rename, delete, and leave (renderManager).
+// it; one shared with the account doesn't (only its owner can share it, and the API refuses anyone else too). The
+// Budgets card on the Budgets, Calendars & Spreadsheets page does the rest: rename, delete, and leave (renderManager).
 //   - A tab keeps the budget it has open (sessionStorage, for the account signed in), so two tabs can each have their own.
 //     A new tab opens the one the account opened last (the API's ?budget=last), and a reminder's notification can name
 //     one (?budget=<id> in its link).
@@ -303,7 +303,7 @@ window.Budgets = (() => {
   // The picker's list: it drops down under the picker (a small panel, Budget UI.js)
   function openList() {
     if (typeof BudgetUI === "undefined") {
-      window.location.href = "/settings.html#budgets";
+      window.location.href = "/menu/spreadsheets.html#budgets";
       return;
     }
     if (listPanel && listPanel.panel.isConnected && !listPanel.panel.classList.contains("isClosing")) {
@@ -321,7 +321,7 @@ window.Budgets = (() => {
         fillList(box);
         form.append(box, BudgetUI.buttonRow([
           { label: "New Budget", kind: "primary", onClick: (event) => openNewBudget(event.currentTarget) },
-          { label: "Manage", onClick: () => { window.location.href = "/settings.html#budgets"; } }
+          { label: "Manage", onClick: () => { window.location.href = "/menu/spreadsheets.html#budgets"; } }
         ]));
         refill = () => fillList(box);
         document.addEventListener("budgets:changed", refill);
@@ -514,7 +514,7 @@ window.Budgets = (() => {
     toast(budget.owned ? `${budget.name} was deleted.` : `You left ${budget.name}.`);
   }
 
-  // Settings' Budgets card: every budget with what can be done to it (Open, Share, Rename, Delete, Leave), invitations,
+  // The Budgets card (on the Budgets, Calendars & Spreadsheets page): every budget with what can be done to it (Open, Share, Rename, Delete, Leave), invitations,
   // and New Budget. container: the card's list; it's drawn again whenever the list changes.
   function renderManager(container) {
     const draw = () => {

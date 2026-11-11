@@ -12,8 +12,8 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="dark">
     <title>Prismal Planning - Site Notes</title>
-    <link rel="stylesheet" href="/stylesheet.css?v=bbc049464e">
-    <link rel="stylesheet" href="/budgetStyle.css?v=47bb6b3b1d">
+    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
+    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
   </head>
   <body>
@@ -39,7 +39,7 @@
           <section id="about" aria-labelledby="aboutTitle">
             <h2 id="aboutTitle">What This Page Is</h2>
             <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Planning Works</a>.</p>
-            <p>Last checked: November 9, 2026 (site version 11.09.2026.B).</p>
+            <p>Last checked: November 11, 2026 (site version 11.11.2026.A).</p>
           </section>
 
           <section id="map" aria-labelledby="mapTitle">
@@ -49,7 +49,7 @@
                 <thead><tr><th>Part</th><th>Where</th></tr></thead>
                 <tbody>
                   <tr><td>Website</td><td>GitHub Pages, from the <code>main</code> branch of the GitHub repo <code>sabianccolbert/PrismalBudgeting</code> (work happens on <code>Testing</code>, then merges in). The repo's <code>CNAME</code> file holds the custom domain, <code>prismalplanning.org</code>. GitHub Pages publishes every file except folders starting with <code>_</code> (like <code>_tools</code>).</td></tr>
-                  <tr><td>Domain, DNS, and the network in front of the site</td><td>Cloudflare: the zone <code>prismalplanning.org</code> (Free plan; its name servers are <code>nancy.ns.cloudflare.com</code> and <code>santino.ns.cloudflare.com</code>). The site's records are proxied (orange cloud), so the addresses the world sees are Cloudflare's, and Cloudflare's rules (section 4) apply to every page.</td></tr><tr><td>The old address</td><td><code>prismalbudget.org</code>, the site's address until November 9, 2026, is a Cloudflare zone too. A Worker there (<code>old-domain/</code> in the API repo) sends every request on to the same page here. The domain is paid through September 22, 2027 and is meant to lapse then: delete that Worker and the zone first.</td></tr>
+                  <tr><td>Domain, DNS, and the network in front of the site</td><td>Cloudflare: the zone <code>prismalplanning.org</code> (Free plan; its name servers are <code>nancy.ns.cloudflare.com</code> and <code>santino.ns.cloudflare.com</code>). The site's records are proxied (orange cloud), so the addresses the world sees are Cloudflare's, and Cloudflare's rules (section 4) apply to every page.</td></tr><tr><td>The old address</td><td><code>prismalbudget.org</code>, the site's address until November 9, 2026, is a Cloudflare zone too. A Worker there (<code>old-domain/</code> in the API repo) sends every request on to the same page here. What to do before the domain's registration ends is in the API repo's notes.</td></tr>
                   <tr><td>API</td><td>A Cloudflare Worker, <code>prismal-budget-api</code>, at <code>https://prismal-budget-api.prismalbudget.workers.dev</code> (on workers.dev, its own address, so section 4's caching and header rules don't apply to it). Its code is in the private repo <code>sabianccolbert/prismal-budget-api</code> (branch <code>testing</code>). Every budget is in its Cloudflare D1 database, <code>prismal-budget-db</code> (the Worker's binding <code>prismal_budget_db</code>). A schedule runs it every 5 minutes (daily reminders, and the Privacy Policy update emails).</td></tr>
                   <tr><td>Email in</td><td>Google Workspace: <code>admin@prismalplanning.org</code>.</td></tr>
                   <tr><td>Email out (verification links, password resets, notices, policy updates)</td><td>Resend, sending as <code>admin@prismalplanning.org</code>.</td></tr>
@@ -94,7 +94,7 @@
               <li><strong>Transform Rules (response headers):</strong> <code>Cache-Control: no-cache</code> for pages and <code>Boot.js</code>, and "Security Headers" (section 5).</li>
               <li><strong>Minimum TLS version:</strong> 1.2.</li>
               <li><strong>Before turning on a Cloudflare feature that adds its own script to pages</strong> (some security and bot features do), check the private API repo's notes: a script the Content-Security-Policy (section 5) doesn't allow is refused, and pages can break.</li>
-              <li><strong>On:</strong> Email Address Obfuscation, which rewrites email addresses in pages as they're sent. A page with an address in it (How It Works, the Privacy Policy, Settings, Spreadsheets &amp; Calendars) never matches its file byte for byte, and that's expected.</li>
+              <li><strong>On:</strong> Email Address Obfuscation, which rewrites email addresses in pages as they're sent. A page with an address in it (How It Works, the Privacy Policy, Settings, Budgets, Calendars &amp; Spreadsheets) never matches its file byte for byte, and that's expected.</li>
               <li><strong>Web Analytics:</strong> Cloudflare adds its script (<code>static.cloudflareinsights.com</code>) to pages sent to browsers (not to tools like curl).</li>
               <li><strong>API tokens</strong> made for scripts expire. When a script says it isn't allowed, make a new one in Cloudflare (My Profile, API Tokens) with only what that script needs.</li>
             </ul>
@@ -125,13 +125,14 @@ X-XSS-Protection: 0</code></pre>
               <table>
                 <thead><tr><th>Name</th><th>Type</th><th>For</th></tr></thead>
                 <tbody>
-                  <tr><td><code>prismalplanning.org</code>, <code>www</code></td><td>A, AAAA (proxied)</td><td>The website, on GitHub Pages</td></tr>
+                  <tr><td><code>prismalplanning.org</code>, <code>www</code></td><td>A, CNAME (proxied)</td><td>The website, on GitHub Pages: four A records with GitHub's addresses, and <code>www</code> pointing at <code>sabianccolbert.github.io</code></td></tr>
                   <tr><td><code>prismalplanning.org</code></td><td>MX</td><td>Google Workspace's mail servers (<code>aspmx.l.google.com</code> first, then <code>alt1</code> to <code>alt4</code>)</td></tr>
                   <tr><td><code>prismalplanning.org</code></td><td>TXT</td><td>SPF, <code>v=spf1 include:_spf.google.com ~all</code> (Google Workspace sends as the domain), and two <code>google-site-verification</code> records (Google proving the domain is ours)</td></tr>
                   <tr><td><code>_dmarc</code></td><td>TXT</td><td><code>v=DMARC1; p=reject; sp=reject; adkim=s; aspf=r; rua=mailto:admin@prismalplanning.org</code>: mail claiming to be from the domain that fails its checks is refused, and the daily reports go to admin@</td></tr>
                   <tr><td><code>google._domainkey</code></td><td>TXT</td><td>Google Workspace's DKIM key (signs mail sent from Gmail)</td></tr>
                   <tr><td><code>resend._domainkey</code></td><td>TXT</td><td>Resend's DKIM key (signs the site's account emails)</td></tr>
-                  <tr><td><code>send</code></td><td>MX, TXT</td><td>Resend's sending address (bounces come back there, with its own SPF)</td></tr>
+                  <tr><td><code>send</code>, <code>rsend</code></td><td>CNAME (not proxied)</td><td>Resend's sending addresses (bounces come back there, with their own SPF)</td></tr>
+                  <tr><td><code>_github-pages-challenge-sabianccolbert</code></td><td>TXT</td><td>GitHub's proof that the domain belongs to the site's GitHub account (keep it, or the verification lapses)</td></tr>
                 </tbody>
               </table>
             </div>
@@ -146,6 +147,7 @@ X-XSS-Protection: 0</code></pre>
               <li><strong>The database:</strong> every part of a budget is one row of JSON per budget (an account's first budget under the account's own number, every other budget under its own; the API's <code>budgets.js</code> says how), up to about 1.9 MB each (D1 keeps up to 2 MB in one value; a bigger save is refused with "That's more than one part of a budget can hold."). People can keep their own copy with Download My Data, and bring one back with Upload A Backup (both in Settings). D1's Time Travel can put the whole database back to an earlier minute (<code>npx wrangler d1 time-travel</code>; how far back depends on the plan).</li>
               <li><strong>Testing on this computer:</strong> <code>npx wrangler dev --local</code> serves it at <code>http://127.0.0.1:8787</code>, and the site uses that address when it's opened at localhost or 127.0.0.1 (<code>Boot.js</code>).</li>
               <li><strong>Privacy Policy update emails:</strong> every few minutes the Worker reads the live Privacy Policy page's <code>policy-version</code> tag; when it's new, every account with a verified email gets one email (a few each run) with the page's <code>policy-changes</code> text.</li>
+              <li><strong>The 5-minute job</strong> sends the reminders and calendar entries' alerts that are due, cleans up, and sends those emails. On Workers Free one run can make 50 outside requests, so each part sends a few at a time (<code>MAX_PUSHES_PER_RUN</code> in <code>notify.js</code>, <code>MAX_ALERT_PUSHES</code> in <code>fractals.js</code>) and the rest go out on the next run; a paid plan could raise them.</li>
             </ul>
           </section>
 
@@ -161,7 +163,9 @@ X-XSS-Protection: 0</code></pre>
                   <tr><td>Nobody can sign in, or "Passwords aren't set up on the server yet"</td><td>The Worker's secrets (<code>npx wrangler secret list</code>), then <code>npx wrangler tail</code> while trying.</td></tr>
                   <tr><td>Account emails don't arrive</td><td>Resend's dashboard (the domain still verified, the email sent), the DNS records (section 6), the spam folder, and the DMARC reports at admin@.</td></tr>
                   <tr><td>Spreadsheets shared with admin@ stop being read</td><td>The admin@ Google account's access the Worker holds may need making again; spreadsheets shared by link still work meanwhile.</td></tr>
-                  <tr><td>A connected calendar stops being read</td><td>Its box on the Spreadsheets &amp; Calendars page says why. Usually its owner stopped sharing it or made a new link (the new link goes in its panel); a calendar app that changes how its links work may need its new kind of link. <code>npx wrangler tail</code> shows the Worker's side.</td></tr>
+                  <tr><td>A connected calendar stops being read</td><td>Its box on the Budgets, Calendars &amp; Spreadsheets page says why. Usually its owner stopped sharing it or made a new link (the new link goes in its panel); a calendar app that changes how its links work may need its new kind of link. <code>npx wrangler tail</code> shows the Worker's side.</td></tr>
+                  <tr><td>Calendar entries' alerts don't arrive</td><td>That device's Push Notifications in Settings (Send Test), the entry's alerts, and <code>npx wrangler tail</code> around a 5-minute run. One missed by more than an hour (an outage) isn't sent late.</td></tr>
+                  <tr><td>A calendar link stops updating in another calendar app</td><td>Settings' Calendar Fractals' Links (New Link stops the old link; the app needs the new one). Google Calendar reads subscriptions on its own schedule, up to about a day.</td></tr>
                   <tr><td>Paychecks' taxes look a year out of date</td><td>A new year's federal or state withholding tables go in <code>Javascript/Calendars.js</code> (<code>FEDERAL_TABLES</code>, <code>STATE_TABLES</code>), from the IRS's Publication 15-T and the state's own packet.</td></tr>
                   <tr><td>Create Account's person check always fails</td><td>Cloudflare's Turnstile dashboard: the site key in <code>Login.js</code> and the Worker's secret have to be the same pair.</td></tr>
                   <tr><td>The API doesn't answer</td><td><code>npx wrangler tail</code>, the Workers dashboard in Cloudflare, and Cloudflare's status page.</td></tr>
@@ -177,6 +181,7 @@ X-XSS-Protection: 0</code></pre>
             <ul>
               <li><code>Javascript/Boot.js</code>: every page's first script. The version, each page's name from its address, which pages work without signing in, the API's address, every script's fingerprint, and the device's theme and Reduced Motion (before the page shows, so it never flashes another look).</li>
               <li><code>Javascript/Layout.js</code>: what every page shares (sliding between pages, the footer, Help, floating windows and cards, signing out, the Quick Entry icon's app).</li>
+              <li><code>Javascript/Fractals.js</code> and the API's <code>src/fractals.js</code>: the calendar (Calendar Fractals, entries, sharing, links, alerts, Quick Calendar). Both work out when a repeating entry happens, the same way: change one and change the other.</li>
               <li><code>Javascript/Budgets.js</code>: which budget a page opens, and the budget picker (the list, Share, New Budget) over the header's buttons.</li>
               <li><code>stylesheet.css</code> (the look's colors and shapes, as tokens, in its section 1), <code>budgetStyle.css</code> (the budget's pages), and <code>themes.css</code> (each theme setting those tokens again). Adding a theme: the top of <code>themes.css</code> lists everything a new one needs, in <code>Boot.js</code>, <code>themes.css</code>, <code>Active Starfield.js</code>, <code>Settings Page.js</code>, and the guides.</li>
               <li><code>Javascript/Line Graph.js</code>: the line graph any window or page can use (Bob's Data windows, the top of the Debt Calculator). <code>Javascript/Quick Icon.js</code>: the picture a Quick Entry icon is added with.</li>

@@ -1403,7 +1403,7 @@ const BudgetUI = (() => {
     const changeKind = inHistory ? changeHistoryEntry : changeEntryKind;
     const renamable = canRenameEntry(parts[0], date);
 
-    openPanel({
+    const opened = openPanel({
       origin,
       size: "small",
       stacked,
@@ -1583,6 +1583,8 @@ const BudgetUI = (() => {
         }
       }
     });
+    // (Home gives the window ‹ and › to the entries before and after this one: Calendar Page.js)
+    if (!stacked) document.dispatchEvent(new CustomEvent("entry:opened", { detail: { panel: opened, kind: "budget", date, line } }));
   }
 
   // What the "?" in the window that asks about moving an entry off a day before today explains
@@ -1624,13 +1626,27 @@ const BudgetUI = (() => {
   // and Equity account, so when one is already there (its own, or a recurring or connected spreadsheet's entry landing
   // there), the form says so and asks whether to add the new amount to it or set it to the new amount. Either way a
   // recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on the calendar.
-  function openNewEntry(origin, { date = today } = {}) {
+  // On Home, two long buttons across its top switch between a budget entry (this form) and a calendar entry (Fractals.js
+  // openNewEvent). kind: which it opens as; left out, a calendar entry while the calendar shows only calendar entries, or
+  // for a day before the budget's History starts (where a budget entry can't go), and a budget entry otherwise.
+  function openNewEntry(origin, { date = today, kind = "" } = {}) {
+    // (The Quick Calendar page has no budget: a zoomed day's + there is always a calendar entry)
+    if (window.Fractals && window.Fractals.isQuick()) return window.Fractals.openNewEvent(origin, { date });
+    const calendar = !!(window.Fractals && window.Fractals.data());
+    if (calendar && !kind) kind = window.Fractals.view() === "calendar" || (date < gridStartDate && !historyHasDay(date)) ? "calendar" : "budget";
+    if (calendar && kind === "calendar") return window.Fractals.openNewEvent(origin, { date });
     openPanel({
       origin,
       size: "large",
       title: "New Entry",
       build(form, panel) {
         const fields = newEntryFields({ date, accounts: otherAccounts() });
+        if (calendar) {
+          form.append(window.Fractals.kindSwitch("budget", (picked) => {
+            const typed = fields.values();
+            if (picked === "calendar") window.Fractals.openNewEvent(origin, { date: typed.date || date, title: typed.title || "" });
+          }));
+        }
         let mode = "add";
         const modeToggle = segmented([{ key: "add", label: "Add to it" }, { key: "set", label: "Set to this" }], mode, (key) => { mode = key; });
         const matchNote = element("div", "panelText matchNote");

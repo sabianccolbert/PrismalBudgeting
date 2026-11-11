@@ -1,5 +1,5 @@
-// Settings Page: the account's budgets (Budgets.js draws the card: open, share, rename, delete, leave, and invitations).
-// The daily "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification): turn on push
+// Settings Page: the calendar's links (Fractals.js draws the card: a private link for every Calendar Fractal, and one
+// for each). The daily "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification): turn on push
 // notifications (per device) and/or a calendar link for Google or Apple Calendar, both optional; while either is on,
 // the Daily Reminder card picks the reminder time, and with more than one budget, which one they're about. Which days
 // get a reminder comes from that budget (buildReminderPlan in Process Budget.js); the API sends and serves them.
@@ -79,7 +79,8 @@ wireDateFormat(); // This device's choices, so they work before (and without) th
 wireThemes();
 wireSounds();
 wireMotion();
-showBudgets();
+loadBudgets();
+showFractalLinks();
 
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
@@ -131,23 +132,54 @@ window.workspaceReady.then(async (loaded) => {
 //#endregion
 
 // =====================================================================
-// #region BUDGETS
+// #region BUDGETS, AND THE CALENDAR'S LINKS
 // =====================================================================
 
 let budgetList = null; // Budgets.js's list ({ current, budgets, invitations }), once it's in
 
-// The Budgets card (it needs the server, so it shows once the list is in)
-async function showBudgets() {
+// The account's budgets, for the list of which one the reminders are about (the Budgets card itself is on the Budgets,
+// Calendars & Spreadsheets page)
+async function loadBudgets() {
   budgetList = await Budgets.list();
-  Budgets.renderManager(document.getElementById("budgetManager"));
-  document.getElementById("newBudgetButton").addEventListener("click", (event) => Budgets.openNewBudget(event.currentTarget));
-  document.getElementById("budgets").hidden = false;
-  if (location.hash === "#budgets") document.getElementById("budgets").scrollIntoView();
   document.addEventListener("budgets:changed", async () => {
     budgetList = await Budgets.list();
     renderReminderBudget();
   });
   renderReminderBudget();
+}
+
+// The Calendar Fractals' Links card (Fractals.js draws it: a link for every calendar, and one for each fractal), and
+// Signed-In Devices' line about Quick Calendar icons. They need the server, so they show once the calendar is in.
+async function showFractalLinks() {
+  const calendar = await window.Fractals.load();
+  if (!calendar) return;
+  window.Fractals.renderLinks(document.getElementById("fractalLinks"));
+  document.getElementById("fractalLinksCard").hidden = false;
+  if (location.hash === "#fractalLinksCard") document.getElementById("fractalLinksCard").scrollIntoView();
+  renderQuickCalendarIcons();
+  document.addEventListener("fractals:changed", renderQuickCalendarIcons);
+}
+
+// How many Quick Calendar icons work, with Turn Off Icons while there are any (every one stops working, and what they
+// left waiting goes)
+function renderQuickCalendarIcons() {
+  const status = document.getElementById("quickCalendarStatus");
+  const buttons = document.getElementById("quickCalendarButtons");
+  const count = window.Fractals.data().icons || 0;
+  status.hidden = false;
+  buttons.replaceChildren();
+  if (count === 0) {
+    status.textContent = "Quick Calendar icons: none right now. The Quick Calendar button on Home makes one for a phone's home screen.";
+    return;
+  }
+  status.textContent = `Quick Calendar icons: ${count} on home screens. Each one can see your calendar's entries and add new ones without signing in.`;
+  buttons.append(settingsButton(count === 1 ? "Turn Off The Calendar Icon" : "Turn Off Calendar Icons", "danger", async (event) => {
+    if (!window.confirm(`Turn off ${count === 1 ? "your Quick Calendar icon" : `all ${count} of your Quick Calendar icons`}? ${count === 1 ? "It stops" : "They stop"} working right away, and entries still waiting from ${count === 1 ? "it" : "them"} are deleted.`)) return;
+    event.currentTarget.disabled = true;
+    const result = await window.Fractals.change("keys/off", {});
+    if (result.ok) BudgetUI.showToast(count === 1 ? "Your Quick Calendar icon is off." : "Your Quick Calendar icons are off.");
+    else BudgetUI.showToast(window.Fractals.problem(result, "Couldn't turn off the icons. Please try again."), true);
+  }));
 }
 
 // With more than one budget, which one the reminders are about (the account's first, until another is picked)
@@ -991,7 +1023,7 @@ document.addEventListener("visibilitychange", async () => {
   account = result.data;
   renderVerification();
   renderOtherEmails();
-  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets and calendars (Menu, then Spreadsheets & Calendars) and add other emails now.");
+  BudgetUI.showToast("Your email is verified, so you can connect spreadsheets and calendars (Menu, then Budgets, Calendars & Spreadsheets) and add other emails now.");
 });
 
 // Prismal Planning is for people 18 and older. The birth date given when signing up can be fixed here (like a

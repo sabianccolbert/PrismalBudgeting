@@ -189,19 +189,19 @@ const MODES = {
     primary: 'Yes, Turn It On',
     toggle: 'No Thanks'
   },
-  // The link in an email verification email (signed in here: on to the Spreadsheets & Calendars page or Home; signed
+  // The link in an email verification email (signed in here: on to the Budgets, Calendars & Spreadsheets page or Home; signed
   // out: sign in)
   verify: {
     title: 'Verify Your Email',
     groups: [],
-    primary: signedInHere ? 'Open Spreadsheets & Calendars' : 'Sign In',
+    primary: signedInHere ? 'Open Budgets, Calendars & Spreadsheets' : 'Sign In',
     toggle: signedInHere ? 'Go Home' : ''
   },
   // The link that confirms another email of the account's (the same next steps as verify)
   sheetEmail: {
     title: 'Confirm Your Email',
     groups: [],
-    primary: signedInHere ? 'Open Spreadsheets & Calendars' : 'Sign In',
+    primary: signedInHere ? 'Open Budgets, Calendars & Spreadsheets' : 'Sign In',
     toggle: signedInHere ? 'Go Home' : ''
   }
 };
@@ -436,7 +436,7 @@ async function verifyEmailLink(token) {
   const { ok, status, data } = await api('/api/email/verify', { token });
   primaryBtn.disabled = false;
   if (ok && data.success) {
-    setStatus(`Your email, ${data.email}, is verified! You can connect spreadsheets and calendars now (Menu, then Spreadsheets & Calendars).`, true);
+    setStatus(`Your email, ${data.email}, is verified! You can connect spreadsheets and calendars now (Menu, then Budgets, Calendars & Spreadsheets).`, true);
   } else if (data.expired) {
     setStatus(signedInHere
       ? "That verification link has expired, or your email changed since it was sent. Open Settings and tap Send Verification Email for a new one."
@@ -455,7 +455,7 @@ async function confirmSheetEmailLink(token) {
   const { ok, status, data } = await api('/api/sheets/emails/verify', { token });
   primaryBtn.disabled = false;
   if (ok && data.success) {
-    setStatus(`${data.email} is confirmed! It signs in to ${data.username} now (with that account's password), and spreadsheets it shares with admin@prismalplanning.org can be connected (Menu, then Spreadsheets & Calendars).`, true);
+    setStatus(`${data.email} is confirmed! It signs in to ${data.username} now (with that account's password), and spreadsheets it shares with admin@prismalplanning.org can be connected (Menu, then Budgets, Calendars & Spreadsheets).`, true);
   } else if (data.expired) {
     setStatus("That link has expired, a newer one was sent, or the email was removed. Add it again in Settings, under Email (Other Emails), for a new link.");
   } else {

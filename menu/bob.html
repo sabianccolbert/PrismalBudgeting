@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=bbc049464e">
+    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=47bb6b3b1d">
-    <link rel="stylesheet" href="/themes.css?v=0e56d3f317">
+    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
+    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
     <title>Prismal Planning - Bob</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -41,19 +41,19 @@
       <header>
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
-          <div class="brandText stacked">
-            <h1>Bob</h1>
-            <h2 translate="no">Prismal Planning</h2>
+          <div class="brandText">
+            <p class="logo" translate="no"><span class="logoStrong">Prismal</span> Planning</p>
+            <p class="tagline">Track • Plan • Learn</p>
           </div>
         </div>
-        <nav class="navButtons" aria-label="Pages">
-          <a id="menuBack" class="navButton" href="/menu/">
-            <img class="navIcon" src="/Resources/Icons/BackNav.webp?v=5fc649006a" alt="">
-            <span>Back</span>
+        <nav class="navButtons" aria-label="Settings, menu, and logout">
+          <a class="navButton" href="/settings.html">
+            <img class="navIcon" src="/Resources/Icons/Settings.webp?v=edc4359acb" alt="">
+            <span>Settings</span>
           </a>
-          <a class="navButton" href="/">
-            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
-            <span>Home</span>
+          <a class="navButton" href="/menu/">
+            <img class="navIcon" src="/Resources/Icons/Menu.webp?v=d60f1cd0ff" alt="">
+            <span>Menu</span>
           </a>
           <a id="logoutButton" class="navButton logoutButton" href="logout">
             <img class="navIcon" src="/Resources/Icons/Logout.webp?v=38a63f5bfb" alt="">
@@ -62,6 +62,24 @@
         </nav>
       </header>
       <main>
+        <!-- The budget's four pages, as tabs (the one showing glows), beside this page's name -->
+        <div class="pageTop">
+          <nav class="pageTabs" aria-label="Budget pages">
+            <a class="pageTab" href="/"><img class="tabIcon" src="/Resources/Icons/Home.webp?v=995586f434" alt=""><span>Home</span></a>
+            <a class="pageTab" href="/menu/recurring.html"><img class="tabIcon" src="/Resources/Icons/Recurring.webp?v=6724e4afad" alt=""><span>Recurring</span></a>
+            <a class="pageTab" href="/menu/accounts.html"><img class="tabIcon" src="/Resources/Icons/Accounts.webp?v=ced77c103a" alt=""><span>Equity</span></a>
+            <a class="pageTab" href="/menu/bob.html" aria-current="page"><img class="tabIcon tabPicture" src="/Resources/Bob.webp?v=63c7f6554d" alt=""><span>Bob</span></a>
+          </nav>
+          <div class="controlsCard pageControls">
+            <div class="cardHeader">
+              <span class="cardIcon pictureIcon"><img src="/Resources/Bob.webp?v=63c7f6554d" alt=""></span>
+              <div class="cardHeading">
+                <h1 id="pageTitle" class="cardTitle">Bob</h1>
+                <p id="pageSubtitle" class="cardSubtitle">What to keep in mind, worked out from your budget</p>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="panelSlot"></div>
         <!-- PROGRAMMING NOTE: the very top card (the one with Bob's picture) gives a breakdown of the highlights from
              every card on this page that's on, and every card has a help button (a "?" in a circle) to the right of its

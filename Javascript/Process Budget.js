@@ -902,11 +902,11 @@ function entryChange(change) {
 
 // An entry gets a new title of its own (change.renameTo; its Equity account stays after it). On a day from today on, an
 // entry that lands by itself (a recurring entry's or a connected spreadsheet's or calendar's, or a temp of one) keeps its
-// title: it's changed on the Recurring Entries or Spreadsheets & Calendars page instead. Any entry on a day before today
+// title: it's changed on the Recurring Entries or Budgets, Calendars & Spreadsheets page instead. Any entry on a day before today
 // can be renamed (in History too). It stays what it was (its type, mark, %, and placeholder), unless an entry with the
 // new title and type is already on that day: then the two become one (a day has one of each), their amounts added, a
 // placeholder only if both were, and a plain amount. Returns { title, sprite }: the entry as it is now.
-const RENAME_LANDED = "This entry comes from a recurring entry or a connected spreadsheet or calendar, so from today on its title is changed there (on the Recurring Entries or Spreadsheets & Calendars page).";
+const RENAME_LANDED = "This entry comes from a recurring entry or a connected spreadsheet or calendar, so from today on its title is changed there (on the Recurring Entries or Budgets, Calendars & Spreadsheets page).";
 function renameEntry(change) {
   const date = createSafeMidnight(change.date || today);
   const { account, from: fromName } = splitAccount(String(change.title || "").trim());
@@ -4713,7 +4713,7 @@ function uploadBackup(backup, choices) {
 }
 
 /* ---------- Connected spreadsheets ---------- */
-// Entries from the person's own spreadsheets (Google Sheets, Excel, ...), set up on the Spreadsheets & Calendars page. Each one says
+// Entries from the person's own spreadsheets (Google Sheets, Excel, ...), set up on the Budgets, Calendars & Spreadsheets page. Each one says
 // which cells hold the dates (always from the spreadsheet), and where the titles, amounts, refraction types,
 // and Equity accounts come from: cells too, or one typed in for all of them. Spreadsheets.js reads them (each
 // time Home or Settings opens) into entries kept here, and the budget writes those onto the calendar the same
@@ -4726,7 +4726,7 @@ function uploadBackup(backup, choices) {
 //   - Once a day passes its entries stay as they were (they turn into temps, see performDailyUpdate)
 //   - The next 28 days after the calendar, Lowest, Search, reminders, and Bob count them too
 // A day has one entry per title and type, so an entry with the title and type of a recurring entry that lands
-// the same day is left out (the Spreadsheets & Calendars page says so). A spreadsheet that's off keeps its entries (it's
+// the same day is left out (the Budgets, Calendars & Spreadsheets page says so). A spreadsheet that's off keeps its entries (it's
 // read again when it's turned back on) and its temps; deleting one turns its temps from today on into unique entries.
 // Connected calendars are kept in the same list and land the same way: their entries are the paychecks their shifts
 // come to (Calendars.js works them out, with the connection's pay settings).
@@ -6520,7 +6520,7 @@ async function budgetApi(endpoint, payload) {
 // (the server would refuse it), and the login page says why. It slides right, like any sign-out.
 let signingOut = false;
 function signedOutElsewhere() {
-  if (signingOut || window.PAGE === "quick") return;
+  if (signingOut || window.PAGE === "quick" || window.PAGE === "quickcal") return;
   signingOut = true;
   workspaceLoaded = false;
   if (typeof clearSignedInData === "function") clearSignedInData();
@@ -7503,9 +7503,11 @@ function noteDaySwipe(e) {
   if (!cell || cell !== activeEditCell || cell.classList.contains('isZoomClosing')) return;
   const content = cell.querySelector('.cell-content');
   const touch = e.touches[0];
-  // (A phone's zoomed day doesn't scroll sideways: its long lines end in "..." instead)
-  const most = content && getComputedStyle(content).overflowX !== 'hidden' ? content.scrollWidth - content.clientWidth : 0;
-  daySwipe = { cell, x: touch.clientX, y: touch.clientY, atLeft: !content || content.scrollLeft <= 1, atRight: !content || content.scrollLeft >= most - 1, dragging: false, base: '', offset: 0 };
+  // (A phone's zoomed day doesn't scroll sideways: its long lines end in "..." instead. Its calendar entries' times do,
+  // when more blocks sit side by side than fit: a finger on them scrolls those first.)
+  const scroller = e.target.closest('.dayTimesScroll') || (content && getComputedStyle(content).overflowX !== 'hidden' ? content : null);
+  const most = scroller ? scroller.scrollWidth - scroller.clientWidth : 0;
+  daySwipe = { cell, x: touch.clientX, y: touch.clientY, atLeft: !scroller || scroller.scrollLeft <= 1, atRight: !scroller || scroller.scrollLeft >= most - 1, dragging: false, base: '', offset: 0 };
 }
 
 // The finger moving on a phone's zoomed day: once it has gone DAY_DRAG_START_PX, mostly sideways (and the day's lines
@@ -7673,6 +7675,8 @@ function zoomDay(cell, animate = true) {
   activeEditCell = cell;
   const place = cell.getBoundingClientRect(); // Where it is before it's doubled
   cell.classList.add('is-editing');
+  // Its calendar entries' times go in before it's measured (Fractals.js)
+  if (window.Fractals) window.Fractals.dayZoomed(cell);
   updateDayAccess(cell);
   // (It's read out, and the Tab key goes on to its entries; a day drawn again under an open window leaves the focus there)
   if (animate && !document.querySelector('.budgetPanel')) cell.querySelector('.cell-content')?.focus({ preventScroll: true });
@@ -7774,46 +7778,71 @@ function nextZoomableDay(from, step, peek = false) {
 
 // 4. ONE DAY AFTER ANOTHER: HISTORY, THE CALENDAR, AND THE 28 DAYS AFTER IT
 // A zoomed day moves on to the day before or after it (a swipe, or the arrow keys) right across what the budget has:
-// History's days, the calendar's, and the 28 days after the calendar (as the daily update will fill them in, each with
-// its In Bank: the days of the Lowest card's window, Calendar Page.js), whatever page it's on. A day the page's own
-// table doesn't have zooms in as a guest: a day of the guest row, seven days laid over the row of the page's table
-// where its days end (each weekday in its column), which shows only the one that's zoomed. Its entries open their
-// options the way they do on their own page (History's keep the balances, and the days after the calendar's go into
-// Upcoming once they're changed), its In Bank (a calendar day's) is set like Home's, and its + adds an entry on its day.
+// History's days, the calendar's, and the days after the calendar (as the daily update will fill them in, each with
+// its In Bank), whatever four weeks Home's calendar is showing. A day the page's own table doesn't have zooms in as a
+// guest: a day of the guest row, seven days laid over the row of the page's table where its days end (each weekday in
+// its column), which shows only the one that's zoomed. Its entries open their options the way that day's do (History's
+// keep the balances, and the days after the calendar's go into Upcoming once they're changed), its In Bank (a calendar
+// day's) is set like Home's, and its + adds an entry on its day.
 
-// The 28 days after the calendar, the way the daily update will fill them in, each with its In Bank (from the calendar's
-// last day's on): [{ date, text (as its cell will have it), inBank }], worked out again after each change
+// The days after the calendar through a day, the way the daily update will fill them in, each with its In Bank (from
+// the calendar's last day's on): [{ date, text (as its cell will have it), inBank }]. They're worked out again after
+// each change, and kept, a week further each time a later day is asked for, so Home's calendar can move years ahead
+// without working them all out first.
 let aheadDaysCache = null;
-function aheadDays() {
-  if (aheadDaysCache) return aheadDaysCache;
+function aheadDaysThrough(lastDay) {
+  if (!aheadDaysCache) aheadDaysCache = [];
+  const days = aheadDaysCache;
+  const from = days.length > 0 ? addDays(days[days.length - 1].date, 1) : nextFourStart;
+  if (lastDay < from) return days;
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
-  const lastDay = addDays(gridEndDate, 28);
-  const sheetDays = sheetEntriesByDay(nextFourStart, lastDay);
-  let inBank = readInBank(calendarData[3][6]) ?? 0;
-  const days = [];
-  for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
+  const sheetDays = sheetEntriesByDay(from, lastDay);
+  let inBank = days.length > 0 ? days[days.length - 1].inBank : readInBank(calendarData[3][6]) ?? 0;
+  for (let day = from; day <= lastDay; day = addDays(day, 1)) {
     const math = applyCellBudgetMath(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), inBank);
     inBank = math.inBank;
     days.push({ date: day, text: math.text, inBank });
   }
-  aheadDaysCache = days;
   return days;
 }
 
+// How far Home's calendar goes: from the Sunday a year before the budget began (when it was made, or its first day in
+// History, whichever is earlier) through the Saturday five years after today. { first, last }
+function calendarRange() {
+  let began = budgetInfo && budgetInfo.created ? createSafeMidnight(new Date(budgetInfo.created)) : today;
+  for (let r = historyData.length - 1; r >= 1; r--) {
+    const header = historyData[r].map(cell => String(cell ?? "").split("\n")[0].trim()).find(Boolean);
+    const day = header ? createSafeMidnight(header, true) : null;
+    if (day && !isNaN(day.getTime())) {
+      if (day < began) began = day;
+      break;
+    }
+  }
+  if (began > today) began = today;
+  const first = new Date(began.getFullYear() - 1, began.getMonth(), began.getDate());
+  const last = new Date(today.getFullYear() + 5, today.getMonth(), today.getDate());
+  return { first: addDays(first, -first.getDay()), last: addDays(last, 6 - last.getDay()) };
+}
+
 // A day of the budget, wherever it is: { date, text (its cell: its date, In Bank, and entries), kind: "history" |
-// "calendar" | "ahead" }, or null for a day it doesn't have (before History, or past the 28 days after the calendar)
+// "calendar" | "ahead" | "blank" (a day before History began, or one it skipped: just its date) }, or null for a day
+// outside the calendar's range (calendarRange)
 function budgetDayAt(date) {
+  // (The Quick Calendar page has no budget: every day is just its date)
+  if (!workspaceLoaded) return { date, text: formatToMMDD(date), kind: "blank" };
   if (date >= gridStartDate && date <= gridEndDate) {
     const spot = calendarSpot(date);
     return spot ? { date, text: String(calendarData[spot.r][spot.c] ?? ""), kind: "calendar" } : null;
   }
+  const range = calendarRange();
+  if (date < range.first || date > range.last) return null;
   if (date > gridEndDate) {
-    const ahead = aheadDays().find(day => day.date.getTime() === date.getTime());
+    const ahead = aheadDaysThrough(addDays(date, 6 - date.getDay())).find(day => day.date.getTime() === date.getTime());
     return ahead ? { date, text: ahead.text, kind: "ahead" } : null;
   }
   const spot = historySpot(date);
-  return spot ? { date, text: String(historyData[spot.r][spot.c] ?? ""), kind: "history" } : null;
+  return spot ? { date, text: String(historyData[spot.r][spot.c] ?? ""), kind: "history" } : { date, text: formatToMMDD(date), kind: "blank" };
 }
 
 // The page's own table of days (Home's calendar, or History's), or null
@@ -7878,9 +7907,12 @@ function fillGuestDay(td, day) {
     fragment.appendChild(BudgetUI.renderEntryLine(words, l, day.date));
   });
   content.replaceChildren(fragment, zoomDayButtons());
-  td.classList.toggle('isNegative', (readInBank(day.text) ?? 0) < 0);
+  // (A day isn't red while the calendar shows only calendar entries: its In Bank is hidden then)
+  td.classList.toggle('isNegative', (readInBank(day.text) ?? 0) < 0 && !(window.Fractals && window.Fractals.view() === 'calendar'));
   td.classList.toggle('isToday', day.date.getTime() === today.getTime());
+  td.classList.toggle('isPast', day.date < today);
   labelDay(td, day.date, day.text);
+  if (window.Fractals) window.Fractals.renderDay(td, day.date);
 }
 
 // The calendar's last day's lines about the 28 days after it ("✅ $812.40 Lowest: 11/14", "✅ $905.10 Day 28 In Bank")
@@ -8966,6 +8998,7 @@ if (window.PAGE !== "quick") {
 
 // Load (and daily-update) the workspace. Page scripts wait on this before rendering:
 //   window.workspaceReady.then(loaded => { if (loaded) render(); });
-// The Quick Entry page only borrows the helpers here: it has no login, so it never loads a budget.
-window.workspaceReady = window.PAGE === "quick" ? Promise.resolve(false) : loadWorkspace();
+// The Quick Entry and Quick Calendar pages only borrow the helpers here: they have no login, so they never load a
+// budget.
+window.workspaceReady = window.PAGE === "quick" || window.PAGE === "quickcal" ? Promise.resolve(false) : loadWorkspace();
 window.workspaceReady.then(loaded => { if (loaded) showRememberedBudgetNotice(); });
