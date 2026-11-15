@@ -13,7 +13,7 @@
     <meta name="color-scheme" content="dark">
     <title>Prismal Planning - Site Notes</title>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
-    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/budgetStyle.css?v=31e535ffeb">
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
   </head>
   <body>
@@ -68,6 +68,7 @@
               <li>Work on the <code>Testing</code> branch.</li>
               <li>Change the version everywhere it's written: <code>SITE_VERSION</code> in <code>Javascript/Boot.js</code> (today's date and the next letter, like 10.27.2026.A, then .B), How It Works' "Last updated" line and its <code>dateModified</code>, and <code>sitemap.xml</code>'s <code>lastmod</code> for the public pages that changed.</li>
               <li>Only when the Privacy Policy &amp; Terms of Use change: its <code>policy-version</code> and <code>policy-changes</code> tags and both Effective Date lines, set to the day it goes live (or, when the last version already has that day or a later one, the day after it: each version has to come after the last, or no email goes out). A new <code>policy-version</code> emails every account with a verified email, once it's live.</li>
+              <li>Add the release to Settings' <strong>Updates</strong> (in <code>settings.html</code>), at the top: its version, its bigger changes, then its smaller ones (nothing as small as a typo or one theme's color). Work still being tested is there as Coming Next: give it the version.</li>
               <li>Run <code>node _tools/stamp.mjs</code>, which writes every file's fingerprint (section 3). The repo's pre-commit hook (turned on with <code>git config core.hooksPath _tools/hooks</code>) refuses a commit whose fingerprints are out of date.</li>
               <li>When the API changed (or the site calls something new on it), it goes first: in the API's folder, <code>npx wrangler secret list</code> (every secret still set), the tests (<code>npx vitest run</code>), then <code>npx wrangler deploy</code>. Running it from the wrong folder deploys nothing new.</li>
               <li>Commit on <code>Testing</code>, merge it into <code>main</code> (<code>git merge --no-ff Testing</code>), and push both. GitHub Pages publishes within a minute.</li>
@@ -235,7 +236,7 @@ gh repo clone sabianccolbert/prismal-budget-api -- --branch testing</code></pre>
             </ol>
             <p><strong>Moving between computers:</strong> before starting, <code>git pull</code> in both folders. Before leaving one, commit the work on <code>Testing</code> (or <code>testing</code>) and <code>git push</code>, so the other computer can pull it. Work that's only committed, and not pushed, stays on that computer. Pushing to <code>Testing</code> doesn't change the live site; only merging into <code>main</code> does (section 2).</p>
             <p><strong>What one computer left for the other:</strong> the private API repo's <code>HANDOFF.md</code> lists what couldn't be done on one computer (like anything that needs the API's real secrets, or deploying), and decisions still waiting. Read it after pulling, and update it before pushing.</p>
-            <p><strong>Working with Claude Code:</strong> its memory of past conversations is kept on each computer, and isn't copied by GitHub. Anything it should know on every computer belongs in these notes, the API repo's notes and <code>HANDOFF.md</code>, or the repos themselves.</p>
+            <p><strong>Working with Claude Code:</strong> its memory of past conversations is kept on each computer, and isn't copied by GitHub. What it should know on every computer is in the private API repo, so a pull brings it: <code>CLAUDE.md</code> (its rules and release steps), <code>notes/</code>, <code>HANDOFF.md</code>, and its test scripts (<code>site-tests/</code>). On each computer, the website's folder needs a <code>.claude/CLAUDE.md</code> of its own (never committed) that points to the API repo's; <code>HANDOFF.md</code> has its few lines.</p>
           </section>
 
         </article>

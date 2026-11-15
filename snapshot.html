@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/budgetStyle.css?v=31e535ffeb">
     <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
     <title>Prismal Planning - Snapshot</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -74,6 +74,8 @@
             <button id="snapshotEdit" class="budgetButton" type="button">Edit</button>
             <button id="snapshotHomeScreen" class="budgetButton" type="button" aria-controls="homeScreenCard" aria-expanded="false">Add To Home Screen</button>
           </div>
+          <!-- Opened with a Snapshot icon's key (Snapshot Page.js startKeyed): which budget, and that it only looks -->
+          <p id="snapshotKeyNote" class="panelHint snapshotKeyNote" hidden>A no-login Snapshot of <strong id="snapshotKeyBudget" translate="no">your budget</strong>. It only shows your cards: <a href="/login.html" target="_blank" rel="noopener">open Prismal Planning</a> to change anything.</p>
         </div>
         <div id="panelSlot"></div>
 
@@ -107,7 +109,8 @@
             </div>
           </div>
           <p class="panelHint">Use the browser itself, not this page opened inside another app like Gmail, Instagram, or Facebook. If it's open inside one, use that app's menu (like ⋯) to open it in your browser first.</p>
-          <p class="panelHint">Then tap the new icon to open your Snapshot. It's your budget, so it asks you to log in the first time (an iPhone's home screen icon keeps its own login, apart from Safari's), and after 15 minutes without a tap, then opens your Snapshot again. To add an entry from your home screen with no login, use Quick Budget (the button at the right of Home).</p>
+          <p id="homeScreenLogin" class="panelHint">Then tap the new icon to open your Snapshot. It's your budget, so it asks you to log in the first time (an iPhone's home screen icon keeps its own login, apart from Safari's), and after 15 minutes without a tap, then opens your Snapshot again. To add an entry from your home screen with no login, use Quick Budget (the button at the right of Home).</p>
+          <p id="homeScreenKeyed" class="panelHint" hidden>Then tap the new icon to see your Snapshot, with no login. Keep this page's address to yourself: anyone with it sees your budget's numbers. Settings (Signed-In Devices) turns Snapshot icons off.</p>
         </section>
 
         <p id="dataStatus" class="dataStatus">Loading...</p>
@@ -144,7 +147,11 @@
           <p>A card whose account, goal, gem, or row was deleted or renamed says so: take it off in Edit, and add it again. A card with <strong>More ›</strong> opens what's behind it, the same as its page does.</p>
 
           <h4>Add To Home Screen</h4>
-          <p><strong>Add To Home Screen</strong> shows how to put this page on your phone's home screen (iPhone, Samsung, Pixel, OnePlus, and more), so your Snapshot is one tap away. It's your whole budget, so it needs your login, unlike Quick Budget and Quick Calendar's icons; after logging in, it opens your Snapshot again.</p>
+          <p><strong>Add To Home Screen</strong> puts this page on your phone's home screen (iPhone, Samsung, Pixel, OnePlus, and more), so your Snapshot is one tap away. It first says what a no-login icon means, then gives two ways:</p>
+          <ul>
+            <li><strong>Make A No-Login Icon</strong> opens your Snapshot with no login, like Quick Budget's and Quick Calendar's icons. It shows this budget's cards and the numbers and graphs they come from, and can't change anything (it doesn't show your calendar's entries, Change Logs, or notes). Anyone holding the phone, or anyone its link reaches, can see your budget's numbers, so only make one on a phone you keep locked. Settings (Signed-In Devices) turns Snapshot icons off, and so do a new password and Sign Out Everywhere.</li>
+            <li><strong>Keep The Login</strong> shows how to put this page on your home screen as it is: it asks you to log in, and after logging in it opens your Snapshot again.</li>
+          </ul>
         </section>
       </main>
     </div>

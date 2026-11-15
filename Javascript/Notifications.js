@@ -1,15 +1,15 @@
 // Notifications: push notifications on this device. Settings turns them on and off (Settings Page.js), and right after
 // a sign-in, Home asks once whether to turn them on here (askAfterSignIn), since reminders for entries are on to start
 // (see ENTRY REMINDERS in Process Budget.js). It asks only while push isn't on here, the browser can show them and hasn't
-// been told to block them, the server has push set up, and they weren't turned off here on purpose (Settings' Turn
-// Off). Not Now waits for the next sign-in. The browser's own question (allow notifications?) comes from a tap on Turn
-// On, the way browsers want it.
+// been told to block them, the server has push set up, and it wasn't told no on this device: Not Now, or Settings' Turn
+// Off (kept through signing out; Settings' Turn On asks nothing). The browser's own question (allow notifications?)
+// comes from a tap on Turn On, the way browsers want it.
 
 window.PushNotifications = (() => {
   "use strict";
 
   const ASK_KEY = "prismal_ask_push"; // A sign-in just happened (Login.js sets it): ask on Home
-  const OFF_KEY = "prismal_push_off"; // Turned off here on purpose: never ask
+  const OFF_KEY = "prismal_push_off"; // Not Now, or turned off here on purpose: never ask on this device again
 
   const read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
   const write = (key, value) => {
@@ -81,7 +81,7 @@ window.PushNotifications = (() => {
 
   const BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then turn them on in Settings.";
 
-  // Settings' Turn Off (true) or Turn On (false): whether Home should never ask on this device
+  // Not Now or Settings' Turn Off (true), or Settings' Turn On (false): whether Home should never ask on this device
   function setOff(off) {
     write(OFF_KEY, off ? "1" : null);
   }
@@ -132,7 +132,10 @@ window.PushNotifications = (() => {
     buttons.append(on, later);
     card.append(title, text, buttons);
     place.before(card);
-    later.addEventListener("click", () => card.remove());
+    later.addEventListener("click", () => {
+      setOff(true);
+      card.remove();
+    });
     on.addEventListener("click", async () => {
       on.disabled = true;
       later.disabled = true;

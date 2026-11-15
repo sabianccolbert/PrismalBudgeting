@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/budgetStyle.css?v=31e535ffeb">
     <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -64,293 +64,350 @@
       <main>
         <p id="dataStatus" class="dataStatus">Loading...</p>
 
-        <div id="settingsView" hidden>
-          <!-- The reminders: which kinds this account gets (a switch for each), when, and with more than one budget, which
-               budget they're about (Settings Page.js). They come as push notifications and on the calendar link, the two
-               cards after it. -->
-          <section id="reminderCard" class="budgetCard settingsCard" aria-labelledby="reminderHeading">
-            <h3 id="reminderHeading">Reminders</h3>
-            <p>A "🗓️ Check Budget" reminder at your reminder time, on the days your budget needs a look. Pick what's worth one:</p>
-            <div id="reminderKinds" class="reminderKinds" role="group" aria-labelledby="reminderHeading"></div>
-            <label class="settingsField">
-              <span class="fieldLabel">Reminder time</span>
-              <input id="reminderTime" class="timeInput" type="time" step="300">
-            </label>
-            <p id="timeZoneNote" class="panelHint"></p>
-            <!-- With more than one budget: which one the reminders are about (Settings Page.js) -->
-            <label id="reminderBudgetField" class="settingsField" hidden>
-              <span class="fieldLabel">Reminders are about</span>
-              <select id="reminderBudget" class="selectInput"></select>
-            </label>
-            <p class="panelHint">They come as push notifications, on your calendar, or both: turn those on below. Reminders for entries are on to start; the rest start off.</p>
-          </section>
+        <!-- This device's cards, then the account's and Updates: side by side on a wide screen (.wideColumns) -->
+        <div class="wideColumns">
+          <div class="wideColumn">
+            <div id="settingsView" hidden>
+              <!-- The reminders: which kinds this account gets (a switch for each), when, and with more than one budget, which
+                   budget they're about (Settings Page.js). They come as push notifications and on the calendar link, the two
+                   cards after it. -->
+              <section id="reminderCard" class="budgetCard settingsCard" aria-labelledby="reminderHeading">
+                <h3 id="reminderHeading">Reminders</h3>
+                <p>A "🗓️ Check Budget" reminder at your reminder time, on the days your budget needs a look. Pick what's worth one:</p>
+                <div id="reminderKinds" class="reminderKinds" role="group" aria-labelledby="reminderHeading"></div>
+                <label class="settingsField">
+                  <span class="fieldLabel">Reminder time</span>
+                  <input id="reminderTime" class="timeInput" type="time" step="300">
+                </label>
+                <p id="timeZoneNote" class="panelHint"></p>
+                <!-- With more than one budget: which one the reminders are about (Settings Page.js) -->
+                <label id="reminderBudgetField" class="settingsField" hidden>
+                  <span class="fieldLabel">Reminders are about</span>
+                  <select id="reminderBudget" class="selectInput"></select>
+                </label>
+                <p class="panelHint">They come as push notifications, on your calendar, or both: turn those on below. Reminders for entries are on to start; the rest start off.</p>
+              </section>
 
-          <section class="budgetCard settingsCard" aria-labelledby="pushHeading">
-            <h3 id="pushHeading">Push Notifications</h3>
-            <p>Your reminders (picked under Reminders) as a "🗓️ Check Budget" notification on this device, at your reminder time.</p>
-            <p id="pushStatus"></p>
-            <div id="pushButtons" class="panelButtons"></div>
-            <ul class="settingsList settingsNotes">
-              <li>Its title shows what it's about (like 🗓️🔔⛔️ Check Budget), and its lines say why. An entry's reminder shows the entry's title and its day; the rest never show amounts or entry titles. Tapping it opens the budget it's about.</li>
-              <li>Each device is turned on by itself, from that device, and right after you sign in, Home asks once whether to turn them on there.</li>
-              <li>On an iPhone or iPad (iOS 16.4 or later), add Prismal Planning to your Home Screen first (Share, then Add to Home Screen), and turn these on from there.</li>
-              <li>The days come from your budget as it was the last time it was opened or changed on any device (from today through the 28 days after the calendar, and the days of entries' reminders), so opening it now and then keeps them up to date.</li>
-              <li>Send Test sends one right away. Turn Off stops them on this device (so does turning off this site's notifications in your device's settings).</li>
-            </ul>
-          </section>
+              <section class="budgetCard settingsCard" aria-labelledby="pushHeading">
+                <h3 id="pushHeading">Push Notifications</h3>
+                <p>Your reminders (picked under Reminders) as a "🗓️ Check Budget" notification on this device, at your reminder time.</p>
+                <p id="pushStatus"></p>
+                <div id="pushButtons" class="panelButtons"></div>
+                <ul class="settingsList settingsNotes">
+                  <li>Its title shows what it's about (like 🗓️🔔⛔️ Check Budget), and its lines say why. An entry's reminder shows the entry's title and its day; the rest never show amounts or entry titles. Tapping it opens the budget it's about.</li>
+                  <li>Each device is turned on by itself, from that device, and right after you sign in, Home asks once whether to turn them on there (Not Now stops it asking on that device; this card turns them on any time).</li>
+                  <li>On an iPhone or iPad (iOS 16.4 or later), add Prismal Planning to your Home Screen first (Share, then Add to Home Screen), and turn these on from there.</li>
+                  <li>The days come from your budget as it was the last time it was opened or changed on any device (from today through Lowest's last day, and the days of entries' reminders), so opening it now and then keeps them up to date.</li>
+                  <li>Send Test sends one right away. Turn Off stops them on this device (so does turning off this site's notifications in your device's settings).</li>
+                </ul>
+              </section>
 
-          <section class="budgetCard settingsCard" aria-labelledby="calendarHeading">
-            <h3 id="calendarHeading">Calendar Link</h3>
-            <p>A private link your calendar app can subscribe to (Apple Calendar, Google Calendar, Outlook, and most others can). Each day with one of your reminders (picked under Reminders) gets a 30-minute "🗓️ Check Budget" event at your reminder time, with an alert.</p>
-            <p id="calendarStatus"></p>
-            <input id="calendarUrl" class="linkInput" type="text" readonly aria-label="Calendar link" hidden>
-            <div id="calendarButtons" class="panelButtons"></div>
-            <ul class="settingsList settingsNotes">
-              <li>Each event's title shows what it's about (like 🗓️⛔️ Check Budget), and its notes spell it out, with a link to Prismal Planning. Like push notifications, only an entry's reminder shows its title.</li>
-              <li>To add it: Apple Calendar opens it with the Apple Calendar button. In Google Calendar, use the Google Calendar button, or on a computer, Other calendars, then From URL, and paste the link. In Outlook, use Add calendar, then Subscribe from web.</li>
-              <li>Calendar apps check the link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
-              <li>Keep the link private: anyone who has it can see your reminder days (and the titles of entries with a reminder). New Link makes a new one (the old one stops working), and Turn Off stops the events.</li>
-            </ul>
-          </section>
-        </div>
+              <section class="budgetCard settingsCard" aria-labelledby="calendarHeading">
+                <h3 id="calendarHeading">Calendar Link</h3>
+                <p>A private link your calendar app can subscribe to (Apple Calendar, Google Calendar, Outlook, and most others can). Each day with one of your reminders (picked under Reminders) gets a 30-minute "🗓️ Check Budget" event at your reminder time, with an alert.</p>
+                <p id="calendarStatus"></p>
+                <input id="calendarUrl" class="linkInput" type="text" readonly aria-label="Calendar link" hidden>
+                <div id="calendarButtons" class="panelButtons"></div>
+                <ul class="settingsList settingsNotes">
+                  <li>Each event's title shows what it's about (like 🗓️⛔️ Check Budget), and its notes spell it out, with a link to Prismal Planning. Like push notifications, only an entry's reminder shows its title.</li>
+                  <li>To add it: Apple Calendar opens it with the Apple Calendar button. In Google Calendar, use the Google Calendar button, or on a computer, Other calendars, then From URL, and paste the link. In Outlook, use Add calendar, then Subscribe from web.</li>
+                  <li>Calendar apps check the link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
+                  <li>Keep the link private: anyone who has it can see your reminder days (and the titles of entries with a reminder). New Link makes a new one (the old one stops working), and Turn Off stops the events.</li>
+                </ul>
+              </section>
+            </div>
 
-        <!-- The calendar's own links: one for every Calendar Fractal together, and one for each (Fractals.js renderLinks) -->
-        <section id="fractalLinksCard" class="budgetCard settingsCard" aria-labelledby="fractalLinksHeading" hidden>
-          <h3 id="fractalLinksHeading">Calendar Fractals' Links</h3>
-          <p>A private link to your calendar's entries that another calendar app (Apple Calendar, Google Calendar, Outlook, and most others) or a spreadsheet can subscribe to: one for every Calendar Fractal together, or one for each. It carries each entry's title, time, location, notes, alerts, and how it repeats.</p>
-          <div id="fractalLinks"></div>
-          <ul class="settingsList settingsNotes">
-            <li>The other calendar shows your entries. Changes made there don't come back here.</li>
-            <li>Calendar apps check a link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
-            <li>Keep a link private: anyone who has it can see those entries. New Link makes a new one (the old one stops working), and Turn Off ends it.</li>
-          </ul>
-        </section>
+            <!-- The calendar's own links: one for every Calendar Fractal together, and one for each (Fractals.js renderLinks) -->
+            <section id="fractalLinksCard" class="budgetCard settingsCard" aria-labelledby="fractalLinksHeading" hidden>
+              <h3 id="fractalLinksHeading">Calendar Fractals' Links</h3>
+              <p>A private link to your calendar's entries that another calendar app (Apple Calendar, Google Calendar, Outlook, and most others) or a spreadsheet can subscribe to: one for every Calendar Fractal together, or one for each. It carries each entry's title, time, location, notes, alerts, and how it repeats.</p>
+              <div id="fractalLinks"></div>
+              <ul class="settingsList settingsNotes">
+                <li>The other calendar shows your entries. Changes made there don't come back here.</li>
+                <li>Calendar apps check a link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
+                <li>Keep a link private: anyone who has it can see those entries. New Link makes a new one (the old one stops working), and Turn Off ends it.</li>
+              </ul>
+            </section>
 
-        <!-- This device's own choices: they don't need the server, so they show right away (Settings Page.js) -->
-        <!-- This device's theme (Boot.js keeps it, themes.css draws it; Settings Page.js fills in a button for each, and
-             Custom's window) -->
-        <section id="themeView" class="budgetCard settingsCard" aria-labelledby="themeHeading">
-          <h3 id="themeHeading">Theme</h3>
-          <p>How Prismal Planning looks in this browser: its colors, corners, background, stars, and icons. Each browser keeps its own, even on the same device or budget.</p>
-          <div id="themeChoices" class="choiceList themeChoices" role="radiogroup" aria-labelledby="themeHeading"></div>
-          <!-- Shown once a theme is picked here: everywhere else it has to be picked too (Settings Page.js showThemeNotice) -->
-          <div id="themeNotice" class="themeNotice" role="status" hidden>
-            <p><strong>Saved in this browser only.</strong> Every other place you use Prismal Planning keeps a theme of its own, so pick this one again in each:</p>
-            <ul>
-              <li><strong>Other browsers</strong>, on this device or another (like Chrome as well as Safari).</li>
-              <li><strong>Quick Budget and Quick Calendar icons</strong> already on a home screen. Each one is an app of its own, and keeps the theme it was added with: add it again from Home's Quick Budget or Quick Calendar button for this one.</li>
-              <li><strong>Prismal Planning added to a home screen</strong> as an app, which keeps its own as well (pick it in Settings there).</li>
-            </ul>
+            <!-- This device's own choices: they don't need the server, so they show right away (Settings Page.js) -->
+            <!-- This device's theme (Boot.js keeps it, themes.css draws it; Settings Page.js fills in a button for each, and
+                 Custom's window) -->
+            <section id="themeView" class="budgetCard settingsCard" aria-labelledby="themeHeading">
+              <h3 id="themeHeading">Theme</h3>
+              <p>How Prismal Planning looks in this browser: its colors, corners, background, stars, and icons. Each browser keeps its own, even on the same device or budget.</p>
+              <div id="themeChoices" class="choiceList themeChoices" role="radiogroup" aria-labelledby="themeHeading"></div>
+              <!-- Shown once a theme is picked here: everywhere else it has to be picked too (Settings Page.js showThemeNotice) -->
+              <div id="themeNotice" class="themeNotice" role="status" hidden>
+                <p><strong>Saved in this browser only.</strong> Every other place you use Prismal Planning keeps a theme of its own, so pick this one again in each:</p>
+                <ul>
+                  <li><strong>Other browsers</strong>, on this device or another (like Chrome as well as Safari).</li>
+                  <li><strong>Quick Budget and Quick Calendar icons</strong> already on a home screen. Each one is an app of its own, and keeps the theme it was added with: add it again from Home's Quick Budget or Quick Calendar button for this one.</li>
+                  <li><strong>Prismal Planning added to a home screen</strong> as an app, which keeps its own as well (pick it in Settings there).</li>
+                </ul>
+              </div>
+              <p class="panelHint">Custom makes one of your own, starting from any of the others. This browser keeps it, even when you sign out or pick another theme: tap Custom to bring it back, and tap it again while it's on to change it. The login page and the front page look like Prismal (the login page keeps your theme when Quick Budget's or Quick Calendar's Home opens it).</p>
+              <!-- How the Quick Budget icon looks on this device's home screen (Settings Page.js, Quick Icon.js) -->
+              <div id="quickIconEditor" class="quickIconEditor"></div>
+            </section>
+
+            <section id="languageView" class="budgetCard settingsCard" aria-labelledby="languageHeading">
+              <h3 id="languageHeading">Language And Dates</h3>
+              <p>Prismal Planning is in English, and your browser can show it in your language:</p>
+              <ul class="settingsList">
+                <li>🌐 Chrome or Edge: tap ⋮ (or right-click the page) and pick Translate.</li>
+                <li>🧭 Safari: tap aA (or the translate button) in the address bar, then Translate.</li>
+                <li>🦊 Firefox: tap the translate button in the address bar.</li>
+              </ul>
+              <p class="panelHint">Your entries, names, amounts, and dates stay just as you typed them. Most browsers offer to translate on their own when a page isn't in your language.</p>
+              <label class="settingsField">
+                <span class="fieldLabel">Date format (on this device)</span>
+                <select id="dateFormat" class="dateFormatSelect"></select>
+              </label>
+              <p id="dateFormatNote" class="panelHint"></p>
+            </section>
+
+            <!-- This device's sounds (Sounds.js, Settings Page.js) -->
+            <section id="soundView" class="budgetCard settingsCard" aria-labelledby="soundHeading">
+              <h3 id="soundHeading">Sounds</h3>
+              <p>Soft crystal twinkles for what you tap, and music: a quiet bed of far-off twinkles in the background, with a clearer few now and then. They're for this device.</p>
+              <label class="checkboxField settingsSwitch">
+                <input id="musicSwitch" type="checkbox" class="pillSwitch" role="switch">
+                <span>Music</span>
+              </label>
+              <label class="checkboxField settingsSwitch">
+                <input id="effectsSwitch" type="checkbox" class="pillSwitch" role="switch">
+                <span>Sound effects</span>
+              </label>
+              <p id="soundNote" class="panelHint"></p>
+            </section>
+
+            <!-- This device's motion (Boot.js keeps it; Settings Page.js) -->
+            <section id="motionView" class="budgetCard settingsCard" aria-labelledby="motionHeading">
+              <h3 id="motionHeading">Reduced Motion</h3>
+              <p>Less movement on this device, whoever signs in on it.</p>
+              <label class="checkboxField settingsSwitch">
+                <input id="stillStarsSwitch" type="checkbox" class="pillSwitch" role="switch">
+                <span>Hold the starfield still</span>
+              </label>
+              <label class="checkboxField settingsSwitch">
+                <input id="lessMotionSwitch" type="checkbox" class="pillSwitch" role="switch">
+                <span>Turn off other animations</span>
+              </label>
+              <p id="motionNote" class="panelHint"></p>
+            </section>
+
           </div>
-          <p class="panelHint">Custom makes one of your own, starting from any of the others. This browser keeps it, even when you sign out or pick another theme: tap Custom to bring it back, and tap it again while it's on to change it. The login page and the front page look like Prismal (the login page keeps your theme when Quick Budget's or Quick Calendar's Home opens it).</p>
-          <!-- How the Quick Budget icon looks on this device's home screen (Settings Page.js, Quick Icon.js) -->
-          <div id="quickIconEditor" class="quickIconEditor"></div>
-        </section>
+          <div class="wideColumn">
+            <div id="accountView" hidden>
+              <!-- An account without a password: what needs one takes a sign-in from the last few minutes instead (Settings Page.js) -->
+              <section id="confirmYou" class="budgetCard settingsCard" aria-labelledby="confirmYouHeading" hidden>
+                <h3 id="confirmYouHeading">Confirm It's You</h3>
+                <p id="confirmYouStatus"></p>
+                <div id="confirmYouButtons" class="panelButtons"></div>
+              </section>
 
-        <section id="languageView" class="budgetCard settingsCard" aria-labelledby="languageHeading">
-          <h3 id="languageHeading">Language And Dates</h3>
-          <p>Prismal Planning is in English, and your browser can show it in your language:</p>
-          <ul class="settingsList">
-            <li>🌐 Chrome or Edge: tap ⋮ (or right-click the page) and pick Translate.</li>
-            <li>🧭 Safari: tap aA (or the translate button) in the address bar, then Translate.</li>
-            <li>🦊 Firefox: tap the translate button in the address bar.</li>
-          </ul>
-          <p class="panelHint">Your entries, names, amounts, and dates stay just as you typed them. Most browsers offer to translate on their own when a page isn't in your language.</p>
-          <label class="settingsField">
-            <span class="fieldLabel">Date format (on this device)</span>
-            <select id="dateFormat" class="dateFormatSelect"></select>
-          </label>
-          <p id="dateFormatNote" class="panelHint"></p>
-        </section>
-
-        <!-- This device's sounds (Sounds.js, Settings Page.js) -->
-        <section id="soundView" class="budgetCard settingsCard" aria-labelledby="soundHeading">
-          <h3 id="soundHeading">Sounds</h3>
-          <p>Soft crystal twinkles for what you tap, and music: a quiet bed of far-off twinkles in the background, with a clearer few now and then. They're for this device.</p>
-          <label class="checkboxField settingsSwitch">
-            <input id="musicSwitch" type="checkbox" class="pillSwitch" role="switch">
-            <span>Music</span>
-          </label>
-          <label class="checkboxField settingsSwitch">
-            <input id="effectsSwitch" type="checkbox" class="pillSwitch" role="switch">
-            <span>Sound effects</span>
-          </label>
-          <p id="soundNote" class="panelHint"></p>
-        </section>
-
-        <!-- This device's motion (Boot.js keeps it; Settings Page.js) -->
-        <section id="motionView" class="budgetCard settingsCard" aria-labelledby="motionHeading">
-          <h3 id="motionHeading">Reduced Motion</h3>
-          <p>Less movement on this device, whoever signs in on it.</p>
-          <label class="checkboxField settingsSwitch">
-            <input id="stillStarsSwitch" type="checkbox" class="pillSwitch" role="switch">
-            <span>Hold the starfield still</span>
-          </label>
-          <label class="checkboxField settingsSwitch">
-            <input id="lessMotionSwitch" type="checkbox" class="pillSwitch" role="switch">
-            <span>Turn off other animations</span>
-          </label>
-          <p id="motionNote" class="panelHint"></p>
-        </section>
-
-        <div id="accountView" hidden>
-          <!-- An account without a password: what needs one takes a sign-in from the last few minutes instead (Settings Page.js) -->
-          <section id="confirmYou" class="budgetCard settingsCard" aria-labelledby="confirmYouHeading" hidden>
-            <h3 id="confirmYouHeading">Confirm It's You</h3>
-            <p id="confirmYouStatus"></p>
-            <div id="confirmYouButtons" class="panelButtons"></div>
-          </section>
-
-          <section id="email" class="budgetCard settingsCard" aria-labelledby="emailHeading">
-            <h3 id="emailHeading">Email</h3>
-            <p id="emailStatus"></p>
-            <p id="verifyStatus" hidden></p>
-            <div id="verifyButtons" class="panelButtons"></div>
-            <form id="emailForm" class="settingsForm">
-              <label class="settingsField">
-                <span class="fieldLabel">New email</span>
-                <input id="newEmail" type="email" required autocomplete="email">
-              </label>
-              <label class="settingsField">
-                <span class="fieldLabel">Your password</span>
-                <input id="emailPassword" type="password" required autocomplete="current-password">
-              </label>
-              <div class="panelButtons">
-                <button id="emailButton" type="submit" class="budgetButton primary">Change Email</button>
-              </div>
-            </form>
-            <!-- More emails of yours, each confirmed by a link we email it (Settings Page.js) -->
-            <h4 class="settingsSubheading">Other Emails</h4>
-            <p id="otherEmailsStatus">Add another email of yours, and open the link we send it. Then it signs in to your account too (with your password), and spreadsheets its Google account shares with admin@prismalplanning.org can be connected.</p>
-            <ul id="otherEmailList" class="sheetEmailList" hidden></ul>
-            <div class="panelButtons">
-              <button id="addOtherEmailButton" type="button" class="budgetButton primary">Add Email</button>
-            </div>
-          </section>
-
-          <section class="budgetCard settingsCard" aria-labelledby="ageHeading">
-            <h3 id="ageHeading">Birth Date</h3>
-            <p id="ageStatus"></p>
-            <form id="ageForm" class="settingsForm">
-              <div class="settingsField">
-                <label class="fieldLabel" for="ageInput">Your birth date</label>
-                <div class="dateRow ageRow">
-                  <input id="ageInput" class="dateInput ageInput" type="text" inputmode="numeric" autocomplete="bday" required>
-                </div>
-              </div>
-              <div class="panelButtons">
-                <button id="ageButton" type="submit" class="budgetButton primary">Save Birth Date</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="budgetCard settingsCard" aria-labelledby="passwordHeading">
-            <h3 id="passwordHeading">Password</h3>
-            <form id="passwordForm" class="settingsForm">
-              <p class="panelHint">A new password signs out your other devices and turns off your Quick Budget icons. This device stays signed in.</p>
-              <!-- Lets password managers save the new password for the right account -->
-              <input id="passwordFormUsername" type="text" autocomplete="username" readonly hidden>
-              <label class="settingsField">
-                <span class="fieldLabel">Current password</span>
-                <input id="currentPassword" type="password" required autocomplete="current-password">
-              </label>
-              <label class="settingsField">
-                <span class="fieldLabel">New password (at least 8 characters, any you like)</span>
-                <input id="newPassword" type="password" required autocomplete="new-password">
-              </label>
-              <label class="settingsField">
-                <span class="fieldLabel">New password again</span>
-                <input id="newPasswordAgain" type="password" required autocomplete="new-password">
-              </label>
-              <div class="panelButtons">
-                <button type="submit" class="budgetButton primary">Change Password</button>
-              </div>
-            </form>
-            <h4 class="settingsSubheading">Forgot It?</h4>
-            <p id="passwordStatus"></p>
-            <div id="passwordButtons" class="panelButtons"></div>
-          </section>
-
-          <section class="budgetCard settingsCard" aria-labelledby="passkeyHeading">
-            <h3 id="passkeyHeading">Passkeys (Face ID, Touch ID, Windows Hello)</h3>
-            <p id="passkeyStatus"></p>
-            <div id="passkeyButtons" class="panelButtons"></div>
-            <ul id="passkeyList" class="passkeyList" hidden></ul>
-            <form id="passkeyForm" class="settingsForm" hidden>
-              <p id="passkeyFormHint" class="panelHint"></p>
-              <div id="passkeyFields">
-                <label class="settingsField">
-                  <span class="fieldLabel">Passkey name</span>
-                  <input id="passkeyName" type="text" maxlength="40" autocomplete="off">
-                </label>
-                <label class="settingsField">
-                  <span class="fieldLabel">Your password</span>
-                  <input id="passkeyPassword" type="password" required autocomplete="current-password">
-                </label>
+              <section id="email" class="budgetCard settingsCard" aria-labelledby="emailHeading">
+                <h3 id="emailHeading">Email</h3>
+                <p id="emailStatus"></p>
+                <p id="verifyStatus" hidden></p>
+                <div id="verifyButtons" class="panelButtons"></div>
+                <form id="emailForm" class="settingsForm">
+                  <label class="settingsField">
+                    <span class="fieldLabel">New email</span>
+                    <input id="newEmail" type="email" required autocomplete="email">
+                  </label>
+                  <label class="settingsField">
+                    <span class="fieldLabel">Your password</span>
+                    <input id="emailPassword" type="password" required autocomplete="current-password">
+                  </label>
+                  <div class="panelButtons">
+                    <button id="emailButton" type="submit" class="budgetButton primary">Change Email</button>
+                  </div>
+                </form>
+                <!-- More emails of yours, each confirmed by a link we email it (Settings Page.js) -->
+                <h4 class="settingsSubheading">Other Emails</h4>
+                <p id="otherEmailsStatus">Add another email of yours, and open the link we send it. Then it signs in to your account too (with your password), and spreadsheets its Google account shares with admin@prismalplanning.org can be connected.</p>
+                <ul id="otherEmailList" class="sheetEmailList" hidden></ul>
                 <div class="panelButtons">
-                  <button id="passkeyAddButton" type="submit" class="budgetButton primary">Add Passkey</button>
+                  <button id="addOtherEmailButton" type="button" class="budgetButton primary">Add Email</button>
                 </div>
+              </section>
+
+              <section class="budgetCard settingsCard" aria-labelledby="ageHeading">
+                <h3 id="ageHeading">Birth Date</h3>
+                <p id="ageStatus"></p>
+                <form id="ageForm" class="settingsForm">
+                  <div class="settingsField">
+                    <label class="fieldLabel" for="ageInput">Your birth date</label>
+                    <div class="dateRow ageRow">
+                      <input id="ageInput" class="dateInput ageInput" type="text" inputmode="numeric" autocomplete="bday" required>
+                    </div>
+                  </div>
+                  <div class="panelButtons">
+                    <button id="ageButton" type="submit" class="budgetButton primary">Save Birth Date</button>
+                  </div>
+                </form>
+              </section>
+
+              <section class="budgetCard settingsCard" aria-labelledby="passwordHeading">
+                <h3 id="passwordHeading">Password</h3>
+                <form id="passwordForm" class="settingsForm">
+                  <p class="panelHint">A new password signs out your other devices and turns off your Quick Budget icons. This device stays signed in.</p>
+                  <!-- Lets password managers save the new password for the right account -->
+                  <input id="passwordFormUsername" type="text" autocomplete="username" readonly hidden>
+                  <label class="settingsField">
+                    <span class="fieldLabel">Current password</span>
+                    <input id="currentPassword" type="password" required autocomplete="current-password">
+                  </label>
+                  <label class="settingsField">
+                    <span class="fieldLabel">New password (at least 8 characters, any you like)</span>
+                    <input id="newPassword" type="password" required autocomplete="new-password">
+                  </label>
+                  <label class="settingsField">
+                    <span class="fieldLabel">New password again</span>
+                    <input id="newPasswordAgain" type="password" required autocomplete="new-password">
+                  </label>
+                  <div class="panelButtons">
+                    <button type="submit" class="budgetButton primary">Change Password</button>
+                  </div>
+                </form>
+                <h4 class="settingsSubheading">Forgot It?</h4>
+                <p id="passwordStatus"></p>
+                <div id="passwordButtons" class="panelButtons"></div>
+              </section>
+
+              <section class="budgetCard settingsCard" aria-labelledby="passkeyHeading">
+                <h3 id="passkeyHeading">Passkeys (Face ID, Touch ID, Windows Hello)</h3>
+                <p id="passkeyStatus"></p>
+                <div id="passkeyButtons" class="panelButtons"></div>
+                <ul id="passkeyList" class="passkeyList" hidden></ul>
+                <form id="passkeyForm" class="settingsForm" hidden>
+                  <p id="passkeyFormHint" class="panelHint"></p>
+                  <div id="passkeyFields">
+                    <label class="settingsField">
+                      <span class="fieldLabel">Passkey name</span>
+                      <input id="passkeyName" type="text" maxlength="40" autocomplete="off">
+                    </label>
+                    <label class="settingsField">
+                      <span class="fieldLabel">Your password</span>
+                      <input id="passkeyPassword" type="password" required autocomplete="current-password">
+                    </label>
+                    <div class="panelButtons">
+                      <button id="passkeyAddButton" type="submit" class="budgetButton primary">Add Passkey</button>
+                    </div>
+                  </div>
+                </form>
+              </section>
+
+              <!-- On standby: Apple, Google, and Microsoft, each one the server has set up, connected to this account or not (Settings Page.js)
+              <section id="signInWith" class="budgetCard settingsCard" aria-labelledby="signInWithHeading" hidden>
+                <h3 id="signInWithHeading">Apple, Google, And Microsoft</h3>
+                <p id="signInWithStatus"></p>
+                <ul id="signInWithList" class="passkeyList"></ul>
+              </section> -->
+
+              <section class="budgetCard settingsCard" aria-labelledby="devicesHeading">
+                <h3 id="devicesHeading">Signed-In Devices</h3>
+                <p id="quickIconStatus"></p>
+                <div id="quickIconButtons" class="panelButtons"></div>
+                <!-- Quick Calendar icons (Home's Quick Calendar button makes them): how many work, and Turn Off (Settings Page.js) -->
+                <p id="quickCalendarStatus" hidden></p>
+                <div id="quickCalendarButtons" class="panelButtons"></div>
+                <!-- Snapshot icons (Snapshot's Add To Home Screen makes them): how many work, and Turn Off (Settings Page.js) -->
+                <p id="snapshotIconStatus"></p>
+                <div id="snapshotIconButtons" class="panelButtons"></div>
+                <!-- Whether Quick Budget icons show In Bank, the lowest, and the Equity accounts' balances (Settings Page.js) -->
+                <label class="checkboxField settingsSwitch">
+                  <input id="quickBalancesSwitch" type="checkbox" class="pillSwitch" role="switch">
+                  <span>Show balances on Quick Budget icons</span>
+                </label>
+                <p id="quickBalancesNote" class="panelHint"></p>
+                <h4 class="settingsSubheading">Sign Out Everywhere</h4>
+                <p>Lost a phone, or signed in on a computer that isn't yours? This signs out every device and browser, this one too, and turns off your Quick Budget icons. Your budget stays just as it is.</p>
+                <div class="panelButtons">
+                  <button id="signOutEverywhereButton" type="button" class="budgetButton danger">Sign Out Everywhere</button>
+                </div>
+              </section>
+
+              <section class="budgetCard settingsCard" aria-labelledby="privacyHeading">
+                <h3 id="privacyHeading">Your Data And Privacy</h3>
+                <p>Download a copy of everything stored for your account (your budgets, who they're shared with, settings, and account details) as a JSON file. Budgets other accounts shared with you are theirs, so they're only named. Passwords, keys, and private link codes are left out.</p>
+                <div class="panelButtons">
+                  <button id="downloadDataButton" type="button" class="budgetButton primary">Download My Data</button>
+                </div>
+                <h4 class="settingsSubheading">Upload A Backup</h4>
+                <p>Bring a budget back from a file Download My Data saved, into the budget that's open (a file with more than one budget asks which). Part by part (History, Recurring Entries, Equity, and the rest), you pick what happens where the backup and the budget both have something. The file is read on this device.</p>
+                <div class="panelButtons">
+                  <button id="uploadBackupButton" type="button" class="budgetButton">Upload A Backup</button>
+                </div>
+                <input id="uploadBackupFile" type="file" accept=".json,application/json" hidden>
+                <h4 class="settingsSubheading">Analytics On This Device</h4>
+                <p id="analyticsStatus"></p>
+                <div id="analyticsButtons" class="panelButtons"></div>
+              </section>
+
+              <section class="budgetCard settingsCard" aria-labelledby="deleteHeading">
+                <h3 id="deleteHeading">Delete Account</h3>
+                <p>This permanently deletes your account and everything in your budgets, for everyone they're shared with too. It can't be undone. What you added to budgets other accounts shared with you stays in them.</p>
+                <form id="deleteForm" class="settingsForm">
+                  <label class="settingsField">
+                    <span class="fieldLabel">Your password</span>
+                    <input id="deletePassword" type="password" required autocomplete="current-password">
+                  </label>
+                  <div class="panelButtons">
+                    <button type="submit" class="budgetButton danger">Delete Account</button>
+                  </div>
+                </form>
+              </section>
+            </div>
+
+            <!-- Updates: the version this page is (Settings Page.js), then every update from 11.14.2026.A on, newest first, each
+                 with its bigger changes and then its smaller ones (nothing as small as a typo or one theme's color). Its list
+                 scrolls inside the card. A release adds its own at the top (the go-live steps). -->
+            <section id="updatesView" class="budgetCard settingsCard updatesCard" aria-labelledby="updatesHeading">
+              <h3 id="updatesHeading">Updates</h3>
+              <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
+              <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
+                <section class="updatesRelease" aria-labelledby="updateNext">
+                  <h4 id="updateNext">Coming Next (Being Tested)</h4>
+                  <p class="updatesKind">Bigger changes</p>
+                  <ul>
+                    <li>Your budget is five weeks now, everywhere: Home's calendar, Lowest, Bob, reminders, and Quick Budget all count the same five weeks.</li>
+                    <li>Lowest has a Look Ahead (on its card): how far past the calendar it counts, 2 months to start and up to 12.</li>
+                    <li>Snapshot can go on your home screen with no login, after a warning about who can see it. Settings turns those icons off.</li>
+                    <li>Bob's page: his cards are rows in one card at the top, each opening as a window, and his figures are cards that fold open and shut.</li>
+                    <li>On a wide screen, pages show their cards side by side.</li>
+                    <li>This list of updates, in Settings.</li>
+                  </ul>
+                  <p class="updatesKind">Smaller changes</p>
+                  <ul>
+                    <li>Not Now, when Home asks about notifications, stops it asking on that device.</li>
+                    <li>Money going out shows as negative everywhere, Bob's graph of purchases added up included.</li>
+                  </ul>
+                </section>
+                <section class="updatesRelease" aria-labelledby="update20261114">
+                  <h4 id="update20261114">11.14.2026.A</h4>
+                  <p class="updatesKind">Bigger changes</p>
+                  <ul>
+                    <li>Snapshot (the header's Snapshot button): one page of the numbers and graphs you pick from across your budget, as cards.</li>
+                    <li>Bob's page has the tracker, and the Spectrum Graph, which compares accounts, categories, and other figures on one graph.</li>
+                    <li>The Debt Calculator is the Accrual Calculator, with saved gems that goals can follow.</li>
+                    <li>Calendar Fractals can show another calendar (linked fractals), and an alert can come after an entry starts, or ring as an alarm.</li>
+                    <li>Home's calendar shows five weeks, and List Mode shows them as a list.</li>
+                  </ul>
+                  <p class="updatesKind">Smaller changes</p>
+                  <ul>
+                    <li>Quick Entry is Quick Budget now.</li>
+                    <li>A connected calendar can pay by the time or the day (like weekend or night pay).</li>
+                    <li>Pinching a zoomed day on a phone shrinks it, and closes it when it gets small.</li>
+                    <li>Home counts the changes your other devices made.</li>
+                    <li>Quicker on slow phones: zooming in on a day, and swiping to the next one.</li>
+                    <li>A page left open loads the newest version by itself.</li>
+                  </ul>
+                </section>
               </div>
-            </form>
-          </section>
-
-          <!-- On standby: Apple, Google, and Microsoft, each one the server has set up, connected to this account or not (Settings Page.js)
-          <section id="signInWith" class="budgetCard settingsCard" aria-labelledby="signInWithHeading" hidden>
-            <h3 id="signInWithHeading">Apple, Google, And Microsoft</h3>
-            <p id="signInWithStatus"></p>
-            <ul id="signInWithList" class="passkeyList"></ul>
-          </section> -->
-
-          <section class="budgetCard settingsCard" aria-labelledby="devicesHeading">
-            <h3 id="devicesHeading">Signed-In Devices</h3>
-            <p id="quickIconStatus"></p>
-            <div id="quickIconButtons" class="panelButtons"></div>
-            <!-- Quick Calendar icons (Home's Quick Calendar button makes them): how many work, and Turn Off (Settings Page.js) -->
-            <p id="quickCalendarStatus" hidden></p>
-            <div id="quickCalendarButtons" class="panelButtons"></div>
-            <!-- Whether Quick Budget icons show In Bank, the lowest, and the Equity accounts' balances (Settings Page.js) -->
-            <label class="checkboxField settingsSwitch">
-              <input id="quickBalancesSwitch" type="checkbox" class="pillSwitch" role="switch">
-              <span>Show balances on Quick Budget icons</span>
-            </label>
-            <p id="quickBalancesNote" class="panelHint"></p>
-            <h4 class="settingsSubheading">Sign Out Everywhere</h4>
-            <p>Lost a phone, or signed in on a computer that isn't yours? This signs out every device and browser, this one too, and turns off your Quick Budget icons. Your budget stays just as it is.</p>
-            <div class="panelButtons">
-              <button id="signOutEverywhereButton" type="button" class="budgetButton danger">Sign Out Everywhere</button>
-            </div>
-          </section>
-
-          <section class="budgetCard settingsCard" aria-labelledby="privacyHeading">
-            <h3 id="privacyHeading">Your Data And Privacy</h3>
-            <p>Download a copy of everything stored for your account (your budgets, who they're shared with, settings, and account details) as a JSON file. Budgets other accounts shared with you are theirs, so they're only named. Passwords, keys, and private link codes are left out.</p>
-            <div class="panelButtons">
-              <button id="downloadDataButton" type="button" class="budgetButton primary">Download My Data</button>
-            </div>
-            <h4 class="settingsSubheading">Upload A Backup</h4>
-            <p>Bring a budget back from a file Download My Data saved, into the budget that's open (a file with more than one budget asks which). Part by part (History, Recurring Entries, Equity, and the rest), you pick what happens where the backup and the budget both have something. The file is read on this device.</p>
-            <div class="panelButtons">
-              <button id="uploadBackupButton" type="button" class="budgetButton">Upload A Backup</button>
-            </div>
-            <input id="uploadBackupFile" type="file" accept=".json,application/json" hidden>
-            <h4 class="settingsSubheading">Analytics On This Device</h4>
-            <p id="analyticsStatus"></p>
-            <div id="analyticsButtons" class="panelButtons"></div>
-          </section>
-
-          <section class="budgetCard settingsCard" aria-labelledby="deleteHeading">
-            <h3 id="deleteHeading">Delete Account</h3>
-            <p>This permanently deletes your account and everything in your budgets, for everyone they're shared with too. It can't be undone. What you added to budgets other accounts shared with you stays in them.</p>
-            <form id="deleteForm" class="settingsForm">
-              <label class="settingsField">
-                <span class="fieldLabel">Your password</span>
-                <input id="deletePassword" type="password" required autocomplete="current-password">
-              </label>
-              <div class="panelButtons">
-                <button type="submit" class="budgetButton danger">Delete Account</button>
-              </div>
-            </form>
-          </section>
+            </section>
+          </div>
         </div>
 
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
@@ -363,7 +420,7 @@
             <li><strong>Your budgets</strong> are on their own page now: open the menu, then Budgets, Calendars &amp; Spreadsheets. The name above the buttons at the top of every page switches between them too.</li>
             <li><strong>Calendar Fractals' Links:</strong> a private link to your calendar's entries (every Calendar Fractal together, or one of them) that Apple Calendar, Google Calendar, Outlook, and spreadsheets can subscribe to. Make A Link shows it, with Copy, Share, and buttons that add it to Apple or Google Calendar (each fractal's Edit window on Home has it too, under Share); New Link makes a new one (the old one stops working), and Turn Off ends it. The other calendar shows your entries, and changes made there don't come back.</li>
             <li><strong>Reminders are about:</strong> with more than one budget, the Reminders card picks which one your reminders follow.</li>
-            <li><strong>Reminders:</strong> a switch for each kind: 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start). They come as push notifications and on the calendar link, at the reminder time. Right after you sign in, Home asks once whether to turn notifications on there.</li>
+            <li><strong>Reminders:</strong> a switch for each kind: 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start). They come as push notifications and on the calendar link, at the reminder time. Right after you sign in, Home asks once whether to turn notifications on there; Not Now stops it asking on that device.</li>
           </ul>
 
           <h4>Your Account</h4>
@@ -379,6 +436,8 @@
             <li><strong>Quick Budget Icon</strong> (under Theme): how the icon looks when Quick Budget is added to this device's home screen. Pick its Colors (one from each theme, and your Custom one), then its Icon: the usual Prismal picture, a minimal one, a blank one (just the colors), an emoji you type, or an image you upload. It's kept in this browser with the theme, even when you sign out. An icon already on a home screen keeps the look it was added with: tap Quick Budget on Home and add it again for the new one.</li>
             <li><strong>Theme:</strong> how Prismal Planning looks in this browser. Other browsers, and apps on a home screen (Prismal Planning added there, and each Quick Budget and Quick Calendar icon), keep their own: once you pick one, the card lists where to pick it again. Tap one to switch, or Custom (at the end) to make your own: start from any theme, pick five colors (the background, the cards, the words, the glow, and what's chosen) and the corners, font, stars, and icons, and watch it change behind the window; Save Theme keeps it. The login page and the front page always look like Prismal.</li>
             <li><strong>Reduced Motion:</strong> Hold the starfield still keeps the stars where they are, and Turn off other animations stops pages sliding, windows growing out of their buttons, and days zooming, on this device. If your device asks for less motion in its own settings, both are on already.</li>
+            <li><strong>Snapshot icons:</strong> Signed-In Devices says how many no-login Snapshot icons work (Snapshot's Add To Home Screen makes them). Turning them off stops every one right away.</li>
+            <li><strong>Updates</strong> (at the bottom): the version you're on, and what each update changed, newest first, the bigger changes before the smaller ones. Its list scrolls.</li>
             <li>Connected spreadsheets and calendars have their own page: open the menu, then Budgets, Calendars &amp; Spreadsheets.</li>
           </ul>
         </section>

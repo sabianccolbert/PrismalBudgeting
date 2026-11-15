@@ -319,7 +319,7 @@ function goToEquity(container, toDay) {
   if (!(toDay instanceof Date) || isNaN(toDay.getTime()) || toDay <= today) return;
   const furthest = addMonths(today, 120);
   const link = BudgetUI.element("a", "budgetButton searchAccounts", "Go To Equity");
-  link.href = `/menu/bob.html?day=${formatToYMD(toDay > furthest ? furthest : toDay)}&open=equity#dataCard`;
+  link.href = `/menu/bob.html?day=${formatToYMD(toDay > furthest ? furthest : toDay)}&open=equity#balancesCard`;
   link.title = `Every account's balance on ${showDate(toDay > furthest ? furthest : toDay)}, in the Equity window on Bob's page`;
   const row = BudgetUI.element("div", "panelButtons searchAccountsRow");
   row.append(link);

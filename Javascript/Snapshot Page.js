@@ -5,7 +5,9 @@
 // (accountsData.snapshot: see The Snapshot page in Process Budget.js), so every device shows the same page; it starts
 // with a few. Each card works its figures out the way the page it comes from does (Bob Page.js's cards, Data, tracker,
 // and graphs; Line Graph.js; Fractals.js; Process Budget.js), and the page draws again with every change to the budget.
-// Add To Home Screen shows how to put the page on a phone's home screen.
+// Add To Home Screen makes a no-login icon of the page (after saying who can see it), or shows how to put the page on a
+// phone's home screen as it is, with the login. Opened with an icon's key (window.SNAPSHOT_KEY), the page only shows its
+// cards: nothing on it changes the budget.
 
 (function snapshotPage() {
   "use strict";
@@ -31,27 +33,99 @@
   // The cards as kept (or the ones it starts with)
   const cards = () => (Array.isArray(accountsData?.snapshot?.cards) ? accountsData.snapshot.cards : START);
 
+  // (An icon whose key stopped working: turned off in Settings, a new password, or its budget gone)
+  let keyGone = null;
+  document.addEventListener("snapshot:gone", (event) => {
+    keyGone = event.detail.gone
+      ? "The budget this icon shows was deleted, or isn't shared with you anymore."
+      : "This Snapshot icon doesn't work anymore: it was turned off in Settings, or the password changed. Log in to Prismal Planning and make a new one from Snapshot.";
+    const status = document.getElementById("dataStatus");
+    if (status) status.textContent = keyGone;
+  });
+
   window.workspaceReady.then((loaded) => {
     const status = document.getElementById("dataStatus");
     if (!loaded) {
-      if (status) status.textContent = "Couldn't load your budget data. Please refresh to try again.";
+      if (status) status.textContent = keyGone || "Couldn't load your budget data. Please refresh to try again.";
       return;
     }
     if (status) status.hidden = true;
-    document.getElementById("snapshotEdit").addEventListener("click", () => {
-      editing = !editing;
-      draw();
-    });
-    const homeButton = document.getElementById("snapshotHomeScreen");
-    const homeCard = document.getElementById("homeScreenCard");
-    homeButton.addEventListener("click", () => {
-      homeCard.hidden = !homeCard.hidden;
-      homeButton.setAttribute("aria-expanded", String(!homeCard.hidden));
-      if (!homeCard.hidden) homeCard.scrollIntoView({ block: "nearest", behavior: window.lessMotion() ? "auto" : "smooth" });
-    });
+    if (window.SNAPSHOT_KEY) {
+      startKeyed();
+    } else {
+      document.getElementById("snapshotEdit").addEventListener("click", () => {
+        editing = !editing;
+        draw();
+      });
+      document.getElementById("snapshotHomeScreen").addEventListener("click", (event) => openHomeScreenSetup(event.currentTarget));
+    }
     draw();
-    if (window.Fractals) window.Fractals.load().then(() => draw());
+    if (window.Fractals && !window.SNAPSHOT_KEY) window.Fractals.load().then(() => draw());
   });
+
+  // How to put the page on a home screen (with the login, or an icon's, just made)
+  function showHomeScreenSteps() {
+    const homeCard = document.getElementById("homeScreenCard");
+    homeCard.hidden = false;
+    document.getElementById("snapshotHomeScreen").setAttribute("aria-expanded", "true");
+    homeCard.scrollIntoView({ block: "nearest", behavior: window.lessMotion() ? "auto" : "smooth" });
+  }
+
+  // Add To Home Screen: what a no-login icon means first (anyone with it sees this budget's Snapshot), then its key, and the
+  // page opened with it, showing how to add it. Or Keep The Login: the steps for the page as it is.
+  function openHomeScreenSetup(origin) {
+    BudgetUI.openPanel({
+      origin,
+      size: "large",
+      title: "Snapshot Icon",
+      build(form, panel) {
+        const text = (line) => el("p", "panelText", line);
+        const whose = budgetInfo?.name ? `${budgetInfo.name}'s` : "this budget's";
+        form.append(
+          text("Put an icon on your phone's home screen that opens this Snapshot, with no login needed."),
+          text(`It shows ${whose} Snapshot: your cards, and the In Bank, accounts, goals, and graphs they come from. It can't change anything, and it never sees your Change Logs, notes, or calendar.`),
+          text("Anyone holding the phone, or anyone its link reaches, can see your budget's numbers this way, so only make one on a phone you keep locked, and never send its link to anyone."),
+          text("Settings turns Snapshot icons off whenever you like, and so do a new password and Sign Out Everywhere. Keep The Login puts this page on your home screen with your login instead."),
+          BudgetUI.buttonRow([
+            { label: "Make A No-Login Icon", kind: "primary", type: "submit" },
+            { label: "Keep The Login", onClick: () => { panel.close(); showHomeScreenSteps(); } },
+            { label: "Cancel", onClick: () => panel.close() }
+          ])
+        );
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          panel.setError("");
+          panel.setBusy(true);
+          const result = await budgetApi("/api/snapshot/key", {});
+          if (!result.ok || !result.data || !result.data.key) {
+            panel.setBusy(false);
+            panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't make the icon. Please try again.");
+            return;
+          }
+          const url = `/snapshot.html?key=${encodeURIComponent(result.data.key)}&setup=1`;
+          if (typeof window.transitionTo === "function") window.transitionTo(url);
+          else window.location.href = url;
+        });
+      }
+    });
+  }
+
+  // The page opened with an icon's key: only its cards, no Edit, and which budget they're from. Just made (setup=1), it
+  // shows how to add it to the home screen, and setup=1 comes off the address, so the icon's link is only the page, its
+  // key, and this device's theme (a phone's home screen app can keep its own storage, and starts from this link).
+  function startKeyed() {
+    document.getElementById("snapshotEdit").hidden = true;
+    document.getElementById("snapshotHomeScreen").hidden = true;
+    document.getElementById("snapshotKeyNote").hidden = false;
+    document.getElementById("snapshotKeyBudget").textContent = budgetInfo?.name || "your budget";
+    if (new URLSearchParams(location.search).has("setup")) {
+      document.getElementById("homeScreenLogin").hidden = true;
+      document.getElementById("homeScreenKeyed").hidden = false;
+      showHomeScreenSteps();
+      const look = window.Themes ? Themes.lookQuery() : "";
+      history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(window.SNAPSHOT_KEY)}${look ? `&${look}` : ""}`);
+    }
+  }
 
   document.addEventListener("budget:updated", () => {
     if (workspaceLoaded) draw();
@@ -225,7 +299,7 @@
       render(body) {
         const last = predictedInBank[predictedInBank.length - 1];
         if (!last) return body.append(el("p", "panelHint", "Nothing worked out past the calendar yet."));
-        numberBody(body, formatMoney(last[1]), `On ${showWeekdayDate(last[0])}, the 28th day after the budget's four weeks`, { amount: last[1] });
+        numberBody(body, formatMoney(last[1]), `On ${showWeekdayDate(last[0])}, the last day Lowest looks at (${lookAheadWords()} past the calendar)`, { amount: last[1] });
       }
     },
     "home.today": {
@@ -327,7 +401,7 @@
       title: () => "Recurring Entries Each Month",
       render(body) {
         const recurring = recurringEachMonth();
-        numberBody(body, formatMoney(recurring.costs), `In bills, and ${formatMoney(recurring.gains)} in gains`, { open: (origin) => openRecurringWindow(origin, recurring) });
+        numberBody(body, formatMoney(recurring.costs), `In bills, and ${formatMoney(recurring.gains)} in gains`, { amount: recurring.costs, open: (origin) => openRecurringWindow(origin, recurring) });
       }
     },
     "gem": {
@@ -421,6 +495,7 @@
 
   // The calendar's entries (Fractals.js) from one day through another, each day's under it
   function calendarBody(body, from, to) {
+    if (window.SNAPSHOT_KEY) return body.append(el("p", "panelHint", "Your calendar's entries show here when you're logged in (a no-login icon doesn't read your calendar)."));
     if (!window.Fractals || !window.Fractals.data()) return body.append(el("p", "panelHint", "Loading your calendar..."));
     const items = [];
     for (let day = from; day <= to; day = addDays(day, 1)) {

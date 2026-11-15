@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/budgetStyle.css?v=31e535ffeb">
     <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
     <title>Prismal Planning - Budgets, Calendars &amp; Spreadsheets</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -64,61 +64,69 @@
       <main>
         <p id="dataStatus" class="dataStatus">Loading...</p>
 
-        <!-- The account's budgets and the ones shared with it (Budgets.js renderManager, Spreadsheets Page.js) -->
-        <section id="budgets" class="budgetCard settingsCard" aria-labelledby="budgetsHeading" hidden>
-          <h3 id="budgetsHeading">Budgets</h3>
-          <p>Keep more than one budget, each with its own calendar, entries, Equity, and Bob, and share any of yours with other Prismal Planning accounts. The list above the buttons at the top of every page switches between them.</p>
-          <div id="budgetManager"></div>
-          <div class="panelButtons">
-            <button id="newBudgetButton" type="button" class="budgetButton primary">New Budget</button>
-          </div>
-          <p class="panelHint">Everyone a budget is shared with can open it and change anything in it. Only its owner can share it, rename it, or delete it, and your first budget can't be deleted.</p>
-        </section>
+        <!-- The budgets and Calendar Fractals, then the connected calendars and spreadsheets: side by side on a wide
+             screen (.wideColumns) -->
+        <div class="wideColumns">
+          <div class="wideColumn">
+            <!-- The account's budgets and the ones shared with it (Budgets.js renderManager, Spreadsheets Page.js) -->
+            <section id="budgets" class="budgetCard settingsCard" aria-labelledby="budgetsHeading" hidden>
+              <h3 id="budgetsHeading">Budgets</h3>
+              <p>Keep more than one budget, each with its own calendar, entries, Equity, and Bob, and share any of yours with other Prismal Planning accounts. The list above the buttons at the top of every page switches between them.</p>
+              <div id="budgetManager"></div>
+              <div class="panelButtons">
+                <button id="newBudgetButton" type="button" class="budgetButton primary">New Budget</button>
+              </div>
+              <p class="panelHint">Everyone a budget is shared with can open it and change anything in it. Only its owner can share it, rename it, or delete it, and your first budget can't be deleted.</p>
+            </section>
 
-        <!-- The account's Calendar Fractals: its calendars, each a name and a color, whose entries show on Home's calendar
-             (Fractals.js renderManager) -->
-        <section id="fractals" class="budgetCard settingsCard" aria-labelledby="fractalsHeading" hidden>
-          <h3 id="fractalsHeading">Calendar Fractals</h3>
-          <p>Your calendars. Each one has a name and a color, and its entries show on Home's calendar in that color while it's checked in the Calendar Fractals list there. Add entries with New Entry on Home (Calendar Entry), or with a Quick Calendar icon. A linked one shows another calendar's entries (one connected below, or a calendar's link).</p>
-          <div id="fractalManager"></div>
-          <div class="panelButtons">
-            <button id="newFractalButton" type="button" class="budgetButton primary">New Calendar Fractal</button>
-          </div>
-          <p class="panelHint">Deleting a fractal deletes its entries too (your last one can't be deleted). Each one's calendar link, for other calendar apps, is in its Edit window (Share), and in <a href="/settings.html#fractalLinksCard">Settings</a>. A fractal with your work shifts can be connected below, to turn them into paychecks.</p>
-        </section>
+            <!-- The account's Calendar Fractals: its calendars, each a name and a color, whose entries show on Home's calendar
+                 (Fractals.js renderManager) -->
+            <section id="fractals" class="budgetCard settingsCard" aria-labelledby="fractalsHeading" hidden>
+              <h3 id="fractalsHeading">Calendar Fractals</h3>
+              <p>Your calendars. Each one has a name and a color, and its entries show on Home's calendar in that color while it's checked in the Calendar Fractals list there. Add entries with New Entry on Home (Calendar Entry), or with a Quick Calendar icon. A linked one shows another calendar's entries (one connected below, or a calendar's link).</p>
+              <div id="fractalManager"></div>
+              <div class="panelButtons">
+                <button id="newFractalButton" type="button" class="budgetButton primary">New Calendar Fractal</button>
+              </div>
+              <p class="panelHint">Deleting a fractal deletes its entries too (your last one can't be deleted). Each one's calendar link, for other calendar apps, is in its Edit window (Share), and in <a href="/settings.html#fractalLinksCard">Settings</a>. A fractal with your work shifts can be connected below, to turn them into paychecks.</p>
+            </section>
 
-        <!-- Connected calendars: each one's button (change it), On/Off, Delete, and its paychecks and shifts, with what's
-             wrong under it (Calendars Page.js; reading them and working out their pay is Calendars.js) -->
-        <section id="calendarsView" class="budgetCard settingsCard" aria-labelledby="calendarsHeading" hidden>
-          <h3 id="calendarsHeading">Connected Calendars</h3>
-          <p>Keep your work shifts on a calendar (Apple, Google, Outlook, or a work scheduling app)? Connect it with your pay, and every paycheck its shifts come to lands on your calendar on its payday, behind a ➕, worked out like a paystub (overtime, night rates, deductions, and taxes), and following the calendar as shifts are added, moved, or deleted.</p>
-          <!-- Like spreadsheets, connecting one needs a verified email (the note above has the button) -->
-          <p id="calendarsVerify" class="panelHint calendarsVerify" role="status" hidden>Connecting a calendar needs a verified email too: see the note under Connected Spreadsheets, below.</p>
-          <ul id="calendarList" class="sheetList"></ul>
-          <div class="panelButtons">
-            <button id="addCalendarButton" type="button" class="budgetButton primary">Add Calendar</button>
           </div>
-        </section>
+          <div class="wideColumn">
+            <!-- Connected calendars: each one's button (change it), On/Off, Delete, and its paychecks and shifts, with what's
+                 wrong under it (Calendars Page.js; reading them and working out their pay is Calendars.js) -->
+            <section id="calendarsView" class="budgetCard settingsCard" aria-labelledby="calendarsHeading" hidden>
+              <h3 id="calendarsHeading">Connected Calendars</h3>
+              <p>Keep your work shifts on a calendar (Apple, Google, Outlook, or a work scheduling app)? Connect it with your pay, and every paycheck its shifts come to lands on your calendar on its payday, behind a ➕, worked out like a paystub (overtime, night rates, deductions, and taxes), and following the calendar as shifts are added, moved, or deleted.</p>
+              <!-- Like spreadsheets, connecting one needs a verified email (the note above has the button) -->
+              <p id="calendarsVerify" class="panelHint calendarsVerify" role="status" hidden>Connecting a calendar needs a verified email too: see the note under Connected Spreadsheets, below.</p>
+              <ul id="calendarList" class="sheetList"></ul>
+              <div class="panelButtons">
+                <button id="addCalendarButton" type="button" class="budgetButton primary">Add Calendar</button>
+              </div>
+            </section>
 
-        <!-- Connected spreadsheets: each one's button (change it), On/Off, and Delete, with what's wrong under it
-             (Spreadsheets Page.js; reading them is Spreadsheets.js) -->
-        <section id="sheetsView" class="budgetCard settingsCard" aria-labelledby="sheetsHeading" hidden>
-          <h3 id="sheetsHeading">Connected Spreadsheets</h3>
-          <p>Keep entries in your own spreadsheet (Google Sheets, Excel, and more)? Connect it, and they land on your calendar from today on, behind a ➕ (➕❗️ Regular, ➕✖️ Hidden, ➕⭕️ Transfer), following the spreadsheet as it changes.</p>
-          <!-- Connecting spreadsheets needs a verified email (Spreadsheets Page.js shows this until it is) -->
-          <div id="sheetsVerify" class="sheetsVerify" role="status" hidden>
-            <p id="sheetsVerifyText"></p>
-            <div class="panelButtons">
-              <button id="sheetsVerifyButton" type="button" class="budgetButton primary">Send Verification Email</button>
-            </div>
+            <!-- Connected spreadsheets: each one's button (change it), On/Off, and Delete, with what's wrong under it
+                 (Spreadsheets Page.js; reading them is Spreadsheets.js) -->
+            <section id="sheetsView" class="budgetCard settingsCard" aria-labelledby="sheetsHeading" hidden>
+              <h3 id="sheetsHeading">Connected Spreadsheets</h3>
+              <p>Keep entries in your own spreadsheet (Google Sheets, Excel, and more)? Connect it, and they land on your calendar from today on, behind a ➕ (➕❗️ Regular, ➕✖️ Hidden, ➕⭕️ Transfer), following the spreadsheet as it changes.</p>
+              <!-- Connecting spreadsheets needs a verified email (Spreadsheets Page.js shows this until it is) -->
+              <div id="sheetsVerify" class="sheetsVerify" role="status" hidden>
+                <p id="sheetsVerifyText"></p>
+                <div class="panelButtons">
+                  <button id="sheetsVerifyButton" type="button" class="budgetButton primary">Send Verification Email</button>
+                </div>
+              </div>
+              <ul id="sheetList" class="sheetList"></ul>
+              <div class="panelButtons">
+                <button id="addSheetButton" type="button" class="budgetButton primary">Add Spreadsheet</button>
+              </div>
+              <!-- Other emails are added in Settings, under Email (they sign in too) -->
+              <p class="panelHint sheetsOtherEmails">Share spreadsheets with admin@prismalplanning.org from a Google account with another email? Add that email in <a href="/settings.html#email">Settings, under Email</a> (Other Emails), and open the link we send it. Then the spreadsheets it shares can be connected too.</p>
+            </section>
           </div>
-          <ul id="sheetList" class="sheetList"></ul>
-          <div class="panelButtons">
-            <button id="addSheetButton" type="button" class="budgetButton primary">Add Spreadsheet</button>
-          </div>
-          <!-- Other emails are added in Settings, under Email (they sign in too) -->
-          <p class="panelHint sheetsOtherEmails">Share spreadsheets with admin@prismalplanning.org from a Google account with another email? Add that email in <a href="/settings.html#email">Settings, under Email</a> (Other Emails), and open the link we send it. Then the spreadsheets it shares can be connected too.</p>
-        </section>
+        </div>
 
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
@@ -156,7 +164,7 @@
             <li>To change one entry for one day, tap that day on the calendar, then tap the entry. That keeps your change for that day (like ❗️➕) even when the spreadsheet changes.</li>
             <li>Once a day passes, its spreadsheet entries stay as they were (like ❗️➕), even if the spreadsheet changes later or you delete it.</li>
             <li>An entry with the same title and refraction type as a recurring entry on the same day is left out (a day has one of each), and the spreadsheet's box says so.</li>
-            <li>They count everywhere your budget looks ahead: In Bank, Lowest, the 28 days after the calendar, Search, reminders, and Bob's page.</li>
+            <li>They count everywhere your budget looks ahead: In Bank, Lowest (through its last day), Search, reminders, and Bob's page.</li>
             <li>In a budget shared with others, everyone it's shared with sees its spreadsheets and calendars (their links and a calendar's pay settings too), and they're read again on their devices as well. A spreadsheet shared only with admin@prismalplanning.org is read again just for the account that connected it.</li>
             <li>Turn on <strong>Placeholder</strong> (under the parts) to make every entry it adds a placeholder, like for a list of estimates: they show in yellow, count like any entry until their day passes, then they're deleted instead of staying.</li>
           </ul>

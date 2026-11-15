@@ -23,10 +23,19 @@ let sheetsData = null;   // Connected spreadsheets: { version, list: [connection
 let notesData = null;    // Entries' notes: { version, entries, recurring } (see ENTRY NOTES)
 
 // Data Sizes
-// The calendar is always exactly 4x7. Every other table keeps all of its stored rows
-// (never truncated), padded to at least these columns and header rows.
-let calendarRows = 4;
+// The calendar is always exactly five weeks, 5x7 (a budget saved with four is given its fifth week by the daily update,
+// see savedCalendarRows). Every other table keeps all of its stored rows (never truncated), padded to at least these
+// columns and header rows.
+const CALENDAR_ROWS = 5;
+const CALENDAR_DAYS = CALENDAR_ROWS * 7;
+let calendarRows = CALENDAR_ROWS;
 let calendarCols = 7;
+let savedCalendarRows = CALENDAR_ROWS; // How many weeks the stored calendar had (4 before budgets were five weeks)
+
+// How far Lowest looks past the calendar (accountsData.lookAhead, left out while it's this default): Home's Lowest card,
+// Bob, Snapshot, Quick Budget, and reminders all count In Bank from today through that day (see lookAheadEnd)
+const LOOK_AHEAD_DEFAULT = { count: 2, unit: "months" };
+const LOOK_AHEAD_MOST = { days: 366, weeks: 52, months: 12 };
 const TABLE_SHAPES = {
   recurring:  { cols: 6, minRows: 2 },  // [0] summary row, [1] column titles
   tracker:    { cols: 5, minRows: 1 },  // [0] column titles
@@ -77,24 +86,24 @@ let notesEdited = false;
 // the page loaded; today is the budget's day, which is the same, except it never goes back before the last
 // day the budget was brought up to date (see setBudgetDay in loadWorkspace).
 const pageDay = createSafeMidnight(new Date());
-let today, yesterday, gridDates, gridStartDate, gridEndDate, nextFourStart;
+let today, yesterday, gridDates, gridStartDate, gridEndDate, afterCalendarStart;
 setBudgetDay(pageDay);
 
-// The budget's day, and the four-week calendar (Sunday through Saturday) that starts with its week.
+// The budget's day, and the five-week calendar (Sunday through Saturday) that starts with its week.
 // Days are counted on the calendar (addDays), never in 24-hour steps, so daylight saving time can't skip one.
 function setBudgetDay(day) {
   today = createSafeMidnight(day);
   yesterday = addDays(today, -1);
   gridDates = getGridDates();
   gridStartDate = gridDates[0][0];
-  gridEndDate = gridDates[3][6];
-  nextFourStart = addDays(gridEndDate, 1);
+  gridEndDate = gridDates[CALENDAR_ROWS - 1][6];
+  afterCalendarStart = addDays(gridEndDate, 1);
 }
 
 // BOB (his message on Home, see commenceBob)
 let visibleUncommons = 0;
 let visibleNegatives = 0;
-let nextFourNegative = false;
+let aheadNegative = false;
 const greetingPresets = ["Hey there ", "Hi ", "What's up ", "How's it going ", "Hello ", "Howdy "];
 const nicknamePresets = ["friend! ", "buddy! ", "pal! ", "dude! ", "man! "];
 const allClearPresets = ["Everything here looks great. ", "I don't see any issues right now. ", "Seems everything is in order. "];
@@ -140,11 +149,33 @@ const GETTING_STARTED_KEY = "prismal_getting_started";
 // #region META FUNCTIONS
 // =====================================================================
 
+// A Snapshot icon's key (snapshot.html?key=, Boot.js): the page loads the budget the icon was made in with it, and only
+// looks. Nothing it works out (the daily update, the reminders' plan) is saved, and it never asks for anything that needs
+// a login.
+const SNAPSHOT_KEY = typeof window.SNAPSHOT_KEY === "string" ? window.SNAPSHOT_KEY : null;
+const SNAPSHOT_RELOAD_MS = 15 * 60 * 1000; // How old an icon's page gets before it loads again (as it's looked at)
+let snapshotLoadedAt = 0;
+
+// The budget from the server: signed in (budgetLoadAddress), or with a Snapshot icon's key
+function fetchBudget() {
+  if (SNAPSHOT_KEY) {
+    snapshotLoadedAt = Date.now();
+    return fetch(`${window.API_BASE_URL}/api/snapshotkey/load`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: SNAPSHOT_KEY }) });
+  }
+  return fetch(budgetLoadAddress(), { headers: { Authorization: `Bearer ${localStorage.getItem("prismal_jwt")}`, "Content-Type": "application/json" } });
+}
+
+// A Snapshot icon whose key stopped working (turned off in Settings, a new password, or its budget gone): its page says so
+function snapshotKeyGone(response) {
+  workspaceLoaded = false;
+  document.dispatchEvent(new CustomEvent("snapshot:gone", { detail: { gone: response.status === 404 } }));
+}
+
 async function loadWorkspace() {
   isDailyUpdate = true;
   const token = localStorage.getItem('prismal_jwt');
 
-  if (!token) {
+  if (!token && !SNAPSHOT_KEY) {
     console.error("No active session found. Redirecting to login...");
     if (typeof window.transitionTo === 'function') {
       window.transitionTo("/login.html", true, "right");
@@ -157,14 +188,12 @@ async function loadWorkspace() {
   try {
     const requestedAt = performance.now(); // The daily update's change log starts when the budget is asked for
 
-    const response = await fetch(budgetLoadAddress(), {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await fetchBudget();
 
+    if (SNAPSHOT_KEY && (response.status === 401 || response.status === 404)) {
+      snapshotKeyGone(response);
+      return false;
+    }
     // The session ended (signed out everywhere, a new password, or it expired): sign out here too
     if (response.status === 401) {
       signedOutElsewhere();
@@ -222,9 +251,10 @@ async function loadWorkspace() {
 
     // Only mark the days as processed once the processed data is stored. If a save failed,
     // the database still has the old calendar AND the old date, so the next load redoes them.
-    if (allSaved && pendingProcessedDate) {
+    if (allSaved && pendingProcessedDate && !SNAPSHOT_KEY) {
       if (await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
     }
+    if (SNAPSHOT_KEY) return true;
     await holdQuickEntries(data.quick_entries); // Made with Quick Budget icons: this device's are added, the rest wait on Home
     queueReminderPlanSync();
     return true;
@@ -259,7 +289,7 @@ function withBudget(address) {
 }
 
 // Routes that are about the open budget (the rest are about the account)
-const BUDGET_ROUTES = /^\/api\/(data|quick)\/|^\/api\/notify\/plan$/;
+const BUDGET_ROUTES = /^\/api\/(data|quick|snapshot)\/|^\/api\/notify\/plan$/;
 
 // The budget the page loaded: { id, name, first, owned, owner, shared } (see Budgets.js), or null before it has
 let budgetInfo = null;
@@ -313,8 +343,12 @@ function readLoadedTables(data) {
     return null;
   }
 
-  // Each table back as rows of cells. Tables keep every stored row (only the calendar has a fixed size).
-  calendarData   = normalizeApiGrid(parseDB(data.calendar, "calendar"), calendarRows, calendarCols);
+  // Each table back as rows of cells. Tables keep every stored row (only the calendar has a fixed size: one saved with
+  // four weeks gets an empty fifth here, which the daily update fills in like a week that just came onto the calendar).
+  const storedCalendar = parseDB(data.calendar, "calendar");
+  const storedDays = Array.isArray(storedCalendar) ? storedCalendar.flat(Infinity).length : 0;
+  savedCalendarRows = storedDays > 0 && storedDays <= 28 ? 4 : CALENDAR_ROWS;
+  calendarData   = normalizeApiGrid(storedCalendar, calendarRows, calendarCols);
   recurringData  = normalizeApiTable(parseDB(data.recurring, "recurring"), TABLE_SHAPES.recurring);
   trackerData    = normalizeApiTable(parseDB(data.tracker, "tracker"), TABLE_SHAPES.tracker);
   futureData     = normalizeApiTable(parseDB(data.future, "future"), TABLE_SHAPES.future);
@@ -371,8 +405,8 @@ through the end of today's grid is laid out as one timeline and walked once, in 
     and recurring entries written in, exactly like the daily runs would have done
   - Every missed day gets equity processed and its recurring entries turned into temps, once each
   - Days that scrolled in get In Bank math, chained from the last known balance
-Then every week before today's week goes to History in one insert, and today's 4 weeks
-become the new calendar.
+Then every week before today's week goes to History in one insert, and today's 5 weeks
+become the new calendar. (A budget saved with four weeks counts its fifth as one that scrolled in.)
 */
 async function performDailyUpdate() {
   formEntryRow[2] = "🕛 Daily Update";
@@ -387,13 +421,13 @@ async function performDailyUpdate() {
   }
 
   // 2. Lay every week from the saved grid to the end of today's grid out as one timeline
-  // Rows 0-3 are the saved calendar; any rows after that are weeks that scrolled in while away
+  // The first rows are the saved calendar; any rows after that are weeks that scrolled in while away
   let timeline = [];
-  for (let w = 0; w < weeksToScroll + 4; w++) {
+  for (let w = 0; w < weeksToScroll + CALENDAR_ROWS; w++) {
     let row = [];
     for (let c = 0; c < 7; c++) {
       let date = addDays(oldGridStart, w * 7 + c);
-      let isNew = w >= 4;
+      let isNew = w >= savedCalendarRows;
       let text = isNew ? "" : String(calendarData[w][c] ?? "").trim();
       if (text === "") text = formatToMMDD(date);
       row.push({ date, text, isNew });
@@ -517,8 +551,10 @@ async function performDailyUpdate() {
     weeksScrolled += weeksToScroll;
   }
 
-  // 6. Today's 4 weeks become the calendar
+  // 6. Today's 5 weeks become the calendar (saved with its fifth week, if it had only four)
   calendarData = timeline.slice(weeksToScroll).map(row => row.map(cell => cell.text));
+  if (savedCalendarRows < CALENDAR_ROWS) calendarEdited = true;
+  savedCalendarRows = CALENDAR_ROWS;
 
   // 7. Remove Future Dates entries that were written into missed days (by their rows' places, so before anything else
   // takes a row out)
@@ -579,7 +615,7 @@ function dropHistoryPlaceholders(catchup = null) {
 // come off. Returns how many.
 function dropEarlyPlaceholders() {
   let dropped = 0;
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] < today) continue;
       const kept = dropPlaceholders(calendarData[r][c], gridDates[r][c]);
@@ -1039,7 +1075,7 @@ function isCatchupLine(line) {
 // (the budget's as it was before a change; the daily update's calendar is still the saved one).
 function lastCatchupDay(calendar = calendarData, history = historyData, calendarStart = gridStartDate) {
   const hasCatchup = (cellText) => String(cellText ?? "").split("\n").slice(1).some(text => isCatchupLine(readLine(text)));
-  for (let r = 3; r >= 0; r--) {
+  for (let r = CALENDAR_ROWS - 1; r >= 0; r--) {
     for (let c = 6; c >= 0; c--) {
       const day = addDays(calendarStart, r * 7 + c);
       if (day <= today && hasCatchup(calendar[r]?.[c])) return day;
@@ -1116,7 +1152,7 @@ function holdPastBank(before) {
     const catchupsHeld = !!catchup && date < catchup;
     return { held: round((entriesHeld ? entries : 0) + (catchupsHeld ? catchups : 0)), counts: round((entriesHeld ? 0 : entries) + (catchupsHeld ? 0 : catchups)) };
   };
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] >= today) continue;
       const { held } = split(gridDates[r][c], oldCalendar[r][c], calendarData[r][c]);
@@ -1508,6 +1544,7 @@ function runBudgetAction(logType, change, undo = null) {
 // took: from when it was asked for to when the page had drawn it.
 async function processBudgetAction(logType, change, undo = null, requestedAt = performance.now()) {
   if (!workspaceLoaded) return { ok: false, message: "Your budget hasn't finished loading yet." };
+  if (SNAPSHOT_KEY) return { ok: false, message: "This icon only shows your Snapshot. Open Prismal Planning to change anything." };
 
   // The page stayed open past midnight (or the device moved to another time zone): reload so the daily
   // update runs before any change
@@ -1738,7 +1775,7 @@ function otherDevicesEdits() {
 // Remove everything but unique entries (and temps) from the calendar. Recurring entries, connected
 // spreadsheets' entries, In Bank, Gains/Costs and the next-28 lines are all rebuilt by refreshBudgetData().
 function stripRecurringEntries() {
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       let cellText = String(calendarData[r][c]).trim();
       let lines = cellText.split("\n").filter(l => l.trim() !== "");
@@ -1764,10 +1801,10 @@ function refreshBudgetData() {
   // The spreadsheet ran once per execution; the page runs this many times, so reset per run
   visibleUncommons = 0;
   visibleNegatives = 0;
-  nextFourNegative = false;
+  aheadNegative = false;
   recurringToDeleteIndexes = [];
 
-  aheadDaysCache = null; // (The 28 days after the calendar are worked out again when they're next looked at)
+  aheadDaysCache = null; // (The days after the calendar are worked out again when they're next looked at)
   normalizeFrequencies();
   upcomingEntriesMaintenance();
   writeRecurring();
@@ -2093,7 +2130,7 @@ function injectOrDefer(action, dateObj, newAmt, title, sprite = "❗️", outDat
 
   // 1. Active Grid
   if (dateObj >= gridStartDate && dateObj <= gridEndDate) {
-    currentLoop: for (let r = 0; r < 4; r++) {
+    currentLoop: for (let r = 0; r < CALENDAR_ROWS; r++) {
       for (let c = 0; c < 7; c++) {
         if (formatToMMDD(gridDates[r][c]) === targetMMDD) {
           let lines = String(calendarData[r][c]).split("\n");
@@ -2394,7 +2431,7 @@ function resolveEndDate(endDate, current) {
 function moveRecurringTemps(oldClean, oldSpecial, newTitle, newSpecial) {
   // (A placeholder temp stays one, and a % one stays one)
   const isOldTemp = (sprite, title) => baseSprite(String(sprite ?? "").trim()) === oldSpecial + "✔️" && cleanString(title) === oldClean;
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] < today) continue;
       let lines = String(calendarData[r][c]).split("\n");
@@ -2534,8 +2571,8 @@ function describeAliases(text) {
 // the month it's added, Separate Interest and its interest balance then (see accountInterest), escrow a month, its day,
 // and what was due then (see accountEscrow), and the day interest counts from (see interestPeriodStart)].
 // accountsData.coming: each account's changes after today, which the Quick Budget page counts once their day comes (see
-// accountChangesAhead). accountsData.inBank: In Bank from today through the 28 days after the calendar, for the Quick
-// Entry page (see inBankAhead). The default account, Savings, is always there and can't be deleted.
+// accountChangesAhead). accountsData.inBank: In Bank from today through Lowest's last day, for the Quick Budget page
+// (see inBankAhead). accountsData.lookAhead: how far past the calendar that is (see LOWEST'S LOOK AHEAD). The default account, Savings, is always there and can't be deleted.
 
 const ACCOUNTS_VERSION = 3;
 const DEFAULT_ACCOUNT = "Savings";
@@ -2612,7 +2649,7 @@ function eachEntryLine(visit) {
     if (line.amount === 0 && entryMark(line.sprite)) return;
     visit(text, line, date, place);
   };
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) String(calendarData[r][c] ?? "").split("\n").slice(1).forEach(text => add(text, gridDates[r][c], "calendar"));
   }
   for (let r = 1; r < historyData.length; r++) {
@@ -2674,11 +2711,11 @@ function updateAccountBalances() {
   accountsData.inBank = inBankAhead();
 }
 
-// In Bank on each day from today through the 28 days after the calendar: [["YYYY-MM-DD", amount], ...]. The Quick
-// Entry page shows today's and the lowest from these (the API's readInBank adds the entries waiting for the budget).
+// In Bank on each day from today through Lowest's last day: [["YYYY-MM-DD", amount], ...]. The Quick Budget page
+// shows today's and the lowest from these (the API's readInBank adds the entries waiting for the budget).
 function inBankAhead() {
   const days = [];
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       const inBank = gridDates[r][c] >= today ? readInBank(calendarData[r][c]) : null;
       if (inBank !== null) days.push([formatToYMD(gridDates[r][c]), inBank]);
@@ -2701,15 +2738,15 @@ function accountChangesAhead() {
       coming.push([account.name, formatToYMD(day), Math.round(change * 100) / 100]);
     }
   };
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) if (gridDates[r][c] > today) add(calendarData[r][c], gridDates[r][c]);
   }
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
   const lastDay = addDays(gridEndDate, 28);
-  const sheetDays = sheetEntriesByDay(nextFourStart, lastDay);
+  const sheetDays = sheetEntriesByDay(afterCalendarStart, lastDay);
   const fullUntil = fullCatchUpEnd(today);
-  for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
+  for (let day = afterCalendarStart; day <= lastDay; day = addDays(day, 1)) {
     add(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays, day < fullUntil), day);
   }
   return coming;
@@ -2818,7 +2855,7 @@ function accountSummaries(interestUntil = gridEndDate, calendarStart = gridStart
       summaries.get(account.index).entries.push({ date, change, sprite, title: splitAccount(title).title });
     }
   };
-  for (let r = 3; r >= 0; r--) {
+  for (let r = CALENDAR_ROWS - 1; r >= 0; r--) {
     for (let c = 6; c >= 0; c--) addCell(calendarData[r][c], () => addDays(calendarStart, r * 7 + c));
   }
   const historyDay = (lines) => createSafeMidnight(lines[0].trim(), true);
@@ -2870,16 +2907,16 @@ function projectBudget(until, summaries = accountSummaries()) {
   const accounts = accountTitleMap();
   const coming = new Map(summaries.map(summary => [summary.index, []]));
   const inBank = [];
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] >= today && gridDates[r][c] <= until) inBank.push({ date: gridDates[r][c], amount: readInBank(calendarData[r][c]) ?? 0 });
     }
   }
-  let balance = readInBank(calendarData[3][6]) ?? 0;
+  let balance = readInBank(calendarData[CALENDAR_ROWS - 1][6]) ?? 0;
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
-  const sheetDays = sheetEntriesByDay(nextFourStart, until);
-  for (let day = nextFourStart; day <= until; day = addDays(day, 1)) {
+  const sheetDays = sheetEntriesByDay(afterCalendarStart, until);
+  for (let day = afterCalendarStart; day <= until; day = addDays(day, 1)) {
     const text = dayAfterCalendar(day, recurringRows, futureByDate, sheetDays);
     balance = Math.round((balance + dayMath(text.split("\n")).bankChange) * 100) / 100;
     inBank.push({ date: day, amount: balance });
@@ -3633,7 +3670,7 @@ function renameAccountEntries(oldClean, newName) {
     return renamed ? combineSameEntries(lines).join("\n") : cellText;
   };
 
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) calendarData[r][c] = renameCell(calendarData[r][c]);
   }
   for (let r = 1; r < historyData.length; r++) {
@@ -4338,7 +4375,7 @@ function moveDayNotes(oldTitle, oldSprite, newTitle, newSprite, from) {
   const oldPart = `|${cleanString(oldTitle)}|${NOTE_TYPES[getSpecialType(oldSprite)]}`;
   const first = formatToYMD(from);
   const own = new Set();
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       for (const line of ownEntryLines(calendarData[r][c])) own.add(entryNoteKey(gridDates[r][c], readLine(line).title, readLine(line).sprite));
     }
@@ -4401,7 +4438,7 @@ function dropStrayNotes() {
         if (!line.blank && !line.system && line.title) there.add(entryNoteKey(date, line.title, line.sprite));
       }
     };
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < CALENDAR_ROWS; r++) {
       for (let c = 0; c < 7; c++) addDay(gridDates[r][c], calendarData[r][c]);
     }
     for (let r = 1; r < historyData.length; r++) {
@@ -4559,7 +4596,7 @@ function remindedEntries() {
   const lastDate = createSafeMidnight(latest, true);
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
-  const sheetDays = lastDate > gridEndDate ? sheetEntriesByDay(nextFourStart, lastDate) : new Map();
+  const sheetDays = lastDate > gridEndDate ? sheetEntriesByDay(afterCalendarStart, lastDate) : new Map();
   const wanted = new Map(keys);
   const days = new Set(keys.map(([key]) => key.slice(0, 10)));
   for (const ymd of days) {
@@ -4962,7 +4999,7 @@ function historyPlan(plan, pool) {
 // land again, and the budget works out In Bank again)
 function calendarPlan(plan, pool, holds) {
   const mine = new Map();
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) mine.set(gridDates[r][c].getTime(), ownEntryLines(calendarData[r][c]));
   }
   const theirs = new Map([...pool].filter(([time]) => mine.has(time)).map(([time, day]) => [time, day.lines]));
@@ -4971,7 +5008,7 @@ function calendarPlan(plan, pool, holds) {
   const count = [...mine].reduce((sum, [time, lines]) => sum + mergeKeyed(keyed(lines), keyed(theirs.get(time)), null).clashes, 0);
   const lines = (days) => [...days.values()].reduce((sum, list) => sum + list.length, 0);
   plan("calendar", "Home's Calendar", "entries", lines(mine), lines(theirs), count, (choice) => {
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < CALENDAR_ROWS; r++) {
       for (let c = 0; c < 7; c++) {
         const time = gridDates[r][c].getTime();
         const merged = mergeKeyed(keyed(mine.get(time)), keyed(theirs.get(time)), choice).items;
@@ -5021,7 +5058,7 @@ function uploadBackup(backup, choices) {
 //   - Changing one for its day (or deleting it) makes a temp, like ❗️➕, that keeps the spreadsheet's entry
 //     off that day; a unique entry with its title and type takes in its amount (it becomes a temp)
 //   - Once a day passes its entries stay as they were (they turn into temps, see performDailyUpdate)
-//   - The next 28 days after the calendar, Lowest, Search, reminders, and Bob count them too
+//   - The days after the calendar, Lowest, Search, reminders, and Bob count them too
 // A day has one entry per title and type, so an entry with the title and type of a recurring entry that lands
 // the same day is left out (the Budgets, Calendars & Spreadsheets page says so). A spreadsheet that's off keeps its entries (it's
 // read again when it's turned back on) and its temps; deleting one turns its temps from today on into unique entries.
@@ -5373,7 +5410,7 @@ function scheduledHit(title, date, special = null, mark = null) {
 function writeSheetEntries() {
   const days = sheetEntriesByDay(today, gridEndDate);
   if (days.size === 0) return;
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       const day = days.get(gridDates[r][c].getTime());
       if (day) calendarData[r][c] = writeSheetsToCell(calendarData[r][c], day, gridDates[r][c]);
@@ -5419,7 +5456,7 @@ function releaseSheetTemps() {
     const special = getSpecialType(sprite);
     return baseSprite(String(sprite).trim()) === special + SHEET_MARK && !known.has(cleanString(title) + "|" + special);
   };
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] < today) continue;
       let lines = String(calendarData[r][c]).split("\n");
@@ -5697,7 +5734,7 @@ function search(query, calendar = calendarData) {
       addIfFound(cellDate, line.amount, line.sprite, line.title);
     }
   };
-  for (let r = 3; r >= 0; r--) {
+  for (let r = CALENDAR_ROWS - 1; r >= 0; r--) {
     for (let c = 6; c >= 0; c--) {
       if (inRange(gridDates[r][c].getTime())) searchCellLines(calendar[r][c], gridDates[r][c]);
     }
@@ -5865,7 +5902,7 @@ function writeRecurring() {
     const special = getSpecialType(String(sprite || ""));
     const parsed = parseRecurringRow(row);
     calendarChecks:
-    for (let r = 3; r >= 0; r--) {
+    for (let r = CALENDAR_ROWS - 1; r >= 0; r--) {
       for (let c = 6; c >= 0; c--) {
         const cellDate = gridDates[r][c];
         if (cellDate.getTime() < todayTime) break calendarChecks;
@@ -5940,7 +5977,7 @@ function releaseEndedTemps() {
     return lastDay ? Math.max(addDays(lastDay, 1).getTime(), today.getTime()) : null;
   };
 
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       let lines = String(calendarData[r][c]).split("\n");
       let changed = false;
@@ -5982,7 +6019,7 @@ function organizeCellEntries() {
   function extractSortingTitle(wholeLine) {
     return cleanString(getParts(wholeLine).slice(2).join(" "));
   }
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       let oldLines = combineSameEntries(calendarData[r][c].split("\n"));
       let newLines = [];
@@ -6052,7 +6089,7 @@ function writeBudgetMath() {
   pruneBankHolds();
   let lastInBank = readLatestHistoryInBank();
   let lowest = Infinity;
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       let lines = calendarData[r][c].split("\n");
       let { gains, costs, bankChange } = dayMath(lines);
@@ -6078,14 +6115,14 @@ function writeBudgetMath() {
     }
   }
 
-  // [0] lowest in the next 28 days line, [1] day 28 In Bank line, [2] lowest raw number
+  // [0] the lowest after the calendar's line, [1] In Bank on Lowest's last day's line, [2] the lowest as a number
   let predictionValues = getPredictionData(lastInBank);
-  let lastCellLinesArray = calendarData[3][6].split("\n");
+  let lastCellLinesArray = calendarData[CALENDAR_ROWS - 1][6].split("\n");
   lastCellLinesArray.splice(2, 0, predictionValues[1]);
   lastCellLinesArray.splice(2, 0, predictionValues[0]);
-  calendarData[3][6] = lastCellLinesArray.join("\n");
+  calendarData[CALENDAR_ROWS - 1][6] = lastCellLinesArray.join("\n");
 
-  if (predictionValues[2] < 0) nextFourNegative = true;
+  if (predictionValues[2] < 0) aheadNegative = true;
   if (predictionValues[2] < lowest) lowest = predictionValues[2];
   lowestInBank = lowest === Infinity ? 0 : lowest;
 }
@@ -6111,59 +6148,104 @@ function dayMath(lines) {
   return { gains, costs, bankChange };
 }
 
-// In Bank on each of the 28 days after the calendar, as getPredictionData works it out: [[Date, amount], ...] (for the
-// Quick Budget page, see inBankAhead)
+// In Bank on each day after the calendar through Lowest's last day, as getPredictionData works it out: [[Date, amount],
+// ...] (for the Quick Budget page, see inBankAhead)
 let predictedInBank = [];
 
-// The 28 days after the calendar: lowest balance (and when) and the balance on day 28, with recurring entries,
-// connected spreadsheets' entries, and Future Dates. Also counts uncommon recurring entries (every 3 months or
-// less often) visible from today on.
+// LOWEST'S LOOK AHEAD
+// Lowest counts In Bank from today through a number of days, weeks, or months past the calendar, two months to start:
+// accountsData.lookAhead { count, unit }, kept with the budget so every device, Quick Budget, and reminders agree.
+
+// How far past the calendar Lowest looks
+function lookAhead() {
+  return normalizeLookAhead(accountsData?.lookAhead) || { ...LOOK_AHEAD_DEFAULT };
+}
+
+// A stored look ahead, checked: { count, unit }, or null when it isn't one
+function normalizeLookAhead(value) {
+  if (!value || typeof value !== "object" || !Object.hasOwn(LOOK_AHEAD_MOST, value.unit)) return null;
+  const count = Number(value.count);
+  if (!Number.isInteger(count) || count < 1 || count > LOOK_AHEAD_MOST[value.unit]) return null;
+  return { count, unit: value.unit };
+}
+
+// Lowest's last day: the calendar's last day, plus the look ahead
+function lookAheadEnd(ahead = lookAhead()) {
+  if (ahead.unit === "months") return addMonths(gridEndDate, ahead.count);
+  return addDays(gridEndDate, ahead.count * (ahead.unit === "weeks" ? 7 : 1));
+}
+
+// "2 months", "1 week"
+function lookAheadWords(ahead = lookAhead()) {
+  return `${ahead.count} ${ahead.count === 1 ? ahead.unit.slice(0, -1) : ahead.unit}`;
+}
+
+// Lowest's look ahead (from Home's Lowest card)
+function setLookAhead(count, unit) {
+  return runBudgetAction("📉 Lowest's Look Ahead", () => {
+    const most = LOOK_AHEAD_MOST[unit];
+    const ahead = normalizeLookAhead({ count: Number(count), unit });
+    if (!ahead) throw new BudgetInputError(most ? `Pick 1 to ${most} ${unit}.` : "Pick days, weeks, or months.");
+    if (ahead.count === LOOK_AHEAD_DEFAULT.count && ahead.unit === LOOK_AHEAD_DEFAULT.unit) delete accountsData.lookAhead;
+    else accountsData.lookAhead = ahead;
+    formEntryRow[3] = `Past the calendar: ${lookAheadWords(ahead)}`;
+    return {};
+  });
+}
+
+// The days after the calendar through Lowest's last day: the lowest In Bank (and when) and In Bank on the last of them,
+// with recurring entries, connected spreadsheets' entries, and Upcoming entries. Also counts the uncommon recurring
+// entries (every 3 months or less often) on the calendar from today on.
 function getPredictionData(lastInBank) {
   predictedInBank = [];
   let recurringRows = getParsedRecurringRows();
-  let sheetDays = sheetEntriesByDay(nextFourStart, addDays(nextFourStart, 27));
-  let visibleDay = createSafeMidnight(gridStartDate);
-  let testDay = createSafeMidnight(nextFourStart);
-  let todayTime = today.getTime();
+  const lastDay = lookAheadEnd();
+  let sheetDays = sheetEntriesByDay(afterCalendarStart, lastDay);
+  let testDay = createSafeMidnight(afterCalendarStart);
 
-  let daysDone = 0;
+  // One recurring entry per title and type lands on a day, like writeRecurring (when two rows match, see
+  // recurringDuplicates, the first one does)
+  const uncommonRows = recurringRows.filter(row => isUncommonFrequency(row.parsed.frequency));
+  for (let day = today; day <= gridEndDate; day = addDays(day, 1)) {
+    const landed = new Set();
+    for (let row of uncommonRows) {
+      const key = row.parsed.cleanTitle + "|" + row.parsed.special;
+      if (!landed.has(key) && recurringRowHits(row.parsed, day)) {
+        landed.add(key);
+        visibleUncommons++;
+      }
+    }
+  }
+
   let lowest = Infinity;
   let lowestDate = new Date(testDay.getTime());
 
-  let parsedFuture = [];
+  // Upcoming entries by day
+  const futureByDay = new Map();
   for (let f = 1; f < futureData.length; f++) {
     let time = createSafeMidnight(futureData[f][2], true).getTime();
     if (isNaN(time)) continue;
     let fSprite = String(futureData[f][3] || "");
-    parsedFuture.push({
+    if (!futureByDay.has(time)) futureByDay.set(time, []);
+    futureByDay.get(time).push({
       title: cleanString(futureData[f][0]),
       amt: parseAmount(futureData[f][1]),
-      time,
       sprite: fSprite,
       special: getSpecialType(fSprite),
       fromOther: isFromOther(fSprite, futureData[f][0])
     });
   }
 
-  while (daysDone < 28) {
+  while (testDay <= lastDay) {
     let dayTotal = 0;
     let currentTestTime = testDay.getTime();
-    let currentVisibleTime = visibleDay.getTime();
+    const dayFuture = futureByDay.get(currentTestTime) || [];
 
-    // A Future Dates temp (like ❗️✔️ or ❗️➕) with its title and type that day replaces a recurring or
-    // spreadsheet entry
-    const overridden = (clean, special) => parsedFuture.some(future => future.time === currentTestTime && future.title === clean &&
-      entryMark(future.sprite) && future.special === special);
-    // One recurring entry per title and type lands on a day, like writeRecurring (when two rows match, see
-    // recurringDuplicates, the first one does)
-    const visibleLanded = new Set();
+    // An Upcoming temp (like ❗️✔️ or ❗️➕) with its title and type that day replaces a recurring or spreadsheet entry
+    const overridden = (clean, special) => dayFuture.some(future => future.title === clean && entryMark(future.sprite) && future.special === special);
     const testLanded = new Set();
     for (let row of recurringRows) {
       const key = row.parsed.cleanTitle + "|" + row.parsed.special;
-      if (isUncommonFrequency(row.parsed.frequency) && currentVisibleTime >= todayTime && !visibleLanded.has(key) && recurringRowHits(row.parsed, visibleDay)) {
-        visibleLanded.add(key);
-        visibleUncommons++;
-      }
       if (String(row.sprite || "").includes("✖️") || testLanded.has(key) || !recurringRowHits(row.parsed, testDay)) continue;
       testLanded.add(key);
       if (!overridden(row.parsed.cleanTitle, row.parsed.special) && !isFromOther(row.sprite, row.title)) dayTotal += landingAmount({ amount: row.amt, percent: row.percent, sprite: row.sprite, title: row.title }, testDay);
@@ -6172,10 +6254,10 @@ function getPredictionData(lastInBank) {
       if (entry.special !== "✖️" && !overridden(entry.clean, entry.special)) dayTotal += landingAmount(entry, testDay);
     }
 
-    for (let f = 0; f < parsedFuture.length; f++) {
+    for (const future of dayFuture) {
       // Hidden entries don't change In Bank (hidden recurring entries are skipped above), and neither do transfers from
       // another Equity account
-      if (parsedFuture[f].time === currentTestTime && parsedFuture[f].special !== "✖️" && !parsedFuture[f].fromOther) dayTotal += parsedFuture[f].amt;
+      if (future.special !== "✖️" && !future.fromOther) dayTotal += future.amt;
     }
 
     lastInBank = Math.round((lastInBank + dayTotal) * 100) / 100; // To the cent, like every In Bank
@@ -6185,20 +6267,18 @@ function getPredictionData(lastInBank) {
       lowestDate = new Date(testDay.getTime());
     }
 
-    testDay.setDate(testDay.getDate() + 1);
-    visibleDay.setDate(visibleDay.getDate() + 1);
-    daysDone++;
+    testDay = addDays(testDay, 1);
   }
 
   let nextLowest = (lowest < 0 ? "⛔️" : "✅") + " " + formatMoney(lowest) + " Lowest: " + formatToMMDD(lowestDate);
-  let finalInBank = (lastInBank < 0 ? "⛔️" : "✅") + " " + formatMoney(lastInBank) + " Day 28 In Bank";
+  let finalInBank = (lastInBank < 0 ? "⛔️" : "✅") + " " + formatMoney(lastInBank) + " Last Day: " + formatToMMDD(lastDay);
 
   return [nextLowest, finalInBank, lowest];
 }
 
 // Bob's message on Home, worked out with every change (so it's quick, in plain words): a greeting, what needs
-// attention (days below $0 on the calendar, going below $0 in the 28 days after it, uncommon recurring entries on it, and
-// Upcoming entries), and today's affirmation. Everything else he has to say waits for his page (Bob Page.js).
+// attention (days below $0 on the calendar, going below $0 after it through Lowest's last day, uncommon recurring
+// entries on it, and Upcoming entries), and today's affirmation. Everything else he has to say waits for his page (Bob Page.js).
 function commenceBob() {
   let message = "Oops, looks like I couldn't read the budget! Sorry about that...";
   try {
@@ -6214,7 +6294,7 @@ function commenceBob() {
     if (!hasRecurring) written = "Woah! Nice new budget, don't forget to add your recurring entries! ";
     let discrepancies = 0;
     let writtenDisc = 0;
-    if (nextFourNegative) discrepancies++;
+    if (aheadNegative) discrepancies++;
     if (visibleUncommons) discrepancies++;
     if (futureDatesAmount) discrepancies++;
     if (visibleNegatives) discrepancies++;
@@ -6227,12 +6307,12 @@ function commenceBob() {
     } else if (discrepancies > 3) {
       written += "I've found these things to keep in mind: ";
     }
-    if (nextFourNegative) { // Next four negative
+    if (aheadNegative) { // Below $0 after the calendar
       writtenDisc++;
       if (discrepancies === 1) {
-        written += "All I see right now is that you'll be going negative sometime after the current four weeks. ";
+        written += "All I see right now is that you'll be going negative sometime after the calendar's five weeks. ";
       } else {
-        written += "It looks like you'll be going negative sometime after the current four weeks";
+        written += "It looks like you'll be going negative sometime after the calendar's five weeks";
         if (writtenDisc === discrepancies) written += ". ";
       }
     }
@@ -6245,9 +6325,9 @@ function commenceBob() {
       writtenDisc++;
       let plurality = (visibleUncommons > 1) ? "s" : "";
       if (discrepancies === 1) {
-        written += "All I see right now is that you've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the current four weeks. ";
+        written += "All I see right now is that you've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the calendar's five weeks. ";
       } else {
-        written += firstLetter + "ou've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the current four weeks";
+        written += firstLetter + "ou've got " + visibleUncommons + " uncommon recurring payment" + plurality + " in the calendar's five weeks";
         if (writtenDisc === discrepancies) written += ". ";
       }
     }
@@ -6261,9 +6341,9 @@ function commenceBob() {
       let plurality = (futureDatesAmount > 1) ? "s" : "";
       let isAre = (futureDatesAmount > 1) ? "are" : "is";
       if (discrepancies === 1) {
-        written += "All I see right now is that there " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the current four weeks. ";
+        written += "All I see right now is that there " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the calendar's five weeks. ";
       } else {
-        written += firstLetter + "here " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the current four weeks";
+        written += firstLetter + "here " + isAre + " " + futureDatesAmount + " upcoming payment" + plurality + " sometime after the calendar's five weeks";
         if (writtenDisc === discrepancies) written += ". ";
       }
     }
@@ -6360,7 +6440,7 @@ function updateTrackerTab() {
 
   // Days up to today, newest first: the calendar, then History
   let pastCells = [];
-  for (let r = 3; r >= 0; r--) {
+  for (let r = CALENDAR_ROWS - 1; r >= 0; r--) {
     for (let c = 6; c >= 0; c--) {
       if (gridDates[r][c] <= today) pastCells.push(String(calendarData[r][c]).trim());
     }
@@ -6758,10 +6838,10 @@ function syncGemGoals(gems, calendar) {
 const REMINDER_PLAN_KEY = "prismal_reminder_plan"; // The last plan this browser sent
 let reminderSync = Promise.resolve();
 
-// Days from today through the 28 days after the calendar that need a reminder, using the
+// Days from today through Lowest's last day (see LOWEST'S LOOK AHEAD) that need a reminder, using the
 // spreadsheet's three notification flags:
 //   negative: that day's In Bank is negative (⛔️)
-//   uncommon: uncommon recurring payments from that day to the end of its 4-week calendar (✔️)
+//   uncommon: uncommon recurring payments from that day to the end of its five-week calendar (✔️)
 //   cost:     that day has a cost (❗️)
 // Days past the calendar are worked out the same way the daily update will fill them in. And the days entries' reminders
 // are on (🔔, see ENTRY REMINDERS), however far ahead: entries: [{ title, date (its day), days (how many days before
@@ -6769,19 +6849,19 @@ let reminderSync = Promise.resolve();
 function buildReminderPlan() {
   let recurringRows = getParsedRecurringRows();
   let futureByDate = groupFutureRowsByDate();
-  let lastDay = addDays(gridEndDate, 28);
-  let sheetDays = sheetEntriesByDay(nextFourStart, lastDay);
+  let lastDay = lookAheadEnd();
+  let sheetDays = sheetEntriesByDay(afterCalendarStart, lastDay);
 
-  // Uncommon recurring payments per day, through the end of the last day's 4-week calendar
+  // Uncommon recurring payments per day, through the end of the last day's five-week calendar
   let uncommonRows = recurringRows.filter(row => isUncommonFrequency(row.parsed.frequency));
-  let countsEnd = addDays(lastDay, 27 - lastDay.getDay());
+  let countsEnd = addDays(lastDay, CALENDAR_DAYS - 1 - lastDay.getDay());
   let uncommonCounts = [];
   for (let day = today; day <= countsEnd; day = addDays(day, 1)) {
     uncommonCounts.push(uncommonRows.filter(row => recurringRowHits(row.parsed, day)).length);
   }
 
   let days = {};
-  let inBank = readInBank(calendarData[3][6]) ?? 0;
+  let inBank = readInBank(calendarData[CALENDAR_ROWS - 1][6]) ?? 0;
   for (let day = today, i = 0; day <= lastDay; day = addDays(day, 1), i++) {
     let cellText;
     let dayInBank;
@@ -6796,7 +6876,7 @@ function buildReminderPlan() {
       dayInBank = inBank = math.inBank;
     }
 
-    let windowEnd = getDayDifference(addDays(day, 27 - day.getDay()), today);
+    let windowEnd = getDayDifference(addDays(day, CALENDAR_DAYS - 1 - day.getDay()), today);
     let uncommon = 0;
     for (let c = i; c <= windowEnd; c++) uncommon += uncommonCounts[c];
     let reminder = {
@@ -6874,6 +6954,11 @@ function currentTimeZone() {
 // refuses one from an older copy (the budget was saved on another device or tab since): then nothing
 // more is sent, and the page reloads with the newest budget instead of saving over it.
 async function saveChanges() {
+  // (A Snapshot icon only looks: what its page works out stays on the page)
+  if (SNAPSHOT_KEY) {
+    for (const table of Object.values(BUDGET_TABLES)) table.saved();
+    return true;
+  }
   savingNow = true;
   try {
     return await saveChangedTables();
@@ -7076,6 +7161,8 @@ function normalizeApiAccounts(rawData) {
   if (bob) accounts.bob = bob; // (Bob's page, see normalizeBob)
   const snapshot = isCurrent ? normalizeSnapshot(parsed.snapshot) : null;
   if (snapshot) accounts.snapshot = snapshot; // (The Snapshot page's cards, see normalizeSnapshot)
+  const ahead = isCurrent ? normalizeLookAhead(parsed.lookAhead) : null;
+  if (ahead) accounts.lookAhead = ahead; // (Lowest's look ahead, see LOWEST'S LOOK AHEAD)
   // (What holds In Bank steady on days before the last Catchup, see IN BANK AND THE LAST CATCHUP)
   if (isCurrent && parsed.bankHolds && typeof parsed.bankHolds === "object" && !Array.isArray(parsed.bankHolds)) {
     const holds = Object.entries(parsed.bankHolds).filter(([day, amount]) => /^\d{2}\/\d{2}\/\d{4}$/.test(day) && Number.isFinite(amount) && amount !== 0);
@@ -7106,7 +7193,7 @@ function normalizeApiGrid(rawData, rows, cols) {
   return grid;
 }
 
-// The calendar's 28 days, 4 rows of Sunday through Saturday, starting with the budget's week (today)
+// The calendar's 35 days, 5 rows of Sunday through Saturday, starting with the budget's week (today)
 function getGridDates() {
   let now = createSafeMidnight(today ? new Date(today.getTime()) : new Date());
   let dayOfWeek = now.getDay(); // 0 is Sunday
@@ -7114,7 +7201,7 @@ function getGridDates() {
   startDate.setDate(now.getDate() - dayOfWeek);
 
   let datesArray = [];
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     let row = [];
     for (let c = 0; c < 7; c++) {
       let cellDate = new Date(startDate);
@@ -7594,7 +7681,7 @@ function resolvePercentEntries() {
   }
   const runner = percentRunner(start, today);
   const byDay = new Map();
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] < today) continue;
       const day = runner.day(calendarData[r][c], gridDates[r][c]);
@@ -7609,8 +7696,8 @@ function resolvePercentEntries() {
   }
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
-  const sheetDays = sheetEntriesByDay(nextFourStart, until);
-  for (let day = nextFourStart; day <= until; day = addDays(day, 1)) {
+  const sheetDays = sheetEntriesByDay(afterCalendarStart, until);
+  for (let day = afterCalendarStart; day <= until; day = addDays(day, 1)) {
     byDay.set(day.getTime(), runner.day(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), day).morning);
   }
   percentBases = { byDay, until, last: new Map(runner.balances), runner };
@@ -8350,10 +8437,10 @@ function nextZoomableDay(from, step, peek = false) {
   return null;
 }
 
-// 4. ONE DAY AFTER ANOTHER: HISTORY, THE CALENDAR, AND THE 28 DAYS AFTER IT
+// 4. ONE DAY AFTER ANOTHER: HISTORY, THE CALENDAR, AND THE DAYS AFTER IT
 // A zoomed day moves on to the day before or after it (a swipe, or the arrow keys) right across what the budget has:
 // History's days, the calendar's, and the days after the calendar (as the daily update will fill them in, each with
-// its In Bank), whatever four weeks Home's calendar is showing. A day the page's own table doesn't have zooms in as a
+// its In Bank), whatever five weeks Home's calendar is showing. A day the page's own table doesn't have zooms in as a
 // guest: a day of the guest row, seven days laid over the row of the page's table where its days end (each weekday in
 // its column), which shows only the one that's zoomed. Its entries open their options the way that day's do (History's
 // keep the balances, and the days after the calendar's go into Upcoming once they're changed), its In Bank (a calendar
@@ -8367,12 +8454,12 @@ let aheadDaysCache = null;
 function aheadDaysThrough(lastDay) {
   if (!aheadDaysCache) aheadDaysCache = [];
   const days = aheadDaysCache;
-  const from = days.length > 0 ? addDays(days[days.length - 1].date, 1) : nextFourStart;
+  const from = days.length > 0 ? addDays(days[days.length - 1].date, 1) : afterCalendarStart;
   if (lastDay < from) return days;
   const recurringRows = getParsedRecurringRows();
   const futureByDate = groupFutureRowsByDate();
   const sheetDays = sheetEntriesByDay(from, lastDay);
-  let inBank = days.length > 0 ? days[days.length - 1].inBank : readInBank(calendarData[3][6]) ?? 0;
+  let inBank = days.length > 0 ? days[days.length - 1].inBank : readInBank(calendarData[CALENDAR_ROWS - 1][6]) ?? 0;
   for (let day = from; day <= lastDay; day = addDays(day, 1)) {
     const math = applyCellBudgetMath(dayAfterCalendar(day, recurringRows, futureByDate, sheetDays), inBank);
     inBank = math.inBank;
@@ -8469,7 +8556,7 @@ function placeGuestRow(guests, row, table) {
 }
 
 // Draw a budget day in a guest day: its date (History's in full, like on History), In Bank, and entries (not the
-// calendar's last day's lines about the 28 days after it, which Home shows in the Lowest card), and its + and v
+// calendar's last day's lines about the days after it, which Home shows in the Lowest card), and its + and v
 function fillGuestDay(td, day) {
   td.dataset.date = formatToMMDDYYYY(day.date);
   td.dataset.kind = day.kind;
@@ -8489,12 +8576,13 @@ function fillGuestDay(td, day) {
   if (window.Fractals) window.Fractals.renderDay(td, day.date);
 }
 
-// The calendar's last day's lines about the 28 days after it ("✅ $812.40 Lowest: 11/14", "✅ $905.10 Day 28 In Bank")
+// The calendar's last day's lines about the days after it through Lowest's last day ("✅ $812.40 Lowest: 11/14",
+// "✅ $905.10 Last Day: 02/20"; budgets saved before the look ahead have "✅ $905.10 Day 28 In Bank" until they're worked out)
 function isAfterCalendarLine(line) {
   const parts = getParts(line);
   if (!systemEmojis.includes(parts[0])) return false;
   const words = parts.slice(2).join(' ');
-  return /^Lowest: \d{1,2}\/\d{1,2}$/.test(words) || words === 'Day 28 In Bank';
+  return /^(Lowest|Last Day): \d{1,2}\/\d{1,2}$/.test(words) || words === 'Day 28 In Bank';
 }
 
 // A tap on a zoomed guest day's entry opens its options (History's keep the balances), and on a calendar day's In Bank
@@ -8515,8 +8603,7 @@ function guestEntryTap(event) {
   if (line) BudgetUI.openEntryOptions(lineEl, line, day.date, { lineIndex, inHistory: day.kind === 'history' });
 }
 
-// Zoom in on any day of the budget (the Lowest card's window opens one of the 28 days after the calendar this way): the
-// page's own, or a guest laid over the end of its table
+// Zoom in on any day of the budget: the page's own, or a guest laid over the end of its table
 function zoomBudgetDay(date) {
   const table = pageDayTable();
   const own = table ? dayCellOn(table, date) : null;
@@ -9072,7 +9159,7 @@ function isUpcomingOn(row, date) {
 
 // Where a day is on the calendar: { r, c }, or null
 function calendarSpot(date) {
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c].getTime() === date.getTime()) return { r, c };
     }
@@ -9494,6 +9581,15 @@ async function liveCheck() {
   if (savingNow || hasUnsavedChanges() || liveUpdateWaits() || navigator.onLine === false) return;
   liveChecking = true;
   try {
+    // (A Snapshot icon has no revision to ask about: once it's a while old, the page loads again, daily update and all)
+    if (SNAPSHOT_KEY) {
+      if (Date.now() - snapshotLoadedAt > SNAPSHOT_RELOAD_MS) {
+        reloadingBudget = true;
+        workspaceLoaded = false;
+        window.location.reload();
+      }
+      return;
+    }
     if (Date.now() - versionCheckedAt > VERSION_CHECK_MS) {
       versionCheckedAt = Date.now();
       if (await newerSiteVersion() && !savingNow && !hasUnsavedChanges() && !liveUpdateWaits()) {
@@ -9528,13 +9624,16 @@ async function liveCheck() {
 function loadInPlace() {
   const run = budgetQueue.then(async () => {
     if (!workspaceLoaded || savingNow || hasUnsavedChanges() || budgetConflict || liveUpdateWaits()) return null;
-    const token = localStorage.getItem("prismal_jwt");
-    if (!token) return null;
+    if (!SNAPSHOT_KEY && !localStorage.getItem("prismal_jwt")) return null;
     let response;
     try {
-      response = await fetch(budgetLoadAddress(), { headers: { Authorization: `Bearer ${token}` } });
+      response = await fetchBudget();
     } catch (e) {
       return null; // (Offline: the next check tries again)
+    }
+    if (SNAPSHOT_KEY && (response.status === 401 || response.status === 404)) {
+      snapshotKeyGone(response);
+      return null;
     }
     if (response.status === 401) {
       signedOutElsewhere();

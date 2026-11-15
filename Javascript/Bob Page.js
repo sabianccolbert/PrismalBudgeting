@@ -11,14 +11,15 @@
 //   - A card that's on (but Wavelength Planning) has a Warnings switch beside its own: with it on, the card's highlight,
 //     when it needs a look, shows on Bob's card on Home (bobWarnings), which moves over the calendar until it's okayed.
 //     A new card that can need a look gets one too (BOB_WARNING_CARDS in Process Budget.js).
-//   - Anything that shows from a tap (a table, a list) opens in a floating window (BudgetUI.openPanel), not in the page.
+//   - Anything that shows from a tap (a table, a list) opens in a floating window (openWindow), not in the page.
 //
-// The cards, top to bottom: Bob's highlights; the Spectrum Graph (one line graph comparing any of what this page can draw);
-// Data (what every card below works from, with Equity's window: each account now and on a day picked, interest too; the
-// Tracker's window: its rows, added up between two days, with New Row and Edit, and each row's own window with a graph; and
-// a line graph at the bottom of each window that can have one); Goals; Wavelength Planning (a spectrum of what each
-// wavelength cost); then one for each of his tips: Payday, Spending Pace, Big Bills, Weekly Check, Catchup Entries, and
-// Refunds. Bob's page loads Budget Pages.js too, for the tracker's table, New Row, and Edit.
+// The page, top to bottom: Bob's highlights; Bob's Cards, a row for each card with a switch (Goals; Wavelength Planning, a
+// spectrum of what each wavelength cost; then one for each of his tips: Payday, Spending Pace, Big Bills, Weekly Check,
+// Catchup Entries, and Refunds), each opening its card in a window; then what they work from, as cards that fold open and
+// shut: the Spectrum Graph (one line graph comparing any of what this page can draw), and Data's groups (DATA_GROUPS), with
+// Equity's window (each account now and on a day picked, interest too), the Tracker's (its rows, added up between two days,
+// with New Row and Edit, and each row's own window with a graph), and a line graph at the bottom of each window that can
+// have one. Bob's page loads Budget Pages.js too, for the tracker's table, New Row, and Edit.
 
 // =====================================================================
 // #region SETUP
@@ -109,7 +110,7 @@ const CARDS = [
   }
 ];
 
-const TOP_HELP = "A quick look at what every card that's on has to say, one line each. Turn a card on or off with the switch at its right.";
+const TOP_HELP = "A quick look at what every card that's on has to say, one line each. Turn a card on or off in Bob's Cards: tap its row, then its switch.";
 
 let pageCards = [];    // The cards as made: [{ def, el, toggle, state, warning, body, results, highlight }] (see buildCard)
 let highlightList = null;
@@ -133,9 +134,9 @@ if (window.PAGE === "bob") {
   });
 }
 
-// A link from the Accrual Calculator's Add To Goals (/menu/bob.html?goalGem=ID&by=YYYY-MM-DD#goalsCard) opens New Goal
-// following that gem, on that day, by the Goals card once the page has slid in and come to it (so the window opens where
-// it can be seen). The link's ?goalGem comes off the address, so going back or reloading doesn't open it again.
+// A link from the Accrual Calculator's Add To Goals (/menu/bob.html?goalGem=ID&by=YYYY-MM-DD#bobCardsCard) opens New Goal
+// following that gem, on that day, from Goals' row in Bob's Cards once the page has slid in and come to it (so the window
+// opens where it can be seen). The link's ?goalGem comes off the address, so going back or reloading doesn't open it again.
 function openLinkedGoal() {
   const params = new URLSearchParams(location.search);
   const gem = params.get("goalGem");
@@ -145,18 +146,15 @@ function openLinkedGoal() {
   const started = Date.now();
   const open = () => {
     if (document.documentElement.style.overflowY === "hidden" && Date.now() - started < 3000) return requestAnimationFrame(open);
-    const card = document.getElementById("goalsCard");
-    card?.scrollIntoView({ block: "start" });
-    requestAnimationFrame(() => {
-      const button = card?.querySelector(".sectionButtons .budgetButton");
-      openGoalPanel(button && button.offsetParent ? button : card || document.body, null, { gem, date: by && !isNaN(by.getTime()) && by >= today ? by : null });
-    });
+    const row = document.getElementById("goalsRow");
+    row?.scrollIntoView({ block: "center" });
+    requestAnimationFrame(() => openGoalPanel(row || document.body, null, { gem, date: by && !isNaN(by.getTime()) && by >= today ? by : null }));
   };
   open();
 }
 
-// A link here with a day (Search's Go To Equity: /menu/bob.html?day=YYYY-MM-DD&open=equity#dataCard) shows Equity's window on
-// that day: it's the day this device remembers for it from then on (ACCOUNTS_DAY_KEY)
+// A link here with a day (Search's Go To Equity: /menu/bob.html?day=YYYY-MM-DD&open=equity#balancesCard) shows Equity's window
+// on that day: it's the day this device remembers for it from then on (ACCOUNTS_DAY_KEY)
 function takeLinkedDay() {
   const text = new URLSearchParams(location.search).get("day");
   const day = text ? createSafeMidnight(text, true) : null;
@@ -164,16 +162,18 @@ function takeLinkedDay() {
   try { localStorage.setItem(ACCOUNTS_DAY_KEY, formatToMMDDYYYY(day)); } catch (e) {}
 }
 
-// A link that says open=equity opens Equity's window, from Data's row
+// A link that says open=equity opens Equity's window, from In Bank And Equity
 function openLinkedWindow() {
-  if (new URLSearchParams(location.search).get("open") === "equity") openEquityWindow(document.getElementById("dataCard") || document.body);
+  if (new URLSearchParams(location.search).get("open") === "equity") openEquityWindow(document.getElementById("balancesCard") || document.body);
 }
 
 // The card a link's #spot names comes into view once the page has slid in (its cards are made after the budget loads,
-// so Layout.js may not have found it)
+// so Layout.js may not have found it), open when it folds (an older link's #dataCard is In Bank And Equity now)
 function showLinkedCard() {
-  const spot = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+  const id = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+  const spot = document.getElementById(id === "dataCard" ? "balancesCard" : id);
   if (!spot) return;
+  for (const fold of folds.values()) if (fold.el === spot) fold.open();
   const started = Date.now();
   const tryScroll = () => {
     if (document.documentElement.style.overflowY === "hidden" && Date.now() - started < 3000) return requestAnimationFrame(tryScroll);
@@ -192,16 +192,165 @@ document.addEventListener("budget:updated", () => {
 // #region THE PAGE
 // =====================================================================
 
-// The cards, made once: their titles, help, switches, and boxes stay while the page is open (so a box being typed in or a
-// switch just tapped stays put), and what they show is drawn again with every change
+// The page, top to bottom: Bob's highlights; Bob's Cards, a row for each of his cards (what it says, or Off), each opening
+// the card in a window with its switches; then what he works from, as cards that fold open and shut: the Spectrum Graph
+// and Data's groups (DATA_GROUPS). Made once: titles, help, switches, and boxes stay while the page is open (so a box being
+// typed in or a switch just tapped stays put), and what they show is drawn again with every change.
+const CARDS_HELP = "Each of Bob's cards, with what it says right now. Tap one to open it: its switch turns it on or off (off, it works nothing out), Warnings lets it speak up on Home, and its ? says what it's for.";
+const OPEN_KEY = "prismal_bob_open"; // The folding cards open in this browser (In Bank And Equity, to start)
+let cardRows = new Map();  // Each of Bob's cards' row in Bob's Cards, by its id: { row, note, value }
+let folds = new Map();     // The folding cards, by id: { el, body, summary, toggle }
+let spectrumCard = null;   // The Spectrum Graph, drawn like his cards (see buildCard), in its folding card
+let dataHighlight = null;  // Data's highlight, for the top card
+
 function buildPage() {
   const top = document.getElementById("bobTop");
   const { head, help } = cardHead("Bob's Highlights", TOP_HELP, "bobTop");
   highlightList = BudgetUI.element("ul", "bobHighlights");
   top.querySelector(".bobTopText").append(head, help, highlightList);
   top.hidden = false;
-  pageCards = CARDS.map(buildCard);
-  document.getElementById("dataView").replaceChildren(...pageCards.map(card => card.el));
+  pageCards = CARDS.filter(def => BOB_CARDS.has(def.id)).map(buildCard);
+  const spectrumDef = CARDS.find(def => def.id === "spectrum");
+  const spectrumFold = makeFold("spectrum", spectrumDef.title, spectrumDef.help);
+  spectrumCard = { def: spectrumDef, el: spectrumFold.el, toggle: null, state: null, warning: null, body: BudgetUI.element("div"), results: BudgetUI.element("div", "sectionResults"), highlight: null };
+  spectrumCard.body.append(spectrumDef.setup(spectrumCard), spectrumCard.results);
+  spectrumFold.body.append(spectrumCard.body);
+  const dataFolds = DATA_GROUPS.map(group => makeFold(group.id, group.title, group.help));
+  // (Bob's Cards, then the folding cards: side by side on a wide screen, see .wideColumns)
+  const columns = BudgetUI.element("div", "wideColumns");
+  const cardsColumn = BudgetUI.element("div", "wideColumn");
+  const foldsColumn = BudgetUI.element("div", "wideColumn");
+  cardsColumn.append(buildCardsCard());
+  foldsColumn.append(spectrumFold.el, ...dataFolds.map(fold => fold.el));
+  columns.append(cardsColumn, foldsColumn);
+  document.getElementById("dataView").replaceChildren(columns);
+}
+
+// Bob's Cards: a row for each card that has a switch, opening it in a window
+function buildCardsCard() {
+  const section = BudgetUI.element("section", "budgetCard bobCardsCard");
+  section.id = "bobCardsCard";
+  const { head, help, title } = cardHead("Bob's Cards", CARDS_HELP, "bobCards");
+  section.setAttribute("aria-labelledby", title.id);
+  const list = BudgetUI.element("ul", "bobData");
+  for (const card of pageCards) {
+    const item = BudgetUI.element("li", "bobDataItem");
+    const row = BudgetUI.element("button", "bobDataRow bobCardRow");
+    row.type = "button";
+    row.id = `${card.def.id}Row`;
+    const text = BudgetUI.element("span", "bobDataText");
+    const note = BudgetUI.element("span", "bobDataNote");
+    text.append(BudgetUI.element("span", "bobDataLabel", card.def.title), note);
+    const value = BudgetUI.element("span", "bobDataValue");
+    row.append(text, value, BudgetUI.element("span", "bobDataMore", "›"));
+    row.addEventListener("click", () => openCardWindow(card, row));
+    item.append(row);
+    list.append(item);
+    cardRows.set(card.def.id, { row, note, value });
+  }
+  section.append(head, help, list);
+  return section;
+}
+
+// Each row of Bob's Cards as its card is now: On, with what it says (red-orange when it needs a look), or Off
+function renderCardRows() {
+  for (const card of pageCards) {
+    const { row, note, value } = cardRows.get(card.def.id);
+    const on = bobCardOn(card.def.id);
+    value.textContent = on ? "On" : "Off";
+    value.classList.toggle("isOffValue", !on);
+    note.textContent = on ? (card.highlight ? card.highlight.text : "") : "Off. Open it to see what it's for, and turn it on.";
+    row.classList.toggle("isWarning", on && !!card.highlight?.warn);
+  }
+}
+
+// One of Bob's cards in a window (from its row): its ?, its switches, and what it shows, drawn again with every change while
+// it's open. What it opens goes over it (see openWindow).
+function openCardWindow(card, origin) {
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: card.def.title,
+    build(form) {
+      form.addEventListener("submit", (event) => event.preventDefault()); // (Its boxes never send the window anywhere)
+      card.el.classList.add("inWindow");
+      form.append(card.el);
+    }
+  });
+}
+
+// A window from Bob's page: over the one it was opened from (a card's window), which comes back when it closes
+function openWindow(options) {
+  return BudgetUI.openPanel({ ...options, stacked: options.stacked ?? !!options.origin?.closest?.(".budgetPanel") });
+}
+
+// A card that folds open and shut: its title is the button (with a figure from it, shown while it's shut), its ? beside
+// it. Which are open is kept in this browser.
+function makeFold(id, titleText, helpText) {
+  const el = BudgetUI.element("section", "budgetCard bobFold");
+  el.id = `${id}Card`;
+  const { head, help, title } = cardHead(titleText, helpText, id);
+  el.setAttribute("aria-labelledby", title.id);
+  const toggle = BudgetUI.element("button", "foldToggle");
+  toggle.type = "button";
+  const summary = BudgetUI.noTranslate(BudgetUI.element("span", "foldSummary"));
+  const chevron = BudgetUI.element("span", "foldChevron", "›");
+  chevron.setAttribute("aria-hidden", "true");
+  toggle.append(BudgetUI.element("span", "foldTitle", titleText), summary, chevron);
+  title.replaceChildren(toggle);
+  const body = BudgetUI.element("div", "sectionBody foldBody");
+  body.id = `${id}Body`;
+  toggle.setAttribute("aria-controls", body.id);
+  const fold = { el, body, summary, toggle };
+  const show = (open) => {
+    toggle.setAttribute("aria-expanded", String(open));
+    el.classList.toggle("isOpen", open);
+    body.hidden = !open;
+  };
+  show(openFolds().includes(id));
+  toggle.addEventListener("click", () => {
+    const open = !el.classList.contains("isOpen");
+    show(open);
+    const kept = openFolds().filter(other => other !== id);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(open ? [...kept, id] : kept)); } catch (e) {}
+  });
+  fold.open = () => show(true);
+  folds.set(id, fold);
+  el.append(head, help, body);
+  return fold;
+}
+
+// The folding cards open in this browser
+function openFolds() {
+  try {
+    const kept = JSON.parse(localStorage.getItem(OPEN_KEY) || "null");
+    return Array.isArray(kept) ? kept : ["balances"];
+  } catch (e) {
+    return ["balances"];
+  }
+}
+
+// Data's groups, each in its folding card (with its first figure beside its title), and Data's highlight
+function renderDataGroups(shared) {
+  let found;
+  try {
+    found = dataGroups(shared);
+  } catch (error) {
+    console.error("Bob's Data couldn't be worked out:", error);
+    for (const group of DATA_GROUPS) folds.get(group.id).body.replaceChildren(BudgetUI.element("p", "panelHint", "Bob couldn't work this out. Please refresh to try again."));
+    dataHighlight = null;
+    return;
+  }
+  dataHighlight = found.highlight;
+  for (const group of DATA_GROUPS) {
+    const fold = folds.get(group.id);
+    const { summary, rows } = found.groups[group.id];
+    fold.summary.textContent = summary.text;
+    fold.summary.classList.toggle("negative", summary.amount < 0);
+    const list = BudgetUI.element("ul", "bobData");
+    list.append(...rows);
+    fold.body.replaceChildren(list);
+  }
 }
 
 // One card: its title and help, its switch (when it has one), and what it shows
@@ -264,10 +413,14 @@ function cardHead(text, helpText, id) {
   return { head, help, title };
 }
 
-// Draw every card that's on (one that's off shows only its title and switch), then the highlights from them
+// Draw every card that's on (one that's off shows only its title and switch), the Spectrum Graph, and Data's groups, then
+// Bob's Cards' rows and the highlights from them all
 function renderPage() {
   const shared = sharedFigures();
   for (const card of pageCards) drawCard(card, shared);
+  drawCard(spectrumCard, shared);
+  renderDataGroups(shared);
+  renderCardRows();
   renderHighlights();
 }
 
@@ -352,20 +505,22 @@ function bobWarnings() {
   return found;
 }
 
-// The top card: a line from each card that's on (red-orange for one that needs a look), and how many are off
+// The top card: a line from the Spectrum Graph, Data, and each card that's on (red-orange for one that needs a look), and
+// how many are off
 function renderHighlights() {
   const items = [];
-  for (const card of pageCards) {
-    if (!card.highlight) continue;
-    const item = BudgetUI.element("li", card.highlight.warn ? "bobHighlight isWarning" : "bobHighlight");
-    item.append(BudgetUI.element("strong", "", `${card.def.title}: `), card.highlight.text);
+  const lines = [[spectrumCard.def.title, spectrumCard.highlight], ["Data", dataHighlight], ...pageCards.map(card => [card.def.title, card.highlight])];
+  for (const [title, highlight] of lines) {
+    if (!highlight) continue;
+    const item = BudgetUI.element("li", highlight.warn ? "bobHighlight isWarning" : "bobHighlight");
+    item.append(BudgetUI.element("strong", "", `${title}: `), highlight.text);
     items.push(item);
   }
   const off = pageCards.filter(card => card.toggle && !bobCardOn(card.def.id)).length;
   if (off > 0) {
     items.push(BudgetUI.element("li", "bobHighlight isQuiet", off === 1
-      ? "One more card is off. Turn it on below to see what it has to say here."
-      : `${off} more cards are off. Turn any of them on below to see what they have to say here.`));
+      ? "One more card is off. Turn it on in Bob's Cards to see what it has to say here."
+      : `${off} more cards are off. Turn any of them on in Bob's Cards to see what they have to say here.`));
   }
   highlightList.replaceChildren(...items);
 }
@@ -394,10 +549,21 @@ function sharedFigures() {
 // =====================================================================
 // #region DATA
 // =====================================================================
-// Everything the cards work from, as a list: each row's figure, with a note under it, and the rows with more behind them
-// open it in a window.
+// Everything the cards work from, in groups that each show as a card of their own on his page (folding open and shut): a
+// row for each figure, with a note under it, and the rows with more behind them open it in a window. (Goals and Wavelength
+// Planning are cards of his, so their figures are there.) Data, the Snapshot page's card of all of it, is every group's
+// rows in one list.
 
-function renderDataCard(card, shared) {
+const DATA_GROUPS = [
+  { id: "balances", title: "In Bank And Equity", help: "In Bank today, the lowest it gets after today (through Lowest's last day, picked on Home's Lowest card), and your Equity accounts. Tap one to see it on a graph, or Equity's window: each account today and on a day you pick." },
+  { id: "spending", title: "Paydays And Spending", help: `Your paydays, and what goes out besides your recurring bills: in the last 7 days, and between paychecks. Payday and Spending Pace work from these, out of your last ${HISTORY_MONTHS} months of History.` },
+  { id: "purchases", title: "Purchases And Catchups", help: `Regular costs you add by hand or with Quick Budget: the last ${REFUND_DAYS} days, the ones still to come before the lowest day, and your Catchup entries. Refunds and Catchup Entries work from these.` },
+  { id: "bills", title: "Bills And The Tracker", help: `What your recurring entries come to each month, the big bills of the next ${BILL_DAYS} days, and the tracker's costs between its two days (its window has every row, New Row, and Edit).` }
+];
+
+// Data's figures in their groups ({ balances: { summary: { text, amount }, rows: [<li>] }, ... }, see DATA_GROUPS), and Data's
+// highlight
+function dataGroups(shared) {
   const spending = shared.spending();
   const payday = shared.payday();
   const lowest = shared.lowest();
@@ -410,54 +576,78 @@ function renderDataCard(card, shared) {
   const inBank = inBankToday();
   const spent = purchases.reduce((total, purchase) => total - purchase.amount, 0);
   const dayCount = (date) => getDayDifference(date, today);
-  // (What Goals, Wavelength Planning, and Refunds work from too)
+  // (What Goals and Refunds work from too)
   const summaries = shared.summaries();
   const accountsTotal = Math.round(summaries.reduce((sum, summary) => sum + summary.today, 0) * 100) / 100;
-  const goals = accountsData?.goals || [];
-  const purposes = Object.values(accountsData?.bob?.purposes || {});
-  const onWavelength = purposes.filter(id => wavelengthList().some(wave => wave.id === id)).length;
   const coming = lowest.date > today ? purchasesBetween(addDays(today, 1), lowest.date) : [];
   const comingSpent = coming.reduce((total, purchase) => total - purchase.amount, 0);
+  // (Spending is worked out as what went out; the rows show it below $0, like every cost)
+  const weekSpent = pace ? pace.thisWeek : lastWeekSpent(spending);
   const tracked = trackerTotals(trackerDays().from, trackerDays().to);
   const trackedCosts = tracked.get(trackerRowIndex("costs"))?.total ?? 0;
   const trackedGains = tracked.get(trackerRowIndex("gains"))?.total ?? 0;
 
-  const list = BudgetUI.element("ul", "bobData");
-  list.append(
-    dataRow("History", oldest ? `From ${showDate(oldest)}` : "None yet",
-      oldest ? (spending.enough ? `${HISTORY_MONTHS} months or more: enough for every card` : `Payday and Spending Pace need ${HISTORY_MONTHS} months of it`) : "Each week moves into History as it passes"),
-    dataRow("In Bank today", formatMoney(inBank), "", { amount: inBank, open: (origin) => openGraphWindow(origin, "In Bank", "In Bank at the end of each day, from History and the calendar. Pick a later day to see what your budget expects.", inBankGraph("In Bank Over Time")) }),
-    dataRow("Lowest in bank after today", formatMoney(lowest.amount), `On ${showDay(lowest.date)}`, { amount: lowest.amount, open: (origin) => openGraphWindow(origin, "Lowest In Bank", `The lowest In Bank gets from today through the 28 days after the calendar is ${formatMoney(lowest.amount)}, on ${showDate(lowest.date)}. Pick a later day to see it on the graph.`, inBankGraph("In Bank Over Time")) }),
-    dataRow("Equity", formatMoney(accountsTotal), `${summaries.length} ${summaries.length === 1 ? "account" : "accounts"} today; with In Bank, the Total is ${formatMoney(inBank + accountsTotal)}`,
-      { amount: accountsTotal, open: (origin) => openEquityWindow(origin) }),
-    dataRow("Goals", String(goals.length), goals.length ? goals.map(goalName).slice(0, 3).join(", ") + (goals.length > 3 ? ", and more" : "") : "None set yet",
-      goals.length ? { open: (origin) => openGoalsDataWindow(origin, goals) } : {}),
-    dataRow("Titles on a wavelength", String(onWavelength), wavelengthList().map(wave => wave.name).join(", "),
-      { open: (origin) => openWavelengthsDataWindow(origin) }),
-    dataRow("Recurring entries each month", formatMoney(recurring.costs), `In bills, and ${formatMoney(recurring.gains)} in gains`, { open: (origin) => openRecurringWindow(origin, recurring) }),
-    dataRow("Tracker", formatMoney(trackedCosts), `Costs from ${showDay(trackerDays().from)} through ${showDay(trackerDays().to)}, and ${formatMoney(trackedGains)} in gains`,
-      { amount: trackedCosts, open: (origin) => openTrackerWindow(origin) }),
-    dataRow("Paydays", payday.next ? showDay(payday.next) : "None coming", payday.next ? `The next one, in ${dayCount(payday.next)} ${dayCount(payday.next) === 1 ? "day" : "days"}` : `No paycheck in the next ${PAYDAY_LOOK} days`,
-      { open: (origin) => openPaydaysWindow(origin, spending, payday) }),
-    dataRow("Spent besides recurring bills", formatMoney(pace ? pace.thisWeek : lastWeekSpent(spending)), pace ? `In the last 7 days (a usual week: ${formatMoney(pace.usualWeek)})` : "In the last 7 days",
-      { open: (origin) => openWeeksWindow(origin, spending) }),
-    dataRow("Usually spent between paychecks", payday.average === null ? "--" : formatMoney(payday.average),
-      payday.average === null ? `Needs ${HISTORY_MONTHS} months of History` : `In the ${payday.span} days from a payday, besides recurring bills`),
-    dataRow(`Catchup entries, last ${CATCHUP_DAYS} days`, formatMoney(catchup.total), `${catchup.entries.length} ${catchup.entries.length === 1 ? "entry" : "entries"}`,
-      { open: (origin) => openEntriesWindow(origin, `Catchup Entries, Last ${CATCHUP_DAYS} Days`, catchup.entries, `None in the last ${CATCHUP_DAYS} days.`, () => runningGraph("Catchup Entries, Added Up", "Catchups", CATCHUP_DAYS, catchupsBetween, "None in these days.")) }),
-    dataRow(`Big bills, next ${BILL_DAYS} days`, String(bills.length), bills[0] ? `The first: ${capitalize(bills[0].title)} on ${showDay(bills[0].date)}` : "None",
-      { open: (origin) => openEntriesWindow(origin, `Big Bills, Next ${BILL_DAYS} Days`, bills, `None in the next ${BILL_DAYS} days.`, () => runningGraph("Big Bills, Added Up", "Big bills", 0, (first, until) => bigBills().filter(bill => bill.date >= first && bill.date <= until), `Pick a later day, up to ${BILL_DAYS} days from today, to see the bills ahead added up.`)) }),
-    dataRow(`Purchases, last ${REFUND_DAYS} days`, formatMoney(spent), `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} added by hand or with Quick Budget`,
-      { open: (origin) => openEntriesWindow(origin, `Purchases, Last ${REFUND_DAYS} Days`, purchases, `None in the last ${REFUND_DAYS} days.`, () => runningGraph("Purchases, Added Up", "Purchases", REFUND_DAYS, purchasesBetween, "None in these days.")) }),
-    dataRow("Purchases still to come", formatMoney(comingSpent), lowest.date > today ? `${coming.length} by the lowest day, ${showDay(lowest.date)}` : "None before the lowest day",
-      { open: (origin) => openEntriesWindow(origin, "Purchases Still To Come", coming, "None before the lowest day.", () => runningGraph("Purchases Still To Come, Added Up", "Purchases", 0, purchasesBetween, "Pick a later day to see what's planned, added up.")) })
-  );
-  card.results.replaceChildren(list);
+  const groups = {
+    balances: {
+      summary: { text: formatMoney(inBank), amount: inBank },
+      rows: [
+        dataRow("In Bank today", formatMoney(inBank), "", { amount: inBank, open: (origin) => openGraphWindow(origin, "In Bank", "In Bank at the end of each day, from History and the calendar. Pick a later day to see what your budget expects.", inBankGraph("In Bank Over Time")) }),
+        dataRow("Lowest in bank after today", formatMoney(lowest.amount), `On ${showDay(lowest.date)}`, { amount: lowest.amount, open: (origin) => openGraphWindow(origin, "Lowest In Bank", `The lowest In Bank gets from today through ${showDate(lookAheadEnd())} (${lookAheadWords()} past the calendar, picked on Home's Lowest card) is ${formatMoney(lowest.amount)}, on ${showDate(lowest.date)}. Pick a later day to see it on the graph.`, inBankGraph("In Bank Over Time")) }),
+        dataRow("Equity", formatMoney(accountsTotal), `${summaries.length} ${summaries.length === 1 ? "account" : "accounts"} today; with In Bank, the Total is ${formatMoney(inBank + accountsTotal)}`,
+          { amount: accountsTotal, open: (origin) => openEquityWindow(origin) })
+      ]
+    },
+    spending: {
+      summary: { text: formatMoney(-weekSpent), amount: -weekSpent },
+      rows: [
+        dataRow("Paydays", payday.next ? showDay(payday.next) : "None coming", payday.next ? `The next one, in ${dayCount(payday.next)} ${dayCount(payday.next) === 1 ? "day" : "days"}` : `No paycheck in the next ${PAYDAY_LOOK} days`,
+          { open: (origin) => openPaydaysWindow(origin, spending, payday) }),
+        dataRow("Spent besides recurring bills", formatMoney(-weekSpent), pace ? `In the last 7 days (a usual week: ${formatMoney(-pace.usualWeek)})` : "In the last 7 days",
+          { amount: -weekSpent, open: (origin) => openWeeksWindow(origin, spending) }),
+        dataRow("Usually spent between paychecks", payday.average === null ? "--" : formatMoney(-payday.average),
+          payday.average === null ? `Needs ${HISTORY_MONTHS} months of History` : `In the ${payday.span} days from a payday, besides recurring bills`,
+          payday.average === null ? {} : { amount: -payday.average }),
+        dataRow("History", oldest ? `From ${showDate(oldest)}` : "None yet",
+          oldest ? (spending.enough ? `${HISTORY_MONTHS} months or more: enough for every card` : `Payday and Spending Pace need ${HISTORY_MONTHS} months of it`) : "Each week moves into History as it passes")
+      ]
+    },
+    purchases: {
+      summary: { text: formatMoney(-spent), amount: -spent },
+      rows: [
+        dataRow(`Purchases, last ${REFUND_DAYS} days`, formatMoney(-spent), `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} added by hand or with Quick Budget`,
+          { amount: -spent, open: (origin) => openEntriesWindow(origin, `Purchases, Last ${REFUND_DAYS} Days`, purchases, `None in the last ${REFUND_DAYS} days.`, () => runningGraph("Purchases, Added Up", "Purchases", REFUND_DAYS, purchasesBetween, "None in these days.")) }),
+        dataRow("Purchases still to come", formatMoney(-comingSpent), lowest.date > today ? `${coming.length} by the lowest day, ${showDay(lowest.date)}` : "None before the lowest day",
+          { amount: -comingSpent, open: (origin) => openEntriesWindow(origin, "Purchases Still To Come", coming, "None before the lowest day.", () => runningGraph("Purchases Still To Come, Added Up", "Purchases", 0, purchasesBetween, "Pick a later day to see what's planned, added up.")) }),
+        dataRow(`Catchup entries, last ${CATCHUP_DAYS} days`, formatMoney(-catchup.total), `${catchup.entries.length} ${catchup.entries.length === 1 ? "entry" : "entries"}`,
+          { amount: -catchup.total, open: (origin) => openEntriesWindow(origin, `Catchup Entries, Last ${CATCHUP_DAYS} Days`, catchup.entries, `None in the last ${CATCHUP_DAYS} days.`, () => runningGraph("Catchup Entries, Added Up", "Catchups", CATCHUP_DAYS, catchupsBetween, "None in these days.")) })
+      ]
+    },
+    bills: {
+      summary: { text: formatMoney(recurring.costs), amount: recurring.costs },
+      rows: [
+        dataRow("Recurring entries each month", formatMoney(recurring.costs), `In bills, and ${formatMoney(recurring.gains)} in gains`, { amount: recurring.costs, open: (origin) => openRecurringWindow(origin, recurring) }),
+        dataRow(`Big bills, next ${BILL_DAYS} days`, String(bills.length), bills[0] ? `The first: ${capitalize(bills[0].title)} on ${showDay(bills[0].date)}` : "None",
+          { open: (origin) => openEntriesWindow(origin, `Big Bills, Next ${BILL_DAYS} Days`, bills, `None in the next ${BILL_DAYS} days.`, () => runningGraph("Big Bills, Added Up", "Big bills", 0, (first, until) => bigBills().filter(bill => bill.date >= first && bill.date <= until), `Pick a later day, up to ${BILL_DAYS} days from today, to see the bills ahead added up.`)) }),
+        dataRow("Tracker", formatMoney(trackedCosts), `Costs from ${showDay(trackerDays().from)} through ${showDay(trackerDays().to)}, and ${formatMoney(trackedGains)} in gains`,
+          { amount: trackedCosts, open: (origin) => openTrackerWindow(origin) })
+      ]
+    }
+  };
   // (And where everything will be on the day this device picked for Equity's window)
   const day = readAccountsDay();
   const ahead = equityFigures(day, shared.projection(), summaries);
   const interestNote = ahead.hasInterest && ahead.total.interest !== 0 ? `, with ${formatMoney(ahead.total.interest)} in interest by then` : "";
-  return { text: `In Bank is ${formatMoney(inBank)} today, and the lowest it gets is ${formatMoney(lowest.amount)} on ${showDay(lowest.date)}. On ${showDate(day)}, In Bank will be ${formatMoney(ahead.rows[0].then)} and the Total ${formatMoney(ahead.total.then)}${interestNote}.`, warn: lowest.amount < 0 || ahead.rows[0].then < 0 };
+  const highlight = { text: `In Bank is ${formatMoney(inBank)} today, and the lowest it gets is ${formatMoney(lowest.amount)} on ${showDay(lowest.date)}. On ${showDate(day)}, In Bank will be ${formatMoney(ahead.rows[0].then)} and the Total ${formatMoney(ahead.total.then)}${interestNote}.`, warn: lowest.amount < 0 || ahead.rows[0].then < 0 };
+  return { groups, highlight };
+}
+
+// Data as one card (the Snapshot page's): every group's rows, in order
+function renderDataCard(card, shared) {
+  const { groups, highlight } = dataGroups(shared);
+  const list = BudgetUI.element("ul", "bobData");
+  for (const group of DATA_GROUPS) list.append(...groups[group.id].rows);
+  card.results.replaceChildren(list);
+  return highlight;
 }
 
 // Data's rows as figures, for the Snapshot page (Snapshot Page.js): [{ label, value, note, amount, open }], in Data's order.
@@ -500,13 +690,13 @@ function inBankToday() {
   return (spot && readInBank(calendarData[spot.r][spot.c])) ?? 0;
 }
 
-// The lowest In Bank from today through the 28 days after the calendar (Lowest in bank after today), and its day
+// The lowest In Bank from today through Lowest's last day (Lowest in bank after today), and its day
 function lowestAhead() {
   let lowest = null;
   const consider = (date, amount) => {
     if (amount !== null && (!lowest || amount < lowest.amount)) lowest = { amount, date };
   };
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) if (gridDates[r][c] >= today) consider(gridDates[r][c], readInBank(calendarData[r][c]));
   }
   for (const [date, amount] of predictedInBank) consider(date, amount);
@@ -524,7 +714,7 @@ function eachDay(from, to, visit) {
       if (!isNaN(date.getTime()) && date >= from && date <= to) visit(date, lines.slice(1));
     }
   }
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       if (gridDates[r][c] >= from && gridDates[r][c] <= to) visit(gridDates[r][c], String(calendarData[r][c] ?? "").split("\n").slice(1));
     }
@@ -738,7 +928,7 @@ function bigBills() {
     .filter(row => row.title && !isNaN(row.date.getTime()));
   const changed = new Set(upcoming.filter(row => entryMark(row.sprite)).map(row => row.date.getTime() + "|" + cleanString(row.title) + "|" + getSpecialType(row.sprite)));
   if (uncommon.length > 0) {
-    for (let day = nextFourStart; day <= lastDay; day = addDays(day, 1)) {
+    for (let day = afterCalendarStart; day <= lastDay; day = addDays(day, 1)) {
       for (const row of uncommon) {
         if (recurringRowHits(row.parsed, day) && !changed.has(day.getTime() + "|" + row.parsed.cleanTitle + "|" + row.parsed.special)) {
           bills.push({ date: day, title: row.title, amount: row.amt });
@@ -746,7 +936,7 @@ function bigBills() {
       }
     }
   }
-  for (const [time, day] of sheetEntriesByDay(nextFourStart, lastDay)) {
+  for (const [time, day] of sheetEntriesByDay(afterCalendarStart, lastDay)) {
     for (const entry of day.values()) {
       const key = time + "|" + entry.clean + "|" + entry.special;
       if (entry.amount <= -BIG_BILL && entry.special !== "⭕️" && isUncommonBill(entry.clean + "|" + entry.special, SHEET_MARK, new Date(time)) && !changed.has(key)) {
@@ -771,7 +961,7 @@ function bigBills() {
 
 // A floating window with only a note and a line graph (see Line Graph.js)
 function openGraphWindow(origin, title, intro, graph) {
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     title,
@@ -786,7 +976,7 @@ function openGraphWindow(origin, title, intro, graph) {
 // cells: text, or { text, amount } for an amount, red or green by its sign), and at the bottom, when it can have one, a
 // line graph (graph: makes it, see Line Graph.js)
 function openTableWindow(origin, { title, intro = "", columns, rows, empty = "Nothing to show.", graph = null }) {
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     title,
@@ -845,11 +1035,12 @@ function openRecurringWindow(origin, recurring) {
   });
 }
 
-// Each goal: what it's for, its amount, and the day to reach it by (what Goals works from)
-function openGoalsDataWindow(origin, goals) {
+// Each goal: what it's for, its amount, and the day to reach it by, with the goals' graph (from the Goals card)
+function openGoalsTableWindow(origin) {
+  const goals = accountsData?.goals || [];
   openTableWindow(origin, {
-    title: "Goals",
-    intro: "What each goal is for, its amount, and the day to reach it by. Goals works out what reaching each one takes.",
+    title: "Goals Over Time",
+    intro: "What each goal is for, its amount, and the day to reach it by, with where each one's account is on each day.",
     columns: ["Goal", "For", "Amount", "By"],
     rows: goals.map(goal => [goalName(goal), goalTarget(goal) || "--", amountCell(goal.amount), goal.date ? showStoredDate(goal.date) : "--"]),
     empty: "No goals yet.",
@@ -857,12 +1048,13 @@ function openGoalsDataWindow(origin, goals) {
   });
 }
 
-// Each wavelength, longest to shortest, with how many titles are on it (what Wavelength Planning works from)
-function openWavelengthsDataWindow(origin) {
+// Each wavelength, longest to shortest, with how many titles are on it and what each cost week by week (from the
+// Wavelength Planning card)
+function openWavelengthsTableWindow(origin) {
   const purposes = Object.values(accountsData?.bob?.purposes || {});
   openTableWindow(origin, {
-    title: "Titles On A Wavelength",
-    intro: "How many titles are on each wavelength. Every entry with a title shares its title's wavelength.",
+    title: "Each Wavelength, Week By Week",
+    intro: "How many titles are on each wavelength (every entry with a title shares its title's wavelength), and what each cost week by week.",
     columns: ["Wavelength", "Titles"],
     rows: wavelengthList().map(wave => [wave.name, String(purposes.filter(id => id === wave.id).length)]),
     graph: wavelengthsGraph
@@ -957,7 +1149,7 @@ function equityFigures(day, projection, summaryList) {
 
 // Data's Equity window: the table, with the day it works out to in its column's head, and a graph at the bottom
 function openEquityWindow(origin) {
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     title: "Equity",
@@ -1275,7 +1467,7 @@ function autoTitleCell(row) {
   button.setAttribute("aria-label", `What ${name} is`);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    BudgetUI.openPanel({
+    openWindow({
       origin: button,
       size: "small",
       stacked: true,
@@ -1347,7 +1539,7 @@ function setTrackerRange({ from, to }) {
 function openTrackerWindow(origin) {
   editMode = false;
   selectedRows.clear();
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     title: "Tracker",
@@ -1439,7 +1631,7 @@ function openTrackerRowWindow(origin, index) {
   const { from, to } = trackerDays();
   const figure = trackerTotals(from, to).get(index) || { total: 0, parts: new Map() };
   const name = String(row[0]).trim();
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     stacked: true,
@@ -1469,7 +1661,7 @@ function openTrackerRowWindow(origin, index) {
 // it counts transfers. It opens over the Tracker window, which comes back when it closes.
 function openTrackerPanel(origin, index) {
   const existing = index === null ? null : trackerData[index];
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     stacked: true,
@@ -1534,7 +1726,7 @@ function knownInBank() {
       if (inBank !== null) known.set(date.getTime(), inBank);
     }
   }
-  for (let r = 0; r < 4; r++) {
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
     for (let c = 0; c < 7; c++) {
       const inBank = readInBank(calendarData[r][c]);
       if (inBank !== null) known.set(gridDates[r][c].getTime(), inBank);
@@ -1599,11 +1791,11 @@ function goalsGraph(goals) {
   });
 }
 
-// Amounts added up as the days go: one point a day from first through until, from items [{ date, amount }] (each counted as a
-// positive amount)
+// Amounts added up as the days go: one point a day from first through until, from items [{ date, amount }] (signed, so what
+// went out adds up below $0)
 function runningLine(name, items, first, until) {
   const byDay = new Map();
-  for (const item of items) byDay.set(item.date.getTime(), (byDay.get(item.date.getTime()) || 0) + Math.abs(item.amount));
+  for (const item of items) byDay.set(item.date.getTime(), (byDay.get(item.date.getTime()) || 0) + item.amount);
   let sum = 0;
   return { name, points: daysBetween(first, until).map(date => {
     sum += byDay.get(date.getTime()) || 0;
@@ -1623,12 +1815,13 @@ const runningGraph = (label, name, days, itemsBetween, emptyNote) => LineGraph.c
   emptyNote
 });
 
-// Amounts added up a week at a time: one point at each week's end, from items [{ date, amount }]
+// Amounts added up a week at a time: one point at each week's end, from items [{ date, amount }] (signed, so what went out
+// is below $0)
 function weeklyPoints(items, first, until) {
   const weeks = new Map();
   for (const item of items) {
     const week = Math.floor(getDayDifference(item.date, first) / 7);
-    weeks.set(week, (weeks.get(week) || 0) + Math.abs(item.amount));
+    weeks.set(week, (weeks.get(week) || 0) + item.amount);
   }
   const points = [];
   for (let week = 0; addDays(first, week * 7) <= until; week++) {
@@ -1687,7 +1880,7 @@ function recurringMonthLines(first, until) {
     if (line.blank || line.system || entryMark(line.sprite) !== RECURRING_MARK || isTransferEntry(line.sprite)) return;
     const month = months.get(new Date(date.getFullYear(), date.getMonth(), 1).getTime());
     if (!month) return;
-    if (line.amount < 0) month.costs -= line.amount;
+    if (line.amount < 0) month.costs += line.amount; // (Bills stay below $0)
     else month.gains += line.amount;
   });
   const list = [...months.values()];
@@ -2007,7 +2200,10 @@ function setupGoalsCard() {
   const button = BudgetUI.element("button", "budgetButton primary", "New Goal");
   button.type = "button";
   button.addEventListener("click", () => openGoalPanel(button));
-  box.append(button);
+  const graph = BudgetUI.element("button", "budgetButton", "Goals Over Time ›");
+  graph.type = "button";
+  graph.addEventListener("click", () => openGoalsTableWindow(graph));
+  box.append(button, graph);
   return box;
 }
 
@@ -2240,7 +2436,7 @@ function goalShare(goal, balance) {
 // stays that amount), and a day to reach it by, if it has one. link: from Add To Goals, { gem (its id), date }.
 function openGoalPanel(origin, index = null, link = {}) {
   const existing = index === null ? null : (accountsData?.goals || [])[index];
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "small",
     title: existing ? "Change Goal" : "New Goal",
@@ -2356,8 +2552,11 @@ function setupPurposesCard(card) {
   const edit = BudgetUI.element("button", "budgetButton wavelengthsButton", "Add Or Change Wavelengths");
   edit.type = "button";
   edit.addEventListener("click", () => openWavelengthsWindow(edit));
+  const weeks = BudgetUI.element("button", "budgetButton wavelengthsButton", "Week By Week ›");
+  weeks.type = "button";
+  weeks.addEventListener("click", () => openWavelengthsTableWindow(weeks));
   const controls = BudgetUI.element("div", "wavelengthControls");
-  controls.append(card.purposes.el, edit, BudgetUI.element("p", "panelHint wavelengthsHint", `Needs, Wants, and Future are only a start. Add your own (up to ${MAX_WAVELENGTHS}), rename them, or take some out with the button above.`));
+  controls.append(card.purposes.el, edit, weeks, BudgetUI.element("p", "panelHint wavelengthsHint", `Needs, Wants, and Future are only a start. Add your own (up to ${MAX_WAVELENGTHS}), rename them, or take some out with the button above.`));
   return controls;
 }
 
@@ -2432,7 +2631,7 @@ function eachEntryBetween(from, to, visit) {
   eachDay(from, to, (date, lines) => lines.forEach(text => visit(date, text)));
   const limit = addDays(today, PURPOSE_AHEAD_DAYS);
   const last = to < limit ? to : limit;
-  const first = from > nextFourStart ? from : nextFourStart;
+  const first = from > afterCalendarStart ? from : afterCalendarStart;
   if (last < first) return;
   percentBasesThrough(last);
   const recurringRows = getParsedRecurringRows();
@@ -2629,7 +2828,7 @@ function setPurposeRange({ from, to }) {
 // A wavelength's window: the days (From and To), what it came to and its share, and each title on it, biggest first,
 // with what it cost, its share of the wavelength, and how many entries it has, in a box that scrolls
 function openPurposeWindow(origin, key) {
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     title: wavelengthName(key),
@@ -2678,7 +2877,7 @@ function openPurposeWindow(origin, key) {
 // Titles on no wavelength yet (what they cost in the spectrum's days, biggest first), each with a button for every
 // wavelength that puts it on one right there (every entry with that title gets it)
 function openUnsortedWindow(origin) {
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     title: "Not On A Wavelength Yet",
@@ -2736,7 +2935,7 @@ function openUnsortedWindow(origin) {
 // down, or taken out, and new ones added (1 to MAX_WAVELENGTHS). Saved together (saveWavelengths in Process Budget.js);
 // taking out one that titles are on asks first, since they won't have one after.
 function openWavelengthsWindow(origin) {
-  BudgetUI.openPanel({
+  openWindow({
     origin,
     size: "large",
     title: "Wavelengths",
