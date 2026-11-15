@@ -7864,9 +7864,10 @@ window.updateGridCell = async function(gridName, row, col, textValue) {
 // here; History draws its table later (and again after a change), so Budget Pages.js wires each one it draws.
 
 // 1. TOUCH: TWO-FINGER PINCH ON A DAY, AND SWIPING BETWEEN ZOOMED DAYS
-// Two fingers on one day pinch, stretch, turn, and move just that day, which settles back when they let go. Two
-// fingers that start on different days (or off the days), or on a zoomed day, zoom the page itself, like anywhere else
-// on it (a zoomed day is part of the page, so it zooms with it).
+// Two fingers on one day pinch, stretch, turn, and move just that day, which settles back when they let go. On a
+// phone's zoomed day, two fingers coming together shrink it the same way (PINCHING THE ZOOMED DAY, below). Two fingers
+// that start on different days (or off the days), or that move apart on a zoomed day, zoom the page itself, like
+// anywhere else on it (a zoomed day is part of the page, so it zooms with it).
 
 let isTransforming = false;
 let targetEl = null;
@@ -7886,6 +7887,17 @@ const DAY_DRAG_STRETCH = 0.3;
 const DAY_SETTLE_MS = 220;
 let daySwipe = null; // { cell, x, y, atLeft, atRight, dragging, base, offset } for the finger on a zoomed day
 
+// PINCHING THE ZOOMED DAY: two fingers on a phone's zoomed day (or beside it: its layout covers the screen) that start
+// by coming together shrink it with them, moving and turning it too, the way a day that isn't zoomed follows them, and
+// the page behind brightens as it shrinks. Let go while it's still at least DAY_PINCH_CLOSE of its size (a little
+// pinch, to see more of it and of the calendar behind it) and it grows back. Smaller than that, the page brightens
+// more, and letting go closes the day (it shrinks on back into its spot). Fingers that start by moving apart zoom the
+// page instead (the browser's own zoom), and so does any pinch on a page that's zoomed in.
+const DAY_PINCH_CLOSE = 0.6;
+const DAY_PINCH_STRETCH = 0.3; // Moving apart again after coming together, the day grows only this share as much
+const DAY_PINCH_SETTLE_MS = 260;
+let dayPinch = null; // { cell, ids, dist, angle, x, y, cx, cy, base, shrinking (null until the fingers first move), scale }
+
 const wiredTables = new WeakSet();
 
 // Pinching a day, swiping a zoomed one, and tapping a day to zoom it, on this table (once)
@@ -7895,6 +7907,7 @@ function wireElasticTable(table) {
 
   table.addEventListener('touchstart', (e) => {
     noteDaySwipe(e);
+    noteDayPinch(e);
     if (e.touches.length !== 2) return;
     const t1 = e.touches[0];
     const t2 = e.touches[1];
@@ -7915,7 +7928,7 @@ function wireElasticTable(table) {
   }, { passive: false });
 
   table.addEventListener('touchmove', (e) => {
-    if (followDaySwipe(e) || !isTransforming || e.touches.length !== 2) return;
+    if (followDaySwipe(e) || followDayPinch(e) || !isTransforming || e.touches.length !== 2) return;
     e.preventDefault();
     const t1 = e.touches[0];
     const t2 = e.touches[1];
@@ -7927,11 +7940,13 @@ function wireElasticTable(table) {
 
   table.addEventListener('touchend', (e) => {
     endTransform(e);
+    finishDayPinch(e);
     finishDaySwipe(e);
   });
   table.addEventListener('touchcancel', (e) => {
     if (daySwipe?.dragging) settleDraggedDay(daySwipe);
     daySwipe = null;
+    finishDayPinch(e, true);
     endTransform(e);
   });
   table.addEventListener('click', zoomTappedDay);
@@ -8024,6 +8039,107 @@ function finishDaySwipe(e) {
   }
   if (slides && swipe.cell === activeEditCell && nextZoomableDay(swipe.cell, step, true)) slideToDay(step, swipe.offset);
   else settleDraggedDay(swipe);
+}
+
+// A touch from a list of them by its identifier, or null
+function touchById(touches, id) {
+  for (let i = 0; i < touches.length; i++) {
+    if (touches[i].identifier === id) return touches[i];
+  }
+  return null;
+}
+
+// Two fingers down on a phone's zoomed day (see PINCHING THE ZOOMED DAY): which, how far apart, at what angle, and
+// where between them. Whose pinch it is waits for their first move (followDayPinch).
+function noteDayPinch(e) {
+  if (dayPinch) {
+    // A third finger changes nothing while both of its fingers are down. (When they aren't, their lifting never got
+    // here, like a finger on a line the page drew again since: the day grows back now.)
+    if (touchById(e.touches, dayPinch.ids[0]) && touchById(e.touches, dayPinch.ids[1])) return;
+    finishDayPinch(e, true);
+  }
+  const cell = activeEditCell;
+  if (e.touches.length !== 2 || !cell || !cell.classList.contains('is-fullZoom') || cell.classList.contains('isZoomClosing') || pageZoomedIn()) return;
+  const t1 = e.touches[0];
+  const t2 = e.touches[1];
+  if (t1.target.closest?.('td') !== cell || t2.target.closest?.('td') !== cell) return;
+  const center = getCenter(t1, t2);
+  dayPinch = { cell, ids: [t1.identifier, t2.identifier], dist: Math.max(getDistance(t1, t2), 1), angle: getAngle(t1, t2), x: center.x, y: center.y, cx: 0, cy: 0, base: '', shrinking: null, scale: 1 };
+}
+
+// The zoomed day's transform while it's pinched: moved (x, y), turned, and scaled around where the fingers started
+const pinchedDay = (pinch, x, y, turn, scale) => `${pinch.base} translate(${x}px, ${y}px) translate(${pinch.cx}px, ${pinch.cy}px) rotate(${turn}deg) scale(${scale}) translate(${-pinch.cx}px, ${-pinch.cy}px)`;
+
+// How much of the page's dimming stays behind a pinched day: less as it shrinks, and much less once letting go
+// would close it
+const pinchedBackdrop = (scale) => (scale < DAY_PINCH_CLOSE ? 0.25 : 0.55 + 0.45 * Math.min(1, (scale - DAY_PINCH_CLOSE) / (1 - DAY_PINCH_CLOSE)));
+
+// The two fingers moving. Their first move says whose pinch it is: coming together (or no farther apart), the day's;
+// apart, the page's (the browser zooms it). From then on the day follows them. Says whether the move was the day's.
+function followDayPinch(e) {
+  const pinch = dayPinch;
+  if (!pinch) return false;
+  const t1 = touchById(e.touches, pinch.ids[0]);
+  const t2 = touchById(e.touches, pinch.ids[1]);
+  if (pinch.shrinking === null) {
+    // (A move the browser won't let the page stop is the page's too: it was already scrolling)
+    if (!t1 || !t2 || pinch.cell !== activeEditCell || !e.cancelable || getDistance(t1, t2) > pinch.dist + 2) {
+      dayPinch = null;
+      return false;
+    }
+    startDayPinch(pinch);
+  }
+  if (e.cancelable) e.preventDefault();
+  if (!t1 || !t2 || pinch.cell !== activeEditCell) return true; // (Nothing to follow until it ends)
+  let scale = Math.max(getDistance(t1, t2) / pinch.dist, 0.05);
+  if (scale > 1) scale = 1 + (scale - 1) * DAY_PINCH_STRETCH;
+  pinch.scale = scale;
+  // (Turned the short way, so growing back turns it back the short way too)
+  const turn = ((getAngle(t1, t2) - pinch.angle + 540) % 360) - 180;
+  const center = getCenter(t1, t2);
+  pinch.cell.style.transform = pinchedDay(pinch, center.x - pinch.x, center.y - pinch.y, turn, scale);
+  if (zoomBackdrop) zoomBackdrop.style.opacity = String(pinchedBackdrop(scale));
+  return true;
+}
+
+// The day's pinch begins: the day stops any growing in, sliding in, or growing back it was still doing, and the
+// fingers' starting point is measured from its top left corner (which its transform turns around, see fitZoomedDay)
+function startDayPinch(pinch) {
+  const cell = pinch.cell;
+  for (const animation of cell.getAnimations ? cell.getAnimations() : []) {
+    if (!animation.animationName && !animation.transitionProperty) animation.finish();
+  }
+  pinch.shrinking = true;
+  pinch.base = /^\s*none\s*$/.test(cell.style.transform) ? '' : cell.style.transform;
+  const box = cell.getBoundingClientRect();
+  pinch.cx = pinch.x - box.left;
+  pinch.cy = pinch.y - box.top;
+  cell.style.willChange = 'transform';
+}
+
+// A finger lifted (or the browser took the touch away: cancelled, which never closes it). Pinched smaller than
+// DAY_PINCH_CLOSE, the day closes; otherwise it grows back to its zoomed size, and the page dims again.
+function finishDayPinch(e, cancelled = false) {
+  const pinch = dayPinch;
+  if (!pinch) return;
+  if (!cancelled && touchById(e.touches, pinch.ids[0]) && touchById(e.touches, pinch.ids[1])) return; // (Both still down)
+  dayPinch = null;
+  if (!pinch.shrinking) return;
+  const cell = pinch.cell;
+  cell.style.removeProperty('will-change');
+  const dim = zoomBackdrop ? zoomBackdrop.style.opacity : '';
+  if (zoomBackdrop) zoomBackdrop.style.removeProperty('opacity');
+  if (cell !== activeEditCell) return; // (Closed some other way meanwhile)
+  if (!cancelled && pinch.scale < DAY_PINCH_CLOSE) {
+    closeZoomedDay();
+    return;
+  }
+  const pinched = cell.style.transform;
+  cell.style.transform = pinch.base;
+  if (!cell.animate || reducedMotion()) return;
+  const settle = { duration: DAY_PINCH_SETTLE_MS, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' };
+  cell.animate([{ transform: pinched }, { transform: pinchedDay(pinch, 0, 0, 0, 1) }], settle);
+  if (zoomBackdrop && dim) zoomBackdrop.animate([{ opacity: dim }, { opacity: 1 }], settle);
 }
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)

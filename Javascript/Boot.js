@@ -43,7 +43,7 @@
     "/Javascript/Login.js": "5869bb48e7",
     "/Javascript/Notifications.js": "facb1b76b2",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "579ee5c3c7",
+    "/Javascript/Process Budget.js": "d110b28e77",
     "/Javascript/Quick Calendar.js": "7910e773dd",
     "/Javascript/Quick Entry.js": "b26972c2f1",
     "/Javascript/Quick Icon.js": "a54709cbc5",
