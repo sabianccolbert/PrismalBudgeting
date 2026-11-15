@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.11.2026.A";
+  const SITE_VERSION = "11.14.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,30 +26,31 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "aeec73b776",
-    "/Javascript/Budget Pages.js": "e6a9bedff2",
+    "/Javascript/Bob Page.js": "0c6a8bc31d",
+    "/Javascript/Budget Pages.js": "d3742cdbd1",
     "/Javascript/Budget Search.js": "7848a0fe36",
-    "/Javascript/Budget UI.js": "64abb6607c",
+    "/Javascript/Budget UI.js": "2d4b6200fe",
     "/Javascript/Budgets.js": "48b18d72a5",
-    "/Javascript/Calendar Page.js": "46b096b8cb",
-    "/Javascript/Calendars Page.js": "1506e3908c",
-    "/Javascript/Calendars.js": "26a0565c1a",
+    "/Javascript/Calendar Page.js": "44b5689449",
+    "/Javascript/Calendars Page.js": "91388f50de",
+    "/Javascript/Calendars.js": "0d778ceb17",
     "/Javascript/Dates.js": "331a3e1cb1",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "ed0c58d798",
+    "/Javascript/Fractals.js": "0982018a40",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "4e60824e74",
-    "/Javascript/Line Graph.js": "8dec370bf9",
-    "/Javascript/Login.js": "1718ff9325",
+    "/Javascript/Layout.js": "040b0fd9b2",
+    "/Javascript/Line Graph.js": "852a44c28d",
+    "/Javascript/Login.js": "5869bb48e7",
     "/Javascript/Notifications.js": "facb1b76b2",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "e66577b798",
-    "/Javascript/Quick Calendar.js": "5623f7119f",
-    "/Javascript/Quick Entry.js": "9f2dea8391",
-    "/Javascript/Quick Icon.js": "4851e4c76a",
-    "/Javascript/Session.js": "988bbb66b5",
-    "/Javascript/Settings Page.js": "59eac4f402",
-    "/Javascript/Sounds.js": "268b17e32a",
+    "/Javascript/Process Budget.js": "579ee5c3c7",
+    "/Javascript/Quick Calendar.js": "7910e773dd",
+    "/Javascript/Quick Entry.js": "b26972c2f1",
+    "/Javascript/Quick Icon.js": "a54709cbc5",
+    "/Javascript/Session.js": "2ba7a04b3e",
+    "/Javascript/Settings Page.js": "123ccad00e",
+    "/Javascript/Snapshot Page.js": "ece1fa56a9",
+    "/Javascript/Sounds.js": "dc92737a93",
     "/Javascript/Spreadsheets Page.js": "cc69112cb2",
     "/Javascript/Spreadsheets.js": "fd11909f30",
     "/Javascript/Sprites.js": "c6c86160d9",
@@ -77,7 +78,7 @@
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",
     "/Resources/Star.webp": "f2d3021d0b",
-    "/themes.css": "5345abd52b"
+    "/themes.css": "fa9fa48911"
   };
   // </stamp:files>
 
@@ -102,6 +103,7 @@
     if (p === "/login") return "login";
     if (p === "/privacy%20and%20terms") return "privacy";
     if (p === "/settings") return "settings";
+    if (p === "/snapshot") return "snapshot";
     if (p === "/quick") return "quick";
     if (p === "/quickcal") return "quickcal";
     if (p === "/how-it-works") return "guide";
@@ -111,7 +113,6 @@
     if (p === "/menu/recurring") return "recurring";
     if (p === "/menu/accounts") return "accounts";
     if (p === "/menu/spreadsheets") return "spreadsheets";
-    if (p === "/menu/tracker") return "tracker";
     if (p === "/menu/calculator") return "calculator";
     if (p === "/menu/payments") return "payments";
     if (p === "/menu/logs") return "logs";
@@ -124,7 +125,7 @@
   // GitHub Pages shows 404.html at whatever address was asked for, so that page says what it is
   window.PAGE = document.documentElement.dataset.page === "notfound" ? "notfound" : pageKeyOf(location.pathname);
 
-  // Pages that work without logging in (Quick Entry and Quick Calendar use the key in their links instead; How It
+  // Pages that work without logging in (Quick Budget and Quick Calendar use the key in their links instead; How It
   // Works and the Not Found page are for anyone, search engines included)
   const PUBLIC_PAGES = ["login", "privacy", "quick", "quickcal", "guide", "notfound"];
 
@@ -141,7 +142,7 @@
     storage = null;
   }
   // Settings' Reduced Motion, kept on this device whoever signs in on it: the starfield holding still (STILL_STARS_KEY),
-  // and the other animations off (LESS_MOTION_KEY: pages sliding, windows zooming open, cards floating, days zooming). A
+  // and the other animations off (LESS_MOTION_KEY: pages sliding, windows zooming open, days zooming). A
   // device that asks for less motion on its own gets both, and no starfield at all (stylesheet.css section 11).
   // html.lessMotion turns the animations off in the CSS, and the scripts ask lessMotion() and stillStars().
   const STILL_STARS_KEY = "prismal_still_stars";
@@ -224,8 +225,10 @@
   const pageParams = new URLSearchParams(location.search);
   const isEmailLink = PAGE === "login" && (pageParams.has("reset") || pageParams.has("verify") || pageParams.has("sheet-email") || hasResetCode);
 
-  // If they are not logged in, and not already on a page that works without it, redirect them.
+  // If they are not logged in, and not already on a page that works without it, redirect them. Signing in comes back to
+  // this page (kept for this tab: Login.js goToBudget), like the Snapshot page opened from a home screen icon.
   if (!isLoggedIn && !IS_PUBLIC) {
+    try { sessionStorage.setItem("prismal_return_to", location.pathname + location.search + location.hash); } catch (e) {}
     window.location.replace("/login.html");
     return;
   }
@@ -239,7 +242,7 @@
    * =============================== */
   // The theme picked in Settings, kept on this device (so two devices on the same budget can each have their own):
   // html[data-theme] sets the colors, edges, background, icons, and font (themes.css), and the starfield's look (Active
-  // Starfield.js). Only the pages behind a sign-in, and Quick Entry, have one: the login page, the front page, and the
+  // Starfield.js). Only the pages behind a sign-in, Quick Budget, and Quick Calendar have one: the login page, the front page, and the
   // pages for anyone (How It Works, the Privacy Policy) always look like Prismal, which has no data-theme.
   // Custom is a theme of the person's own (Settings' Custom window): one of the others to start from (its data-theme),
   // with five colors of their own (the page behind the cards, the cards, the words, the glow, and what's chosen) worked
@@ -301,11 +304,12 @@
     }
   }
 
-  // The look a link hands on (Quick Entry's Home, to the login page, and a Quick Entry icon's own address, for a phone
-  // whose home screen app keeps its own storage): { theme, custom (a Custom theme's parts) }, or null
+  // The look a link hands on (Quick Budget's and Quick Calendar's Home, to the login page, and a Quick Budget or Quick
+  // Calendar icon's own address, for a phone whose home screen app keeps its own storage): { theme, custom (a Custom
+  // theme's parts) }, or null
   let lookGiven = null;
   function readLookGiven() {
-    if (PAGE !== "login" && PAGE !== "quick") return null;
+    if (PAGE !== "login" && PAGE !== "quick" && PAGE !== "quickcal") return null;
     const params = new URLSearchParams(location.search);
     const theme = params.get("look");
     if (!THEMES.includes(theme) || theme === "prismal") return null;
@@ -329,7 +333,7 @@
   // The theme this page shows
   function shownTheme() {
     if (PAGE === "login") return lookGiven ? lookGiven.theme : "prismal";
-    if (PAGE === "quick" && lookGiven && !keepsTheme()) return lookGiven.theme;
+    if ((PAGE === "quick" || PAGE === "quickcal") && lookGiven && !keepsTheme()) return lookGiven.theme;
     return THEMED ? savedTheme() : "prismal";
   }
 
@@ -462,7 +466,7 @@
       "--TILE_FILL": `radial-gradient(circle at 50% 40%, ${rgba(glow, 0.35)}, ${rgba(cardDeep, 0.92)})`,
       "--LINE_GRADIENT": `linear-gradient(90deg, transparent, ${rgba(glow, 0.65)} 25%, ${rgba(mix(glow, pick, 0.4), 0.65)} 75%, transparent)`,
       "--BAR_FILL": `linear-gradient(90deg, ${rgbColor(glow)}, ${rgbColor(glowLight)})`,
-      // New Entry's ring in the glow's colors (the theme it starts from may have its own), and Quick Entry's bolt the
+      // New Entry's ring in the glow's colors (the theme it starts from may have its own), and Quick Budget's bolt the
       // color of its words
       "--RING_FILL": `conic-gradient(from 200deg, ${rgbColor(glow)}, ${rgbColor(glowLight)}, ${rgbColor(mix(glow, pick, 0.35))}, ${rgbColor(glow)})`,
       "--PRIMARY_ICON": darkWords ? "brightness(0) invert(0.08)" : "brightness(0) invert(1)",
@@ -664,14 +668,15 @@
     "/Javascript/Analytics.js"
   ];
 
-  // Quick Entry and Quick Calendar borrow the budget helpers and forms without loading a budget (see Quick Entry.js
+  // Quick Budget and Quick Calendar borrow the budget helpers and forms without loading a budget (see Quick Entry.js
   // and Quick Calendar.js)
-  const BUDGET_PAGES = ["home", "recurring", "accounts", "spreadsheets", "tracker", "calculator", "payments", "logs", "bob", "settings", "quick", "quickcal"];
+  const BUDGET_PAGES = ["home", "recurring", "accounts", "spreadsheets", "calculator", "payments", "logs", "bob", "settings", "snapshot", "quick", "quickcal"];
 
   // The script that draws each budget page (the menu data pages share Budget Pages.js)
   const PAGE_SCRIPTS = {
     home: "/Javascript/Calendar Page.js",
     settings: "/Javascript/Settings Page.js",
+    snapshot: "/Javascript/Snapshot Page.js",
     spreadsheets: "/Javascript/Spreadsheets Page.js",
     bob: "/Javascript/Bob Page.js",
     quick: "/Javascript/Quick Entry.js",
@@ -690,7 +695,7 @@
   function scriptsFor(page, signedIn){
     const frontPage = page === "home" && !signedIn;
     const isPublic = frontPage || PUBLIC_PAGES.includes(page);
-    // Quick Entry's and Quick Calendar's links carry their keys, so those pages never load analytics
+    // Quick Budget's and Quick Calendar's links carry their keys, so those pages never load analytics
     const keyPage = page === "quick" || page === "quickcal";
     const scripts = GLOBAL_SCRIPTS.filter(src => !keyPage || !src.endsWith("/Analytics.js"));
 
@@ -719,23 +724,25 @@
       scripts.push("/Javascript/Dates.js"); // Days stored, shown, typed, and picked (Process Budget.js uses it)
       scripts.push("/Javascript/Process Budget.js");
       scripts.push("/Javascript/Budget UI.js");
-      // Connected spreadsheets' reading (Quick Entry and Quick Calendar never read them)
+      // Connected spreadsheets' reading (Quick Budget and Quick Calendar never read them)
       if (!keyPage) scripts.push("/Javascript/Spreadsheets.js");
       // Connected calendars' reading and pay, on the pages that keep them up to date
       if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Calendars.js");
       // Search (Home's): before the page script, which opens it
       if (page === "home") scripts.push("/Javascript/Budget Search.js");
       // The calendar (Calendar Fractals and their entries): Home shows it, the Budgets, Calendars & Spreadsheets page
-      // manages it, Settings has its links, and the Quick Calendar page is it
-      if (page === "home" || page === "spreadsheets" || page === "settings" || page === "quickcal") scripts.push("/Javascript/Fractals.js");
-      // The Quick Entry icon: Settings makes it, and the Quick Entry page puts it in its icon links
+      // manages it, Settings has its links, the Quick Calendar page is it, and Snapshot can show its entries
+      if (page === "home" || page === "spreadsheets" || page === "settings" || page === "quickcal" || page === "snapshot") scripts.push("/Javascript/Fractals.js");
+      // The Quick Budget icon: Settings makes it, and the Quick Budget page puts it in its icon links
       if (page === "settings" || page === "quick") scripts.push("/Javascript/Quick Icon.js");
-      // The line graphs (Bob's Data windows and the Debt Calculator)
-      if (page === "bob" || page === "payments") scripts.push("/Javascript/Line Graph.js");
+      // The line graphs (Bob's page, the Accrual Calculator, and Snapshot)
+      if (page === "bob" || page === "payments" || page === "snapshot") scripts.push("/Javascript/Line Graph.js");
       // Push notifications on this device: Settings turns them on and off, and Home asks once after a sign-in
       if (page === "home" || page === "settings") scripts.push("/Javascript/Notifications.js");
-      // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings)
-      if (page === "home") scripts.push("/Javascript/Bob Page.js");
+      // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings), and his page borrows the menu data
+      // pages' tables, New Row, and Edit for the tracker in his Data card. Snapshot draws its cards with both.
+      if (page === "home" || page === "snapshot") scripts.push("/Javascript/Bob Page.js");
+      if (page === "bob" || page === "snapshot") scripts.push("/Javascript/Budget Pages.js");
       scripts.push(PAGE_SCRIPTS[page] || "/Javascript/Budget Pages.js");
       // The Budgets, Calendars & Spreadsheets page's calendars
       if (page === "spreadsheets") scripts.push("/Javascript/Calendars Page.js");

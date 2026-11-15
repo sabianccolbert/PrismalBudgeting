@@ -1863,7 +1863,7 @@ html:is([data-theme="spooky"], [data-corners="sharp"]):not([data-theme="digital"
   border-radius: 50% !important;
 }
 
-/* Quick Entry's bolt is the color of its words (white, unless the theme's are dark: --PRIMARY_ICON) */
+/* Quick Budget's bolt is the color of its words (white, unless the theme's are dark: --PRIMARY_ICON) */
 html:is([data-theme], .customTheme) .budgetButton.homeQuick .buttonIcon {
   filter: var(--PRIMARY_ICON, brightness(0) invert(1)) !important;
 }
@@ -1925,7 +1925,7 @@ html:is([data-theme="professional"], [data-theme="dark"], [data-theme="elements"
 /* Custom, until there's one: every color (once there is, Settings Page.js paints it in its own) */
 .themeSwatch[data-swatch="custom"]       { background: linear-gradient(90deg, #ff4d4d, #ffd166, #7dff5a, #46c8ff, #8d5cff, #e050ff); }
 
-/* The Quick Entry icon: what it looks like beside its words, then its Colors and its Icon */
+/* The Quick Budget icon: what it looks like beside its words, then its Colors and its Icon */
 .quickIconEditor {
   margin-top: 1em;
   padding-top: 0.9em;

@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
+    <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
-    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
+    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
     <title>Prismal Planning - Budgets, Calendars &amp; Spreadsheets</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -79,12 +79,12 @@
              (Fractals.js renderManager) -->
         <section id="fractals" class="budgetCard settingsCard" aria-labelledby="fractalsHeading" hidden>
           <h3 id="fractalsHeading">Calendar Fractals</h3>
-          <p>Your calendars. Each one has a name and a color, and its entries show on Home's calendar in that color while it's checked in the Calendar Fractals list there. Add entries with New Entry on Home (Calendar Entry), or with a Quick Calendar icon.</p>
+          <p>Your calendars. Each one has a name and a color, and its entries show on Home's calendar in that color while it's checked in the Calendar Fractals list there. Add entries with New Entry on Home (Calendar Entry), or with a Quick Calendar icon. A linked one shows another calendar's entries (one connected below, or a calendar's link).</p>
           <div id="fractalManager"></div>
           <div class="panelButtons">
             <button id="newFractalButton" type="button" class="budgetButton primary">New Calendar Fractal</button>
           </div>
-          <p class="panelHint">Deleting a fractal deletes its entries too (your last one can't be deleted). Each one's calendar link, for other calendar apps, is in <a href="/settings.html#fractalLinksCard">Settings</a>. A fractal with your work shifts can be connected below, to turn them into paychecks.</p>
+          <p class="panelHint">Deleting a fractal deletes its entries too (your last one can't be deleted). Each one's calendar link, for other calendar apps, is in its Edit window (Share), and in <a href="/settings.html#fractalLinksCard">Settings</a>. A fractal with your work shifts can be connected below, to turn them into paychecks.</p>
         </section>
 
         <!-- Connected calendars: each one's button (change it), On/Off, Delete, and its paychecks and shifts, with what's
@@ -129,7 +129,7 @@
           <p>Every budget you have, your own and the ones shared with you, with invitations to Join or Decline. <strong>Open</strong> switches to one, <strong>Share</strong> invites someone to one of yours (by their username or email; once they join, they can open it and change anything in it, and Stop Sharing takes it back), <strong>Rename</strong> and <strong>Delete</strong> are for your own (your first budget can't be deleted), and <strong>Leave</strong> is for one shared with you. Only a budget's owner can share it. The name above the buttons at the top of every page switches between them too.</p>
 
           <h4>Calendar Fractals</h4>
-          <p>Your calendars, each with a name and a color. Their entries show on Home's calendar in that color while they're checked in the Calendar Fractals list there. <strong>Edit</strong> changes one's name or color (or deletes it, with its entries; your last one can't be deleted), and <strong>New Calendar Fractal</strong> makes another. Each one's link for other calendar apps is in Settings. Add entries with New Entry on Home (its Calendar Entry button), or with a Quick Calendar icon.</p>
+          <p>Your calendars, each with a name and a color. Their entries show on Home's calendar in that color while they're checked in the Calendar Fractals list there. <strong>Edit</strong> changes one's name or color (or deletes it, with its entries; your last one can't be deleted), and its <strong>Share</strong> gives its link for other calendar apps (it's in Settings too). <strong>New Calendar Fractal</strong> makes another, or with <strong>From another calendar</strong>, links one: a calendar connected below, or a calendar's subscription link. A linked one's entries show on Home in its color but can't be changed here (or get alerts); its Edit has Read Again, Share, and Unlink. Deleting a connected calendar unlinks the fractals showing it. Add entries with New Entry on Home (its Calendar Entry button), or with a Quick Calendar icon.</p>
 
           <h4>Spreadsheets</h4>
           <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
@@ -185,6 +185,7 @@
             <li><strong>Paydays:</strong> every week, every other week, twice a month, or once a month, and a payday on a weekend can be paid the Friday before or the Monday after. Each paycheck pays the full workweeks before its payday's week, or the days up to a few days before its payday.</li>
             <li><strong>Overtime:</strong> hours past the weekly limit (and a daily limit and double time, for places that have them), paid on the week's blended rate (the law's regular rate) or on each hour's own rate.</li>
             <li><strong>Pay By Event Title:</strong> a shift whose title has a rule's words in it is paid the rule's way: its own hourly and night rates, an extra per hour, a multiplier, a stipend for each shift (taxed, or tax-free like a per diem), its own unpaid break, or as paid time off (paid, but not counted toward overtime), on the days you pick.</li>
+            <li><strong>Pay By Time Or Day:</strong> the hours inside a rule's days and hours are paid its way, like $2.00 more an hour on weekends, or 1.1 times from 10:00 PM to 6:00 AM (Add Weekend Rule and Add Night Rule start one). Each has its days, its hours (blank: all day; an end earlier than the start runs past midnight), and an hourly rate, an extra per hour, or a multiplier. It goes on top of base pay (or a title rule's rate), and when more than one is on at once, like a Saturday night, each counts, in order.</li>
             <li><strong>Unpaid breaks</strong> come out of each shift that's long enough, and <strong>night pay</strong> is paid in the night hours you pick.</li>
             <li><strong>Bonuses:</strong> an all-day event with the bonus word and an amount, like Bonus $25, is paid in that week's paycheck.</li>
             <li><strong>Pay changes:</strong> a raise, a new deduction, or anything else that changes from one paycheck on. Tap Pay Change, pick the day it starts, and fill in only what's new. Paychecks before it stay as they were.</li>

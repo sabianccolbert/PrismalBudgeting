@@ -1,24 +1,39 @@
-// Line Graph: a line graph that can go in any window or page (Bob's Data windows, the top of the Debt Calculator). It's given
-// what to draw for a stretch of days, and has its own date box, on today to start: a later day adds what the budget expects, drawn
-// dashed after today. Pointing at it (or the arrow keys, once it's focused) shows each line's value on the nearest day. More than
-// one line has a legend whose buttons hide or show each one; "See the numbers" opens the same figures as a table.
+// Line Graph: a line graph that can go in any window or page (Bob's page, the top of the Accrual Calculator). It's given what to
+// draw for a stretch of days, and has its own date boxes: Start date (the first day drawn) and Show through (on today to start:
+// a later day adds what the budget expects, drawn dashed after today). Pointing at it (or the arrow keys, once it's focused)
+// shows each line's value on the nearest day. "See the numbers" opens the same figures as a table.
 //
-// LineGraph.create({ label, from, series, note, money, moneyKeys, min, max, pickDay, emptyNote }):
+// More than one line has a legend: each line's name is a button that goes, one tap at a time, Separate (its own line and
+// color), Red, Blue, Hidden, and back to Separate. Every line set to Red is added together into one thicker red line, and every
+// one set to Blue into a blue one, so a few lines can be seen as one (like Coffee, Coffees, and Drinks) next to others. A "?"
+// first in the legend says so. Past MAX_LINES lines (as many as there are colors), the rest start Hidden.
+//
+// LineGraph.create({ label, from, series, note, money, min, max, pickDay, start, until, dashAhead, emptyNote, level }):
 //   label: what it shows, for the title over it and for screen readers
-//   from(until): the first day to show when it runs through until
+//   from(until): the first day to show when it runs through until (until a Start date is picked)
 //   series(first, until): the lines, [{ name, points: [{ date, value }] }] (oldest first; every line's days need not match)
-//   note: words under it. money: its values are dollars (true to start). min, max: the date box's limits.
-//   pickDay: false for a graph that isn't about days ahead, or that takes its days from elsewhere (no date box)
+//   note: words under it. money: its values are dollars (true to start). min, max: the Show through box's limits.
+//   pickDay: false for a graph that isn't about days ahead, or that takes its days from elsewhere (no date boxes)
+//   start, until: the days it starts on (start: a Start date of its own, instead of from(until); until: today without one)
 //   dashAhead: false to draw days after today like the rest (a graph that's all ahead)
 //   emptyNote: said when there's nothing to draw. level: its title's heading level (3 to start, for under a window's title)
-// Returns { el, draw(), until() }. draw() works it out again (after a change to the budget).
+// Returns { el, draw(), until(), lines() }. draw() works it out again (after a change to the budget); lines() is what was
+// worked out last, [{ name, points }].
 
 window.LineGraph = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const HEIGHT = 230;
   const MAX_POINTS = 420;     // More days than this are drawn every few days (the day picked is always the last)
   const MAX_TABLE_ROWS = 60;  // The most days "See the numbers" lists (spread across the stretch)
-  const MAX_LINES = 8;        // Past this the last lines are added together as Other: there are only so many colors to tell apart
+  const MAX_LINES = 8;        // As many colors as there are to tell lines apart (--SERIES_n): past this many, the rest start Hidden
+  const MODES = ["separate", "red", "blue", "hidden"]; // What a tap on a line's name goes through, in order
+  const MODE_WORDS = { separate: "Separate", red: "Red", blue: "Blue", hidden: "Hidden" };
+  const GROUP_COLORS = { red: "var(--GRAPH_RED)", blue: "var(--GRAPH_BLUE)" };
+  const MODES_HELP = [
+    "Tap a line's name to change how it's drawn. Each tap goes to the next: Separate (its own line, in its own color), Red, Blue, Hidden, then back to Separate.",
+    "Every line set to Red is added together into one thicker red line, and every line set to Blue into one blue line. That way a few lines can be seen as one, like Coffee, Coffees, and Drinks in red, next to Groceries in blue.",
+    `Point at the graph (or tap it) to read each line on that day. A graph with more than ${MAX_LINES} lines starts with the rest Hidden.`
+  ];
   const WIDE_ENOUGH = 460;    // Pixels wide before each line's name fits at its right end
   const LONG_STRETCH = 300 * 86400000; // Past this much time, the days along the bottom say the month and year instead
   let count = 0;
@@ -66,22 +81,19 @@ window.LineGraph = (function () {
     return kept;
   }
 
-  // Lines past MAX_LINES as one more line, Other, each day's value added together
-  function foldedLines(lines) {
-    if (lines.length <= MAX_LINES) return lines;
-    const rest = lines.slice(MAX_LINES - 1);
+  // Lines added together, each day's values summed (a day only some of them have counts what they have)
+  function addedUp(members) {
     const byDay = new Map();
-    for (const line of rest) {
+    for (const line of members) {
       for (const point of line.points) {
         const time = point.date.getTime();
         byDay.set(time, (byDay.get(time) || 0) + point.value);
       }
     }
-    const points = [...byDay].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ date: new Date(time), value: Math.round(value * 100) / 100 }));
-    return [...lines.slice(0, MAX_LINES - 1), { name: `Other (${rest.length})`, points }];
+    return [...byDay].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ date: new Date(time), value: Math.round(value * 100) / 100 }));
   }
 
-  function create({ label, from, series, note = "", money = true, min = null, max = null, pickDay = true, dashAhead = true, emptyNote = "Nothing to draw for these days yet.", level = 3 }) {
+  function create({ label, from, series, note = "", money = true, min = null, max = null, pickDay = true, start = null, until: firstUntil = null, dashAhead = true, emptyNote = "Nothing to draw for these days yet.", level = 3 }) {
     const id = ++count;
     const el = BudgetUI.element("div", "lineGraph");
     const heading = BudgetUI.element("div", "lineGraphTitle", label);
@@ -90,8 +102,16 @@ window.LineGraph = (function () {
     heading.setAttribute("aria-level", String(level));
     el.append(heading);
 
-    const day = pickDay ? BudgetUI.dateField({ label: "Show through", date: today, min, max, hint: "On today to start. Pick a later day to see what your budget expects, drawn dashed." }) : null;
-    if (day) el.append(day.el);
+    let until = firstUntil || today;
+    let picked = start; // The Start date picked (null: from(until))
+    const firstDay = () => (picked && picked < until ? picked : from(until));
+    const startBox = pickDay ? BudgetUI.dateField({ label: "Start date", date: firstDay(), max, hint: "The first day drawn." }) : null;
+    const day = pickDay ? BudgetUI.dateField({ label: "Show through", date: until, min, max, hint: "On today to start. Pick a later day to see what your budget expects, drawn dashed." }) : null;
+    if (day) {
+      const days = BudgetUI.element("div", "lineGraphDays");
+      days.append(startBox.el, day.el);
+      el.append(days);
+    }
     const problem = BudgetUI.element("p", "panelError");
     problem.hidden = true;
     problem.setAttribute("role", "alert");
@@ -112,17 +132,34 @@ window.LineGraph = (function () {
     const empty = BudgetUI.element("p", "panelHint lineGraphEmpty");
     empty.hidden = true;
     const legend = BudgetUI.element("ul", "lineGraphLegend");
+    // The legend's first item: a "?" that opens (and closes) what its names do, under it
+    const modesHelp = BudgetUI.element("div", "lineGraphHelp");
+    modesHelp.id = `lineGraphModes${id}`;
+    modesHelp.hidden = true;
+    for (const words of MODES_HELP) modesHelp.append(BudgetUI.element("p", "panelHint", words));
+    const helpItem = BudgetUI.element("li", "lineGraphHelpItem");
+    const helpButton = BudgetUI.element("button", "fieldHelpButton lineGraphHelpButton", "?");
+    helpButton.type = "button";
+    helpButton.title = "What tapping a name does";
+    helpButton.setAttribute("aria-label", helpButton.title);
+    helpButton.setAttribute("aria-controls", modesHelp.id);
+    helpButton.setAttribute("aria-expanded", "false");
+    helpButton.addEventListener("click", () => {
+      modesHelp.hidden = !modesHelp.hidden;
+      helpButton.setAttribute("aria-expanded", String(!modesHelp.hidden));
+    });
+    helpItem.append(helpButton);
     const tableBox = BudgetUI.element("details", "lineGraphTable");
     const tableLabel = BudgetUI.element("summary", "", "See the numbers");
     const tableHolder = BudgetUI.element("div", "bobScroll");
     tableBox.append(tableLabel, tableHolder);
-    el.append(problem, plot, keyboard, spoken, empty, legend, tableBox);
+    el.append(problem, plot, keyboard, spoken, empty, legend, modesHelp, tableBox);
     if (note) el.append(BudgetUI.element("p", "panelHint", note));
 
-    const hidden = new Set();    // The names of the lines hidden with the legend
-    const slots = new Map();     // Each line's color, by its name: it keeps it however the others change
-    let until = today;
-    let lines = [];
+    const modes = new Map();     // Each line's mode (MODES), by its name: it keeps it however the others change
+    const slots = new Map();     // Each line's color, by its name, the same way
+    let lines = [];              // The lines worked out: [{ name, points, byDay }]
+    let drawn = [];              // What's drawn: the Separate lines, then Red's and Blue's (see drawnLines)
     let dates = [];              // Every day drawn, oldest first
     let layout = null;           // Where things are: { x(index) }
     let pointed = -1;            // The day being read (an index into dates), or -1
@@ -133,20 +170,31 @@ window.LineGraph = (function () {
       return slots.get(name);
     };
     const colorOf = (name) => (lines.length === 1 ? "var(--GRAPH_ONE)" : `var(--SERIES_${slotOf(name) + 1})`);
+    const modeOf = (name) => modes.get(name) || "separate";
     const valueOn = (line, date) => line.byDay.get(date.getTime());
-    const shownLines = () => lines.filter(line => !hidden.has(line.name));
+    const withDays = (points) => ({ points, byDay: new Map(points.map(point => [point.date.getTime(), point.value])) });
 
-    // The lines for the stretch, from the page's numbers
+    // The lines for the stretch, from the page's numbers (a line seen for the first time past the first MAX_LINES starts Hidden)
     function work() {
-      const first = from(until);
-      lines = foldedLines(series(first < until ? first : addDays(until, -1), until).filter(line => line.points.length > 0))
-        .map(line => {
-          const points = thinned(line.points);
-          return { name: line.name, points, byDay: new Map(points.map(point => [point.date.getTime(), point.value])) };
-        });
+      const first = firstDay();
+      lines = series(first < until ? first : addDays(until, -1), until).filter(line => line.points.length > 0)
+        .map(line => ({ name: line.name, ...withDays(thinned(line.points)) }));
+      lines.forEach((line, at) => { if (!modes.has(line.name)) modes.set(line.name, at < MAX_LINES ? "separate" : "hidden"); });
       const times = new Set();
       for (const line of lines) for (const point of line.points) times.add(point.date.getTime());
       dates = [...times].sort((a, b) => a - b).map(time => new Date(time));
+      drawn = drawnLines();
+    }
+
+    // What's drawn: each Separate line in its own color, then the Red lines added together as one, and the Blue ones
+    function drawnLines() {
+      const shown = lines.filter(line => modeOf(line.name) === "separate").map(line => ({ ...line, color: colorOf(line.name), group: false }));
+      for (const mode of ["red", "blue"]) {
+        const members = lines.filter(line => modeOf(line.name) === mode);
+        if (members.length === 0) continue;
+        shown.push({ name: `${MODE_WORDS[mode]}: ${members.map(line => line.name).join(" + ")}`, ...withDays(addedUp(members)), color: GROUP_COLORS[mode], group: true });
+      }
+      return shown;
     }
 
     // The picture, at the width it has
@@ -154,11 +202,11 @@ window.LineGraph = (function () {
       svg.replaceChildren();
       tip.hidden = true;
       pointed = -1;
-      const hasData = dates.length >= 2 && shownLines().length > 0;
+      const hasData = dates.length >= 2 && drawn.length > 0;
       plot.hidden = !hasData;
       empty.hidden = hasData;
       if (!hasData) {
-        empty.textContent = dates.length >= 2 ? "Every line is hidden. Tap a name below to show it." : emptyNote;
+        empty.textContent = dates.length >= 2 ? "Every line is Hidden. Tap a name below to show it again." : emptyNote;
         return;
       }
       const width = plot.clientWidth;
@@ -166,7 +214,6 @@ window.LineGraph = (function () {
       svg.setAttribute("viewBox", `0 0 ${width} ${HEIGHT}`);
       svg.setAttribute("width", String(width));
       svg.setAttribute("height", String(HEIGHT));
-      const drawn = shownLines();
       const values = drawn.flatMap(line => line.points.map(point => point.value));
       let low = Math.min(...values);
       let high = Math.max(...values);
@@ -206,14 +253,15 @@ window.LineGraph = (function () {
       }
 
       for (const line of drawn) {
-        const color = colorOf(line.name);
+        const color = line.color;
+        const lineClass = line.group ? "lineGraphLine isGroup" : "lineGraphLine";
         const path = (points) => points.map((point, at) => `${at ? "L" : "M"}${xOf(point.date).toFixed(1)} ${yOf(point.value).toFixed(1)}`).join(" ");
         const past = line.points.filter(point => point.date <= today);
         const ahead = line.points.filter(point => point.date >= today);
         // (With the days thinned out, no point may land on today: the dashes start from the last point before it)
         if (past.length > 0 && ahead.length > 0 && past[past.length - 1].date < ahead[0].date) ahead.unshift(past[past.length - 1]);
-        if (past.length >= 2) svgEl("path", { d: path(past), class: "lineGraphLine", stroke: color }, svg);
-        if (ahead.length >= 2) svgEl("path", { d: path(ahead), class: dashAhead ? "lineGraphLine isAhead" : "lineGraphLine", stroke: color }, svg);
+        if (past.length >= 2) svgEl("path", { d: path(past), class: lineClass, stroke: color }, svg);
+        if (ahead.length >= 2) svgEl("path", { d: path(ahead), class: dashAhead ? `${lineClass} isAhead` : lineClass, stroke: color }, svg);
         if (past.length < 2 && ahead.length < 2 && line.points.length === 1) svgEl("circle", { cx: xOf(line.points[0].date), cy: yOf(line.points[0].value), r: 4, fill: color }, svg);
       }
 
@@ -240,7 +288,7 @@ window.LineGraph = (function () {
         cross.setAttribute("x1", String(x));
         cross.setAttribute("x2", String(x));
       }
-      const rows = shownLines().map(line => ({ name: line.name, value: valueOn(line, date), color: colorOf(line.name) })).filter(row => row.value !== undefined);
+      const rows = drawn.map(line => ({ name: line.name, value: valueOn(line, date), color: line.color })).filter(row => row.value !== undefined);
       tip.replaceChildren(BudgetUI.element("div", "lineGraphTipDay", `${showWeekdayDate(date)}${date > today ? " (expected)" : ""}`));
       for (const row of rows) {
         const item = BudgetUI.element("div", "lineGraphTipRow");
@@ -285,33 +333,43 @@ window.LineGraph = (function () {
       point(next);
     });
 
-    // The legend (with two lines or more): a line key and its name, each a button that hides or shows it
+    // The legend (with two lines or more): its "?", then each line's key and name, a button that goes to the line's next
+    // mode (MODES), saying the one it's on unless that's Separate
     function drawLegend() {
       legend.hidden = lines.length < 2;
-      legend.replaceChildren(...(lines.length < 2 ? [] : lines.map(line => {
+      if (legend.hidden) {
+        modesHelp.hidden = true;
+        helpButton.setAttribute("aria-expanded", "false");
+        return legend.replaceChildren();
+      }
+      legend.replaceChildren(helpItem, ...lines.map((line, at) => {
+        const mode = modeOf(line.name);
+        const next = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
         const item = BudgetUI.element("li");
-        const button = BudgetUI.element("button", "lineGraphLegendButton");
+        const button = BudgetUI.element("button", `lineGraphLegendButton is${MODE_WORDS[mode]}`);
         button.type = "button";
-        button.setAttribute("aria-pressed", String(!hidden.has(line.name)));
-        button.title = `Show or hide ${line.name}`;
+        button.title = `${line.name}: ${MODE_WORDS[mode]}. Tap for ${MODE_WORDS[next]}.`;
+        button.setAttribute("aria-label", button.title);
         const key = BudgetUI.element("span", "lineGraphKey");
-        key.style.background = colorOf(line.name);
+        key.style.background = GROUP_COLORS[mode] || colorOf(line.name);
         button.append(key, BudgetUI.noTranslate(BudgetUI.element("span", "", line.name)));
+        if (mode !== "separate") button.append(BudgetUI.element("span", "lineGraphMode", MODE_WORDS[mode]));
         button.addEventListener("click", () => {
-          if (hidden.has(line.name)) hidden.delete(line.name);
-          else hidden.add(line.name);
+          modes.set(line.name, next);
+          drawn = drawnLines();
           drawLegend();
           paint();
           fillTable();
+          // (The button was drawn again: the focus stays on this line's)
+          legend.children[at + 1]?.querySelector("button")?.focus({ preventScroll: true });
         });
         item.append(button);
         return item;
-      })));
+      }));
     }
 
     // "See the numbers": the same figures in a table, newest day first, spread across the stretch when there are many days
     function fillTable() {
-      const drawn = shownLines();
       tableBox.hidden = dates.length < 2 || drawn.length === 0;
       if (tableBox.hidden) return tableHolder.replaceChildren();
       const step = Math.max(1, Math.ceil(dates.length / MAX_TABLE_ROWS));
@@ -338,25 +396,34 @@ window.LineGraph = (function () {
       fillTable();
     }
 
-    // A new day in the box
+    const showProblem = (words) => {
+      problem.textContent = words;
+      problem.hidden = !words;
+    };
+
+    // A new day in a box. A Start date on or after the Show through day goes back to the usual one, and so does an
+    // emptied Start date box.
     if (day) {
-      const onDay = () => {
-        const picked = day.value();
-        problem.hidden = true;
-        if (!(picked instanceof Date)) {
-          problem.textContent = `Enter a day to show through (${datePattern()}).`;
-          problem.hidden = false;
-          return;
-        }
-        if ((min && picked < min) || (max && picked > max)) {
-          problem.textContent = `Pick a day from ${min ? showDate(min) : "the start"} through ${max ? showDate(max) : "today"}.`;
-          problem.hidden = false;
-          return;
-        }
-        until = createSafeMidnight(picked);
+      day.input.addEventListener("change", () => {
+        const value = day.value();
+        if (!(value instanceof Date)) return showProblem(`Enter a day to show through (${datePattern()}).`);
+        if ((min && value < min) || (max && value > max)) return showProblem(`Pick a day from ${min ? showDate(min) : "the start"} through ${max ? showDate(max) : "today"}.`);
+        showProblem("");
+        until = createSafeMidnight(value);
+        if (picked && picked >= until) picked = null;
+        startBox.input.value = showDate(firstDay());
         draw();
-      };
-      day.input.addEventListener("change", onDay);
+      });
+      startBox.input.addEventListener("change", () => {
+        const value = startBox.value();
+        if (value === undefined) return showProblem(`Enter a start date (${datePattern()}).`);
+        const date = value ? createSafeMidnight(value) : null;
+        if (date && date >= until) return showProblem(`Pick a start date before ${showDate(until)}.`);
+        showProblem("");
+        picked = date;
+        startBox.input.value = showDate(firstDay());
+        draw();
+      });
     }
 
     // Drawn again when it gets a width, or a new one
@@ -370,7 +437,7 @@ window.LineGraph = (function () {
       })).observe(el);
     }
     draw();
-    return { el, draw, until: () => until };
+    return { el, draw, until: () => until, lines: () => lines };
   }
 
   return { create };

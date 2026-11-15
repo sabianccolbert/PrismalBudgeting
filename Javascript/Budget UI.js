@@ -35,7 +35,7 @@ const BudgetUI = (() => {
   // Open a panel. "large" panels float over the top of the screen: nothing on the page moves, and the
   // page under them can still be scrolled and tapped (like a calendar day for a date field). "small"
   // floats next to its origin. inline: true puts a large one in the page's #panelSlot instead, for a page
-  // that is just the panel (Quick Entry). build(form, panel) adds the fields and buttons.
+  // that is just the panel (Quick Budget). build(form, panel) adds the fields and buttons.
   // closable: false leaves out the × and Escape. stacked: true opens it over the open panel (which waits
   // under it, and comes back when it closes) instead of closing that one.
   function openPanel({ origin, size = "large", title, build, closable = true, inline = false, stacked = false }) {
@@ -237,7 +237,7 @@ const BudgetUI = (() => {
 
   // Leaving the page closes the floating panels, any date box's waiting for a day, and notes, right away, so the
   // browser's Back button never brings the page back with them still up (see FloatingWindows in Layout.js). A panel
-  // that's part of the page (inline: the Quick Entry page's form) stays, so coming back (Back, or a phone closing the
+  // that's part of the page (inline: the Quick Budget page's form) stays, so coming back (Back, or a phone closing the
   // page it opened over this one) finds it there.
   window.FloatingWindows?.closeOnPageExit(() => {
     while (currentPanel && !currentPanel.inline) closePanel(true);
@@ -546,7 +546,7 @@ const BudgetUI = (() => {
   }
 
   // An Equity account in a choiceList: its name, with its balance today under it (and the most it can hold, when it has a
-  // max: "$500.00/$2000.00"), or just its name when there's no balance to show (Quick Entry with balances off)
+  // max: "$500.00/$2000.00"), or just its name when there's no balance to show (Quick Budget with balances off)
   function accountChoice({ name, balance = null, max = null }, key = name) {
     const hasBalance = typeof balance === "number";
     const detail = hasBalance ? formatMoney(balance) + (max ? `/${formatMoney(max)}` : "") : "";
@@ -1021,7 +1021,7 @@ const BudgetUI = (() => {
   // Process Budget.js), at the bottom of every form that makes or changes an entry once Bob's Wavelength Planning card
   // is on (shown), with a button for each wavelength and None. It's kept for the entry's title, so it starts on the
   // title's (lookup: purposeOf) and follows the title as it's typed (follow), until one is tapped. With no budget to
-  // look in (the Quick Entry page: lookup null, and wavelengths from the API), nothing's picked to start, which leaves
+  // look in (the Quick Budget page: lookup null, and wavelengths from the API), nothing's picked to start, which leaves
   // the title's as it is. value(): a wavelength's id or "none"; undefined when it isn't shown or nothing's picked.
   function purposeField({ shown = false, title = "", lookup = purposeOf, wavelengths = null } = {}) {
     let touched = false;
@@ -1288,7 +1288,7 @@ const BudgetUI = (() => {
   // into or out of (accounts: [{ name, balance, max }], or names), then the amount (cost or gain: with an account, it can
   // be a % of it, which is why the account comes first), date, Placeholder (for a day from today on), and its
   // Wavelength (purposes: whether to ask, see purposeField; purposeLookup: null where there's no budget to look in,
-  // with the wavelengths passed in). The calendar's New Entry panel and the Quick Entry page share it, so they always
+  // with the wavelengths passed in). The calendar's New Entry panel and the Quick Budget page share it, so they always
   // match. Its note (noteEl, see noteField) goes under the form's buttons. noteMax: the longest a note can be (0 for no
   // limit). read(): { entry: { title, amount, date, sprite, placeholder, purpose, note } } when it's filled in right,
   // otherwise
@@ -1298,9 +1298,9 @@ const BudgetUI = (() => {
   //   unreadable), sprite ("" for Auto), account ("" for none), date (null when blank, undefined when it isn't a day),
   //   placeholder, purpose, note }
   // fill({ title, amount, sprite, account, placeholder, purpose, note }): puts these in, leaving the fields they don't
-  //   have as they are (the Quick Entry page's prisms). dateEl and purposeEl: those fields, for a form that doesn't need
+  //   have as they are (the Quick Budget page's prisms). dateEl and purposeEl: those fields, for a form that doesn't need
   //   them.
-  // setAccounts(accounts): new balances for the Equity account list (the Quick Entry page's, after an Undo or Redo)
+  // setAccounts(accounts): new balances for the Equity account list (the Quick Budget page's, after an Undo or Redo)
   function newEntryFields({ date = today, accounts = [], purposes = bobCardOn("purposes"), purposeLookup = purposeOf, wavelengths = null, noteMax = 0 } = {}) {
     const title = textField({ label: "Title", placeholder: "Coffee, paycheck, gas...", maxLength: MAX_TITLE });
     const amount = amountField();
@@ -1849,7 +1849,7 @@ const BudgetUI = (() => {
   // dates as they are (they're the person's own words and numbers); only the budget's own words, like In Bank, get
   // translated.
   function renderEntryLine(line, lineIndex, date = null) {
-    if (lineIndex === 0) return noTranslate(element("div", "lineDate", line));
+    if (lineIndex === 0) return dateLine(line, date);
     const parts = getParts(line);
     const amount = parseAmount(parts[1]);
     if (isSystemLine(parts[0])) {
@@ -1868,6 +1868,20 @@ const BudgetUI = (() => {
     el.classList.add(amountClass(amount));
     if (isPlaceholder(parts[0])) el.classList.add("isPlaceholder");
     if (date && lineHasNote(date, line)) el.classList.add("hasNote");
+    return el;
+  }
+
+  // A day's first line: its date, then its day of the week, shortened ("10/05 Mon"), and in full on a zoomed day
+  // ("10/05 Monday": budgetStyle.css ENTRY LINES shows one or the other). The date stays as it is when a browser
+  // translates the page; the day of the week is translated, like the weekdays over the calendar.
+  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  function dateLine(text, date) {
+    const el = element("div", "lineDate");
+    el.appendChild(noTranslate(element("span", "", text)));
+    if (date instanceof Date && !isNaN(date.getTime())) {
+      const name = DAY_NAMES[date.getDay()];
+      el.append(" ", element("span", "lineWeekday", name.slice(0, 3)), element("span", "lineWeekday lineWeekdayFull", name));
+    }
     return el;
   }
 

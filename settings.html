@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
+    <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
-    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
+    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -47,7 +47,7 @@
           </div>
         </div>
         <nav class="navButtons" aria-label="Pages">
-          <a id="normalBack" class="navButton" href="back" hidden>
+          <a id="menuBack" class="navButton" href="/menu/">
             <img class="navIcon" src="/Resources/Icons/BackNav.webp?v=5fc649006a" alt="">
             <span>Back</span>
           </a>
@@ -131,10 +131,19 @@
              Custom's window) -->
         <section id="themeView" class="budgetCard settingsCard" aria-labelledby="themeHeading">
           <h3 id="themeHeading">Theme</h3>
-          <p>How Prismal Planning looks on this device: its colors, corners, background, stars, and icons. Each device keeps its own, even on the same budget.</p>
+          <p>How Prismal Planning looks in this browser: its colors, corners, background, stars, and icons. Each browser keeps its own, even on the same device or budget.</p>
           <div id="themeChoices" class="choiceList themeChoices" role="radiogroup" aria-labelledby="themeHeading"></div>
-          <p class="panelHint">Custom makes one of your own, starting from any of the others. This device keeps it, even when you sign out or pick another theme: tap Custom to bring it back, and tap it again while it's on to change it. The login page and the front page look like Prismal (the login page keeps your theme when Quick Entry's Home opens it).</p>
-          <!-- How the Quick Entry icon looks on this device's home screen (Settings Page.js, Quick Icon.js) -->
+          <!-- Shown once a theme is picked here: everywhere else it has to be picked too (Settings Page.js showThemeNotice) -->
+          <div id="themeNotice" class="themeNotice" role="status" hidden>
+            <p><strong>Saved in this browser only.</strong> Every other place you use Prismal Planning keeps a theme of its own, so pick this one again in each:</p>
+            <ul>
+              <li><strong>Other browsers</strong>, on this device or another (like Chrome as well as Safari).</li>
+              <li><strong>Quick Budget and Quick Calendar icons</strong> already on a home screen. Each one is an app of its own, and keeps the theme it was added with: add it again from Home's Quick Budget or Quick Calendar button for this one.</li>
+              <li><strong>Prismal Planning added to a home screen</strong> as an app, which keeps its own as well (pick it in Settings there).</li>
+            </ul>
+          </div>
+          <p class="panelHint">Custom makes one of your own, starting from any of the others. This browser keeps it, even when you sign out or pick another theme: tap Custom to bring it back, and tap it again while it's on to change it. The login page and the front page look like Prismal (the login page keeps your theme when Quick Budget's or Quick Calendar's Home opens it).</p>
+          <!-- How the Quick Budget icon looks on this device's home screen (Settings Page.js, Quick Icon.js) -->
           <div id="quickIconEditor" class="quickIconEditor"></div>
         </section>
 
@@ -238,7 +247,7 @@
           <section class="budgetCard settingsCard" aria-labelledby="passwordHeading">
             <h3 id="passwordHeading">Password</h3>
             <form id="passwordForm" class="settingsForm">
-              <p class="panelHint">A new password signs out your other devices and turns off your Quick Entry icons. This device stays signed in.</p>
+              <p class="panelHint">A new password signs out your other devices and turns off your Quick Budget icons. This device stays signed in.</p>
               <!-- Lets password managers save the new password for the right account -->
               <input id="passwordFormUsername" type="text" autocomplete="username" readonly hidden>
               <label class="settingsField">
@@ -299,14 +308,14 @@
             <!-- Quick Calendar icons (Home's Quick Calendar button makes them): how many work, and Turn Off (Settings Page.js) -->
             <p id="quickCalendarStatus" hidden></p>
             <div id="quickCalendarButtons" class="panelButtons"></div>
-            <!-- Whether Quick Entry icons show In Bank, the lowest, and the Equity accounts' balances (Settings Page.js) -->
+            <!-- Whether Quick Budget icons show In Bank, the lowest, and the Equity accounts' balances (Settings Page.js) -->
             <label class="checkboxField settingsSwitch">
               <input id="quickBalancesSwitch" type="checkbox" class="pillSwitch" role="switch">
-              <span>Show balances on Quick Entry icons</span>
+              <span>Show balances on Quick Budget icons</span>
             </label>
             <p id="quickBalancesNote" class="panelHint"></p>
             <h4 class="settingsSubheading">Sign Out Everywhere</h4>
-            <p>Lost a phone, or signed in on a computer that isn't yours? This signs out every device and browser, this one too, and turns off your Quick Entry icons. Your budget stays just as it is.</p>
+            <p>Lost a phone, or signed in on a computer that isn't yours? This signs out every device and browser, this one too, and turns off your Quick Budget icons. Your budget stays just as it is.</p>
             <div class="panelButtons">
               <button id="signOutEverywhereButton" type="button" class="budgetButton danger">Sign Out Everywhere</button>
             </div>
@@ -352,7 +361,7 @@
           <h4>Reminders And Your Calendar</h4>
           <ul>
             <li><strong>Your budgets</strong> are on their own page now: open the menu, then Budgets, Calendars &amp; Spreadsheets. The name above the buttons at the top of every page switches between them too.</li>
-            <li><strong>Calendar Fractals' Links:</strong> a private link to your calendar's entries (every Calendar Fractal together, or one of them) that Apple Calendar, Google Calendar, Outlook, and spreadsheets can subscribe to. Make A Link shows it, with Copy and buttons that add it to Apple or Google Calendar; New Link makes a new one (the old one stops working), and Turn Off ends it. The other calendar shows your entries, and changes made there don't come back.</li>
+            <li><strong>Calendar Fractals' Links:</strong> a private link to your calendar's entries (every Calendar Fractal together, or one of them) that Apple Calendar, Google Calendar, Outlook, and spreadsheets can subscribe to. Make A Link shows it, with Copy, Share, and buttons that add it to Apple or Google Calendar (each fractal's Edit window on Home has it too, under Share); New Link makes a new one (the old one stops working), and Turn Off ends it. The other calendar shows your entries, and changes made there don't come back.</li>
             <li><strong>Reminders are about:</strong> with more than one budget, the Reminders card picks which one your reminders follow.</li>
             <li><strong>Reminders:</strong> a switch for each kind: 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start). They come as push notifications and on the calendar link, at the reminder time. Right after you sign in, Home asks once whether to turn notifications on there.</li>
           </ul>
@@ -361,15 +370,15 @@
           <ul>
             <li><strong>Email:</strong> change it here (with your password). A new email gets a link to verify it, and until it's verified, spreadsheets and calendars can't be connected or read. Send Verification Email sends a new link.</li>
             <li><strong>Other Emails:</strong> add another email of yours (up to 5), and open the link we send it (it works for 24 hours). Once it's confirmed, you can sign in with it too (and use it for Forgot Password), and spreadsheets its Google account shares with admin@prismalplanning.org can be connected. Remove one to stop both. Adding one needs your own email verified first.</li>
-            <li><strong>Quick Entry icons:</strong> turn off Show balances on Quick Entry icons, and they stop showing In Bank, the lowest it gets, and your Equity accounts' balances (just their names), on every icon.</li>
+            <li><strong>Quick Budget icons:</strong> turn off Show balances on Quick Budget icons, and they stop showing In Bank, the lowest it gets, and your Equity accounts' balances (just their names), on every icon.</li>
             <li><strong>Quick Calendar icons:</strong> Signed-In Devices says how many work. Turning them off stops every one, and deletes the entries still waiting from them.</li>
             <li><strong>Birth Date:</strong> Prismal Planning is for people 18 and older. If you typed the wrong birth date when you signed up, fix it here: type it, or pick it with the calendar button.</li>
-            <li>Change your password, add passkeys, turn off Quick Entry icons, sign out everywhere, download your data, or delete your account.</li>
+            <li>Change your password, add passkeys, turn off Quick Budget icons, sign out everywhere, download your data, or delete your account.</li>
             <li><strong>Upload A Backup:</strong> pick a file Download My Data saved (one with more than one budget asks which), and it goes into the budget that's open: for each part of the budget it has (History, Home's Calendar, Upcoming, Recurring Entries, Equity, Goals, Bob's Page, Tracker, Connected Spreadsheets And Calendars, Paycheck Calculator, Notes, and Change Logs), pick one: <strong>Prefer Current Data</strong> keeps yours where the two clash (like an entry with the same title and type on the same day) and adds the rest from the backup; <strong>Prefer Uploaded Data</strong> does the same, but the backup's wins where they clash; <strong>Remove Current Data</strong> puts the backup's in place of yours. Parts the backup doesn't have stay as they are. Undo can't take it back, so the window offers Download My Data first.</li>
             <li><strong>Sounds:</strong> turn Music (a quiet bed of far-off twinkles, with a clearer few now and then) and Sound effects (a soft crystal sound for what you tap) on or off for this device. They mix with your own audio instead of stopping it.</li>
-            <li><strong>Quick Entry Icon</strong> (under Theme): how the icon looks when Quick Entry is added to this device's home screen. Pick its Colors (one from each theme, and your Custom one), then its Icon: the usual Prismal picture, a minimal one, a blank one (just the colors), an emoji you type, or an image you upload. It's kept on this device with the theme, even when you sign out. An icon already on a home screen keeps the look it was added with: tap Quick Entry on Home and add it again for the new one.</li>
-            <li><strong>Theme:</strong> how Prismal Planning looks on this device. Tap one to switch, or Custom (at the end) to make your own: start from any theme, pick five colors (the background, the cards, the words, the glow, and what's chosen) and the corners, font, stars, and icons, and watch it change behind the window; Save Theme keeps it. The login page and the front page always look like Prismal.</li>
-            <li><strong>Reduced Motion:</strong> Hold the starfield still keeps the stars where they are, and Turn off other animations stops pages sliding, windows growing out of their buttons, days zooming, and cards floating, on this device. If your device asks for less motion in its own settings, both are on already.</li>
+            <li><strong>Quick Budget Icon</strong> (under Theme): how the icon looks when Quick Budget is added to this device's home screen. Pick its Colors (one from each theme, and your Custom one), then its Icon: the usual Prismal picture, a minimal one, a blank one (just the colors), an emoji you type, or an image you upload. It's kept in this browser with the theme, even when you sign out. An icon already on a home screen keeps the look it was added with: tap Quick Budget on Home and add it again for the new one.</li>
+            <li><strong>Theme:</strong> how Prismal Planning looks in this browser. Other browsers, and apps on a home screen (Prismal Planning added there, and each Quick Budget and Quick Calendar icon), keep their own: once you pick one, the card lists where to pick it again. Tap one to switch, or Custom (at the end) to make your own: start from any theme, pick five colors (the background, the cards, the words, the glow, and what's chosen) and the corners, font, stars, and icons, and watch it change behind the window; Save Theme keeps it. The login page and the front page always look like Prismal.</li>
+            <li><strong>Reduced Motion:</strong> Hold the starfield still keeps the stars where they are, and Turn off other animations stops pages sliding, windows growing out of their buttons, and days zooming, on this device. If your device asks for less motion in its own settings, both are on already.</li>
             <li>Connected spreadsheets and calendars have their own page: open the menu, then Budgets, Calendars &amp; Spreadsheets.</li>
           </ul>
         </section>

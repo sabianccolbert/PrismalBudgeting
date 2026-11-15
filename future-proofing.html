@@ -12,8 +12,8 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="dark">
     <title>Prismal Planning - Site Notes</title>
-    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
-    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
+    <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
+    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
     <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
   </head>
   <body>
@@ -38,8 +38,8 @@
 
           <section id="about" aria-labelledby="aboutTitle">
             <h2 id="aboutTitle">What This Page Is</h2>
-            <p>How the website is hosted and set up, how a release goes out, and what to check when something goes wrong. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Planning Works</a>.</p>
-            <p>Last checked: November 11, 2026 (site version 11.11.2026.A).</p>
+            <p>How the website is hosted and set up, how a release goes out, what to check when something goes wrong, and how to set up another computer to work on it. Nothing links here, it isn't in the sitemap, and search engines are asked to leave it out, but the site's repo is public, so anyone could find it there: it never holds passwords, keys, or tokens, or how the site guards against attacks (those are only in the private API repo's notes). It loads no scripts, so it opens even when the rest of the site has trouble. Everything the site does is in <a href="/how-it-works.html">How Prismal Planning Works</a>.</p>
+            <p>Last checked: November 14, 2026 (site version 11.14.2026.A).</p>
           </section>
 
           <section id="map" aria-labelledby="mapTitle">
@@ -72,6 +72,7 @@
               <li>When the API changed (or the site calls something new on it), it goes first: in the API's folder, <code>npx wrangler secret list</code> (every secret still set), the tests (<code>npx vitest run</code>), then <code>npx wrangler deploy</code>. Running it from the wrong folder deploys nothing new.</li>
               <li>Commit on <code>Testing</code>, merge it into <code>main</code> (<code>git merge --no-ff Testing</code>), and push both. GitHub Pages publishes within a minute.</li>
               <li>Check that the live <code>/Javascript/Boot.js</code> says the new <code>SITE_VERSION</code> (pages show it at the bottom corner too).</li>
+              <li>Pages that were open before the release load again by themselves (they check the live <code>Boot.js</code>'s <code>SITE_VERSION</code> every 10 minutes and as they come back into view, and wait while anything on them is open or unsaved), so an old page never saves the budget with older code, which would leave out what the new version keeps. Versions before 11.14.2026.A don't check, so after that release, refresh Prismal on every device (a phone's home screen app too: close it and open it again).</li>
             </ol>
           </section>
 
@@ -180,11 +181,11 @@ X-XSS-Protection: 0</code></pre>
             <h2 id="filesTitle">9. Files That Matter Most</h2>
             <ul>
               <li><code>Javascript/Boot.js</code>: every page's first script. The version, each page's name from its address, which pages work without signing in, the API's address, every script's fingerprint, and the device's theme and Reduced Motion (before the page shows, so it never flashes another look).</li>
-              <li><code>Javascript/Layout.js</code>: what every page shares (sliding between pages, the footer, Help, floating windows and cards, signing out, the Quick Entry icon's app).</li>
+              <li><code>Javascript/Layout.js</code>: what every page shares (sliding between pages, the footer, Help, floating windows, signing out, the Quick Budget icon's app).</li>
               <li><code>Javascript/Fractals.js</code> and the API's <code>src/fractals.js</code>: the calendar (Calendar Fractals, entries, sharing, links, alerts, Quick Calendar). Both work out when a repeating entry happens, the same way: change one and change the other.</li>
               <li><code>Javascript/Budgets.js</code>: which budget a page opens, and the budget picker (the list, Share, New Budget) over the header's buttons.</li>
               <li><code>stylesheet.css</code> (the look's colors and shapes, as tokens, in its section 1), <code>budgetStyle.css</code> (the budget's pages), and <code>themes.css</code> (each theme setting those tokens again). Adding a theme: the top of <code>themes.css</code> lists everything a new one needs, in <code>Boot.js</code>, <code>themes.css</code>, <code>Active Starfield.js</code>, <code>Settings Page.js</code>, and the guides.</li>
-              <li><code>Javascript/Line Graph.js</code>: the line graph any window or page can use (Bob's Data windows, the top of the Debt Calculator). <code>Javascript/Quick Icon.js</code>: the picture a Quick Entry icon is added with.</li>
+              <li><code>Javascript/Line Graph.js</code>: the line graph any window or page can use (Bob's page and its windows, the top of the Accrual Calculator). <code>Javascript/Quick Icon.js</code>: the picture a Quick Budget icon is added with.</li>
               <li><code>_tools/stamp.mjs</code> and <code>_tools/hooks/pre-commit</code>: fingerprints, and the check before each commit.</li>
               <li><code>CNAME</code>, <code>robots.txt</code>, <code>sitemap.xml</code>, <code>llms.txt</code>, and <code>404.html</code> (GitHub Pages shows it for any address it doesn't have).</li>
               <li><code>how-it-works.html</code>: the full guide to what the site does.</li>
@@ -210,6 +211,31 @@ X-XSS-Protection: 0</code></pre>
               <li><strong>Themes:</strong> words need a contrast of at least 4.5 to 1 (3 to 1 for large words) on every theme; the focus ring uses <code>--GLOW_EDGE</code>, so a new theme has to set it where it can be seen.</li>
               <li><strong>To check a change:</strong> go through the page with only the keyboard, watching that the focus can always be seen and never gets lost; try a screen reader (VoiceOver on an iPhone or Mac, Narrator or NVDA on Windows, TalkBack on Android); and run axe-core on the page. axe-core will report the calendar's days under <code>label-content-name-mismatch</code>, on purpose: each day's name has its date and In Bank, not every entry on it.</li>
             </ul>
+          </section>
+
+          <section id="computer" aria-labelledby="computerTitle">
+            <h2 id="computerTitle">11. Setting Up Another Computer</h2>
+            <p>The site can be worked on from more than one computer. GitHub is what connects them: each computer has its own copy of both repos, and the <code>Testing</code> branch carries the work between them. Setting one up changes nothing on GitHub, the live site, or the API.</p>
+            <ol>
+              <li><strong>Install the tools.</strong> On Windows: <code>winget install Git.Git</code>, <code>winget install GitHub.cli</code>, and <code>winget install OpenJS.NodeJS.LTS</code> (on a Mac, <code>brew install git gh node</code>). Open a new terminal afterward so it finds them.</li>
+              <li><strong>Sign in to GitHub:</strong> <code>gh auth login</code>, with the account that owns both repos (the API's repo is private).</li>
+              <li><strong>Download both repos,</strong> each on the branch work happens on (never <code>main</code>, which is the live site):
+                <pre><code>gh repo clone sabianccolbert/PrismalBudgeting -- --branch Testing
+gh repo clone sabianccolbert/prismal-budget-api -- --branch testing</code></pre></li>
+              <li><strong>Turn on the website's fingerprint check</strong> (section 3). Git doesn't copy this setting with a download, so each computer needs it once. In the website's folder: <code>git config core.hooksPath _tools/hooks</code>, then <code>node _tools/stamp.mjs --check</code> (it should print nothing).</li>
+              <li><strong>Set up the API.</strong> In its folder:
+                <ul>
+                  <li><code>npm ci</code> installs exactly what <code>package-lock.json</code> lists (<code>npm install</code> can rewrite that file; don't commit a change to it made only by setting up).</li>
+                  <li>Newer versions of npm hold back packages' own setup steps until they're allowed. When <code>npm ci</code> says so, allow the two the API needs, <code>npm install-scripts approve esbuild workerd</code>, then <code>npm rebuild esbuild workerd</code>. Approving writes an <code>allowScripts</code> list into <code>package.json</code>; leave that out of commits (<code>git checkout -- package.json</code>), since it names exact versions.</li>
+                  <li><code>npx vitest run</code> runs the tests. On a slow computer, a few can stop at the 5-second limit with "Test timed out", a different few each time; that's the computer, not the code. <code>npx vitest run --testTimeout=30000</code> gives them longer.</li>
+                  <li><code>npx wrangler d1 execute prismal-budget-db --local --file=schema.sql</code> makes this computer's own empty database for <code>wrangler dev --local</code> (section 7). It never touches the real one.</li>
+                </ul></li>
+              <li><strong>The API's local secrets</strong> go in a <code>.dev.vars</code> file in the API's folder. Git leaves it out on purpose, so it never comes with a download: copy it from the other computer by hand (never by committing it, emailing it, or pasting it anywhere public), or make one with test values that are only for this computer. Which secrets there are is in the private API repo's notes.</li>
+              <li><strong>Only to deploy the API</strong> (section 2): <code>npx wrangler login</code>, with the Cloudflare account. Testing and coding don't need it.</li>
+            </ol>
+            <p><strong>Moving between computers:</strong> before starting, <code>git pull</code> in both folders. Before leaving one, commit the work on <code>Testing</code> (or <code>testing</code>) and <code>git push</code>, so the other computer can pull it. Work that's only committed, and not pushed, stays on that computer. Pushing to <code>Testing</code> doesn't change the live site; only merging into <code>main</code> does (section 2).</p>
+            <p><strong>What one computer left for the other:</strong> the private API repo's <code>HANDOFF.md</code> lists what couldn't be done on one computer (like anything that needs the API's real secrets, or deploying), and decisions still waiting. Read it after pulling, and update it before pushing.</p>
+            <p><strong>Working with Claude Code:</strong> its memory of past conversations is kept on each computer, and isn't copied by GitHub. Anything it should know on every computer belongs in these notes, the API repo's notes and <code>HANDOFF.md</code>, or the repos themselves.</p>
           </section>
 
         </article>

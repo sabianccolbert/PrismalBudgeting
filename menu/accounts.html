@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
+    <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
-    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
+    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
     <title>Prismal Planning - Equity</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -46,10 +46,10 @@
             <p class="tagline">Track • Plan • Learn</p>
           </div>
         </div>
-        <nav class="navButtons" aria-label="Settings, menu, and logout">
-          <a class="navButton" href="/settings.html">
-            <img class="navIcon" src="/Resources/Icons/Settings.webp?v=edc4359acb" alt="">
-            <span>Settings</span>
+        <nav class="navButtons" aria-label="Snapshot, menu, and logout">
+          <a class="navButton" href="/snapshot.html">
+            <img class="navIcon" src="/Resources/Icons/Snapshot.svg?v=fe2019cd62" alt="">
+            <span>Snapshot</span>
           </a>
           <a class="navButton" href="/menu/">
             <img class="navIcon" src="/Resources/Icons/Menu.webp?v=d60f1cd0ff" alt="">
@@ -96,14 +96,14 @@
           <h4>Kinds Of Accounts</h4>
           <ul>
             <li>New Account (in Edit) starts by asking which kind it is: <strong>Car</strong>, <strong>Mortgage</strong>, <strong>Credit Card</strong>, <strong>Debit</strong>, or <strong>Other</strong>. Other has every box. The rest show tips on what each one is and how to fill it in, use its own words, show only the boxes it needs, and set up its interest the way that kind works. You can change an account's kind later from its window.</li>
-            <li>Got a Debt Calculator gem for it? <strong>Fill in from a gem</strong>, at the top, puts in what the gem keeps.</li>
+            <li>Got an Accrual Calculator gem for it? <strong>Fill in from a gem</strong>, at the top, puts in what the gem keeps.</li>
             <li>Once it's made, <strong>Add Recurring Entry?</strong> can set up its payment for you, with the amount you typed, on its next due day.</li>
             <li>Car, Mortgage, and Credit Card are money owed: a balance paid past $0.00 earns no interest.</li>
           </ul>
 
           <h4>Moving Money In And Out</h4>
           <ul>
-            <li>When you add a Hidden or Transfer entry (on the calendar, in Recurring Entries, or with the Quick Entry icon), pick the account under Equity Account (before the amount): tap its box for the list, where each account has its balance today under its name. The entry keeps its own title, and the account shows after it, like "Payday → Savings".</li>
+            <li>When you add a Hidden or Transfer entry (on the calendar, in Recurring Entries, or with the Quick Budget icon), pick the account under Equity Account (before the amount): tap its box for the list, where each account has its balance today under its name. The entry keeps its own title, and the account shows after it, like "Payday → Savings".</li>
             <li>⭕️ <strong>Transfer</strong> moves money between your budget's account and this one, so In Bank changes and the account gets the opposite amount. Moving $100 into savings is a $100 Transfer cost: In Bank goes down $100, and Savings goes up $100.</li>
             <li>A ⭕️ Transfer can also come <strong>From</strong> another Equity account instead of In Bank (the box under Equity Account, In Bank to start): moving $100 from Savings into an HSA takes $100 out of Savings, puts it in the HSA, and leaves In Bank as it is. It shows like "Move ← Savings → HSA", and each account lists it in its entries.</li>
             <li>✖️ <strong>Hidden</strong> happens in the account itself, so In Bank stays the same and the account changes by the same amount. Putting $50 in cash into savings is a $50 Hidden gain (Savings goes up $50); paying $30 straight out of savings is a $30 Hidden cost (Savings goes down $30).</li>
@@ -129,7 +129,7 @@
             <li>A balance below $0 goes further below, and one above $0 grows. Each time it's added shows in the account's entries as % Interest, and counts in its balance and In 6 Months.</li>
             <li><strong>Separate Interest</strong> (a switch under the interest's choices): off, interest is added to the balance, like a credit card's. On, it's a balance of its own, like a mortgage's: the panel shows <strong>Interest today</strong> right under the switch (type it in, or the balance; its ? says what it's for and how to use it), Equity shows it under the balance, only the balance earns interest, and a payment toward the account pays the interest first, then the balance. Everything that adds balances up (the totals, In 6 Months, Bob, Goals) counts the two together.</li>
             <li>Typing a new balance (or interest balance), or changing the rate, any of its choices, or the escrow, starts the count again from that day, with the interest so far kept in the balance (or in the interest balance). The interest added next still counts from the last time it was added, the way a bank adds a month's interest at its end, so typing a balance partway through a month loses none of it, and neither does an account added partway through one. Turn the switch off to stop it. Interest set up before these choices keeps working as it did: monthly, on the day of the month it started.</li>
-            <li>To see when a balance owed is paid off, and what paying extra saves, open the <strong>Debt Calculator</strong> (in the Menu) and pick the account.</li>
+            <li>To see when a balance owed is paid off, and what paying extra saves, open the <strong>Accrual Calculator</strong> (in the Menu) and pick the account. It does savings too: when one reaches a goal amount.</li>
           </ul>
 
           <h4>Escrow</h4>

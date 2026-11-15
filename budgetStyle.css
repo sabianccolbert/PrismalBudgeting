@@ -12,10 +12,10 @@
   z-index: 1;
 }
 
-/* Table Layout: as wide as its card */
+/* Table Layout: as wide as its card, and five weeks tall (15% of the screen's height for each week) */
 .elastic-table {
   width: 100%;
-  height: 60vh;
+  height: 75vh;
   table-layout: fixed;
 
   /* Separate days, with a small gap between them */
@@ -803,6 +803,22 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 .lineDate {
   font-weight: bold;
   color: var(--TEXT_BRIGHT);
+}
+
+/* After the date, its day of the week (Budget UI.js dateLine): shortened ("Fri") on a day, and in full ("Friday") once
+   the day is zoomed */
+.lineWeekday {
+  font-weight: normal;
+  color: var(--TEXT_DIM);
+}
+
+.lineWeekdayFull,
+.elastic-table td.is-editing .lineWeekday:not(.lineWeekdayFull) {
+  display: none;
+}
+
+.elastic-table td.is-editing .lineWeekdayFull {
+  display: inline;
 }
 
 /* An entry's words follow its amount: a gain green, a cost red, and $0.00 a darker grey. The lines the budget writes
@@ -2567,7 +2583,7 @@ button.dropdownBox:focus-visible {
 .homeQuick  { grid-area: quick;  justify-self: end;   width: min(100%, 17em); }
 .homeQuickCalendar { grid-area: quickcal; }
 
-/* Phones: Undo and Redo only as wide as they need, so Quick Entry and Quick Calendar get the rest */
+/* Phones: Undo and Redo only as wide as they need, so Quick Budget and Quick Calendar get the rest */
 @media (max-width: 560px) {
   .controlsCard.homeControls {
     grid-template-columns: auto auto minmax(0, 1fr);
@@ -2591,7 +2607,7 @@ button.dropdownBox:focus-visible {
   border-radius: 50%;
 }
 
-/* Quick Entry glows: a blue-violet radial gradient from its center and a bright edge (a recommended button, .primary,
+/* Quick Budget glows: a blue-violet radial gradient from its center and a bright edge (a recommended button, .primary,
    looks the same), and glows a little more under the pointer */
 .budgetButton.homeQuick {
   color: var(--PRIMARY_TEXT);
@@ -2638,7 +2654,7 @@ button.dropdownBox:focus-visible {
   border-radius: 50%;
 }
 
-/* The disk: a blue-violet radial gradient from its center over Quick Entry's blue-to-violet, its edge under the ring.
+/* The disk: a blue-violet radial gradient from its center over Quick Budget's blue-to-violet, its edge under the ring.
    Its glow spreads from there, so it hugs the ring. */
 .newEntryPrism::before {
   content: "";
@@ -2770,7 +2786,7 @@ button.dropdownBox:focus-visible {
   margin-top: 0;
 }
 
-/* Quick Entry: In Bank today and the lowest it gets, side by side over the form (Quick Entry.js showQuickBalances) */
+/* Quick Budget: In Bank today and the lowest it gets, side by side over the form (Quick Entry.js showQuickBalances) */
 .quickBalances {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2838,14 +2854,14 @@ html.watchView .quickBalanceAmount {
   font-size: 1.8em;
 }
 
-/* Undo and Redo (the Quick Entry page's, above its form) */
+/* Undo and Redo (the Quick Budget page's, above its form) */
 .undoButtons {
   display: flex;
   gap: 1.2vmin;
   margin-right: auto;
 }
 
-/* The Quick Entry page's: just above its form, lined up with it (.budgetPanel.large's width), with Waiting at the right */
+/* The Quick Budget page's: just above its form, lined up with it (.budgetPanel.large's width), with Waiting at the right */
 .undoButtons.quickUndo {
   justify-content: flex-start;
   width: min(94vw, 560px);
@@ -2922,7 +2938,7 @@ html.watchView .quickBalanceAmount {
   flex: 0 0 auto;
 }
 
-/* Home's Quick Entries To Add (Calendar Page.js): the same rows, each with Add and Delete */
+/* Home's Quick Budget Entries To Add (Calendar Page.js): the same rows, each with Add and Delete */
 .budgetCard.quickWaiting {
   width: var(--PAGE_WIDTH);
   margin: 0 auto clamp(10px, 2vmin, 18px);
@@ -2965,7 +2981,7 @@ html.watchView .quickBalanceAmount {
   box-shadow: var(--FLOAT_SHADOW), var(--GLOW_SHADOW);
 }
 
-/* Quick Entry's prisms: under its form, lined up with it. Add Prism, its ?, and Edit Prisms, then the
+/* Quick Budget's prisms: under its form, lined up with it. Add Prism, its ?, and Edit Prisms, then the
    prisms as buttons (or, in Edit Prisms, rows to drag and delete) */
 .prismSection {
   box-sizing: border-box;
@@ -3198,12 +3214,10 @@ button.fractalPicker[aria-expanded="true"] {
   line-height: 1;
 }
 
-.calendarMonth {
-  min-width: 5.6em;
-  text-align: center;
-  font-size: 1.1em;
-  color: var(--TEXT_BRIGHT);
-  text-shadow: var(--TITLE_GLOW);
+/* The month and the year: lists (the month's wide enough for September) */
+.calendarNav .calendarMonth {
+  width: auto;
+  min-width: 7.4em;
 }
 
 .calendarNav .calendarYear {
@@ -3211,13 +3225,134 @@ button.fractalPicker[aria-expanded="true"] {
   min-width: 4.6em;
 }
 
-.calendarNav .calendarJump {
-  flex: 0 1 auto;
-  width: auto;
+/* Home's count of other devices' edits (Calendar Page.js OTHER DEVICES' EDITS): a round button, a grey 0, or a red
+   count with a red edge */
+.calendarNav a.otherEdits {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 2.3em;
+  font-weight: bold;
+  color: var(--TEXT_DIM);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
 }
 
-.calendarNav .calendarJump .dateInput {
-  width: 7.2em;
+.calendarNav a.otherEdits.hasEdits {
+  color: var(--NEGATIVE_TEXT);
+  border-color: var(--NEGATIVE_DAY_EDGE);
+}
+
+/* List Mode's switch: its word stays on one line */
+.calendarNav .listModeSwitch {
+  gap: 0.4em;
+  white-space: nowrap;
+}
+
+/* List Mode (Calendar Page.js LIST MODE): the days as one list that scrolls, as tall as the table it stands in for, each
+   day's name staying at the top while its entries scroll under it */
+.calendarList {
+  position: relative;
+  max-height: 75vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.2em;
+  font-size: clamp(13px, 3.4vw, 16px);
+}
+
+.listDay {
+  padding: 0 0 0.5em;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.listDay.isPast {
+  opacity: 0.62;
+}
+
+.listDayHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.45em 0.2em 0.3em;
+  background: var(--LIST_FILL);
+}
+
+.listDayName {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1em;
+  color: var(--TEXT_BRIGHT);
+  overflow-wrap: anywhere;
+}
+
+.listDayName .listWeekday {
+  color: var(--TEXT_DIM);
+  font-weight: normal;
+}
+
+/* Today glows, like its day on the calendar; a day below $0 is red */
+.listDay.isToday .listDayName {
+  color: var(--TEXT_HOT);
+  text-shadow: var(--TITLE_GLOW);
+}
+
+.listDay.isToday .listDayHead {
+  box-shadow: inset 3px 0 0 var(--GLOW_EDGE);
+}
+
+.listDay.isNegative .listDayHead {
+  box-shadow: inset 3px 0 0 var(--NEGATIVE_DAY_EDGE);
+}
+
+/* A day's + (a new entry on it), like a zoomed day's */
+button.listDayAdd {
+  flex: 0 0 auto;
+  width: 1.9em;
+  height: 1.9em;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--GLASS_BUTTON);
+  border: 1.5px solid var(--GLASS_LINE_BRIGHT);
+  color: var(--TEXT_BRIGHT);
+  font-size: 1em;
+  line-height: 1;
+  font-family: sans-serif;
+  cursor: pointer;
+}
+
+button.listDayAdd:hover,
+button.listDayAdd:focus-visible {
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+  outline: none;
+}
+
+/* A day's lines: whole (they wrap, unlike a day on the calendar), and an entry can be tapped */
+.listDay > :is(.lineSystem, .lineEntry, .lineEvent) {
+  margin: 0.15em 0.2em 0 0.6em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.listDay > :is(.lineEntry, .lineInBank, .lineEvent) {
+  cursor: pointer;
+}
+
+.listDayEmpty {
+  margin: 0.15em 0.2em 0 0.6em;
+  color: var(--TEXT_DIM);
+  font-size: 0.9em;
+}
+
+/* With only the calendar's entries showing, the budget's lines are put away, like on the table */
+.calendarCard[data-view="calendar"] .calendarList :is(.lineSystem, .lineEntry) {
+  display: none;
 }
 
 /* Days that passed are duller (not while one is zoomed or magnified) */
@@ -3411,6 +3546,21 @@ button.fractalPicker[aria-expanded="true"] {
   opacity: 0.85;
 }
 
+/* A block covered by one to its right that starts within the hour after it (Fractals.js layOut): only its left edge
+   shows, so its title runs down that edge, sideways, as far as the block goes ("..." when it's longer) */
+.timeBlock.isCovered {
+  padding: 0.25em 0.1em;
+}
+
+.timeBlock.isCovered .timeBlockTitle {
+  writing-mode: vertical-rl;
+  align-self: flex-start; /* (At the left edge: stretched, sideways words would start at the block's right) */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  font-size: 0.9em;
+}
+
 /* Travel time: dimmer, above the block, with a dashed edge */
 .timeTravel {
   border: 1px dashed rgba(var(--TINT_RGB), 0.5);
@@ -3429,15 +3579,36 @@ button.fractalPicker[aria-expanded="true"] {
   overflow: visible;
 }
 
-/* The Calendar Fractals list (a small window under the picker), and a fractal's color */
+/* The Calendar Fractals list (a small window under the picker), and a fractal's color. (Its words are the window's size,
+   not a form label's: stylesheet.css label.) A linked one's note goes on its own line under its name. */
 .fractalItem .fractalCheck {
   display: flex;
   flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5em;
+  gap: 0.2em 0.5em;
   min-width: 0;
+  margin: 0;
   padding: 0.45em 0.6em;
+  font-size: 1em;
   cursor: pointer;
+}
+
+/* New Calendar Fractal's From another calendar: which calendar (or its link), with room between each part */
+.linkFields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+}
+
+.linkFields > .panelHint {
+  margin: 0;
+}
+
+.fractalItem .fractalLinkedNote {
+  flex-basis: 100%;
+  padding-left: calc(1.15em + 0.5em);
+  font-size: 0.82em;
 }
 
 .fractalItem .fractalCheck input {
@@ -3544,6 +3715,30 @@ button.fractalColor[aria-checked="true"] {
 
 .alertRows:empty {
   display: none;
+}
+
+/* An alert: how long, before or after it starts, and ×, then its Alarm switch under them (Fractals.js alertsField). Each
+   one is set apart by a faint line, so its Alarm reads as its own. */
+.alertRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+.alertTiming {
+  flex-wrap: wrap;
+}
+
+.alertTiming .alertWhen {
+  flex: 1 1 9em;
+  min-width: 0;
+}
+
+.alertAlarm {
+  align-self: flex-start;
+  font-size: 0.92em;
 }
 
 .shareRow {
@@ -3970,6 +4165,32 @@ a.budgetButton:hover {
   text-indent: -1.6em;
 }
 
+/* Settings' Theme, once one is picked: where else it has to be picked (each browser, and each app on a home screen,
+   keeps its own), in a box edged in the glow so it's noticed */
+.themeNotice {
+  margin: 0.8em 0;
+  padding: 0.7em 0.9em;
+  border-radius: 12px;
+  background: var(--PANEL_SOFT);
+  box-shadow: inset 0 0 0 1px var(--GLOW_EDGE);
+  font-size: 0.92em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.themeNotice p {
+  margin: 0 0 0.4em;
+}
+
+.themeNotice ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.themeNotice li + li {
+  margin-top: 0.3em;
+}
+
 /* Settings' Reminders: a switch for each kind, with what it's about under it */
 .reminderKinds {
   display: flex;
@@ -4036,7 +4257,7 @@ a.budgetButton:hover {
   align-items: stretch;
 }
 
-/* A pill switch in a Settings card (like Show balances on Quick Entry icons), and what it does under it */
+/* A pill switch in a Settings card (like Show balances on Quick Budget icons), and what it does under it */
 .budgetCard .settingsSwitch {
   margin: 1em 0 0.3em;
 }
@@ -4438,6 +4659,29 @@ html.lessMotion .sheetForm.isOpening {
   margin: 0;
   padding: 0.35em 0.9em;
   font-size: 0.9em;
+}
+
+/* Pay By Time Or Day: Add Weekend Rule and Add Night Rule side by side, and a rule's days, a button each (lit while it's
+   one of its days) */
+.calendarAddTimeRules,
+.calendarDays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.budgetButton.calendarDay {
+  margin: 0;
+  min-width: 3.2em;
+  padding: 0.35em 0.6em;
+  font-size: 0.9em;
+}
+
+.budgetButton.calendarDay.isOn {
+  color: var(--TEXT_BRIGHT);
+  border-color: rgba(var(--PICK_RGB), 0.9);
+  background: rgba(var(--PICK_RGB), 0.28);
+  box-shadow: 0 0 10px rgba(var(--PICK_RGB), 0.45);
 }
 
 /* Pay Change's "?" sits beside it, and the explanations of Pay Change and Pay By Event Title open under their row */
@@ -4988,7 +5232,7 @@ footer.hasHelp > hr {
   }
 }
 
-/* The calculators' crystals and gems (Budget Pages.js presetShelf): like Quick Entry's prisms, in a card over the form.
+/* The calculators' crystals and gems (Budget Pages.js presetShelf): like Quick Budget's prisms, in a card over the form.
    Add, its ?, and Edit, then the presets as buttons (or, in Edit, rows to drag and delete) */
 .presetShelf {
   text-align: left;
@@ -5607,9 +5851,12 @@ button.bobDataRow:focus-visible {
 
 /* Line graphs (Line Graph.js): hairline grid, 2px lines, days ahead dashed, and a box with each line's value on the day read.
    Colors: a graph with one line uses the theme's glow (--GRAPH_ONE); with more, the eight in --SERIES_n, stepped for dark or
-   light cards */
+   light cards. The legend's Red and Blue (lines added together) are --GRAPH_RED and --GRAPH_BLUE, stronger than the series'
+   own red and blue, and drawn thicker. */
 :root {
   --GRAPH_ONE: rgb(var(--GLOW_RGB));
+  --GRAPH_RED: #ff4040;
+  --GRAPH_BLUE: #4d9dff;
   --SERIES_1: #3987e5;
   --SERIES_2: #d95926;
   --SERIES_3: #199e70;
@@ -5622,6 +5869,8 @@ button.bobDataRow:focus-visible {
 
 html.lightCards {
   --GRAPH_ONE: var(--LINK_LIGHT);
+  --GRAPH_RED: #d40000;
+  --GRAPH_BLUE: #0052cc;
   --SERIES_1: #2a78d6;
   --SERIES_2: #eb6834;
   --SERIES_3: #1baf7a;
@@ -5660,6 +5909,18 @@ html.lightCards {
   margin: 0 0 0.4em;
   font-weight: 600;
   color: var(--TEXT_BRIGHT);
+}
+
+/* Start date and Show through, side by side where they fit (one over the other on a narrow phone) */
+.lineGraphDays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em 1em;
+}
+
+.lineGraphDays > * {
+  flex: 1 1 13em;
+  min-width: 0;
 }
 
 .lineGraphPlot {
@@ -5714,6 +5975,11 @@ html.lightCards {
 
 .lineGraphLine.isAhead {
   stroke-dasharray: 5 5;
+}
+
+/* The Red or Blue line (the lines set to it, added together) */
+.lineGraphLine.isGroup {
+  stroke-width: 3.5;
 }
 
 .lineGraphTip {
@@ -5788,13 +6054,53 @@ html.lightCards {
   cursor: pointer;
 }
 
-.lineGraphLegendButton[aria-pressed="false"] {
+/* A name's mode (Line Graph.js MODES): Red and Blue edged in their color, Hidden crossed out */
+.lineGraphLegendButton.isRed {
+  border-color: var(--GRAPH_RED);
+}
+
+.lineGraphLegendButton.isBlue {
+  border-color: var(--GRAPH_BLUE);
+}
+
+.lineGraphLegendButton.isHidden {
   color: var(--TEXT_DIM);
+}
+
+.lineGraphLegendButton.isHidden > span:not(.lineGraphMode) {
   text-decoration: line-through;
 }
 
-.lineGraphLegendButton[aria-pressed="false"] .lineGraphKey {
+.lineGraphLegendButton.isHidden .lineGraphKey {
   opacity: 0.35;
+}
+
+.lineGraphMode {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--TEXT_DIM);
+}
+
+.lineGraphLegendButton.isRed .lineGraphMode {
+  color: var(--GRAPH_RED);
+}
+
+.lineGraphLegendButton.isBlue .lineGraphMode {
+  color: var(--GRAPH_BLUE);
+}
+
+/* The legend's "?" first, lined up with the names, and what it opens under them */
+.lineGraphHelpItem {
+  display: flex;
+  align-items: center;
+}
+
+.lineGraphHelp {
+  margin-top: 0.4em;
+}
+
+.lineGraphHelp p {
+  margin: 0.3em 0;
 }
 
 .lineGraphEmpty {
@@ -5814,6 +6120,98 @@ html.lightCards {
 
 .lineGraphTable .bobScroll {
   margin-top: 0.4em;
+}
+
+/* Bob's Data card's Tracker window (Bob Page.js openTrackerWindow): From and To, New Row and Edit, the search, then the rows
+   (the tracker's table, from Budget Pages.js), the window's width */
+.trackerToolbar.tableToolbar {
+  margin: 0.2em 0 0.7em;
+}
+
+.textInput.trackerSearch {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 0.5em;
+}
+
+.trackerView .dataScroll {
+  width: 100%;
+  margin: 0 0 0.8em;
+}
+
+/* The Spectrum Graph (Bob Page.js spectrumGraph): its lists and Add on one line (wrapping on a phone), each line picked as a
+   pill with a × to take it off, then the graph */
+.spectrumAdder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.spectrumAdder .selectInput {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+.budgetButton.spectrumAdd {
+  margin: 0;
+  padding: 0.4em 1.3em;
+}
+
+.spectrumPicks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin: 0.7em 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spectrumPick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  max-width: 100%;
+  padding: 0.1em 0.15em 0.1em 0.75em;
+  font-size: 0.9em;
+  color: var(--BASE_COLOR);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 999px;
+}
+
+.spectrumPick > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.spectrumRemove {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 1.9em;
+  height: 1.9em;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 1.1em;
+  line-height: 1;
+  color: var(--TEXT_DIM);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.spectrumRemove:hover,
+.spectrumRemove:focus-visible {
+  color: var(--TEXT_BRIGHT);
+  background: rgba(var(--TINT_RGB, 255, 255, 255), 0.12);
+}
+
+.spectrumMissing {
+  margin: 0.5em 0 0;
 }
 
 /* Equity's window: how an account's interest is worked out, on its own line under the account */
@@ -6269,8 +6667,283 @@ html:not(.frontPage) .frontSignIn,
   }
 }
 
+/*========================================*
+ *  SNAPSHOT (snapshot.html, Snapshot Page.js)
+ *========================================*
+ *  The page's name with Edit and Add To Home Screen, then the cards: as many side by side as fit (each at least 22rem),
+ *  one under another on a narrow screen. In Edit, a dashed + at the top (across the page) and one in the next empty
+ *  space, and each card's title has a ≡ to drag it and a × to take it off.
+ */
+
+.controlsCard.snapshotControls {
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2.2vmin, 22px);
+}
+
+.snapshotButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em;
+}
+
+.snapshotButtons .budgetButton {
+  margin: 0;
+}
+
+.budgetCard p.snapshotStartNote {
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto 1em;
+  text-align: center;
+}
+
+.snapshotStartNote[hidden] {
+  display: none;
+}
+
+.snapshotGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  align-items: start;
+  gap: clamp(10px, 2vmin, 20px);
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(14px, 3vmin, 30px);
+}
+
+.budgetCard.snapshotCard {
+  width: auto;
+  min-width: 0;
+  margin: 0;
+}
+
+/* Its title, with (in Edit) the ≡ before it and the × at its right */
+.snapshotHead {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+  margin: 0 0 0.5em;
+}
+
+.budgetCard h3.snapshotTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.15em;
+  overflow-wrap: anywhere;
+}
+
+/* The ≡ to hold and drag (or focus, and use the arrow keys): the page doesn't scroll while it's held */
+.snapshotHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 28px; /* (A target at least this big to tap) */
+  min-height: 28px;
+  -webkit-touch-callout: none; /* (Holding it on an iPhone drags, without the copy and look up bubble) */
+  flex-shrink: 0;
+  padding: 0.05em 0.35em;
+  font-size: 1.3em;
+  line-height: 1;
+  border-radius: 8px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.snapshotHandle:focus-visible {
+  outline: 2px solid var(--GLOW_EDGE);
+}
+
+.snapshotRemove {
+  flex-shrink: 0;
+}
+
+.snapshotGrid.isEditing .budgetCard.snapshotCard {
+  border-style: dashed;
+}
+
+.budgetCard.snapshotCard.isDragging {
+  border-color: var(--PICK_EDGE);
+  box-shadow: 0 0 14px rgba(var(--PICK_RGB), 0.55);
+  opacity: 0.85;
+}
+
+.snapshotCard.isDragging .snapshotHandle {
+  cursor: grabbing;
+}
+
+/* A number card: the figure big, with its note under it */
+.budgetCard p.snapshotNumber {
+  margin: 0.1em 0 0.2em;
+  font-size: 2em;
+  line-height: 1.15;
+  color: var(--TEXT_BRIGHT);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.budgetCard p.snapshotNumber.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.budgetCard p.snapshotNote {
+  font-size: 0.9em;
+  color: var(--TEXT_DIM);
+}
+
+.budgetButton.snapshotMore {
+  margin: 0.2em 0 0;
+  padding: 0.35em 1em;
+  font-size: 0.9em;
+}
+
+.budgetCard p.snapshotText {
+  line-height: 1.45;
+}
+
+/* A list card: each line's words at the left and its figure at the right */
+.snapshotList {
+  margin: 0 0 0.4em;
+  padding: 0;
+  list-style: none;
+}
+
+.snapshotList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8em;
+  padding: 0.35em 0;
+  line-height: 1.35;
+}
+
+.snapshotList li + li {
+  border-top: 1px solid var(--PANEL_LINE);
+}
+
+.snapshotListText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.snapshotListFigure {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A graph's own title would say the card's again: it's kept for screen readers */
+.snapshotBody .lineGraphTitle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The dashed + (at the top, across the page, and in the next empty space) */
+button.snapshotAdd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 8em;
+  margin: 0;
+  padding: 1em;
+  font-size: var(--UI_TEXT);
+  color: var(--TEXT_DIM);
+  background: rgba(var(--INSET_RGB), 0.2);
+  border: 2px dashed var(--GLASS_LINE_BRIGHT);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+button.snapshotAdd:first-child {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  min-height: 0;
+  padding: 0.6em 1em;
+}
+
+button.snapshotAdd:hover,
+button.snapshotAdd:focus-visible {
+  transform: none;
+  color: var(--TEXT_BRIGHT);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+}
+
+.snapshotAddPlus {
+  font-size: 2em;
+  line-height: 1;
+}
+
+/* Add A Card's windows: each part of the site (or what's in one), a › on one with more inside */
+.snapshotChoices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button.snapshotChoice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.6em;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.55em 0.8em;
+  font-size: var(--UI_TEXT);
+  line-height: 1.3;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: var(--BOX_FILL);
+  border: 1.5px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+button.snapshotChoice:hover,
+button.snapshotChoice:focus-visible {
+  transform: none;
+  outline: none;
+  border-color: var(--GLOW_EDGE);
+  box-shadow: none;
+}
+
+.snapshotChoiceName {
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
+
+.snapshotChoiceAbout {
+  grid-column: 1;
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+.snapshotChoiceMore {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-size: 1.3em;
+  line-height: 1; /* (No taller than a name alone) */
+}
+
 /* A placeholder (Process Budget.js) is yellow, a cost or a gain, wherever it shows: on a day, in Upcoming, Search, the
-   Recurring Entries table, an account's entries, Quick Entry's prisms and waiting entries, and a spreadsheet's count and
+   Recurring Entries table, an account's entries, Quick Budget's prisms and waiting entries, and a spreadsheet's count and
    preview. It comes last, and is as specific as each place's own colors, so it wins over them. */
 .isPlaceholder,
 .isPlaceholder .positive,

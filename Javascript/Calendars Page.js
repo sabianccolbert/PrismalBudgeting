@@ -215,7 +215,7 @@ const PAY_HELP = {
   ],
   nightPay: [
     "Base pay's rate for the hours inside Night hours, for a job that pays more at night (a shift differential). For $1.50 more at night on $20.00 base pay, type 21.50.",
-    "A title rule can have its own night rate."
+    "A title rule can have its own night rate. For a differential that adds to whatever the hour pays (or a weekend one too), use a rule under Pay By Time Or Day instead."
   ],
   premiumWord: [
     "For shifts paid a multiple of base pay, like a holiday at double time: type a word in those shifts' titles (like Holiday), and they're paid base pay times the premium multiplier.",
@@ -303,6 +303,12 @@ const TITLE_RULES_HELP = [
   "Hours worked count toward overtime. Paid time off (like vacation) is paid at its rate, but never counts toward overtime.",
   "The first rule whose words are in a shift's title is the one it uses, so put the more exact ones first."
 ];
+const TIME_RULES_HELP = [
+  "A time or day rule pays the hours inside its days and times another way: a weekend differential ($2.00 more an hour on Saturdays and Sundays), a night differential (1.1 times from 10:00 PM to 6:00 AM), or a holiday rate on the days it's on.",
+  "Each one has its days (a button each), its hours (blank for all day; an end earlier than the start runs past midnight, and belongs to the day it starts), and an hourly rate, an extra per hour, or a multiplier (or more than one: the rate, then the extra, then the multiplier).",
+  "It goes on top of what the hours would be paid otherwise: base pay, or a title rule's rate, and in the night hours the night rate. When more than one is on at once, like a Saturday night, each one counts, in order, so the extras add up.",
+  "Its pay counts toward overtime's blended rate, the way US law asks. Paid time off and premium shifts aren't changed by it."
+];
 // Picks that change which boxes show (the form is drawn again when one changes)
 const PAY_REDRAWS = ["payEvery", "period", "fedMode"];
 const TAX_NOTE = "Taxes here are estimates of what's withheld (the 2026 IRS tables for a W-4, and each state's 2026 rates), not a tax return. Your employer's payroll decides your real paycheck.";
@@ -353,9 +359,10 @@ function openCalendarPanel(id, origin) {
         openedLink: "",
         versions: kept.versions.length > 0 ? kept.versions : [{}],
         rules: kept.rules,
+        timeRules: kept.timeRules,
         current: 0,
         sections: new Map(), // Sections opened or closed by a tap: name -> open (the rest open as drawVersionForm says)
-        openRules: new WeakSet() // Title rules shown open (new ones, and ones tapped open)
+        openRules: new WeakSet() // Title and time rules shown open (new ones, and ones tapped open)
       };
       draft.current = draft.versions.length - 1;
 
@@ -444,6 +451,28 @@ function openCalendarPanel(id, origin) {
       });
       rulesPart.append(BudgetUI.element("p", "panelHint", "A shift whose title has a rule's words in it is paid the rule's way (any capitals). The first rule that matches is the one it uses, so put the more exact ones first."), rulesList, addRule);
 
+      // Pay by time or day (weekend and night differentials)
+      const timePart = BudgetUI.element("fieldset", "calculatorSection calendarPart");
+      const timeHelp = helpToggle("What time and day rules do", TIME_RULES_HELP);
+      const timeLegend = BudgetUI.element("legend", "", "Pay By Time Or Day");
+      timeLegend.append(timeHelp.button);
+      timePart.append(timeLegend, timeHelp.box);
+      const timeList = BudgetUI.element("div", "calendarRules");
+      const addTimeRule = (rule) => {
+        if (draft.timeRules.length >= Calendars.MAX_TIME_RULES) return BudgetUI.showToast(`A calendar can have up to ${Calendars.MAX_TIME_RULES} time and day rules.`, true);
+        draft.timeRules.push(rule);
+        draft.openRules.add(rule);
+        drawTimeRules();
+        schedulePreview();
+        timeList.lastElementChild?.querySelector("input")?.focus({ preventScroll: true });
+      };
+      const timeButtons = BudgetUI.element("div", "calendarAddTimeRules");
+      timeButtons.append(
+        settingsButton("Add Weekend Rule", "calendarAddRule", () => addTimeRule({ name: "Weekends", days: [0, 6], startTime: "", endTime: "", rate: null, extraHour: null, multiplier: null })),
+        settingsButton("Add Night Rule", "calendarAddRule", () => addTimeRule({ name: "Nights", days: [0, 1, 2, 3, 4, 5, 6], startTime: "22:00", endTime: "06:00", rate: null, extraHour: null, multiplier: null }))
+      );
+      timePart.append(BudgetUI.element("p", "panelHint", "The hours inside a rule's days and times are paid its way, like $2.00 more an hour on weekends, or 1.1 times at night. When more than one is on at once (a Saturday night), each one counts, in order."), timeList, timeButtons);
+
       // Which events count
       const pay = kept;
       const only = BudgetUI.textField({ label: "Only events with", value: pay.only, placeholder: "Blank: every timed event", hint: "Words (with commas between them), any of which an event's title needs to be a shift. Blank: every event with a time is a shift. Overlapping events count once." });
@@ -478,12 +507,13 @@ function openCalendarPanel(id, origin) {
       const preview = BudgetUI.element("div", "sheetPreview");
       preview.setAttribute("aria-live", "polite");
 
-      section.append(name.el, entryPart, payPart, rulesPart, eventsPart, preview);
+      section.append(name.el, entryPart, payPart, rulesPart, timePart, eventsPart, preview);
       form.append(source.el, link.el, openedNote, section, buttons);
       [title.input].forEach(input => input.addEventListener("input", schedulePreview));
       showAccountRow();
       drawVersions();
       drawRules();
+      drawTimeRules();
       updatePreview();
 
       form.addEventListener("submit", (event) => {
@@ -860,6 +890,111 @@ function openCalendarPanel(id, origin) {
         return card;
       }
 
+      // ---- Time and day rules ----
+
+      function drawTimeRules() {
+        timeList.replaceChildren();
+        if (draft.timeRules.length === 0) timeList.append(BudgetUI.element("p", "panelHint", "No time or day rules: an hour pays the same any day, at any time (but for Night pay, under Pay)."));
+        draft.timeRules.forEach((rule, index) => timeList.append(timeRuleCard(rule, index)));
+      }
+
+      // One time or day rule: its name, its days (a button each), its times, how it pays, and when it's on. It opens and
+      // closes; its summary says what it does.
+      function timeRuleCard(rule, index) {
+        const card = BudgetUI.element("details", "calendarRule");
+        card.open = draft.openRules.has(rule);
+        const summary = BudgetUI.noTranslate(BudgetUI.element("summary", "", timeRuleSummary(rule, index)));
+        card.append(summary);
+        card.addEventListener("toggle", () => { if (card.open) draft.openRules.add(rule); else draft.openRules.delete(rule); });
+        const after = () => {
+          summary.textContent = timeRuleSummary(rule, index);
+          schedulePreview();
+        };
+        const name = BudgetUI.textField({ label: "Name", value: rule.name || "", placeholder: "Like Weekends or Nights", maxLength: 40, optional: true, hint: "Shown on its shifts in Paychecks And Shifts." });
+        name.input.addEventListener("input", () => { rule.name = name.value(); after(); });
+        // (A button for each day, on or off)
+        const days = BudgetUI.element("div", "calendarDays");
+        days.setAttribute("role", "group");
+        days.setAttribute("aria-label", "Its days");
+        WEEKDAY_NAMES.forEach((day, number) => {
+          const dayButton = BudgetUI.element("button", "budgetButton calendarDay", day.slice(0, 3));
+          dayButton.type = "button";
+          dayButton.setAttribute("aria-label", day);
+          const show = () => {
+            const on = rule.days.includes(number);
+            dayButton.setAttribute("aria-pressed", String(on));
+            dayButton.classList.toggle("isOn", on);
+          };
+          dayButton.addEventListener("click", () => {
+            rule.days = rule.days.includes(number) ? rule.days.filter(other => other !== number) : [...rule.days, number].sort((a, b) => a - b);
+            show();
+            after();
+          });
+          show();
+          days.append(dayButton);
+        });
+        const time = (key, label) => {
+          const input = BudgetUI.element("input", "calendarTime");
+          input.type = "time";
+          input.value = rule[key] || "";
+          input.setAttribute("aria-label", label);
+          input.addEventListener("change", () => { rule[key] = input.value; after(); });
+          return input;
+        };
+        const times = BudgetUI.element("div", "calendarPair");
+        times.append(BudgetUI.element("span", "rangeWord", "From"), time("startTime", "Its hours start"), BudgetUI.element("span", "rangeWord", "to"), time("endTime", "Its hours end"));
+        const number = (label, key, unit, hintText) => {
+          const input = BudgetUI.element("input", "calendarNumber");
+          input.type = "text";
+          input.inputMode = "decimal";
+          input.value = typeof rule[key] === "number" ? String(rule[key]) : "";
+          input.addEventListener("input", () => {
+            const value = typedNumber(input.value);
+            input.classList.toggle("isWrong", Number.isNaN(value));
+            if (!Number.isNaN(value)) { rule[key] = value; after(); }
+          });
+          const wrapper = BudgetUI.element("div", "unitInput");
+          wrapper.append(input, BudgetUI.element("span", "inputUnit", unit));
+          return BudgetUI.field(label, wrapper, { optional: true, hint: hintText });
+        };
+        const date = (label, key) => {
+          const box = BudgetUI.dateField({ label, date: rule[key] ? createSafeMidnight(rule[key]) : null, optional: true, hint: " " });
+          const write = () => {
+            const value = box.value();
+            box.input.classList.toggle("isWrong", value === undefined);
+            if (value !== undefined) { rule[key] = value ? formatToYMD(value) : ""; after(); }
+          };
+          box.input.addEventListener("change", write);
+          box.input.addEventListener("blur", write);
+          return box.el;
+        };
+        const grid = BudgetUI.element("div", "calendarRuleGrid");
+        grid.append(
+          name.el,
+          BudgetUI.field("Days", days, { hint: "The days its hours are on. A night that runs past midnight belongs to the day it starts." }),
+          BudgetUI.field("Hours", times, { hint: "Blank: all day. An end earlier than the start runs past midnight, like 10:00 PM to 6:00 AM." }),
+          number("Hourly rate", "rate", "$/hr", "Its own rate in place of the usual one. Blank: the usual one."),
+          number("Extra per hour", "extraHour", "$/hr", "Added to the rate, like a $2.00 differential."),
+          number("Multiplier", "multiplier", "×", "The rate times this, like 1.5. Blank: 1."),
+          date("Starts on", "from"),
+          date("Ends on", "to")
+        );
+        const move = (by) => {
+          const to = index + by;
+          if (to < 0 || to >= draft.timeRules.length) return;
+          [draft.timeRules[index], draft.timeRules[to]] = [draft.timeRules[to], draft.timeRules[index]];
+          drawTimeRules();
+          after();
+        };
+        const row = BudgetUI.buttonRow([
+          ...(index > 0 ? [{ label: "Move Up", onClick: () => move(-1) }] : []),
+          ...(index < draft.timeRules.length - 1 ? [{ label: "Move Down", onClick: () => move(1) }] : []),
+          { label: "Delete Rule", kind: "danger", onClick: () => { draft.timeRules.splice(index, 1); drawTimeRules(); after(); } }
+        ]);
+        card.append(grid, row);
+        return card;
+      }
+
       // ---- What it comes to ----
 
       // The pay settings as they're set now (a blank look ahead is the usual one)
@@ -868,6 +1003,7 @@ function openCalendarPanel(id, origin) {
         return {
           versions: draft.versions.map(version => ({ ...version })),
           rules: draft.rules.map(rule => ({ ...rule })),
+          timeRules: draft.timeRules.map(rule => ({ ...rule, days: [...rule.days] })),
           lookAhead: { count: count ? Number(count) : null, unit: aheadUnit.value },
           only: only.value(),
           skip: skip.value(),
@@ -1006,6 +1142,24 @@ function ruleSummary(rule, index) {
   if (typeof rule.extraShift === "number" && rule.extraShift) parts.push(`+${formatMoney(rule.extraShift)} a shift${rule.shiftTaxFree ? ", tax-free" : ""}`);
   if (typeof rule.breakMinutes === "number") parts.push(`${rule.breakMinutes}-minute break`);
   return `Rule ${index + 1}: ${rule.contains || "(no words yet)"}${parts.length > 0 ? ` (${parts.join(", ")})` : ""}`;
+}
+
+// "Rule 1: Weekends (Sat, Sun, all day, +$2.00/hr)"
+function timeRuleSummary(rule, index) {
+  const days = rule.days.length === 7 ? "every day" : rule.days.length === 0 ? "no days yet" : rule.days.map(day => WEEKDAY_NAMES[day].slice(0, 3)).join(", ");
+  const hours = rule.startTime || rule.endTime ? `${rule.startTime || "00:00"} to ${rule.endTime || "24:00"}` : "all day";
+  const parts = [days, hours];
+  if (typeof rule.rate === "number") parts.push(`${formatMoney(rule.rate)}/hr`);
+  if (typeof rule.extraHour === "number" && rule.extraHour) parts.push(`+${formatMoney(rule.extraHour)}/hr`);
+  if (typeof rule.multiplier === "number") parts.push(`×${rule.multiplier}`);
+  return `Rule ${index + 1}: ${rule.name || "Time and day"} (${parts.join(", ")})`;
+}
+
+// The time and day rules a shift's piece was paid by, in words: ", with Weekends and Nights" ("" for none)
+function timedWords(piece) {
+  const names = [...new Set((piece.segments || []).flatMap(segment => segment.timedNames || []))];
+  if (names.length === 0) return "";
+  return `, with ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}`;
 }
 
 // A part of the calendar's form, in its own box
@@ -1277,7 +1431,7 @@ function openPaycheck(id, date, origin) {
           item.append(
             BudgetUI.noTranslate(BudgetUI.element("strong", "", `${showDay(piece.day)} ${timeWords(piece.start)} to ${timeWords(piece.end)}${part}`)),
             BudgetUI.noTranslate(BudgetUI.element("span", "", ` ${piece.shift.title}`)),
-            BudgetUI.element("span", "calendarShiftKind", ` ${Math.round(piece.hours * 100) / 100} hours, ${kinds.join(" + ")}, at ${formatMoney(rate)} an hour${piece.rule ? ` (${piece.rule.contains})` : ""}${piece.shift.breakHours > 0 && piece.part === 1 ? `, less a ${Math.round(piece.shift.breakHours * 60)}-minute break` : ""}${piece.extraShift ? `, plus ${formatMoney(piece.extraShift)} for the shift` : ""}`)
+            BudgetUI.element("span", "calendarShiftKind", ` ${Math.round(piece.hours * 100) / 100} hours, ${kinds.join(" + ")}, at ${formatMoney(rate)} an hour${piece.rule ? ` (${piece.rule.contains})` : ""}${timedWords(piece)}${piece.shift.breakHours > 0 && piece.part === 1 ? `, less a ${Math.round(piece.shift.breakHours * 60)}-minute break` : ""}${piece.extraShift ? `, plus ${formatMoney(piece.extraShift)} for the shift` : ""}`)
           );
           list.append(item);
         }

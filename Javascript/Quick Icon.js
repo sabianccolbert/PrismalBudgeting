@@ -1,6 +1,6 @@
-// Quick Icon: how a Quick Entry icon looks on this device's home screen. Settings makes it (under Theme: its Colors and its Icon,
+// Quick Icon: how a Quick Budget icon looks on this device's home screen. Settings makes it (under Theme: its Colors and its Icon,
 // or an uploaded image), and this device keeps it with the theme (prismal_quick_icon, kept when signing out: Layout.js
-// DEVICE_SETTINGS). The Quick Entry page puts the picture in its icon links (apply), so a phone saves it when the page is
+// DEVICE_SETTINGS). The Quick Budget page puts the picture in its icon links (apply), so a phone saves it when the page is
 // added to its home screen; an icon that's already there keeps the look it was added with.
 
 (function () {
@@ -160,7 +160,7 @@
     });
   }
 
-  // On the Quick Entry page: this device's icon, in the links a phone reads when the page is added to its home screen
+  // On the Quick Budget page: this device's icon, in the links a phone reads when the page is added to its home screen
   function apply() {
     const { picture } = settings();
     if (!picture) return;

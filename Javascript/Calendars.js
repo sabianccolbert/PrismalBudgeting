@@ -495,6 +495,9 @@ const Calendars = (() => {
       calendar.events.push({
         uid: props.UID ? props.UID.value.trim() : "",
         title: props.SUMMARY ? unescapeText(props.SUMMARY.value).slice(0, 200) : "",
+        // (Where it is and its notes, for a linked Calendar Fractal's entries: Fractals.js)
+        location: props.LOCATION ? unescapeText(props.LOCATION.value).slice(0, 500) : "",
+        notes: props.DESCRIPTION ? unescapeText(props.DESCRIPTION.value).slice(0, 4000) : "",
         start,
         end,
         rule: props.RRULE ? readRule(props.RRULE.value) : null,
@@ -509,7 +512,7 @@ const Calendars = (() => {
   }
 
   // Every time the calendar's events happen between two days (local midnights, the last one included): [{ title,
-  // allDay, start, end (ms), date and days (an all-day one: its first day, and how many) }], and the titles of
+  // allDay, start, end (ms), date and days (an all-day one: its first day, and how many), location, notes }], and the titles of
   // repeating events that repeat in a way this can't follow (only their first time counts)
   function eventsBetween(calendar, fromDate, toDate) {
     const fromMs = fromDate.getTime();
@@ -530,9 +533,9 @@ const Calendars = (() => {
       if (event.cancelled) return;
       if (start.allDay) {
         const days = Math.max(1, Math.round((end.date - start.date) / DAY_MS));
-        if (start.date < addDays(toDate, 1) && addDays(start.date, days) > fromDate) found.push({ title: event.title, allDay: true, date: start.date, days });
+        if (start.date < addDays(toDate, 1) && addDays(start.date, days) > fromDate) found.push({ title: event.title, allDay: true, date: start.date, days, location: event.location || "", notes: event.notes || "" });
       } else if (start.ms < toMs && Math.max(end.ms, start.ms) > fromMs) {
-        found.push({ title: event.title, allDay: false, start: start.ms, end: Math.max(end.ms, start.ms) });
+        found.push({ title: event.title, allDay: false, start: start.ms, end: Math.max(end.ms, start.ms), location: event.location || "", notes: event.notes || "" });
       }
     };
 
@@ -597,13 +600,19 @@ const Calendars = (() => {
   // =====================================================================
   // #region PAY SETTINGS
   // =====================================================================
-  // A calendar's pay settings (the connection's pay): { versions, rules, lookAhead, only, skip, bonusWord }.
+  // A calendar's pay settings (the connection's pay): { versions, rules, timeRules, lookAhead, only, skip, bonusWord }.
   //   - versions: the pay as it is from one paycheck on, oldest first ([{ from: "YYYY-MM-DD", ...PAY_DEFAULTS' keys }]).
   //     The first one's from is the first paycheck counted; each later one takes over from the first paycheck on or after
   //     its from, so older paychecks never change. A later one only has what changed: anything it leaves out is the one
   //     before it's.
   //   - rules: pay by event title ([{ contains, kind, rate, night, extraHour, extraShift, shiftTaxFree, multiplier,
   //     breakMinutes, from, to }]): a shift whose title has contains in it is paid this way (the first one that matches)
+  //   - timeRules: pay by time or day ([{ name, days: [weekdays, 0 Sunday to 6 Saturday], startTime, endTime ("HH:MM";
+  //     blank: the day's start or end; an end earlier than the start runs past midnight, and belongs to the day it
+  //     starts), rate, extraHour, multiplier, from, to (the days it's on) }]): the hours in its window are paid its way, on
+  //     top of what they'd be paid otherwise (base pay or a title rule's rate, at night the night rate), every rule that's
+  //     on at once in order: a rate takes the place of the one before it, an extra per hour adds to it, and a multiplier
+  //     multiplies it. Weekend and night differentials, say: both are paid on a Saturday night.
   //   - lookAhead: { count, unit: "days" | "weeks" | "months" }: paychecks paid further past today aren't counted yet
   //   - only and skip: words (comma-separated) an event's title needs to have to be a shift, or that leave it out
   //   - bonusWord: an all-day event with this word and an amount (like Bonus $25) is a bonus in that week
@@ -630,6 +639,7 @@ const Calendars = (() => {
   };
   const RULE_KINDS = ["worked", "paidOff"];
   const MAX_RULES = 40;
+  const MAX_TIME_RULES = 20;
   const MAX_VERSIONS = 41; // The first paycheck's pay and 40 pay changes
   const MAX_WORDS = 300;
   const MAX_HOURLY = 100000;
@@ -722,6 +732,23 @@ const Calendars = (() => {
         to: isDay(rule.to) ? rule.to : ""
       };
     }).filter(Boolean);
+    // (A time rule needs a day it's on to do anything; its pay can be blank while it's being filled in)
+    const timeRules = (Array.isArray(source.timeRules) ? source.timeRules : []).slice(0, MAX_TIME_RULES).map(rule => {
+      if (!rule || typeof rule !== "object") return null;
+      const days = Array.isArray(rule.days) ? [...new Set(rule.days.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b) : [];
+      if (days.length === 0) return null;
+      return {
+        name: String(rule.name ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+        days,
+        startTime: isTime(rule.startTime) ? rule.startTime : "",
+        endTime: isTime(rule.endTime) ? rule.endTime : "",
+        rate: money(rule.rate),
+        extraHour: money(rule.extraHour),
+        multiplier: money(rule.multiplier, 100),
+        from: isDay(rule.from) ? rule.from : "",
+        to: isDay(rule.to) ? rule.to : ""
+      };
+    }).filter(Boolean);
     const ahead = source.lookAhead && typeof source.lookAhead === "object" ? source.lookAhead : {};
     const unit = ["days", "weeks", "months"].includes(ahead.unit) ? ahead.unit : "days";
     const count = Number.isInteger(ahead.count) && ahead.count >= 0 ? Math.min(unit === "months" ? 12 : unit === "weeks" ? 52 : MAX_LOOK_AHEAD_DAYS, ahead.count) : 21;
@@ -729,6 +756,7 @@ const Calendars = (() => {
     return {
       versions: unique,
       rules,
+      timeRules,
       lookAhead: { count, unit },
       only: words(source.only),
       skip: words(source.skip),
@@ -953,6 +981,58 @@ const Calendars = (() => {
     return total / HOUR_MS;
   }
 
+  // Minutes into a day of a time ("HH:MM"; blank is the day's start, or for an end, its end)
+  const minutesOf = (time, end = false) => (time ? Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) : end ? 1440 : 0);
+
+  // Is a time rule on at an instant? Its window is its times on each of its weekdays, while it's on (from and to). One
+  // that ends earlier than it starts runs past midnight into the next day, and belongs to the day it starts; the same time
+  // for both is all day.
+  function timeRuleOn(rule, ms) {
+    const at = new Date(ms);
+    const minute = at.getHours() * 60 + at.getMinutes() + at.getSeconds() / 60;
+    const from = minutesOf(rule.startTime);
+    const to = minutesOf(rule.endTime, true);
+    let day = createSafeMidnight(at);
+    if (from < to) {
+      if (minute < from || minute >= to) return false;
+    } else if (from > to) {
+      if (minute < to) day = addDays(day, -1);
+      else if (minute < from) return false;
+    }
+    const key = formatToYMD(day);
+    return rule.days.includes(day.getDay()) && (!rule.from || rule.from <= key) && (!rule.to || rule.to >= key);
+  }
+
+  // A rate with the time rules that are on at an instant, in order: { rate, names (of the rules that were on) }
+  function timeRate(rate, ms, rules) {
+    const names = [];
+    for (const rule of rules) {
+      if (!timeRuleOn(rule, ms)) continue;
+      if (rule.rate !== null) rate = rule.rate;
+      if (rule.extraHour !== null) rate += rule.extraHour;
+      if (rule.multiplier !== null) rate *= rule.multiplier;
+      names.push(rule.name || "Time rule");
+    }
+    return { rate, names };
+  }
+
+  // The instants from start to end where a time rule or the night hours (or a day) start or stop, so each stretch between
+  // two of them is paid one way all through
+  function payBreaks(start, end, rules, version) {
+    const times = new Set(["00:00", version.nightFrom, version.nightTo, ...rules.flatMap(rule => [rule.startTime, rule.endTime])].filter(Boolean));
+    const breaks = new Set([start, end]);
+    for (let day = addDays(createSafeMidnight(new Date(start)), -1); day.getTime() < end; day = addDays(day, 1)) {
+      for (const time of times) {
+        const ms = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Number(time.slice(0, 2)), Number(time.slice(3, 5))).getTime();
+        if (ms > start && ms < end) breaks.add(ms);
+      }
+    }
+    return [...breaks].sort((a, b) => a - b);
+  }
+
+  // Is an instant in the night hours?
+  const inNight = (ms, version) => nightHours(ms, ms + 1, version) > 0;
+
   //#endregion
 
   // =====================================================================
@@ -961,7 +1041,8 @@ const Calendars = (() => {
   // Within each workweek, hours count in the order they're worked. With a daily limit, a day's hours past otDaily are
   // overtime (and past dtDaily double time); the rest count toward the week's limit, and the week's hours past otWeekly
   // are overtime (the week's last hours). Each hour is paid at its shift rate: the rule's hourly rate (or base pay) plus
-  // its extra per hour, times its multiplier, or its night rate in the night hours (base pay's night rate is nightPay).
+  // its extra per hour, times its multiplier, or its night rate in the night hours (base pay's night rate is nightPay), with
+// the time rules that are on then on top (see timeRate).
   // Overtime adds (overtimeMultiplier - 1) x the week's blended rate (every worked hour's pay, the week's bonuses, and
   // its taxable per-shift extras, over the hours: the regular rate of pay the law uses), or with otRate "own", it's the
   // hour's own rate x overtimeMultiplier. Shifts with premiumWord in their title are paid base pay x premiumMultiplier
@@ -1098,6 +1179,26 @@ const Calendars = (() => {
           const night = piece.kind === "paidOff" ? 0 : Math.min(segment.hours, nightHours(clockStart, clockEnd, piece.version) * piece.shift.scale);
           segment.night = night;
           segment.straight = (segment.hours - night) * dayRate + night * nightRate;
+          // (With time rules, each stretch between where one, or the night hours, starts or stops is paid its own way)
+          if (piece.kind !== "paidOff" && pay.timeRules.length > 0) {
+            const breaks = payBreaks(clockStart, clockEnd, pay.timeRules, piece.version);
+            const names = new Set();
+            let paid = 0;
+            let timed = 0;
+            for (let at = 1; at < breaks.length; at++) {
+              const middle = (breaks[at - 1] + breaks[at]) / 2;
+              const hours = ((breaks[at] - breaks[at - 1]) / HOUR_MS) * piece.shift.scale;
+              const worked = timeRate(inNight(middle, piece.version) ? nightRate : dayRate, middle, pay.timeRules);
+              paid += hours * worked.rate;
+              if (worked.names.length > 0) {
+                timed += hours;
+                worked.names.forEach(name => names.add(name));
+              }
+            }
+            segment.straight = paid;
+            segment.timed = timed;
+            segment.timedNames = [...names];
+          }
           if (piece.kind === "worked") {
             straight += segment.straight;
             workedHours += segment.hours;
@@ -1404,6 +1505,8 @@ const Calendars = (() => {
     if (versions.some(version => version.nightPay !== null || pay.rules.some(rule => rule.night !== null)) && versions.some(version => !version.nightFrom || !version.nightTo)) {
       problems.push("A night rate is filled in, but not the night hours it's for. Fill in Night hours (from and to), under Pay.");
     }
+    const idle = pay.timeRules.filter(rule => rule.rate === null && rule.extraHour === null && rule.multiplier === null);
+    if (idle.length > 0) problems.push(`${idle.map(rule => rule.name || "A time rule").join(", ")} ${idle.length === 1 ? "has" : "have"} no hourly rate, extra per hour, or multiplier, so ${idle.length === 1 ? "it changes" : "they change"} nothing yet. Fill one in, under Pay By Time Or Day.`);
 
     // Each paycheck's totals (in order, so each one knows its year's pay before it: see paycheckTaxes)
     const details = [];
@@ -1609,6 +1712,7 @@ const Calendars = (() => {
     remember,
     PAY_DEFAULTS,
     MAX_RULES,
+    MAX_TIME_RULES,
     MAX_VERSIONS,
     CRYSTAL_KEYS,
     STATE_TABLES,

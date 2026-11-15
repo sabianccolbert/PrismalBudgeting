@@ -99,8 +99,8 @@ function birthdateProblem(date) {
 const SIGNED_OUT_REASONS = {
   idle: "You were signed out after 15 minutes without activity, to keep your budget safe. Please sign in again.",
   expired: "You've been signed out (your session ended, or it was signed out from another device). Please sign in again.",
-  everywhere: "You've been signed out on every device, and your Quick Entry icons were turned off.",
-  quickKey: "That Quick Entry icon doesn't work anymore: your password changed, the icon was replaced or turned off, or the budget it adds to was deleted or isn't shared with you anymore. Delete it, then sign in and tap Quick Entry on Home to make a new one."
+  everywhere: "You've been signed out on every device, and your Quick Budget icons were turned off.",
+  quickKey: "That Quick Budget icon doesn't work anymore: your password changed, the icon was replaced or turned off, or the budget it adds to was deleted or isn't shared with you anymore. Delete it, then sign in and tap Quick Budget on Home to make a new one."
 };
 
 // What unlocks a passkey on this device, like "Face ID or Touch ID" (see Passkeys.js)
@@ -412,14 +412,31 @@ function saveSession(data) {
   try { localStorage.setItem('prismal_ask_push', '1'); } catch (err) {}
 }
 
-// On to the budget (Home), signed in
+// On to the budget, signed in: Home, or the page a sign-out sent here from (returnPath)
 function goToBudget() {
   stopPasskeyAutofill();
+  const path = returnPath() || "/index.html";
   if (typeof window.transitionTo === 'function') {
-    window.transitionTo("/index.html", true);
+    window.transitionTo(path, true);
   } else {
-    window.location.replace("/index.html");
+    window.location.replace(path);
   }
+}
+
+// The page this tab was on when it was sent here to sign in (Session.js toLoginPage), read once: one of the site's own
+// signed-in pages, like the Snapshot page opened from a home screen icon after its sign-in ended. Never another site, and
+// never a public page, the Quick pages, or Home (where signing in goes anyway).
+function returnPath() {
+  let path = null;
+  try {
+    path = sessionStorage.getItem('prismal_return_to');
+    sessionStorage.removeItem('prismal_return_to');
+  } catch (err) {}
+  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return null;
+  let page = null;
+  try { page = typeof window.pageKeyOf === 'function' ? window.pageKeyOf(new URL(path, location.origin).pathname) : null; } catch (err) {}
+  if (!page || ['home', 'login', 'notfound', 'privacy', 'guide', 'quick', 'quickcal', 'generic'].includes(page)) return null;
+  return path;
 }
 
 // Off to another page of the site (it slides out like any link)
