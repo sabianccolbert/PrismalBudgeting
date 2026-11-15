@@ -5,17 +5,17 @@
     <!-- First, before anything loads: no request from this page says its address, which carries the key -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=329726bf4b">
+    <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=278e1755f6">
-    <link rel="stylesheet" href="/themes.css?v=5345abd52b">
-    <title>Prismal Planning - Quick Entry</title>
+    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
+    <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
+    <title>Prismal Planning - Quick Budget</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
     <meta name="robots" content="noindex, nofollow">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Quick Entry" />
+    <meta name="apple-mobile-web-app-title" content="Quick Budget" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#000000">
@@ -38,7 +38,7 @@
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
           <div class="brandText">
-            <h2 class="logo">Quick Entry</h2>
+            <h2 class="logo">Quick Budget</h2>
           </div>
         </div>
         <nav class="navButtons" aria-label="Pages">
@@ -126,7 +126,7 @@
               <li><strong>Add Prism</strong> turns New Entry into a prism. Fill in or pick only what it should keep (what's already in New Entry counts too), then tap Save Prism. A prism never keeps a date.</li>
               <li><strong>Tap a prism</strong> to put what it keeps into New Entry. Then fill in the rest, like the amount, or just tap Add Entry.</li>
               <li><strong>Edit Prisms</strong> lets you drag prisms into order by their ≡, or delete them with ×.</li>
-              <li>Prisms are saved with your budget, so every Quick Entry icon you make has the same ones.</li>
+              <li>Prisms are saved with your budget, so every Quick Budget icon you make has the same ones.</li>
             </ul>
           </div>
           <p id="prismEmpty" class="panelHint prismEmpty" hidden>No prisms yet. Tap Add Prism to save an entry you add often.</p>
@@ -136,7 +136,7 @@
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
-          <h3 id="helpTitle">Quick Entry Help</h3>
+          <h3 id="helpTitle">Quick Budget Help</h3>
           <p>This page adds entries to your budget with no login (to the budget that was open when the icon was made; with more than one, the top of the page says which): the next time Prismal Planning opens on the device that made this icon, they're added, and opened on another device first (like by someone you share it with), they wait on its Home, where whoever has it open adds them or deletes them. Until then, Undo here can take one back, and <strong>Waiting</strong> (next to Undo) lists the ones you added here, to change or delete. At the top, <strong>In Bank today</strong> and the <strong>lowest</strong> it gets (and on what day) count the entries added here too. <strong>Placeholder</strong> (for a day from today on) adds one as a placeholder: a stand-in for an entry you expect, like an estimate, shown in yellow. It counts like any entry until its day passes, then your budget deletes it (or, with a day picked under <strong>Delete it after</strong>, once that day passes). A Transfer with an account picked can come <strong>From</strong> another of your Equity accounts instead of In Bank. With Hidden or Transfer and an Equity account picked, the $ / % switch makes the amount a percent of that account's balance, which your budget works out for its day. Once Wavelength Planning is on (on Bob's page), the form asks for its Wavelength at the bottom, with a button for each of your wavelengths; this page can't see which one a title has, so nothing's picked to start, which keeps the title's as it is. <strong>Add A Note</strong>, under the buttons, gives the entry a note (up to 20,000 characters) that joins your budget with it (in Waiting, an entry with one is underlined). The login page keeps this page's theme when Home goes there. Settings (under Theme) changes how this icon looks. Opened from your home screen, <strong>Home</strong> opens Prismal Planning in your phone's browser (its login page, which goes on to Home when the browser is signed in), and this page stays here; it comes back by itself when you return to the app from another page of the site, and then <strong>Back</strong> (next to Home) goes to that page. Settings (Signed-In Devices) can turn those, and the Equity accounts' balances, off for every icon. This page can't see the rest of your budget. If your password changes, or icons are turned off in Settings, it stops working.</p>
 
           <h4>On Your Home Screen</h4>
@@ -169,18 +169,18 @@
               <p class="deviceName">iPhone</p>
               <ol>
                 <li>Copy this page's link: <button id="copyQuickLink" class="budgetButton" type="button">Copy Link</button></li>
-                <li>In the Shortcuts app, tap +, add the <strong>Open URLs</strong> action, paste the link into it, and name the shortcut (like Quick Entry).</li>
+                <li>In the Shortcuts app, tap +, add the <strong>Open URLs</strong> action, paste the link into it, and name the shortcut (like Quick Budget).</li>
                 <li>Touch and hold your Lock Screen, tap Customize, then Lock Screen. Tap one of the two buttons at the bottom (like the flashlight), remove it, tap + and pick <strong>Shortcut</strong>, then your shortcut (iOS 18 or newer). A Shortcuts widget under the clock works too.</li>
                 <li>More ways to run it: an iPhone with an Action button (Settings, Action Button, Shortcut), or Back Tap, a double or triple tap on the back of the phone (Settings, Accessibility, Touch, Back Tap).</li>
               </ol>
             </div>
             <div data-device="samsung">
               <p class="deviceName">Samsung Galaxy</p>
-              <p>Samsung lets you pick the two Lock Screen shortcuts (Settings, Lock screen and AOD, Shortcuts), but they can only open apps, not a web page. Keep the Quick Entry icon in the row at the bottom of your home screen instead, for one tap right after unlocking.</p>
+              <p>Samsung lets you pick the two Lock Screen shortcuts (Settings, Lock screen and AOD, Shortcuts), but they can only open apps, not a web page. Keep the Quick Budget icon in the row at the bottom of your home screen instead, for one tap right after unlocking.</p>
             </div>
             <div data-device="pixel oneplus motorola xiaomi android other">
               <p class="deviceName">Google Pixel, OnePlus, Motorola, Xiaomi, or another Android phone</p>
-              <p>Android's Lock Screen shortcuts are for things like the camera and flashlight, so they can't open a web page. Keep the Quick Entry icon in the row at the bottom of your home screen instead, for one tap right after unlocking.</p>
+              <p>Android's Lock Screen shortcuts are for things like the camera and flashlight, so they can't open a web page. Keep the Quick Budget icon in the row at the bottom of your home screen instead, for one tap right after unlocking.</p>
             </div>
             <div data-device="computer">
               <p class="deviceName">A computer</p>

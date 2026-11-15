@@ -37,7 +37,10 @@ function verifySession() {
 }
 
 // Off to the login page, sliding right like any sign-out (Layout.js)
+// The page it was on is kept for this tab, so signing in again comes back to it (Login.js goToBudget): a Snapshot icon on
+// a home screen, opened after the sign-in ended, opens the Snapshot page again, not Home.
 function toLoginPage() {
+  try { sessionStorage.setItem('prismal_return_to', location.pathname + location.search + location.hash); } catch (e) {}
   if (typeof transitionTo === 'function') transitionTo('/login.html', true, 'right');
   else window.location.replace('/login.html');
 }

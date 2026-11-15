@@ -33,7 +33,7 @@
   const AMBIENT_BED_MAX_S = 3.2;
   const AMBIENT_BED_SHARE = 0.3;
   const AMBIENT_BED_LOWPASS = 3800; // Hz: the bed's twinkles sound farther off
-  const MUSIC_PAGES = ["home", "recurring", "accounts", "bob", "menu", "spreadsheets", "tracker", "calculator", "logs", "settings"];
+  const MUSIC_PAGES = ["home", "recurring", "accounts", "bob", "menu", "spreadsheets", "calculator", "logs", "settings", "snapshot"];
 
   // This device's choices (Settings)
   const EFFECTS_KEY = "prismal_sound_effects"; // "off" when turned off
@@ -89,22 +89,14 @@
     return 0;
   }
 
-  // The audio context, made in a tap (browsers start one only from a tap). On an iPhone the page's audio is "ambient",
-  // so it mixes with other audio instead of stopping it, and the silent switch silences it.
+  // The audio context, started in a tap (browsers start one only from a tap), with the effects' sounds made ready the
+  // first time. On an iPhone the page's audio is "ambient", so it mixes with other audio instead of stopping it, and the
+  // silent switch silences it.
+  let effectsLoading = false;
   function ensureContext() {
-    if (!AudioContextClass) return null;
-    if (!context) {
-      try {
-        if (navigator.audioSession) navigator.audioSession.type = "ambient";
-      } catch (e) {}
-      try {
-        context = new AudioContextClass();
-      } catch (e) {
-        return null;
-      }
-      master = context.createGain();
-      master.gain.value = MASTER_VOLUME;
-      master.connect(context.destination);
+    if (!makeContext()) return null;
+    if (!effectsLoading) {
+      effectsLoading = true;
       Object.values(FILES).flat().filter(name => !name.startsWith("Ambient")).forEach(loadSound);
     }
     if (context.state !== "running") {
@@ -112,6 +104,37 @@
       if (resumed && typeof resumed.catch === "function") resumed.catch(() => {});
     }
     return context;
+  }
+
+  // The context itself, not started yet (null where the browser has none)
+  function makeContext() {
+    if (context) return context;
+    if (!AudioContextClass) return null;
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "ambient";
+    } catch (e) {}
+    try {
+      context = new AudioContextClass();
+    } catch (e) {
+      return null;
+    }
+    master = context.createGain();
+    master.gain.value = MASTER_VOLUME;
+    master.connect(context.destination);
+    return context;
+  }
+
+  // Making the context can take a moment on a slow device, and made in the first tap, it held up that tap's own work (like
+  // zooming a day) until it was done. So it's made ahead, a moment after the page has loaded and while nothing else is
+  // happening (when sound is on), and a tap only starts it. (Chrome's console notes it can't start before a tap: expected.)
+  if (AudioContextClass) {
+    const early = () => {
+      if (!context && (effectsOn() || musicOn()) && document.visibilityState === "visible") makeContext();
+    };
+    const whenIdle = typeof window.requestIdleCallback === "function" ? (fn) => window.requestIdleCallback(fn, { timeout: 5000 }) : (fn) => setTimeout(fn, 0);
+    const soon = () => setTimeout(() => whenIdle(early), 2000);
+    if (document.readyState === "complete") soon();
+    else window.addEventListener("load", soon, { once: true });
   }
 
   // The music starts once the audio is playing (right away when it is, or when it starts: a tap's resume takes a moment)
@@ -280,9 +303,98 @@
   };
   ["pointerdown", "keydown"].forEach(type => document.addEventListener(type, warmUp, { once: true, passive: true, capture: true }));
 
+  /* ---------- An alarm (a calendar entry's alert with its Alarm switch on: sw.js and Layout.js) ---------- */
+  // A loud crystalline chime, made here rather than from a file: five bell-like notes rising (each a few ringing partials,
+  // the way struck glass rings), with a shimmering echo, again every ALARM_EVERY_MS, a little louder each time, until it's
+  // stopped. It rings whatever Settings says about sound effects (it was asked for), and on an iPhone it plays even with the
+  // silent switch on while it rings (its audio session is "playback" then, and "ambient" again after). Browsers only start
+  // sound after a tap, so on a page that hasn't had one yet it starts with the next.
+  const ALARM_NOTES = [1318.5, 1661.2, 1975.5, 2489.0, 2637.0]; // E6, G#6, B6, D#7, E7
+  const ALARM_PARTIALS = [[1, 1, 1.8], [2.76, 0.45, 1], [5.4, 0.22, 0.55], [8.93, 0.1, 0.3]]; // [ratio, share, seconds]
+  const ALARM_EVERY_MS = 2400;
+  let alarm = null; // { out, timer, level, nodes } while it rings
+
+  // One ring of the chime, at a level (0 to 1)
+  function ringOnce(level) {
+    const now = context.currentTime + 0.02;
+    ALARM_NOTES.forEach((frequency, index) => {
+      const at = now + index * 0.16;
+      for (const [ratio, share, seconds] of ALARM_PARTIALS) {
+        const tone = context.createOscillator();
+        tone.type = "sine";
+        tone.frequency.value = frequency * ratio * (1 + (Math.random() - 0.5) * 0.003);
+        const gain = context.createGain();
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, level * share), at + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + seconds);
+        tone.connect(gain);
+        gain.connect(alarm.out);
+        tone.start(at);
+        tone.stop(at + seconds + 0.05);
+      }
+    });
+  }
+
+  // Start ringing; true when it can be heard now (false: the page needs a tap first)
+  function startAlarm() {
+    const ctx = ensureContext();
+    if (!ctx) return false;
+    if (alarm) return ctx.state === "running";
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "playback";
+    } catch (e) {}
+    // (Its notes, and a fading echo of them, through a compressor so the loudest rings don't distort)
+    const out = ctx.createGain();
+    const echo = ctx.createDelay(1);
+    echo.delayTime.value = 0.23;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.32;
+    const limiter = ctx.createDynamicsCompressor();
+    out.connect(limiter);
+    out.connect(echo);
+    echo.connect(feedback);
+    feedback.connect(echo);
+    echo.connect(limiter);
+    limiter.connect(ctx.destination);
+    alarm = { out, timer: 0, level: 0.25, nodes: [out, echo, feedback, limiter] };
+    const ring = () => {
+      if (!alarm) return;
+      if (ctx.state === "running") {
+        ringOnce(alarm.level);
+        alarm.level = Math.min(0.6, alarm.level * 1.2);
+      }
+    };
+    // (A tap starts the sound on a page that hasn't had one yet)
+    const resume = () => {
+      if (alarm && ctx.state !== "running") ctx.resume().catch(() => {});
+    };
+    alarm.resume = resume;
+    ["pointerdown", "keydown"].forEach(type => document.addEventListener(type, resume, { passive: true, capture: true }));
+    ring();
+    alarm.timer = setInterval(ring, ALARM_EVERY_MS);
+    return ctx.state === "running";
+  }
+
+  // Stop ringing
+  function stopAlarm() {
+    if (!alarm) return;
+    clearInterval(alarm.timer);
+    ["pointerdown", "keydown"].forEach(type => document.removeEventListener(type, alarm.resume, { capture: true }));
+    for (const node of alarm.nodes) {
+      try { node.disconnect(); } catch (e) {}
+    }
+    alarm = null;
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "ambient";
+    } catch (e) {}
+  }
+
   /* ---------- For Settings and Layout.js ---------- */
   window.Sounds = {
     play,
+    startAlarm,
+    stopAlarm,
+    alarmRinging: () => !!alarm,
     // The page slides out to another one (skipped when the tap that started it just made its own sound)
     playTransition() {
       if (Date.now() - lastTapSound < 300) return;

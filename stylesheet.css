@@ -46,8 +46,6 @@
  *
  * 14) DATE BOXES AND THE CALENDAR THAT PICKS A DAY
  *
- * 15) FLOATING CARDS
- *
  *  Themes (Settings: Prismal, Professional, Dark, Spooky, Elements, Poison, Blue, Fall, Winter, Festive, Floral, Digital, Love, Clovers, Playful, Mechanical)
  *  are in themes.css: each one sets the tokens in section 1 again, and changes a few rules of its own (its header lists
  *  everything a new theme needs).
@@ -98,13 +96,13 @@
   --GLASS_SHADOW: 0 10px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --GLASS_RADIUS: 16px;
 
-  /* Glowing things (the page that's showing, today on the calendar, Quick Entry): a blue-violet radial gradient from
+  /* Glowing things (the page that's showing, today on the calendar, Quick Budget): a blue-violet radial gradient from
      their center, a bright edge, and a glow around them */
   --GLOW_FILL: radial-gradient(ellipse at center, rgba(104, 124, 255, 0.55) 0%, rgba(92, 64, 235, 0.3) 45%, rgba(40, 24, 130, 0.12) 75%, rgba(20, 16, 70, 0.05) 100%);
   --GLOW_EDGE: rgba(150, 165, 255, 0.9);
   --GLOW_SHADOW: 0 0 16px rgba(var(--GLOW_RGB), 0.55), inset 0 0 12px rgba(var(--GLOW_RGB), 0.25);
 
-  /* What a recommended button (Save, Add Entry, Sign In) is filled with, under --GLOW_FILL: it glows like Quick Entry */
+  /* What a recommended button (Save, Add Entry, Sign In) is filled with, under --GLOW_FILL: it glows like Quick Budget */
   --RECOMMENDED_FILL: linear-gradient(90deg, rgba(40, 70, 210, 0.55), rgba(130, 50, 220, 0.55));
   /* A button that's not recommended (Delete, Sign Out Everywhere), and one that can't be used now: darker (the first with
      muted red words) */
@@ -431,7 +429,7 @@ img {
  *  Pill-shaped glass buttons, the same everywhere (Home's are the model):
  *   - one that can be tapped is bright glass with a light edge; under the pointer it grows a little, and its edge
  *     brightens and glows blue-violet;
- *   - the recommended one (Save, Add Entry, Sign In: .primary) glows like Quick Entry;
+ *   - the recommended one (Save, Add Entry, Sign In: .primary) glows like Quick Budget;
  *   - one that's not recommended (Delete, Delete Account: .danger), and one that can't be used now (disabled), is darker;
  *   - a chosen one (a picked refraction type or account, Cost or Gain, an open date picker's button) has the red-orange
  *     gradient border and a red glow (GRADIENT BORDERS).
@@ -480,7 +478,7 @@ button:disabled {
   pointer-events: none;
 }
 
-/* A button's small picture before its words (Undo, Redo, Search, Quick Entry): an image from Resources/Icons, as a
+/* A button's small picture before its words (Undo, Redo, Search, Quick Budget): an image from Resources/Icons, as a
    background, so a button made by a script can have one too */
 .buttonIcon {
   display: inline-block;
@@ -733,7 +731,8 @@ header .stacked h2 {
 
 /* Each icon glows in its own color (the colored ones are dark on their own, so they're lifted a little). Home's is green
    like Menu's, and Back's red (HomeNav and BackNav: the tabs' Home and the Undo buttons keep their own icons). */
-.navIcon[src*="/Settings."] { filter: brightness(1.35) drop-shadow(0 0 6px rgba(40, 100, 255, 0.85)); }
+.navIcon[src*="/Settings."],
+.navIcon[src*="/Snapshot."] { filter: brightness(1.35) drop-shadow(0 0 6px rgba(40, 100, 255, 0.85)); }
 .navIcon[src*="/Menu."],
 .navIcon[src*="/HomeNav."]  { filter: drop-shadow(0 0 6px rgba(40, 220, 40, 0.6)); }
 .navIcon[src*="/BackNav."]  { filter: drop-shadow(0 0 6px rgba(255, 50, 40, 0.65)); }
@@ -1144,6 +1143,45 @@ input:focus {
   box-shadow: 0 10px 25px rgba(var(--SHADE_RGB), 0.6), 0 0 14px rgba(var(--PICK_RGB), 0.35);
 }
 
+/* An alarm ringing (Layout.js, from a calendar entry's alert with its Alarm switch on): over everything, at the top of the
+   screen, with its title, its time, and Stop. It glows brighter than a note, so it's seen from across a room. */
+.alarmBox {
+  position: absolute;
+  top: max(3vh, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: min(92vw, 420px);
+  padding: 1em 1.2em;
+  font-size: clamp(14px, 2.6vmin, 18px);
+  line-height: 1.4;
+  text-align: center;
+  color: var(--BASE_COLOR);
+  background: var(--HOVER_GRADIENT);
+  border: 2px solid rgba(var(--PICK_RGB), 0.9);
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(var(--SHADE_RGB), 0.65), 0 0 28px rgba(var(--PICK_RGB), 0.6);
+  pointer-events: auto;
+}
+
+.alarmBox h2 {
+  margin: 0 0 0.3em;
+  font-size: 1.4em;
+  overflow-wrap: anywhere;
+}
+
+.alarmBox p {
+  margin: 0 0 0.6em;
+  font-size: 1em;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.alarmBox .alarmStop {
+  min-width: 8em;
+  font-size: 1.1em;
+}
+
 /* Checkboxes (the input style above hides native controls). A set size: em would follow the input
    style's 5vmin text, which made them huge on big screens. */
 input[type="checkbox"] {
@@ -1304,7 +1342,7 @@ html.lessMotion input[type="checkbox"].pillSwitch {
   font-size: clamp(15px, 3.4vmin, 19px);
 }
 
-/* Its main button (Sign In, Create Account, Send Reset Link...) is the recommended one: it glows like Quick Entry */
+/* Its main button (Sign In, Create Account, Send Reset Link...) is the recommended one: it glows like Quick Budget */
 .authCard #primary-action-btn {
   color: var(--PRIMARY_TEXT);
   background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
@@ -1442,7 +1480,7 @@ button.pickDay[aria-expanded="true"]::before,
   pointer-events: none;
 }
 
-/* Recommended (Save, Add Entry, Set It Up): it glows like Home's Quick Entry, and a little more under the pointer */
+/* Recommended (Save, Add Entry, Set It Up): it glows like Home's Quick Budget, and a little more under the pointer */
 .budgetButton.primary {
   color: var(--PRIMARY_TEXT);
   background: var(--GLOW_FILL), var(--RECOMMENDED_FILL);
@@ -1726,58 +1764,4 @@ button.pickDay[aria-expanded="true"] {
 
 .pickerFoot button:first-child:not(:last-child) {
   margin-right: auto;
-}
-
-/*========================================*
- *  15) FLOATING CARDS
- *========================================*
- *  The page's cards hover in place: each one on the screen (Layout.js gives it .isFloating while it is) drifts a few
- *  pixels around its spot in a slow loop, on its own timing (Layout.js sets how far it goes each way, --FLOAT_X and
- *  --FLOAT_Y; how long a loop takes, --FLOAT_TIME; and when it starts, --FLOAT_DELAY). The loop moves the translate
- *  property, so a card's own transform (growing under the pointer) still works with it. A card holds still while a day
- *  in it is zoomed or held bigger: moving, it would keep the day under the dimmed page and the cards after it. Nothing
- *  floats with Reduced Motion's animations switch on, or for a device that asks for less motion. On a computer
- *  (html.pixelFloat), Layout.js moves the cards along the same loop by whole pixels instead.
- */
-@keyframes cardFloat {
-  0%    { translate: 0 0; }
-  12.5% { translate: calc(var(--FLOAT_X) * 0.71) calc(var(--FLOAT_Y) * -0.15); }
-  25%   { translate: var(--FLOAT_X) calc(var(--FLOAT_Y) * -0.5); }
-  37.5% { translate: calc(var(--FLOAT_X) * 0.71) calc(var(--FLOAT_Y) * -0.85); }
-  50%   { translate: 0 calc(var(--FLOAT_Y) * -1); }
-  62.5% { translate: calc(var(--FLOAT_X) * -0.71) calc(var(--FLOAT_Y) * -0.85); }
-  75%   { translate: calc(var(--FLOAT_X) * -1) calc(var(--FLOAT_Y) * -0.5); }
-  87.5% { translate: calc(var(--FLOAT_X) * -0.71) calc(var(--FLOAT_Y) * -0.15); }
-  100%  { translate: 0 0; }
-}
-
-.isFloating {
-  animation: cardFloat var(--FLOAT_TIME, 9s) linear var(--FLOAT_DELAY, 0s) infinite;
-}
-
-/* Computers (a mouse or trackpad): Layout.js moves each card along the same loop by whole pixels of the screen instead,
-   since moving by part of a pixel smears its words and lines there */
-html.pixelFloat .isFloating {
-  animation: none;
-}
-
-/* (Process Budget.js gives html .dayZoomed while a day is zoomed; :has() also catches a day shrinking back, and one held
-   bigger on a computer) */
-html.dayZoomed .isFloating.calendarCard,
-html.dayZoomed .isFloating.pageCard {
-  animation: none;
-}
-
-.isFloating:has(td.is-editing, td.is-magnified) {
-  animation: none;
-}
-
-html.lessMotion .isFloating {
-  animation: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .isFloating {
-    animation: none;
-  }
 }

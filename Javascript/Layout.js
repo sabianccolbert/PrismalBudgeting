@@ -300,119 +300,6 @@ window.FloatingWindows = {
   }
 };
 
-/* GROUP: Floating cards */
-// The page's cards hover in place (stylesheet.css FLOATING CARDS): the header's buttons and the budget picker, the tabs,
-// the page's buttons, and its cards (the calendar, Bob's, Settings', the Menu's, the login page's). Each one gets its own
-// slow loop (how far it drifts each way, how long a loop takes, and when it starts), so no two move together. A card
-// floats only while it's on the screen or close to it (one that isn't holds still, which spares a phone's memory and
-// battery), and cards a page adds later (Bob's, say) float too. Reduced Motion (the device's, or Settings' animations
-// switch) holds them all still in the CSS, so they start again as soon as it's turned off.
-const FLOAT_CARDS = [
-  "#transitionContainer > header .navButton",
-  "#transitionContainer > header .budgetPicker",
-  ".pageTabs",
-  ".controlsCard",
-  ".infoCard",
-  ".menuLinks .menuLink",
-  ".quickBalance",
-  ".authCard",
-  "#transitionContainer .budgetCard:not(.helpView)"
-].join(", ");
-const FLOATING = new WeakMap(); // Each floating card's loop: { x, y (px), time, delay (ms) }
-const FLOAT_WATCH = typeof IntersectionObserver === "function"
-  ? new IntersectionObserver((ENTRIES) => {
-      ENTRIES.forEach((ENTRY) => {
-        ENTRY.target.classList.toggle("isFloating", ENTRY.isIntersecting);
-        if (!ENTRY.isIntersecting) stopPixelFloat(ENTRY.target);
-        else if (!PIXEL_FLOATERS.has(ENTRY.target)) PIXEL_FLOATERS.set(ENTRY.target, "");
-      });
-      startPixelFloat();
-    }, { rootMargin: "200px 0px" })
-  : null;
-
-// Every card on the page floats, each on a loop of its own (cards already floating keep theirs)
-function floatCards() {
-  if (!FLOAT_WATCH) return;
-  document.querySelectorAll(FLOAT_CARDS).forEach((CARD) => {
-    if (FLOATING.has(CARD)) return;
-    const SIDE = Math.random() < 0.5 ? -1 : 1;
-    const LOOP = { x: SIDE * (0.8 + Math.random() * 1.2), y: 2 + Math.random() * 1.5, time: (7 + Math.random() * 4) * 1000, delay: Math.random() * 1500 };
-    FLOATING.set(CARD, LOOP);
-    CARD.style.setProperty("--FLOAT_X", `${LOOP.x.toFixed(2)}px`);
-    CARD.style.setProperty("--FLOAT_Y", `${LOOP.y.toFixed(2)}px`);
-    CARD.style.setProperty("--FLOAT_TIME", `${(LOOP.time / 1000).toFixed(2)}s`);
-    CARD.style.setProperty("--FLOAT_DELAY", `${(LOOP.delay / 1000).toFixed(2)}s`);
-    FLOAT_WATCH.observe(CARD);
-  });
-}
-
-/* GROUP: Floating by whole pixels (computers) */
-// On a computer's screen, a card that moves by part of a pixel has its words and lines smeared across two pixels, then
-// sharp again as it reaches the next one, over and over. So there (a mouse or trackpad: html.pixelFloat, which turns the
-// CSS loop off, stylesheet.css FLOATING CARDS), each card moves along the same loop, but only by whole pixels of the
-// screen: a frame sets its translate when its spot, rounded to the screen's pixels, changes. Phones keep the CSS loop,
-// where part of a pixel is too small to see. Reduced Motion holds them still, and a card holds still while a day in it is
-// zoomed or held bigger (like the CSS loop).
-const PIXEL_FLOAT_QUERY = window.matchMedia("(pointer: fine)");
-const PIXEL_FLOATERS = new Map(); // The cards floating by whole pixels -> the spot each was last moved to ("" for its own)
-let PIXEL_FLOAT_FRAME = 0;
-
-const pixelFloatOn = () => PIXEL_FLOAT_QUERY.matches;
-document.documentElement.classList.toggle("pixelFloat", pixelFloatOn());
-PIXEL_FLOAT_QUERY.addEventListener?.("change", () => {
-  document.documentElement.classList.toggle("pixelFloat", pixelFloatOn());
-  for (const CARD of PIXEL_FLOATERS.keys()) {
-    CARD.style.translate = "";
-    PIXEL_FLOATERS.set(CARD, "");
-  }
-  startPixelFloat();
-});
-
-// A card that stopped floating goes back to its spot
-function stopPixelFloat(CARD) {
-  PIXEL_FLOATERS.delete(CARD);
-  if (CARD.style.translate) CARD.style.translate = "";
-}
-
-function startPixelFloat() {
-  if (!PIXEL_FLOAT_FRAME && pixelFloatOn() && PIXEL_FLOATERS.size > 0) PIXEL_FLOAT_FRAME = requestAnimationFrame(movePixelFloaters);
-}
-
-// One frame: each card's spot on its loop (across and back, and up and back down: the CSS cardFloat's path), in whole
-// pixels of the screen, written only when it moved to another one
-function movePixelFloaters(NOW) {
-  PIXEL_FLOAT_FRAME = 0;
-  if (!pixelFloatOn() || PIXEL_FLOATERS.size === 0) return;
-  const STILL = prefersReducedMotion();
-  const PIXEL = 1 / (window.devicePixelRatio || 1);
-  const ZOOMED = document.documentElement.classList.contains("dayZoomed");
-  const BIG_DAY = document.querySelector("td.is-editing, td.is-magnified");
-  for (const [CARD, LAST] of PIXEL_FLOATERS) {
-    const LOOP = FLOATING.get(CARD);
-    const HOLD = STILL || !LOOP || (ZOOMED && CARD.matches(".calendarCard, .pageCard")) || (!!BIG_DAY && CARD.contains(BIG_DAY));
-    let SPOT = "";
-    if (!HOLD) {
-      const TURN = (2 * Math.PI * Math.max(0, NOW - LOOP.delay)) / LOOP.time;
-      const X = Math.round((LOOP.x * Math.sin(TURN)) / PIXEL) * PIXEL;
-      const Y = Math.round((-LOOP.y * (1 - Math.cos(TURN)) / 2) / PIXEL) * PIXEL;
-      SPOT = X || Y ? `${X}px ${Y}px` : "";
-    }
-    if (SPOT === LAST) continue;
-    CARD.style.translate = SPOT;
-    PIXEL_FLOATERS.set(CARD, SPOT);
-  }
-  PIXEL_FLOAT_FRAME = requestAnimationFrame(movePixelFloaters);
-}
-
-let FLOAT_FRAME = 0;
-onDOMReady(() => {
-  floatCards();
-  // (Cards a page draws later, once a frame at most)
-  new MutationObserver(() => {
-    if (!FLOAT_FRAME) FLOAT_FRAME = requestAnimationFrame(() => { FLOAT_FRAME = 0; floatCards(); });
-  }).observe(document.getElementById("transitionContainer") || document.body, { childList: true, subtree: true });
-});
-
 /* GROUP: Leave/return lifecycle */
 // pagehide fires for real navigations and for bfcache entries.
 // This is the most reliable "we are leaving" hook across browsers.
@@ -441,16 +328,16 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-/* GROUP: A Quick Entry icon's app comes back to Quick Entry */
-// A Quick Entry icon on a phone's home screen opens as an app of its own (quick.html's meta tags). Its Home button can go
-// on to the budget (signing in first), but the icon is for Quick Entry: left on another page and opened again, the app
-// goes back to the Quick Entry page it opened on. That page is kept in the app's own session storage (QUICK_APP_KEY).
+/* GROUP: A Quick Budget icon's app comes back to Quick Budget */
+// A Quick Budget icon on a phone's home screen opens as an app of its own (quick.html's meta tags). Its Home button can go
+// on to the budget (signing in first), but the icon is for Quick Budget: left on another page and opened again, the app
+// goes back to the Quick Budget page it opened on. That page is kept in the app's own session storage (QUICK_APP_KEY).
 // Leaving the app hides its page without leaving it by a link, so the time it was hidden is kept too (APP_LEFT_KEY, taken
 // off when a link or the app itself leaves the page, pagehide); back on the screen after APP_AWAY_MS or more (a passkey's
-// sheet over it is shorter), or opened again on that page, it goes back to Quick Entry. Only in an app opened from the
+// sheet over it is shorter), or opened again on that page, it goes back to Quick Budget. Only in an app opened from the
 // home screen (in a browser's tab, a page stays where it was left), and never from the login page, where a passkey's or a
 // password's sheet can come and go while signing in.
-// Brought back from another page, Quick Entry's Back goes to it (QUICK_RETURN_KEY, see showQuickBack); opened fresh from
+// Brought back from another page, Quick Budget's Back goes to it (QUICK_RETURN_KEY, see showQuickBack); opened fresh from
 // the icon, it has none.
 const QUICK_APP_KEY = "prismal_quick_app";
 const APP_LEFT_KEY = "prismal_app_left";
@@ -465,7 +352,7 @@ const writeSession = (KEY, VALUE) => {
   } catch {}
 };
 
-// Back to the Quick Entry page the app opened on, when it's away from it (and has nothing unsaved)
+// Back to the Quick Budget page the app opened on, when it's away from it (and has nothing unsaved)
 function backToQuickEntry() {
   const LEFT = Number(readSession(APP_LEFT_KEY));
   writeSession(APP_LEFT_KEY, null);
@@ -476,8 +363,8 @@ function backToQuickEntry() {
   else location.replace(QUICK);
 }
 
-// Quick Entry's Back, once the app went back to it from another page: it goes to that page (signing in again first, like
-// any page, if that time has passed). It's read once, so Quick Entry opened again later starts without it.
+// Quick Budget's Back, once the app went back to it from another page: it goes to that page (signing in again first, like
+// any page, if that time has passed). It's read once, so Quick Budget opened again later starts without it.
 function showQuickBack() {
   const BACK = document.getElementById("quickBack");
   const RETURN = readSession(QUICK_RETURN_KEY);
@@ -538,12 +425,12 @@ const SLIDE_OUT_CLASSES = { left: "toLeft", right: "toRight", up: "toTop" };
 
 /* GROUP: Which way pages slide */
 // Pages slide as if they sat side by side: the Menu and its pages to the right of the budget (going there slides left,
-// coming back slides right), Quick Entry and the Privacy Policy to its left (going there slides right, leaving slides
-// left), and Settings above it all (it slides down into view, and back up to leave). Signing in slides left and
+// coming back slides right; Settings is one of them), Quick Budget and the Privacy Policy to its left (going there slides
+// right, leaving slides left), and Snapshot above it all (it slides down into view, and back up to leave). Signing in slides left and
 // signing out slides right, as if the login page sat to the left of the budget (and to the right of the front page,
 // so Sign In there slides left too). Between the budget's four pages, only what's under their tabs slides. The page
 // that opens slides in the same way the last one slid out (Boot.js reads the note transitionTo leaves).
-const MENU_PAGES = ["menu", "spreadsheets", "tracker", "calculator", "payments", "logs"];
+const MENU_PAGES = ["menu", "spreadsheets", "calculator", "payments", "logs", "settings"];
 const SIDE_PAGES = ["quick", "quickcal", "privacy"];
 const BUDGET_TABS = ["home", "recurring", "accounts", "bob"];
 
@@ -552,8 +439,8 @@ const BUDGET_TABS = ["home", "recurring", "accounts", "bob"];
 function slideWay(FROM, TO) {
   const SIGNED_IN = !!readStored("prismal_jwt");
   if (!FROM || !TO || FROM === TO) return null;
-  if (TO === "settings") return "down";
-  if (FROM === "settings") return "up";
+  if (TO === "snapshot") return "down";
+  if (FROM === "snapshot") return "up";
   if (SIDE_PAGES.includes(TO)) return "right";
   if (SIDE_PAGES.includes(FROM)) return "left";
   if (FROM === "login") return SIGNED_IN ? "left" : TO === "home" ? "right" : null;
@@ -917,7 +804,7 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
   /* GROUP: Leaving without a slide */
   // Nothing to animate (no container, or reduced motion), a page that hasn't slid in yet (it's still out of sight),
   // changes that haven't been saved yet (the browser asks before the page is left, and staying keeps the page as it is),
-  // or Quick Entry in its icon's app: there the link is followed during the tap itself, since a phone can open a page of
+  // or Quick Budget in its icon's app: there the link is followed during the tap itself, since a phone can open a page of
   // the site outside the app, or hold back a link followed a moment after the tap, and the page would be left slid out
   if (!CONTAINER || DURATION_MS === 0 || !CONTAINER.classList.contains("ready") || hasChangesToSave() || (RUNNING_AS_APP && window.PAGE === "quick")) {
     freezeAndSaveStarfield();
@@ -1170,15 +1057,17 @@ document.addEventListener("click", (EVENT) => {
 // Signing out (or deleting the account) forgets everything this browser kept for the account, including
 // this tab's Undo history and the budget it had open, but keeps the device's own choices: whether analytics is off here, its date format,
 // whether music and sound effects are off (Sounds.js), the kind of phone picked for the Steps for lists, the passkey
-// it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Entry icons it made or used
+// it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Budget icons it made or used
 // (their entries are added when the budget opens here, see holdQuickEntries), the day picked for Bob's Accounts
 // card (Bob Page.js), its theme and Custom theme and its Reduced Motion switches (Boot.js), so the next sign-in here
 // looks the same, whether push notifications were turned off here on purpose (Notifications.js), and what Home's
 // calendar shows here: the budget, the calendar, or both, which Calendar Fractals are checked, whether a zoomed day
-// lists its calendar entries, and the Quick Calendar icons this device made or used (Fractals.js).
+// lists its calendar entries, and the Quick Calendar icons this device made or used (Fractals.js), whether Home's
+// calendar is in List Mode, and which Change Logs rows it has seen (Home's count of other devices' edits, see
+// markLogsSeen in Process Budget.js).
 const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
   "prismal_theme", "prismal_custom_theme", "prismal_quick_icon", "prismal_still_stars", "prismal_less_motion", "prismal_push_off",
-  "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons"];
+  "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));
@@ -1208,6 +1097,70 @@ function signOut() {
   try { sessionStorage.setItem("prismal_signed_out", "logout"); } catch {}
   transitionTo("/login.html", true, "right");
 }
+
+/* GROUP: Alarms (a calendar entry's alert with its Alarm switch on) */
+// When an alarm's notification comes, the service worker (sw.js) tells every open page: it rings (Sounds.js) and shows a
+// box over the page with the alarm's title and Stop, until Stop is tapped or the notification is dismissed (on any
+// device of this browser: sw.js says so). Stop closes the notification too. window.PrismalAlarm.ring() is the same, for a
+// test.
+window.PrismalAlarm = (function alarms() {
+  let BOX = null;
+  let TAG = "";
+
+  function stop() {
+    if (window.Sounds && Sounds.stopAlarm) Sounds.stopAlarm();
+    if (BOX) BOX.remove();
+    BOX = null;
+    if (TAG && "serviceWorker" in navigator) {
+      const CLOSING = TAG;
+      navigator.serviceWorker.getRegistration().then(REGISTRATION => {
+        if (REGISTRATION) return REGISTRATION.getNotifications({ tag: CLOSING }).then(LIST => LIST.forEach(NOTE => NOTE.close()));
+      }).catch(() => {});
+    }
+    TAG = "";
+  }
+
+  function ring(MESSAGE) {
+    TAG = MESSAGE.tag || "";
+    const HEARD = !!(window.Sounds && Sounds.startAlarm && Sounds.startAlarm());
+    if (!BOX) {
+      BOX = document.createElement("section");
+      BOX.className = "alarmBox";
+      BOX.setAttribute("role", "alertdialog");
+      BOX.setAttribute("aria-labelledby", "alarmTitle");
+      const TITLE = document.createElement("h2");
+      TITLE.id = "alarmTitle";
+      const BODY = document.createElement("p");
+      BODY.className = "alarmBody";
+      const HINT = document.createElement("p");
+      HINT.className = "alarmHint";
+      const STOP = document.createElement("button");
+      STOP.type = "button";
+      STOP.className = "budgetButton primary alarmStop";
+      STOP.textContent = "Stop";
+      STOP.addEventListener("click", stop);
+      BOX.append(TITLE, BODY, HINT, STOP);
+      (window.ScreenLayer && ScreenLayer.notes ? ScreenLayer.notes : document.body).appendChild(BOX);
+    }
+    BOX.querySelector("h2").textContent = MESSAGE.title || "⏰ Alarm";
+    BOX.querySelector(".alarmBody").textContent = MESSAGE.body || "";
+    const HINT = BOX.querySelector(".alarmHint");
+    HINT.textContent = HEARD ? "" : "Tap anywhere on the page to hear it.";
+    HINT.hidden = HEARD;
+    BOX.querySelector(".alarmStop").focus({ preventScroll: true });
+  }
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (EVENT) => {
+      const MESSAGE = EVENT.data || {};
+      if (MESSAGE.type === "prismal-alarm") ring(MESSAGE);
+      else if (MESSAGE.type === "prismal-alarm-stop" && (!MESSAGE.tag || MESSAGE.tag === TAG)) stop();
+    });
+    // (Messages from the service worker wait until a page says it's listening)
+    try { navigator.serviceWorker.startMessages(); } catch (ERR) {}
+  }
+  return { ring, stop };
+})();
 
 /* GROUP: Missing images */
 // An image that's missing or fails to load shows its words (its alt text) instead of a broken-image

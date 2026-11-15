@@ -12,6 +12,7 @@
   const key = params.get("key") || "";
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const WAITING = "waiting:"; // How a waiting entry's id starts here (the calendar's own ids never do)
+  const CALENDAR_DAYS = 35; // Five weeks, like Home's calendar
   const status = document.getElementById("dataStatus");
   // The calendar goes from the Sunday a year before today through the Saturday five years after it
   const yearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
@@ -21,11 +22,32 @@
   let viewStart = addDays(today, -today.getDay());
 
   // Just set up from Home: show how to add it to the home screen, and drop setup=1 from the address (so the icon's link
-  // is only the page and its key)
+  // is only the page, its key, and this device's theme: a phone's home screen app can keep its own storage, and starts
+  // from this link)
   if (key && params.has("setup")) {
     document.getElementById("setupCard").hidden = false;
-    history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(key)}`);
+    const look = window.Themes ? Themes.lookQuery() : "";
+    history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(key)}${look ? `&${look}` : ""}`);
   }
+
+  // Home goes on when this browser is signed in, and straight to the login page when it isn't, keeping this page's theme
+  // on the way (Themes.lookQuery in Boot.js), like Quick Budget's (Quick Entry.js). Worked out as it's tapped, since this
+  // page can stay open for days. Opened from the home screen as an app (RUNNING_AS_APP, Layout.js), Home opens the site
+  // in the phone's browser instead, and the app stays here: the browser keeps its own sign-in.
+  const homeLink = document.querySelector('.navButtons a[href="/"]');
+  const loginLink = () => {
+    const look = window.Themes ? Themes.lookQuery() : "";
+    return look ? `/login.html?${look}` : "/login.html";
+  };
+  if (homeLink && RUNNING_AS_APP) {
+    homeLink.target = "_blank";
+    homeLink.rel = "noopener";
+    homeLink.setAttribute("href", loginLink());
+  }
+  if (homeLink && !RUNNING_AS_APP && !signedInNow()) homeLink.setAttribute("href", loginLink());
+  homeLink?.addEventListener("click", () => {
+    if (!RUNNING_AS_APP) homeLink.setAttribute("href", signedInNow() ? "/" : loginLink());
+  });
 
   // One request with the key: { ok, status, data }, where data is the calendar as Fractals.js takes it (the entries this
   // icon added that are still waiting shown with the rest, each marked waiting)
@@ -63,7 +85,7 @@
   // Move the calendar so a day is in its first week (kept inside its range). A zoomed day closes first.
   function moveCalendar(date) {
     const anchor = date < range.first ? range.first : date > range.last ? range.last : createSafeMidnight(date);
-    const latest = addDays(range.last, -27);
+    const latest = addDays(range.last, -(CALENDAR_DAYS - 1));
     const start = addDays(anchor, -anchor.getDay());
     viewAnchor = anchor;
     viewStart = start > latest ? latest : start;
@@ -71,15 +93,15 @@
     renderCalendar();
   }
 
-  // Draw the four weeks showing: each day's date and its calendar entries (fillGuestDay in Process Budget.js draws a day
+  // Draw the five weeks showing: each day's date and its calendar entries (fillGuestDay in Process Budget.js draws a day
   // with no budget lines the same way Home does), the header's month and year, and how many entries are waiting
   function renderCalendar() {
-    window.Fractals.prepare(formatToYMD(viewStart), formatToYMD(addDays(viewStart, 27)));
+    window.Fractals.prepare(formatToYMD(viewStart), formatToYMD(addDays(viewStart, CALENDAR_DAYS - 1)));
     document.querySelectorAll(".elastic-table:not(.guestDays) td").forEach((td, index) => {
       const date = addDays(viewStart, index);
       fillGuestDay(td, { date, text: formatToMMDD(date), kind: "blank" });
     });
-    document.getElementById("calendarMonth").textContent = MONTHS[viewAnchor.getMonth()];
+    document.getElementById("calendarMonth").value = String(viewAnchor.getMonth());
     document.getElementById("calendarYear").value = String(viewAnchor.getFullYear());
     document.getElementById("calendarPrev").disabled = new Date(viewAnchor.getFullYear(), viewAnchor.getMonth(), 0) < range.first;
     document.getElementById("calendarNext").disabled = new Date(viewAnchor.getFullYear(), viewAnchor.getMonth() + 1, 1) > range.last;
@@ -90,37 +112,21 @@
     note.textContent = `${waiting} ${waiting === 1 ? "entry is" : "entries are"} waiting to join your calendar (the ${waiting === 1 ? "one" : "ones"} with a dashed edge). ${waiting === 1 ? "It joins" : "They join"} the next time Prismal Planning opens on the device that made this icon. Tap one to change it or delete it.`;
   }
 
-  // The header: Calendar Fractals, Today, the month's ‹ and ›, the year, and the date box with its calendar button
+  // The header: Calendar Fractals, Today, the month (a list) with its ‹ and ›, and the year (like Home's)
   function wireHeader() {
     window.Fractals.wirePicker(document.getElementById("fractalPicker"));
     const stepMonth = (step) => moveCalendar(new Date(viewAnchor.getFullYear(), viewAnchor.getMonth() + step, 1));
     document.getElementById("calendarPrev").addEventListener("click", () => stepMonth(-1));
     document.getElementById("calendarNext").addEventListener("click", () => stepMonth(1));
-    const jump = document.getElementById("calendarJump");
-    document.getElementById("calendarToday").addEventListener("click", () => {
-      jump.value = "";
-      moveCalendar(today);
-    });
+    document.getElementById("calendarToday").addEventListener("click", () => moveCalendar(today));
+    const month = document.getElementById("calendarMonth");
+    MONTHS.forEach((name, index) => month.appendChild(new Option(name, String(index))));
+    month.addEventListener("change", () => moveCalendar(new Date(viewAnchor.getFullYear(), Number(month.value), 1)));
     const year = document.getElementById("calendarYear");
     for (let y = range.first.getFullYear(); y <= range.last.getFullYear(); y++) year.appendChild(new Option(String(y), String(y)));
     year.addEventListener("change", () => {
       const lastDay = new Date(Number(year.value), viewAnchor.getMonth() + 1, 0).getDate();
       moveCalendar(new Date(Number(year.value), viewAnchor.getMonth(), Math.min(viewAnchor.getDate(), lastDay)));
-    });
-    jump.placeholder = datePattern();
-    jump.translate = false;
-    jump.after(BudgetUI.datePickerButton(jump, "date to go to", { min: range.first, max: range.last }));
-    const goToTyped = () => {
-      if (!jump.value.trim()) return;
-      const typed = parseTypedDate(jump.value);
-      if (isNaN(typed.getTime())) return BudgetUI.showToast("That isn't a date. Type one like the box shows, or use the calendar button.", true);
-      moveCalendar(typed);
-    };
-    jump.addEventListener("change", goToTyped);
-    jump.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") return;
-      event.preventDefault();
-      goToTyped();
     });
     document.getElementById("addEventButton").addEventListener("click", (event) => window.Fractals.openNewEvent(event.currentTarget, { date: today }));
     // While a date box is waiting, tapping a day fills it in instead of zooming the day (like on Home)

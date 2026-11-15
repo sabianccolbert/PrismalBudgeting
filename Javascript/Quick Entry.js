@@ -1,5 +1,5 @@
-// Quick Entry: the page a home screen icon opens (quick.html?key=...). It's the calendar's New Entry
-// form with no login. The key in the link comes from Home's Quick Entry button (made
+// Quick Budget: the page a home screen icon opens (quick.html?key=...). It's the calendar's New Entry
+// form with no login. The key in the link comes from Home's Quick Budget button (made
 // while signed in) and can only queue entries, which the budget adds the next time it opens on the device that made
 // the icon, or which wait on its Home to be added or deleted on another device (see holdQuickEntries in Process
 // Budget.js), and change or delete the ones it queued until a budget has
@@ -51,7 +51,7 @@ if (quickKey && quickParams.has("setup")) {
 // page, and not to a signed-in page that would sign out the moment it opens (a sign-in left idle too long, see
 // signedInNow in Layout.js). Worked out as they're tapped, since this page can stay open for days.
 // Opened from the home screen as an app (RUNNING_AS_APP, Layout.js), Home opens the site in the phone's browser instead,
-// and the app stays on Quick Entry: the browser keeps its own sign-in, so it goes to its login page, which goes on to
+// and the app stays on Quick Budget: the browser keeps its own sign-in, so it goes to its login page, which goes on to
 // Home when the browser is signed in.
 const quickHomeLink = document.querySelector('.navButtons a[href="/"]:not(#quickBack)');
 const quickBackLink = document.getElementById("quickBack");
@@ -93,7 +93,7 @@ document.getElementById("copyQuickLink")?.addEventListener("click", async () => 
 // =====================================================================
 
 async function checkQuickKey() {
-  // Without a key there's nothing this page can do: sign in instead (Home's Quick Entry button makes one)
+  // Without a key there's nothing this page can do: sign in instead (Home's Quick Budget button makes one)
   if (!quickKey) {
     transitionTo("/login.html", true);
     return;
@@ -538,7 +538,7 @@ function showWaiting(data) {
   const others = (Number.isInteger(data.waiting) ? data.waiting : 0) - quickQueued.length;
   const note = document.getElementById("waitingNote");
   note.hidden = others <= 0;
-  note.textContent = `${others} more ${others === 1 ? "entry is" : "entries are"} waiting from your other Quick Entry icons.`;
+  note.textContent = `${others} more ${others === 1 ? "entry is" : "entries are"} waiting from your other Quick Budget icons.`;
   // One being changed that isn't waiting here anymore (the budget has it now) can't be saved
   if (quickForm && quickForm.mode === "change" && !quickQueued.some(item => item.id === quickForm.changing.id && !item.joining)) {
     BudgetUI.showToast("That entry is in your budget now (or waiting on its Home to be added), so it can only be changed there.", true);

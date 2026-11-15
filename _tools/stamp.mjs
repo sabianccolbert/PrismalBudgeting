@@ -11,7 +11,7 @@
 //     left alone, so add ?v= to a new one to opt it in. A file that doesn't exist yet (like an image still
 //     to be made) gets an empty fingerprint until it does.
 //   - FILE_VERSIONS in Javascript/Boot.js: every script in Javascript/, every image in Resources/Sprites/, every
-//     sound in Resources/Sounds/, the starfield's Resources/Star.webp, and themes.css (the login page's, when Quick Entry
+//     sound in Resources/Sounds/, the starfield's Resources/Star.webp, and themes.css (the login page's, when Quick Budget
 //     hands its theme on), which pages load through Boot.js's assetUrl.
 // A stylesheet can also carry a small image inside it, so it paints with the page's first frame instead of a
 // moment later: url("data:image/webp;base64,...") /* inline: /Resources/Background.webp */. The data is

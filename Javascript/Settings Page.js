@@ -6,7 +6,7 @@
 // Then the account: the email (change it, which needs the password, and verify it) and other emails (each confirmed by
 // a link; they sign in too, and their spreadsheets can be connected), the birth date (18 or older: fix one typed
 // wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID, Windows Hello: add or
-// remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices (turn off Quick Entry icons, or
+// remove them, and turn passkey sign-in on or off; see Passkeys.js); signed-in devices (turn off Quick Budget icons, or
 // their balances, and Sign Out Everywhere); your data and privacy (Download My Data, analytics on or off for this
 // device); and deleting the account (needs the password). Emails go out through Resend (see account.js in the API).
 // This device's own choices (the theme, with Custom's window to make one's own; the date format; music and sound effects;
@@ -50,7 +50,7 @@ const THEME_INFO = [
   { key: "mechanical", name: "Mechanical", about: "Steel, brass, and gears" },
   { key: "custom", name: "Custom", about: "Your own" }
 ];
-// What the Quick Entry icon can show, and the biggest image it reads (it's cut down to the icon's size)
+// What the Quick Budget icon can show, and the biggest image it reads (it's cut down to the icon's size)
 const QUICK_ICON_CHOICES = [
   { key: "prismal", label: "Prismal" },
   { key: "minimal", label: "Minimal" },
@@ -74,6 +74,9 @@ const CUSTOM_PARTS = [
   { part: "icons", label: "Icons", options: [["theme", "The theme's"], ["gray", "Gray"], ["glowing", "Glowing"]] }
 ];
 const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here to turn them on.";
+// Budgets.js's list ({ current, budgets, invitations }), once it's in (see loadBudgets). Up here, before loadBudgets runs
+// below: Firefox refused to set it from there while its declaration further down hadn't been reached yet.
+let budgetList = null;
 
 wireDateFormat(); // This device's choices, so they work before (and without) the server
 wireThemes();
@@ -134,8 +137,6 @@ window.workspaceReady.then(async (loaded) => {
 // =====================================================================
 // #region BUDGETS, AND THE CALENDAR'S LINKS
 // =====================================================================
-
-let budgetList = null; // Budgets.js's list ({ current, budgets, invitations }), once it's in
 
 // The account's budgets, for the list of which one the reminders are about (the Budgets card itself is on the Budgets,
 // Calendars & Spreadsheets page)
@@ -405,7 +406,7 @@ function wireMotion() {
   stars.disabled = animations.disabled = deviceAsks;
   document.getElementById("motionNote").textContent = deviceAsks
     ? "This device asks for less motion in its own settings, so the starfield is off, and so are the other animations."
-    : "Other animations are pages sliding in, windows growing out of their buttons, days zooming in, and cards floating.";
+    : "Other animations are pages sliding in, windows growing out of their buttons, and days zooming in.";
   for (const [input, which] of [[stars, "stars"], [animations, "animations"]]) {
     input.addEventListener("change", () => {
       if (Motion.set(which, input.checked)) return;
@@ -418,10 +419,10 @@ function wireMotion() {
 //#endregion
 
 // =====================================================================
-// #region THEME (this device)
+// #region THEME (this browser)
 // =====================================================================
 // A button for each theme (its swatch, its name, and a few words), and Custom at the end, which opens a window to make
-// one's own (openCustomTheme). Picking one shows it right away and keeps it on this device (Boot.js Themes).
+// one's own (openCustomTheme). Picking one shows it right away and keeps it in this browser (Boot.js Themes).
 
 function wireThemes() {
   const holder = document.getElementById("themeChoices");
@@ -462,14 +463,23 @@ function renderThemes() {
   });
 }
 
-// A theme's button tapped: it shows right away, and this device keeps it (Custom's says how to change it)
+// A theme's button tapped: it shows right away, and this browser keeps it (Custom's says how to change it)
 function pickTheme(theme) {
+  const before = Themes.saved();
   if (!Themes.set(theme.key)) {
     BudgetUI.showToast("This browser isn't keeping site data, so the theme can't be saved.", true);
     return;
   }
   renderThemes();
+  if (theme.key !== before) showThemeNotice();
   if (theme.key === "custom") BudgetUI.showToast("Your Custom theme is back on. Tap Custom again to change it.");
+}
+
+// After a theme changes: a theme is kept by each browser (and each app on a home screen, which keeps its own storage),
+// so the card says where else to pick it (settings.html #themeNotice)
+function showThemeNotice() {
+  const notice = document.getElementById("themeNotice");
+  if (notice) notice.hidden = false;
 }
 
 // The Custom window: a theme to start from, five colors (the page behind the cards, the cards, the words, the glow, and
@@ -485,7 +495,7 @@ function openCustomTheme(origin) {
     origin,
     title: "Custom Theme",
     build(form, panel) {
-      form.append(BudgetUI.element("p", "panelHint", "Start from any theme, then make it your own. It shows behind this window as you change it, and Save keeps it on this device."));
+      form.append(BudgetUI.element("p", "panelHint", "Start from any theme, then make it your own. It shows behind this window as you change it, and Save keeps it in this browser."));
 
       const base = BudgetUI.segmented(THEME_INFO.filter(theme => theme.key !== "custom").map(theme => ({ key: theme.key, label: theme.name })), draft.base, (key) => {
         draft = Themes.tidyCustom({ base: key });
@@ -561,9 +571,10 @@ function openCustomTheme(origin) {
         }
         kept = true;
         renderThemes();
+        showThemeNotice();
         document.dispatchEvent(new CustomEvent("quickicon:colors"));
         panel.close();
-        BudgetUI.showToast("Your Custom theme is on, on this device.");
+        BudgetUI.showToast("Your Custom theme is on, in this browser.");
       });
 
       // Closed without Save (Cancel, ×, Escape, or leaving the page): the theme that was on comes back
@@ -582,9 +593,9 @@ function openCustomTheme(origin) {
 //#endregion
 
 // =====================================================================
-// #region QUICK ENTRY ICON (this device)
+// #region QUICK BUDGET ICON (this device)
 // =====================================================================
-// Under Theme: how the Quick Entry icon looks on this device's home screen. Colors has one for each theme (and the Custom one
+// Under Theme: how the Quick Budget icon looks on this device's home screen. Colors has one for each theme (and the Custom one
 // this device keeps), and Icon the site's usual picture, a minimal one, a blank one (just the colors), an emoji typed in, or
 // an uploaded image. Each change is drawn and kept right away (Quick Icon.js).
 
@@ -594,7 +605,7 @@ function wireQuickIcon() {
   let chosen = QuickIcon.settings();
 
   const preview = BudgetUI.element("img", "quickIconPreview");
-  preview.alt = "How the Quick Entry icon will look";
+  preview.alt = "How the Quick Budget icon will look";
   preview.src = chosen.picture || "/Favicon/apple-touch-icon.png";
 
   // Draws what's picked, shows it, and keeps it (only the latest of several quick changes counts)
@@ -684,7 +695,7 @@ function wireQuickIcon() {
 
   const top = BudgetUI.element("div", "quickIconTop");
   const words = BudgetUI.element("div", "quickIconWords");
-  words.append(BudgetUI.element("h4", "", "Quick Entry Icon"), BudgetUI.element("p", "panelHint", "How the icon looks when Quick Entry is added to this device's home screen. This device keeps it with its theme, even when you sign out. An icon that's already there keeps the look it was added with: tap Quick Entry on Home and add it again for the new one."));
+  words.append(BudgetUI.element("h4", "", "Quick Budget Icon"), BudgetUI.element("p", "panelHint", "How the icon looks when Quick Budget is added to this device's home screen. This browser keeps it with its theme, even when you sign out. An icon that's already there keeps the look it was added with: tap Quick Budget on Home and add it again for the new one."));
   top.append(preview, words);
   holder.replaceChildren(top, BudgetUI.field("Colors", colorChoices), BudgetUI.field("Icon", icons.el), emoji.el, upload);
 }
@@ -887,7 +898,7 @@ function wireAccount() {
   document.getElementById("deleteForm").addEventListener("submit", deleteAccount);
 }
 
-// The account cards: email (and whether it's verified), age, the reset link, Quick Entry icons, and analytics
+// The account cards: email (and whether it's verified), age, the reset link, Quick Budget icons, and analytics
 function renderAccount() {
   document.getElementById("emailStatus").textContent = account.email
     ? `Signed in as ${account.username}, with the email ${account.email}. Password reset links go there.`
@@ -915,7 +926,7 @@ function renderAccount() {
   renderPasswordless();
 }
 
-// A new password: the other devices are signed out and Quick Entry icons stop; this one gets a new session
+// A new password: the other devices are signed out and Quick Budget icons stop; this one gets a new session
 async function changePassword(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -950,7 +961,7 @@ async function changePassword(event) {
   renderAccount();
   // renderSignIns(); (On standby)
   const noted = account.email && account.canEmail ? " We emailed you a note about it." : "";
-  BudgetUI.showToast(`${first ? "Password set" : "Password changed"}. Your other devices were signed out${hadIcons ? ", and your Quick Entry icons were turned off" : ""}.${noted}`);
+  BudgetUI.showToast(`${first ? "Password set" : "Password changed"}. Your other devices were signed out${hadIcons ? ", and your Quick Budget icons were turned off" : ""}.${noted}`);
 }
 
 // Change Email (needs the password): the new one gets a link to verify it
@@ -1119,8 +1130,8 @@ function renderPasswordless() {
   const passwordButton = document.querySelector("#passwordForm button[type=submit]");
   passwordButton.textContent = noPassword ? "Set Password" : "Change Password";
   document.querySelector("#passwordForm .panelHint").textContent = noPassword
-    ? "Your account doesn't have a password yet. Set one to sign in with your username or email too. It signs out your other devices and turns off your Quick Entry icons."
-    : "A new password signs out your other devices and turns off your Quick Entry icons. This device stays signed in.";
+    ? "Your account doesn't have a password yet. Set one to sign in with your username or email too. It signs out your other devices and turns off your Quick Budget icons."
+    : "A new password signs out your other devices and turns off your Quick Budget icons. This device stays signed in.";
 
   clearTimeout(confirmTimer);
   const card = document.getElementById("confirmYou");
@@ -1299,17 +1310,17 @@ document.addEventListener("visibilitychange", async () => {
 //#endregion
 
 // =====================================================================
-// #region SIGNED-IN DEVICES (Quick Entry icons and their balances, Sign Out Everywhere)
+// #region SIGNED-IN DEVICES (Quick Budget icons and their balances, Sign Out Everywhere)
 // =====================================================================
 
-// Whether Quick Entry icons show balances: In Bank today, the lowest it gets, and the Equity accounts' balances (a
+// Whether Quick Budget icons show balances: In Bank today, the lowest it gets, and the Equity accounts' balances (a
 // setting of the account, so every icon follows it; off, they show the accounts' names only)
 function renderQuickBalances() {
   const toggle = document.getElementById("quickBalancesSwitch");
   toggle.checked = account.quickBalances !== false;
   document.getElementById("quickBalancesNote").textContent = toggle.checked
-    ? "Quick Entry icons show In Bank today, the lowest it gets, and your Equity accounts' balances."
-    : "Off: Quick Entry icons don't show In Bank or any balances, just your Equity accounts' names (to pick one).";
+    ? "Quick Budget icons show In Bank today, the lowest it gets, and your Equity accounts' balances."
+    : "Off: Quick Budget icons don't show In Bank or any balances, just your Equity accounts' names (to pick one).";
 }
 
 // The switch was flipped: saved with the account (the icons follow it the next time they're opened or add an entry)
@@ -1320,45 +1331,45 @@ async function setQuickBalances(toggle) {
   toggle.disabled = false;
   if (result.ok && result.data) {
     account = result.data;
-    BudgetUI.showToast(on ? "Quick Entry icons show balances again." : "Quick Entry icons don't show balances now.");
+    BudgetUI.showToast(on ? "Quick Budget icons show balances again." : "Quick Budget icons don't show balances now.");
   } else {
     BudgetUI.showToast(accountError(result, "Couldn't change that. Please try again."), true);
   }
   renderQuickBalances();
 }
 
-// How many Quick Entry icons work, with Turn Off Icons while there are any
+// How many Quick Budget icons work, with Turn Off Icons while there are any
 function renderQuickIcons() {
   const status = document.getElementById("quickIconStatus");
   const buttons = document.getElementById("quickIconButtons");
   buttons.replaceChildren();
   const count = account.quickIcons || 0;
   if (count === 0) {
-    status.textContent = "Quick Entry icons: none right now. The Quick Entry button on Home makes one for a phone's home screen.";
+    status.textContent = "Quick Budget icons: none right now. The Quick Budget button on Home makes one for a phone's home screen.";
     return;
   }
-  status.textContent = `Quick Entry icons: ${count} on home screens. Each one can add entries without signing in, see your Equity accounts (for its account picker) and, unless they're off below, In Bank today, the lowest it gets, and the accounts' balances, and keep your prisms, but nothing else.`;
+  status.textContent = `Quick Budget icons: ${count} on home screens. Each one can add entries without signing in, see your Equity accounts (for its account picker) and, unless they're off below, In Bank today, the lowest it gets, and the accounts' balances, and keep your prisms, but nothing else.`;
   buttons.append(settingsButton(count === 1 ? "Turn Off The Icon" : "Turn Off Icons", "danger", turnOffQuickIcons));
 }
 
-// Turn Off Icons (after asking): every Quick Entry icon stops working
+// Turn Off Icons (after asking): every Quick Budget icon stops working
 async function turnOffQuickIcons(event) {
   const count = account.quickIcons;
-  if (!window.confirm(`Turn off ${count === 1 ? "your Quick Entry icon" : `all ${count} of your Quick Entry icons`}? ${count === 1 ? "It stops" : "They stop"} working right away (entries already made with ${count === 1 ? "it" : "them"} still get added). You can make a new one on Home.`)) return;
+  if (!window.confirm(`Turn off ${count === 1 ? "your Quick Budget icon" : `all ${count} of your Quick Budget icons`}? ${count === 1 ? "It stops" : "They stop"} working right away (entries already made with ${count === 1 ? "it" : "them"} still get added). You can make a new one on Home.`)) return;
   event.currentTarget.disabled = true;
   const result = await budgetApi("/api/quick/off", {});
   if (result.ok && result.data) {
     account.quickIcons = 0;
-    BudgetUI.showToast(count === 1 ? "Your Quick Entry icon is off." : "Your Quick Entry icons are off.");
+    BudgetUI.showToast(count === 1 ? "Your Quick Budget icon is off." : "Your Quick Budget icons are off.");
   } else {
     BudgetUI.showToast(accountError(result, "Couldn't turn off the icons. Please try again."), true);
   }
   renderQuickIcons();
 }
 
-// Every device and browser (this one too) is signed out, and Quick Entry icons stop
+// Every device and browser (this one too) is signed out, and Quick Budget icons stop
 async function signOutEverywhere(event) {
-  if (!window.confirm("Sign out every device and browser, this one too? Your Quick Entry icons will stop working, and you'll sign in again here.")) return;
+  if (!window.confirm("Sign out every device and browser, this one too? Your Quick Budget icons will stop working, and you'll sign in again here.")) return;
   const button = event.currentTarget;
   button.disabled = true;
   const result = await budgetApi("/api/account/sign-out-everywhere", {});

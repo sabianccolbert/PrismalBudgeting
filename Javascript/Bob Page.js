@@ -6,17 +6,19 @@
 //     that's on. Each card's render returns its highlight (see CARDS), and a new card needs one too.
 //   - Every card has a help button (a "?" in a circle) to the right of its title, with a short, clear note on what the
 //     card is for (its help, see CARDS). A new card needs one too.
-//   - Data always runs. Every other card has an on/off switch, starts off, and works nothing out while it's off. Which are
-//     on is kept with the budget (Bob's page in Process Budget.js), so every device shows the same.
+//   - The Spectrum Graph and Data always run. Every other card has an on/off switch, starts off, and works nothing out while
+//     it's off. Which are on is kept with the budget (Bob's page in Process Budget.js), so every device shows the same.
 //   - A card that's on (but Wavelength Planning) has a Warnings switch beside its own: with it on, the card's highlight,
 //     when it needs a look, shows on Bob's card on Home (bobWarnings), which moves over the calendar until it's okayed.
 //     A new card that can need a look gets one too (BOB_WARNING_CARDS in Process Budget.js).
 //   - Anything that shows from a tap (a table, a list) opens in a floating window (BudgetUI.openPanel), not in the page.
 //
-// The cards, top to bottom: Bob's highlights; Data (what every card below works from, with Equity's window: each account
-// now and on a day picked, interest too, and a line graph at the bottom of each window that can have one); Goals;
-// Wavelength Planning (a spectrum of what each wavelength cost); then one for each of his tips: Payday, Spending Pace, Big
-// Bills, Weekly Check, Catchup Entries, and Refunds.
+// The cards, top to bottom: Bob's highlights; the Spectrum Graph (one line graph comparing any of what this page can draw);
+// Data (what every card below works from, with Equity's window: each account now and on a day picked, interest too; the
+// Tracker's window: its rows, added up between two days, with New Row and Edit, and each row's own window with a graph; and
+// a line graph at the bottom of each window that can have one); Goals; Wavelength Planning (a spectrum of what each
+// wavelength cost); then one for each of his tips: Payday, Spending Pace, Big Bills, Weekly Check, Catchup Entries, and
+// Refunds. Bob's page loads Budget Pages.js too, for the tracker's table, New Row, and Edit.
 
 // =====================================================================
 // #region SETUP
@@ -43,15 +45,22 @@ const ACCOUNTS_DAY_KEY = "prismal_bob_accounts_day"; // The day this device pick
 // render(card, shared) (draws it, and returns its highlight: { text, warn } or null)
 const CARDS = [
   {
+    id: "spectrum",
+    title: "Spectrum Graph",
+    help: "One graph to compare anything on Bob's page: In Bank, the Total, your Equity accounts, tracker rows (a whole row, or one of its aliases), and Bob's own figures, like purchases added up or what's spent each week. Pick a line in the lists and tap Add; × takes one off. The lines are kept with your budget, so every device shows the same ones. Tap a name under the graph to make it Red or Blue (added together with the others of that color), or Hidden.",
+    setup: setupSpectrumCard,
+    render: renderSpectrumCard
+  },
+  {
     id: "data",
     title: "Data",
-    help: "What Bob works everything out from: your History, paydays, spending, and bills ahead. The cards below use these numbers. Tap a row with › to see what's behind it, with a line graph at the bottom of the ones that can have one: pick a later day there to see what your budget expects.",
+    help: "What Bob works everything out from: your History, paydays, spending, the tracker, and bills ahead. The cards below use these numbers. Tap a row with › to see what's behind it, with a line graph at the bottom of the ones that can have one: pick a later day there to see what your budget expects.",
     render: renderDataCard
   },
   {
     id: "goals",
     title: "Goals",
-    help: "Amounts for In Bank, the Total, or an Equity account to reach, by a day if you like. Bob works out what to set aside from each payday to get there, and warns you when one is in danger. A credit card's can be $0.00: paid off.",
+    help: "Amounts for In Bank, the Total, or an Equity account to reach, by a day if you like. Bob works out what to set aside from each payday to get there, and warns you when one is in danger. A credit card's can be $0.00: paid off. A goal can follow an Accrual Calculator gem, and changes when the gem does.",
     setup: setupGoalsCard,
     render: renderGoalsCard
   },
@@ -120,7 +129,30 @@ if (window.PAGE === "bob") {
     renderPage();
     showLinkedCard();
     openLinkedWindow();
+    openLinkedGoal();
   });
+}
+
+// A link from the Accrual Calculator's Add To Goals (/menu/bob.html?goalGem=ID&by=YYYY-MM-DD#goalsCard) opens New Goal
+// following that gem, on that day, by the Goals card once the page has slid in and come to it (so the window opens where
+// it can be seen). The link's ?goalGem comes off the address, so going back or reloading doesn't open it again.
+function openLinkedGoal() {
+  const params = new URLSearchParams(location.search);
+  const gem = params.get("goalGem");
+  if (!gem) return;
+  const by = params.get("by") ? createSafeMidnight(params.get("by"), true) : null;
+  try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) {}
+  const started = Date.now();
+  const open = () => {
+    if (document.documentElement.style.overflowY === "hidden" && Date.now() - started < 3000) return requestAnimationFrame(open);
+    const card = document.getElementById("goalsCard");
+    card?.scrollIntoView({ block: "start" });
+    requestAnimationFrame(() => {
+      const button = card?.querySelector(".sectionButtons .budgetButton");
+      openGoalPanel(button && button.offsetParent ? button : card || document.body, null, { gem, date: by && !isNaN(by.getTime()) && by >= today ? by : null });
+    });
+  };
+  open();
 }
 
 // A link here with a day (Search's Go To Equity: /menu/bob.html?day=YYYY-MM-DD&open=equity#dataCard) shows Equity's window on
@@ -386,6 +418,9 @@ function renderDataCard(card, shared) {
   const onWavelength = purposes.filter(id => wavelengthList().some(wave => wave.id === id)).length;
   const coming = lowest.date > today ? purchasesBetween(addDays(today, 1), lowest.date) : [];
   const comingSpent = coming.reduce((total, purchase) => total - purchase.amount, 0);
+  const tracked = trackerTotals(trackerDays().from, trackerDays().to);
+  const trackedCosts = tracked.get(trackerRowIndex("costs"))?.total ?? 0;
+  const trackedGains = tracked.get(trackerRowIndex("gains"))?.total ?? 0;
 
   const list = BudgetUI.element("ul", "bobData");
   list.append(
@@ -400,6 +435,8 @@ function renderDataCard(card, shared) {
     dataRow("Titles on a wavelength", String(onWavelength), wavelengthList().map(wave => wave.name).join(", "),
       { open: (origin) => openWavelengthsDataWindow(origin) }),
     dataRow("Recurring entries each month", formatMoney(recurring.costs), `In bills, and ${formatMoney(recurring.gains)} in gains`, { open: (origin) => openRecurringWindow(origin, recurring) }),
+    dataRow("Tracker", formatMoney(trackedCosts), `Costs from ${showDay(trackerDays().from)} through ${showDay(trackerDays().to)}, and ${formatMoney(trackedGains)} in gains`,
+      { amount: trackedCosts, open: (origin) => openTrackerWindow(origin) }),
     dataRow("Paydays", payday.next ? showDay(payday.next) : "None coming", payday.next ? `The next one, in ${dayCount(payday.next)} ${dayCount(payday.next) === 1 ? "day" : "days"}` : `No paycheck in the next ${PAYDAY_LOOK} days`,
       { open: (origin) => openPaydaysWindow(origin, spending, payday) }),
     dataRow("Spent besides recurring bills", formatMoney(pace ? pace.thisWeek : lastWeekSpent(spending)), pace ? `In the last 7 days (a usual week: ${formatMoney(pace.usualWeek)})` : "In the last 7 days",
@@ -410,7 +447,7 @@ function renderDataCard(card, shared) {
       { open: (origin) => openEntriesWindow(origin, `Catchup Entries, Last ${CATCHUP_DAYS} Days`, catchup.entries, `None in the last ${CATCHUP_DAYS} days.`, () => runningGraph("Catchup Entries, Added Up", "Catchups", CATCHUP_DAYS, catchupsBetween, "None in these days.")) }),
     dataRow(`Big bills, next ${BILL_DAYS} days`, String(bills.length), bills[0] ? `The first: ${capitalize(bills[0].title)} on ${showDay(bills[0].date)}` : "None",
       { open: (origin) => openEntriesWindow(origin, `Big Bills, Next ${BILL_DAYS} Days`, bills, `None in the next ${BILL_DAYS} days.`, () => runningGraph("Big Bills, Added Up", "Big bills", 0, (first, until) => bigBills().filter(bill => bill.date >= first && bill.date <= until), `Pick a later day, up to ${BILL_DAYS} days from today, to see the bills ahead added up.`)) }),
-    dataRow(`Purchases, last ${REFUND_DAYS} days`, formatMoney(spent), `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} added by hand or with Quick Entry`,
+    dataRow(`Purchases, last ${REFUND_DAYS} days`, formatMoney(spent), `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} added by hand or with Quick Budget`,
       { open: (origin) => openEntriesWindow(origin, `Purchases, Last ${REFUND_DAYS} Days`, purchases, `None in the last ${REFUND_DAYS} days.`, () => runningGraph("Purchases, Added Up", "Purchases", REFUND_DAYS, purchasesBetween, "None in these days.")) }),
     dataRow("Purchases still to come", formatMoney(comingSpent), lowest.date > today ? `${coming.length} by the lowest day, ${showDay(lowest.date)}` : "None before the lowest day",
       { open: (origin) => openEntriesWindow(origin, "Purchases Still To Come", coming, "None before the lowest day.", () => runningGraph("Purchases Still To Come, Added Up", "Purchases", 0, purchasesBetween, "Pick a later day to see what's planned, added up.")) })
@@ -423,9 +460,23 @@ function renderDataCard(card, shared) {
   return { text: `In Bank is ${formatMoney(inBank)} today, and the lowest it gets is ${formatMoney(lowest.amount)} on ${showDay(lowest.date)}. On ${showDate(day)}, In Bank will be ${formatMoney(ahead.rows[0].then)} and the Total ${formatMoney(ahead.total.then)}${interestNote}.`, warn: lowest.amount < 0 || ahead.rows[0].then < 0 };
 }
 
+// Data's rows as figures, for the Snapshot page (Snapshot Page.js): [{ label, value, note, amount, open }], in Data's order.
+// Data is worked out as for its card, and each row it draws goes in the list too (dataRowSink).
+let dataRowSink = null;
+function dataFigures(shared) {
+  dataRowSink = [];
+  try {
+    renderDataCard({ results: BudgetUI.element("div") }, shared);
+    return dataRowSink;
+  } finally {
+    dataRowSink = null;
+  }
+}
+
 // One of Data's rows: what it is (and a note under it), and its figure. One with more behind it (open: opens it, given
 // the row) is a button with a ›.
 function dataRow(label, value, note = "", { amount = null, open = null } = {}) {
+  if (dataRowSink) dataRowSink.push({ label, value, note, amount, open });
   const item = BudgetUI.element("li", "bobDataItem");
   const row = BudgetUI.element(open ? "button" : "div", "bobDataRow");
   if (open) {
@@ -630,7 +681,7 @@ function catchupsBetween(from, to) {
   return entries;
 }
 
-// Purchases from `from` through `to`: Regular costs added by hand or with a Quick Entry icon (not from a recurring entry or
+// Purchases from `from` through `to`: Regular costs added by hand or with a Quick Budget icon (not from a recurring entry or
 // a connected spreadsheet, not placeholders, and not Catchup entries, which only make In Bank match the bank), on History's
 // days, the calendar's, and in Upcoming. [{ date, title, amount }], newest first.
 function purchasesBetween(from, to) {
@@ -984,6 +1035,477 @@ function openEquityWindow(origin) {
 //#endregion
 
 // =====================================================================
+// #region TRACKER (Data's Tracker window; its rows are the tracker table, see Tracker rows in Process Budget.js)
+// =====================================================================
+// The tracker adds up entries by row between two days, From and To (the last 3 months through today to start, kept while
+// the page is open), the way the budget's own tracker counts them (updateTrackerTab): each row counts the entries its
+// aliases point to (once each, and transfers only in a row that counts them), Costs and Gains every cost and gain besides
+// transfers, Transfers every transfer, Interest the Equity accounts' interest, and Undefined whatever no row counts. Days
+// after today count what's planned for them, like Wavelength Planning. Data's Tracker row opens its window: the rows, with
+// New Row, Edit (drag, sections, delete), and a search, from Budget Pages.js's tables; and a row opens its own window,
+// with what each of its aliases came to and a line graph of them added up.
+
+const TRACKER_MONTHS = 3; // The tracker's From starts this many months before today
+const TRACKER_COLUMNS = ["Type", "Total", { label: "Aliases", className: "aliasHead" }];
+let trackerRange = null;  // { from, to }: the days the tracker adds up (see trackerDays)
+let trackerWindow = null; // { view, search, found, boxes } while its window is open
+
+// The tracker's days: the last 3 months through today, until others are picked
+function trackerDays() {
+  if (!trackerRange) trackerRange = { from: addMonths(today, -TRACKER_MONTHS), to: today };
+  return trackerRange;
+}
+
+// Where a row that fills in by itself is in the tracker table ("costs", "gains", "transfers", "interest", "undefined"), or -1
+function trackerRowIndex(type) {
+  return trackerData.findIndex((row, index) => index > 0 && !isSeparatorRow(row) && cleanString(row[0]) === type);
+}
+
+const cents = (amount) => Math.round(amount * 100) / 100;
+
+// An alias as a part of its row: { key (its title, as compared), name ("Rent", or "Rent (costs)" for one that counts only costs) }
+const aliasPart = (alias) => ({ key: alias.clean, name: alias.count === "all" ? alias.title : `${alias.title} (${alias.count})` });
+
+// An entry's title as a part of Transfers or Undefined (without its Equity account, the way the tracker compares titles)
+function entryPart(line) {
+  const { title, account } = splitAccount(line.title);
+  return { key: line.titleClean, name: capitalize(title || account) };
+}
+
+// A tracker row's stored aliases ("rent-, paycheck+, atm") as [{ title, clean, count }]
+function aliasList(text) {
+  return String(text ?? "").split(",").map(alias => parseAlias(alias)).filter(alias => alias.clean);
+}
+
+// Every amount the tracker counts from `from` through `to`: visit(the row's index in trackerData, part, date, amount), where part
+// is what in the row it came from ({ key, name }: an alias; for Transfers and Undefined, the entry's title; for Interest, the
+// account), or null for Costs and Gains
+function trackerWalk(from, to, visit) {
+  const autoRows = {};
+  const byTitle = new Map(); // An alias's title, as compared -> [{ index, count, countsTransfers, part }]
+  for (let index = 1; index < trackerData.length; index++) {
+    const row = trackerData[index];
+    if (isSeparatorRow(row)) continue;
+    const type = cleanString(row[0]);
+    if (TRACKER_AUTO_ROWS.includes(type)) {
+      if (autoRows[type] === undefined) autoRows[type] = index;
+      continue;
+    }
+    const countsTransfers = String(row[0]).trim().startsWith("⭕️");
+    for (const alias of aliasList(row[4])) {
+      if (!byTitle.has(alias.clean)) byTitle.set(alias.clean, []);
+      byTitle.get(alias.clean).push({ index, count: alias.count, countsTransfers, part: aliasPart(alias) });
+    }
+  }
+  const toAuto = (type, part, date, amount) => {
+    if (autoRows[type] !== undefined) visit(autoRows[type], part, date, amount);
+  };
+  eachEntryBetween(from, to, (date, text) => {
+    const line = readLine(text);
+    if (line.blank || line.system || line.amount === 0) return;
+    const isTransfer = isTransferEntry(line.sprite);
+    if (isTransfer) toAuto("transfers", entryPart(line), date, line.amount);
+    else toAuto(line.amount > 0 ? "gains" : "costs", null, date, line.amount);
+    const counted = new Set();
+    for (const match of byTitle.get(line.titleClean) || []) {
+      if (counted.has(match.index) || !aliasCounts(match.count, line.amount) || (isTransfer && !match.countsTransfers)) continue;
+      counted.add(match.index);
+      visit(match.index, match.part, date, line.amount);
+    }
+    if (counted.size === 0 && !isTransfer) toAuto("undefined", entryPart(line), date, line.amount);
+  });
+  for (const credit of interestAdded) {
+    if (credit.date >= from && credit.date <= to) toAuto("interest", { key: cleanString(credit.name), name: credit.name }, credit.date, credit.change);
+  }
+}
+
+// What each row came to from `from` through `to`: Map(the row's index -> { total, parts: Map(part's key -> { name, total }) }).
+// An ordinary row's parts are its aliases, in its own order (one with nothing counted is $0.00); Transfers', Undefined's, and
+// Interest's are what they found, biggest first.
+function trackerTotals(from, to) {
+  const rows = new Map();
+  for (let index = 1; index < trackerData.length; index++) {
+    const row = trackerData[index];
+    if (isSeparatorRow(row)) continue;
+    const parts = new Map();
+    if (!TRACKER_AUTO_ROWS.includes(cleanString(row[0]))) {
+      for (const alias of aliasList(row[4])) {
+        const part = aliasPart(alias);
+        parts.set(part.key, { name: part.name, total: 0 });
+      }
+    }
+    rows.set(index, { total: 0, parts });
+  }
+  trackerWalk(from, to, (index, part, date, amount) => {
+    const row = rows.get(index);
+    row.total += amount;
+    if (!part) return;
+    const known = row.parts.get(part.key) || { name: part.name, total: 0 };
+    known.total += amount;
+    row.parts.set(part.key, known);
+  });
+  for (const [index, row] of rows) {
+    row.total = cents(row.total);
+    for (const part of row.parts.values()) part.total = cents(part.total);
+    if (TRACKER_AUTO_ROWS.includes(cleanString(trackerData[index][0]))) row.parts = new Map([...row.parts].sort((a, b) => Math.abs(b[1].total) - Math.abs(a[1].total)));
+  }
+  return rows;
+}
+
+// Each row's amounts by day from first through until: Map(the row's index -> { byDay: Map(day's time -> amount), parts: Map(part's
+// key -> { name, byDay }) }), each ordinary row's aliases in its own order
+function trackerDaily(first, until) {
+  const rows = new Map();
+  const rowOf = (index) => {
+    if (!rows.has(index)) {
+      const parts = new Map();
+      const row = trackerData[index];
+      if (!TRACKER_AUTO_ROWS.includes(cleanString(row[0]))) {
+        for (const alias of aliasList(row[4])) {
+          const part = aliasPart(alias);
+          parts.set(part.key, { name: part.name, byDay: new Map() });
+        }
+      }
+      rows.set(index, { byDay: new Map(), parts });
+    }
+    return rows.get(index);
+  };
+  const add = (byDay, time, amount) => byDay.set(time, (byDay.get(time) || 0) + amount);
+  trackerWalk(first, until, (index, part, date, amount) => {
+    const row = rowOf(index);
+    add(row.byDay, date.getTime(), amount);
+    if (!part) return;
+    if (!row.parts.has(part.key)) row.parts.set(part.key, { name: part.name, byDay: new Map() });
+    add(row.parts.get(part.key).byDay, date.getTime(), amount);
+  });
+  return { rowOf };
+}
+
+// Amounts by day added up as the days go: one point a day from first through until (signed, like the tracker's totals)
+function addedUpLine(name, byDay, first, until) {
+  let sum = 0;
+  return { name, points: daysBetween(first, until).map(date => {
+    sum += byDay.get(date.getTime()) || 0;
+    return { date, value: cents(sum) };
+  }) };
+}
+
+// A row's lines: its Total, then each part (an ordinary row's aliases in its order; the others' biggest first). A part
+// called Total says it's one.
+function trackerLines(index, first, until) {
+  const row = trackerData[index];
+  if (!row || isSeparatorRow(row)) return [];
+  const daily = trackerDaily(first, until).rowOf(index);
+  const lines = [...daily.parts.values()].map(part => addedUpLine(cleanString(part.name) === "total" ? `${part.name} (alias)` : part.name, part.byDay, first, until));
+  if (TRACKER_AUTO_ROWS.includes(cleanString(row[0]))) lines.sort((a, b) => Math.abs(b.points[b.points.length - 1]?.value ?? 0) - Math.abs(a.points[a.points.length - 1]?.value ?? 0));
+  return [addedUpLine("Total", daily.byDay, first, until), ...lines];
+}
+
+// A row's line graph (Total and each part, added up day by day), on the tracker's days to start
+function trackerGraph(index, name) {
+  const { from, to } = trackerDays();
+  return LineGraph.create({
+    label: `${name}, Added Up`,
+    from: (until) => (from < until ? from : addMonths(until, -TRACKER_MONTHS)),
+    until: to,
+    max: addDays(today, PURPOSE_AHEAD_DAYS),
+    series: (first, until) => trackerLines(index, first, until),
+    emptyNote: "Nothing counted in these days."
+  });
+}
+
+// What each row that fills in by itself does, and how to use it (a paragraph each, in its window and its "?")
+const AUTO_ROW_HELP = {
+  costs: [
+    "Costs adds up every cost on your calendar and in History (✖️ Hidden ones too) between the tracker's From and To days. ⭕️ Transfers aren't counted, since moving money between your own accounts isn't spending.",
+    "It fills in by itself, so it can't be changed or deleted. To see where the money goes, add rows for what you spend on, like Groceries, with an alias for each entry title that belongs there."
+  ],
+  gains: [
+    "Gains adds up every gain on your calendar and in History (✖️ Hidden ones too) between the tracker's From and To days, like paychecks and refunds. ⭕️ Transfers aren't counted, since moving money between your own accounts isn't income.",
+    "It fills in by itself, so it can't be changed or deleted. Next to Costs, it shows whether you're spending less than comes in."
+  ],
+  transfers: [
+    "Transfers adds up every ⭕️ Transfer (money moving between your own accounts, like into Savings or onto a credit card) and lists their titles, so they never land in Undefined.",
+    "Other rows leave transfers out, unless their \"Count ⭕️ Transfers in this row\" switch is on. It fills in by itself, so it can't be changed or deleted."
+  ],
+  interest: [
+    "Interest adds up the interest your Equity accounts get, and lists the accounts it came from. Above $0 is interest earned, like a savings account's; below $0 is interest paid, like a credit card's or a loan's.",
+    "Interest isn't an entry, so no other row counts it, and it's only counted through today. Each account counts from the day its interest last started counting (typing its balance, or changing its interest, starts it again). An account's interest is set on the Equity page. It fills in by itself, so it can't be changed or deleted."
+  ],
+  undefined: [
+    "Undefined lists the entry titles no other row counts yet, and adds them up, so nothing slips through.",
+    "To move a title out of it, add the title as an alias to a row (tap the row, then Change Row, or New Row for a new one). Still here after that? The alias counts only Costs or only Gains, so entries of the other kind still need one. It fills in by itself, so it can't be changed or deleted."
+  ]
+};
+
+// The Aliases column in words: "rent (costs), paycheck (gains), atm". Transfers, Undefined, and Interest list what they found
+// in the tracker's days (figure: the row's, from trackerTotals).
+function trackerAliasText(row, figure = null) {
+  const type = cleanString(row[0]);
+  const found = figure ? [...figure.parts.values()].map(part => part.name).join(", ") : "";
+  if (type === "costs") return "Every cost";
+  if (type === "gains") return "Every gain";
+  if (type === "transfers") return found ? `Every transfer: ${found}` : "Every transfer";
+  if (type === "interest") return found ? `Equity accounts' interest: ${found}` : "Equity accounts' interest";
+  if (type === "undefined") return found;
+  return describeAliases(row[4]);
+}
+
+// A tracker row's cells: its title (with a "?" for one that fills in by itself), what it came to in the tracker's days, and its
+// aliases in words, in a short box that scrolls (Budget Pages.js aliasBox)
+function trackerCells(tr, row, figure) {
+  const type = cleanString(row[0]);
+  const isAuto = TRACKER_AUTO_ROWS.includes(type);
+  tr.appendChild(isAuto ? autoTitleCell(row) : noTranslate(cell(row[0], "titleCell")));
+  tr.appendChild(noTranslate(cell(formatMoney(figure ? figure.total : 0), "amountCell")));
+  const aliases = cell("", "aliasCell");
+  aliases.appendChild(aliasBox(trackerAliasText(row, figure)));
+  // (Costs and Gains say what they count in the budget's own words, which translate; the rest are the person's)
+  tr.appendChild(isAuto && (type === "costs" || type === "gains") ? aliases : noTranslate(aliases));
+}
+
+// A row that fills in by itself: its title, with a "?" after it that says what the row does (AUTO_ROW_HELP), over the window.
+// A tap on the "?" never opens or checks the row.
+function autoTitleCell(row) {
+  const td = cell(row[0], "titleCell");
+  const name = String(row[0]).trim();
+  const button = BudgetUI.element("button", "fieldHelpButton autoRowHelp", "?");
+  button.type = "button";
+  button.title = `What ${name} is`;
+  button.setAttribute("aria-label", `What ${name} is`);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    BudgetUI.openPanel({
+      origin: button,
+      size: "small",
+      stacked: true,
+      title: name,
+      build(form, panel) {
+        for (const text of AUTO_ROW_HELP[cleanString(row[0])] || []) form.append(BudgetUI.element("p", "panelText", text));
+        form.append(BudgetUI.buttonRow([{ label: "Okay", kind: "primary", onClick: () => panel.close() }]));
+      }
+    });
+  });
+  td.append(button);
+  return td;
+}
+
+// From and To for the tracker's days (each a date box with its calendar button). Picking a day draws the window and Data's
+// Tracker row again.
+function trackerDateBoxes() {
+  const el = BudgetUI.element("div", "purposeDates");
+  const boxes = {};
+  for (const [key, label] of [["from", "From"], ["to", "To"]]) {
+    const input = BudgetUI.element("input", "dateInput");
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.placeholder = datePattern();
+    input.translate = false;
+    input.value = showDate(trackerDays()[key]);
+    input.setAttribute("aria-label", `Tracker ${label.toLowerCase()} date`);
+    input.addEventListener("change", () => {
+      const date = parseTypedDate(input.value);
+      if (isNaN(date.getTime())) {
+        BudgetUI.showToast(`That date isn't a real day. Use ${datePattern()}.`, true);
+        input.value = showDate(trackerDays()[key]);
+        return;
+      }
+      setTrackerRange({ ...trackerDays(), [key]: createSafeMidnight(date) });
+    });
+    const row = BudgetUI.element("div", "dateRow");
+    row.append(input, BudgetUI.datePickerButton(input, label, { max: addDays(today, PURPOSE_AHEAD_DAYS) }));
+    const part = BudgetUI.element("div", "purposeDate");
+    part.append(BudgetUI.element("span", "fieldLabel", label), row);
+    el.append(part);
+    boxes[key] = input;
+  }
+  return {
+    el,
+    show() {
+      for (const key of ["from", "to"]) if (document.activeElement !== boxes[key]) boxes[key].value = showDate(trackerDays()[key]);
+    }
+  };
+}
+
+// New days for the tracker (From after To swaps them, and To goes no further than Wavelength Planning looks ahead)
+function setTrackerRange({ from, to }) {
+  const limit = addDays(today, PURPOSE_AHEAD_DAYS);
+  const [first, last] = from > to ? [to, from] : [from, to];
+  trackerRange = { from: first > limit ? limit : first, to: last > limit ? limit : last };
+  drawTrackerWindow();
+  const card = pageCards.find(item => item.def.id === "data");
+  if (card) {
+    drawCard(card);
+    renderHighlights();
+  }
+  document.dispatchEvent(new CustomEvent("tracker:range")); // (The Snapshot page's cards follow too)
+}
+
+// Data's Tracker window: From and To, New Row and Edit (Budget Pages.js renderToolbar, in the window), a search, and the rows,
+// each with what it came to in those days (tap one for its own window). Edit drags, sections, and deletes rows, like
+// Recurring's. It starts out of Edit.
+function openTrackerWindow(origin) {
+  editMode = false;
+  selectedRows.clear();
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "Tracker",
+    build(form, panel) {
+      form.addEventListener("submit", (event) => event.preventDefault()); // (Enter in a box: nothing to send)
+      const boxes = trackerDateBoxes();
+      const bar = BudgetUI.element("div", "tableToolbar trackerToolbar");
+      bar.id = "pageToolbar"; // (Where renderToolbar draws New Row and Edit)
+      const search = BudgetUI.element("input", "textInput trackerSearch");
+      search.type = "text";
+      search.placeholder = "Search rows, like food";
+      search.autocomplete = "off";
+      search.setAttribute("aria-label", "Search the tracker's rows and aliases");
+      search.addEventListener("input", filterTrackerRows);
+      const found = BudgetUI.element("p", "searchSummary trackerFound");
+      found.setAttribute("aria-live", "polite");
+      found.hidden = true;
+      const view = BudgetUI.element("div", "trackerView");
+      form.append(
+        BudgetUI.element("p", "panelHint", `What each row came to from From through To (the last ${TRACKER_MONTHS} months to start; a day after today counts what's planned). Tap a row for what each of its aliases came to, and a line graph of them.`),
+        boxes.el, bar, search, found, view,
+        BudgetUI.element("p", "panelHint", "New Row adds one. Edit moves rows (hold a row's ≡ and drag it), adds sections (+ Section), and deletes the rows checked. Costs, Gains, Transfers, Interest, and Undefined fill in by themselves (🔒 in Edit). To see the entries behind a row, search for its title with the Tracker button in Home's Search."),
+        BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }])
+      );
+      trackerWindow = { view, search, found, boxes };
+    }
+  });
+  drawTrackerWindow();
+}
+
+// The Tracker window's rows, drawn again (with every change to the budget, and Edit and Done: Budget Pages.js renderCurrentPage)
+function drawTrackerWindow() {
+  if (!trackerWindow) return;
+  if (!trackerWindow.view.isConnected) {
+    trackerWindow = null;
+    return;
+  }
+  const { view, search, boxes } = trackerWindow;
+  const { from, to } = trackerDays();
+  boxes.show();
+  renderToolbar("tracker", (origin) => openTrackerPanel(origin, null), { newLabel: "New Row", inWindow: true });
+  search.hidden = editMode;
+  const totals = trackerTotals(from, to);
+  const tableEl = buildRowTable({
+    tableName: "tracker",
+    columns: TRACKER_COLUMNS,
+    rows: indexedRows(trackerData, 1),
+    extraClass: "trackerTable",
+    canSelect: (row) => !TRACKER_AUTO_ROWS.includes(cleanString(row[0])),
+    lockedNote: (row) => `${String(row[0]).trim()} fills in by itself, so it can't be deleted.`,
+    renderEntry: (tr, row, index) => trackerCells(tr, row, totals.get(index)),
+    onEntryClick: (index, origin) => openTrackerRowWindow(origin, index)
+  });
+  view.replaceChildren(wrapScroll(tableEl));
+  markClipped(tableEl);
+  filterTrackerRows();
+}
+
+// The window's search: only the rows with every word typed in their title, total, or aliases (sections hide while it's in
+// use; Edit shows every row)
+function filterTrackerRows() {
+  if (!trackerWindow) return;
+  const { view, search, found } = trackerWindow;
+  const words = editMode ? [] : search.value.normalize("NFKC").toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  let total = 0;
+  for (const tr of view.querySelectorAll("tbody tr[data-index]")) {
+    if (tr.classList.contains("categoryRow")) {
+      tr.hidden = words.length > 0;
+      continue;
+    }
+    total++;
+    const match = words.every(word => tr.textContent.normalize("NFKC").toLowerCase().includes(word));
+    tr.hidden = !match;
+    if (match) shown++;
+  }
+  found.hidden = words.length === 0;
+  found.textContent = `${shown} of ${total} ${total === 1 ? "row" : "rows"} found`;
+}
+
+// A row's own window, over the Tracker window: what it came to in the tracker's days, what each of its parts came to (an
+// ordinary row's aliases; Transfers', Undefined's, and Interest's titles and accounts), its line graph, and for an ordinary
+// row, Change Row
+function openTrackerRowWindow(origin, index) {
+  const row = trackerData[index];
+  if (!row || isSeparatorRow(row)) return;
+  const type = cleanString(row[0]);
+  const isAuto = TRACKER_AUTO_ROWS.includes(type);
+  const { from, to } = trackerDays();
+  const figure = trackerTotals(from, to).get(index) || { total: 0, parts: new Map() };
+  const name = String(row[0]).trim();
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    stacked: true,
+    title: name,
+    build(form, panel) {
+      form.addEventListener("submit", (event) => event.preventDefault()); // (Nothing to send)
+      form.append(BudgetUI.noTranslate(BudgetUI.element("p", "panelText", `${formatMoney(figure.total)} from ${showDate(from)} through ${showDate(to)}.`)));
+      for (const words of isAuto ? AUTO_ROW_HELP[type] || [] : []) form.append(BudgetUI.element("p", "panelHint", words));
+      const parts = [...figure.parts.values()];
+      if (parts.length > 0) form.append(tableBox([type === "interest" ? "Account" : isAuto ? "Title" : "Alias", "Total"], parts.map(part => [part.name, amountCell(part.total)])));
+      else if (!isAuto) form.append(BudgetUI.element("p", "panelHint", "This row has no aliases yet: Change Row adds them."));
+      form.append(trackerGraph(index, name).el);
+      // (Change Row opens over the Tracker window, from the row as it's drawn now)
+      const change = () => {
+        panel.close();
+        const rowNow = trackerWindow?.view.querySelector(`tr[data-index="${index}"]`);
+        openTrackerPanel(rowNow || trackerWindow?.view || origin, index);
+      };
+      form.append(BudgetUI.buttonRow(isAuto
+        ? [{ label: "Close", onClick: () => panel.close() }]
+        : [{ label: "Change Row", kind: "primary", onClick: change }, { label: "Close", onClick: () => panel.close() }]));
+    }
+  });
+}
+
+// New tracker row (index null) or change an ordinary one: its title, its aliases (each with All / Costs / Gains), and whether
+// it counts transfers. It opens over the Tracker window, which comes back when it closes.
+function openTrackerPanel(origin, index) {
+  const existing = index === null ? null : trackerData[index];
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    stacked: true,
+    title: existing ? "Change Tracker Row" : "New Tracker Row",
+    build(form, panel) {
+      const existingTitle = existing ? String(existing[0]).replace("⭕️", "") : "";
+      const title = BudgetUI.textField({ label: "Title", value: existingTitle, placeholder: "Groceries, car stuff...", maxLength: MAX_TITLE });
+      const aliases = BudgetUI.aliasField({ aliases: existing ? aliasList(existing[4]) : [] });
+      // Whether the row counts transfers too (its title then starts with ⭕️): an on/off switch
+      const transferSwitch = BudgetUI.checkboxField({ label: "Count ⭕️ Transfers in this row", checked: existing ? String(existing[0]).startsWith("⭕️") : false });
+      const transfers = BudgetUI.field("Transfers", transferSwitch.el, { hint: "Rows leave transfers out unless this is on (the Transfers row has every one either way)." });
+      const buttons = existing
+        ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteRow }, { label: "Cancel", onClick: () => panel.close() }]
+        : [{ label: "Add Row", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
+      form.append(title.el, aliases.el, transfers, BudgetUI.buttonRow(buttons));
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const changes = { title: title.value(), aliases: aliases.value(), tracksTransfers: transferSwitch.value() };
+        if (!changes.title) return panel.setError("Give the tracker row a title.");
+        BudgetUI.submit(panel, () => saveTrackerEntry(changes, index));
+      });
+
+      // (A dialog can't show the ⭕️ image, so a row that counts transfers says so in words)
+      function deleteRow() {
+        const counts = String(existing[0]).startsWith("⭕️") ? " (the one that counts transfers)" : "";
+        if (!window.confirm(`Delete the ${existingTitle.trim()} row${counts}?`)) return;
+        BudgetUI.submit(panel, () => deleteBudgetRows("tracker", [index]));
+      }
+    }
+  });
+}
+
+//#endregion
+
+// =====================================================================
 // #region GRAPHS (at the bottom of Data's windows, see Line Graph.js)
 // =====================================================================
 // Each graph's lines for a stretch of days. Days up to today come from History and the calendar, and later ones from what the
@@ -1122,7 +1644,7 @@ const spentGraph = () => LineGraph.create({
   from: (until) => graphStart(until),
   max: aheadLimit(),
   series: (first, until) => [{ name: "Spent", points: weeklyPoints(purchasesBetween(first, until), first, until) }],
-  note: "Purchases added by hand or with Quick Entry: a day after today only counts what's already planned."
+  note: "Purchases added by hand or with Quick Budget: a day after today only counts what's already planned."
 });
 
 // What went out in the days after each payday, besides recurring bills
@@ -1150,49 +1672,291 @@ const recurringGraph = () => LineGraph.create({
     return new Date(start.getFullYear(), start.getMonth(), 1);
   },
   max: addDays(today, PURPOSE_AHEAD_DAYS),
-  series(first, until) {
-    const months = new Map();
-    const start = new Date(first.getFullYear(), first.getMonth(), 1);
-    for (let month = start; month <= until; month = new Date(month.getFullYear(), month.getMonth() + 1, 1)) months.set(month.getTime(), { date: month < first ? first : month, costs: 0, gains: 0 });
-    // (Whole months: the last one counts what's planned for the rest of it)
-    eachEntryBetween(first, new Date(until.getFullYear(), until.getMonth() + 1, 0), (date, text) => {
-      const line = readLine(text);
-      if (line.blank || line.system || entryMark(line.sprite) !== RECURRING_MARK || isTransferEntry(line.sprite)) return;
-      const month = months.get(new Date(date.getFullYear(), date.getMonth(), 1).getTime());
-      if (!month) return;
-      if (line.amount < 0) month.costs -= line.amount;
-      else month.gains += line.amount;
-    });
-    const list = [...months.values()];
-    const line = (name, key) => ({ name, points: list.map(month => ({ date: month.date, value: Math.round(month[key] * 100) / 100 })) });
-    return [line("Bills", "costs"), line("Gains", "gains")];
-  }
+  series: (first, until) => recurringMonthLines(first, until)
 });
+
+// The recurring entries' bills and gains each month from first through until (transfers left out): [Bills, Gains], one point at
+// each month's start
+function recurringMonthLines(first, until) {
+  const months = new Map();
+  const start = new Date(first.getFullYear(), first.getMonth(), 1);
+  for (let month = start; month <= until; month = new Date(month.getFullYear(), month.getMonth() + 1, 1)) months.set(month.getTime(), { date: month < first ? first : month, costs: 0, gains: 0 });
+  // (Whole months: the last one counts what's planned for the rest of it)
+  eachEntryBetween(first, new Date(until.getFullYear(), until.getMonth() + 1, 0), (date, text) => {
+    const line = readLine(text);
+    if (line.blank || line.system || entryMark(line.sprite) !== RECURRING_MARK || isTransferEntry(line.sprite)) return;
+    const month = months.get(new Date(date.getFullYear(), date.getMonth(), 1).getTime());
+    if (!month) return;
+    if (line.amount < 0) month.costs -= line.amount;
+    else month.gains += line.amount;
+  });
+  const list = [...months.values()];
+  const line = (name, key) => ({ name, points: list.map(month => ({ date: month.date, value: Math.round(month[key] * 100) / 100 })) });
+  return [line("Bills", "costs"), line("Gains", "gains")];
+}
 
 // What each wavelength cost each week
 const wavelengthsGraph = () => LineGraph.create({
   label: "Each Wavelength, Week By Week",
   from: (until) => graphStart(until),
   max: addDays(today, PURPOSE_AHEAD_DAYS),
-  series(first, until) {
-    const weeks = []; // For each week: titleKey -> { total, purpose }
-    eachEntryBetween(first, until, (date, text) => {
-      const line = readLine(text);
-      if (line.blank || line.system || !line.title || line.amount === 0) return;
-      const key = titleKey(line.title);
-      if (!key) return;
-      const week = Math.floor(getDayDifference(date, first) / 7);
-      weeks[week] = weeks[week] || new Map();
-      const known = weeks[week].get(key) || { total: 0, purpose: purposeOf(line.title) };
-      known.total += line.amount;
-      weeks[week].set(key, known);
-    });
-    return wavelengthList().map(wave => ({
-      name: wave.name,
-      points: weeklyPoints(weeks.flatMap((titles, week) => (titles ? [{ date: addDays(first, week * 7), amount: [...titles.values()].reduce((sum, item) => (item.purpose === wave.id && item.total < 0 ? sum + item.total : sum), 0) }] : [])), first, until)
-    }));
-  }
+  series: (first, until) => wavelengthWeekLines(first, until)
 });
+
+// What each wavelength cost each week from first through until: a line for each wavelength, in their order ({ id, name, points })
+function wavelengthWeekLines(first, until) {
+  const weeks = []; // For each week: titleKey -> { total, purpose }
+  eachEntryBetween(first, until, (date, text) => {
+    const line = readLine(text);
+    if (line.blank || line.system || !line.title || line.amount === 0) return;
+    const key = titleKey(line.title);
+    if (!key) return;
+    const week = Math.floor(getDayDifference(date, first) / 7);
+    weeks[week] = weeks[week] || new Map();
+    const known = weeks[week].get(key) || { total: 0, purpose: purposeOf(line.title) };
+    known.total += line.amount;
+    weeks[week].set(key, known);
+  });
+  return wavelengthList().map(wave => ({
+    id: wave.id,
+    name: wave.name,
+    points: weeklyPoints(weeks.flatMap((titles, week) => (titles ? [{ date: addDays(first, week * 7), amount: [...titles.values()].reduce((sum, item) => (item.purpose === wave.id && item.total < 0 ? sum + item.total : sum), 0) }] : [])), first, until)
+  }));
+}
+
+//#endregion
+
+// =====================================================================
+// #region SPECTRUM GRAPH (the card over Data)
+// =====================================================================
+// One line graph that can compare anything Bob's page draws: In Bank, the Total, each Equity account, each tracker row (all of
+// it, or one alias, added up from the first day drawn), each wavelength's week by week, and Bob's own figures. Its lines are
+// kept with the budget (accountsData.bob.spectrum, see setSpectrumLines in Process Budget.js), so every device shows the same
+// ones; it starts on In Bank. spectrumGraph() makes it, so it can go on another page too (the Snapshot page, still to come).
+// A line is { kind, name, part }: kind "inBank", "total", "account" (name: the account's), "tracker" (name: the row's title as
+// stored, part: an alias, as compared, or "" for all of it), "figure" (name: a SPECTRUM_FIGURES key), or "wavelength" (name:
+// its id). One whose account, row, alias, or wavelength is gone draws nothing, and says so under the graph.
+
+const SPECTRUM_START = [{ kind: "inBank", name: "", part: "" }]; // Its lines until any are picked
+const SPECTRUM_FIGURES = {
+  purchases: { name: "Purchases, added up", line: (first, until) => runningLine("Purchases, added up", purchasesBetween(first, until), first, until) },
+  spent: { name: "Spent each week", line: (first, until) => ({ name: "Spent each week", points: weeklyPoints(purchasesBetween(first, until), first, until) }) },
+  catchups: { name: "Catchup entries, added up", line: (first, until) => runningLine("Catchup entries, added up", catchupsBetween(first, until), first, until) },
+  bills: { name: "Big bills, added up", line: (first, until) => runningLine("Big bills, added up", bigBills().filter(bill => bill.date >= first && bill.date <= until), first, until) },
+  recurringBills: { name: "Recurring bills each month", line: (first, until) => ({ ...recurringMonthLines(first, until)[0], name: "Recurring bills each month" }) },
+  recurringGains: { name: "Recurring gains each month", line: (first, until) => ({ ...recurringMonthLines(first, until)[1], name: "Recurring gains each month" }) }
+};
+
+// The card: the lists to add a line, the lines picked, and the graph (made the first time it's drawn)
+function setupSpectrumCard(card) {
+  card.spectrum = spectrumGraph();
+  return card.spectrum.el;
+}
+
+// Drawn again with every change to the budget. Its highlight: each line's last value (the first three)
+function renderSpectrumCard(card) {
+  card.spectrum.draw();
+  const lines = card.spectrum.lines();
+  if (lines.length === 0) return { text: "No lines on it yet. Pick one in its lists and tap Add.", warn: false };
+  const values = lines.slice(0, 3).map(line => `${line.name} ${formatMoney(line.points[line.points.length - 1].value)}`);
+  const more = lines.length > 3 ? `, and ${lines.length - 3} more` : "";
+  return { text: `Through ${showDate(card.spectrum.until())}: ${values.join(", ")}${more}.`, warn: false };
+}
+
+// The lines kept with the budget (In Bank until any are picked)
+function spectrumPicks() {
+  const kept = accountsData?.bob?.spectrum;
+  return Array.isArray(kept) ? kept : SPECTRUM_START;
+}
+
+// What can be added, in groups: [{ label, items: [{ kind, name, label, parts (a tracker row's: [{ key, label }]) }] }]
+function spectrumChoices() {
+  const groups = [];
+  groups.push({ label: "Equity", items: [
+    { kind: "inBank", name: "", label: "In Bank" },
+    { kind: "total", name: "", label: "Total (In Bank and every account)" },
+    ...accountSummaries().map(summary => ({ kind: "account", name: summary.name, label: summary.name }))
+  ] });
+  const rows = [];
+  for (let index = 1; index < trackerData.length; index++) {
+    const row = trackerData[index];
+    if (isSeparatorRow(row)) continue;
+    const title = String(row[0]).trim();
+    const parts = TRACKER_AUTO_ROWS.includes(cleanString(row[0])) ? [] : aliasList(row[4]).map(alias => ({ key: alias.clean, label: aliasPart(alias).name }));
+    rows.push({ kind: "tracker", name: title, label: title, parts });
+  }
+  if (rows.length > 0) groups.push({ label: "Tracker", items: rows });
+  groups.push({ label: "Bob's figures", items: Object.entries(SPECTRUM_FIGURES).map(([key, figure]) => ({ kind: "figure", name: key, label: figure.name })) });
+  groups.push({ label: "Wavelengths", items: wavelengthList().map(wave => ({ kind: "wavelength", name: wave.id, label: `${wave.name}, each week` })) });
+  return groups;
+}
+
+// A picked line's name, as the graph and its list say it
+function spectrumLineName(pick) {
+  if (pick.kind === "inBank") return "In Bank";
+  if (pick.kind === "total") return "Total";
+  if (pick.kind === "account") return pick.name;
+  if (pick.kind === "figure") return SPECTRUM_FIGURES[pick.name]?.name || "A figure";
+  if (pick.kind === "wavelength") return `${wavelengthList().find(wave => wave.id === pick.name)?.name || "A wavelength"}, each week`;
+  if (!pick.part) return pick.name;
+  const row = trackerData.find((item, index) => index > 0 && String(item[0]).trim() === pick.name);
+  const alias = row ? aliasList(row[4]).find(item => item.clean === pick.part) : null;
+  return `${pick.name}: ${alias ? aliasPart(alias).name : pick.part}`;
+}
+
+// The picked lines from first through until (worked out once each: the Equity accounts, and the tracker)
+function spectrumLines(picks, first, until) {
+  let over = null;
+  const equity = () => over || (over = equityOverTime(first, until));
+  let tracked = null;
+  const tracker = () => tracked || (tracked = trackerDaily(first, until));
+  let waves = null;
+  const daysOf = (name, value) => ({ name, points: equity().days.map(date => ({ date, value: value(date) })).filter(point => point.value !== null && point.value !== undefined) });
+  return picks.map(pick => {
+    const name = spectrumLineName(pick);
+    if (pick.kind === "inBank") return daysOf(name, equity().inBank);
+    if (pick.kind === "total") return daysOf(name, equity().total);
+    if (pick.kind === "account") {
+      const account = equity().accounts.find(item => cleanString(item.name) === cleanString(pick.name));
+      return account ? daysOf(name, (date) => equity().account(account.index, date)) : null;
+    }
+    if (pick.kind === "tracker") {
+      const index = trackerData.findIndex((row, at) => at > 0 && !isSeparatorRow(row) && String(row[0]).trim() === pick.name);
+      if (index === -1) return null;
+      const daily = tracker().rowOf(index);
+      const byDay = pick.part ? daily.parts.get(pick.part)?.byDay : daily.byDay;
+      return byDay ? addedUpLine(name, byDay, first, until) : null;
+    }
+    if (pick.kind === "figure") return SPECTRUM_FIGURES[pick.name] ? { ...SPECTRUM_FIGURES[pick.name].line(first, until), name } : null;
+    if (pick.kind === "wavelength") {
+      waves = waves || wavelengthWeekLines(first, until);
+      const wave = waves.find(item => item.id === pick.name);
+      return wave ? { name, points: wave.points } : null;
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+// The Spectrum Graph: { el, draw(), lines(), until() }. draw() fills its lists, its picked lines, and its graph from the
+// budget as it is now.
+function spectrumGraph() {
+  const el = BudgetUI.element("div", "spectrumGraph");
+  const what = BudgetUI.element("select", "selectInput spectrumWhat");
+  what.setAttribute("aria-label", "A line to add");
+  const part = BudgetUI.element("select", "selectInput spectrumPart");
+  part.setAttribute("aria-label", "All of the row, or one of its aliases");
+  const add = BudgetUI.element("button", "budgetButton primary spectrumAdd", "Add");
+  add.type = "button";
+  const adder = BudgetUI.element("div", "spectrumAdder");
+  adder.append(what, part, add);
+  const picked = BudgetUI.element("ul", "spectrumPicks");
+  picked.setAttribute("aria-label", "The graph's lines");
+  const missing = BudgetUI.element("p", "panelHint spectrumMissing");
+  missing.hidden = true;
+  const slot = BudgetUI.element("div", "spectrumSlot");
+  el.append(BudgetUI.field("Add a line", adder, { hint: "A tracker row can be all of it, or one of its aliases (the second list)." }), picked, missing, slot);
+  let graph = null;
+  let items = []; // The items in the first list, by their option's value
+  let saving = false;
+
+  // The first list, in groups, keeping what's picked in it
+  function fillChoices() {
+    const was = what.value;
+    items = [];
+    what.replaceChildren();
+    for (const group of spectrumChoices()) {
+      const optgroup = BudgetUI.element("optgroup");
+      optgroup.label = group.label;
+      for (const item of group.items) {
+        const option = BudgetUI.element("option", "", item.label);
+        option.value = String(items.length);
+        items.push(item);
+        optgroup.append(option);
+      }
+      what.append(optgroup);
+    }
+    BudgetUI.noTranslate(what);
+    what.value = was !== "" && items[Number(was)] ? was : "0";
+    fillParts();
+  }
+
+  // The second list: a tracker row's Total and each of its aliases (hidden for anything else)
+  function fillParts() {
+    const item = items[Number(what.value)];
+    const was = part.value;
+    part.replaceChildren();
+    part.hidden = !item || item.kind !== "tracker" || item.parts.length === 0;
+    if (part.hidden) return;
+    part.append(new Option("All of it (Total)", ""), ...item.parts.map(alias => new Option(alias.label, alias.key)));
+    BudgetUI.noTranslate(part);
+    part.value = item.parts.some(alias => alias.key === was) ? was : "";
+  }
+  what.addEventListener("change", fillParts);
+
+  // Saved with the budget, then drawn again with it (and the card's highlight)
+  async function save(list, words) {
+    if (saving) return;
+    saving = true;
+    add.disabled = true;
+    const result = await setSpectrumLines(list, words);
+    saving = false;
+    add.disabled = false;
+    if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+    else BudgetUI.warnIfUnsaved(result);
+  }
+
+  add.addEventListener("click", () => {
+    const item = items[Number(what.value)];
+    if (!item) return;
+    const pick = { kind: item.kind, name: item.name, part: part.hidden ? "" : part.value };
+    const list = spectrumPicks();
+    if (list.some(line => line.kind === pick.kind && line.name === pick.name && line.part === pick.part)) return BudgetUI.showToast(`${spectrumLineName(pick)} is on the graph already.`);
+    if (list.length >= MAX_SPECTRUM_LINES) return BudgetUI.showToast(`The graph holds up to ${MAX_SPECTRUM_LINES} lines. Take one off (its ×) to add another.`, true);
+    save([...list, pick], `Added ${spectrumLineName(pick)}`);
+  });
+
+  // Each picked line, with a × that takes it off
+  function drawPicks(lines) {
+    const list = spectrumPicks();
+    const drawnNames = new Set(lines.map(line => line.name));
+    const gone = [];
+    picked.replaceChildren(...list.map((pick, at) => {
+      const name = spectrumLineName(pick);
+      const item = BudgetUI.element("li", "spectrumPick");
+      item.append(BudgetUI.noTranslate(BudgetUI.element("span", "", name)));
+      if (!drawnNames.has(name)) gone.push(name);
+      const remove = BudgetUI.element("button", "spectrumRemove", "×");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Take ${name} off the graph`);
+      remove.title = remove.getAttribute("aria-label");
+      remove.addEventListener("click", () => save(list.filter((_, other) => other !== at), `Took off ${name}`));
+      item.append(remove);
+      return item;
+    }));
+    picked.hidden = list.length === 0;
+    missing.hidden = gone.length === 0;
+    missing.textContent = gone.length ? `Nothing to draw for ${gone.join(", ")} in these days (or it's no longer in your budget).` : "";
+  }
+
+  function draw() {
+    fillChoices();
+    if (!graph) {
+      graph = LineGraph.create({
+        label: "Your Lines, Day By Day",
+        from: (until) => graphStart(until),
+        max: aheadLimit(),
+        series: (first, until) => spectrumLines(spectrumPicks(), first, until),
+        emptyNote: "Nothing to draw for these days. Pick a line above and tap Add, or pick other days."
+      });
+      slot.replaceChildren(graph.el);
+    } else {
+      graph.draw();
+    }
+    drawPicks(graph.lines());
+  }
+
+  return { el, draw, lines: () => (graph ? graph.lines() : []), until: () => (graph ? graph.until() : today) };
+}
 
 //#endregion
 
@@ -1419,9 +2183,46 @@ function goalRow(goal, index, plan) {
     button.append(bar);
   }
   if (plan.note) button.append(BudgetUI.element("span", "goalPlan", plan.note));
+  const gemWords = plan.tone === "reached" ? "" : gemPlanWords(goal, plan);
+  if (gemWords) button.append(BudgetUI.noTranslate(BudgetUI.element("span", "goalPlan goalGem", `💠 ${gemWords}`)));
   button.addEventListener("click", () => openGoalPanel(button, index));
   item.append(button);
   return item;
+}
+
+// What a goal's gem says (see Gems and goals in Process Budget.js): when the gem's payments (or deposits), with its extra,
+// get the goal there, from what the goal is for holds now (a gem typed in by hand: from the gem's own balance), with that
+// account's interest (or the gem's own), the first one a payment's time from today. "" for a goal without a gem (or one
+// whose gem is gone).
+function gemPlanWords(goal, plan) {
+  // (Home works Bob's warnings out without drawing his page, and without Budget Pages.js, which this uses)
+  if (!goal.gem || typeof describeDebt !== "function") return "";
+  const gem = calculatorStore("gems").find(item => item.id === goal.gem);
+  if (!gem) return "";
+  const values = gem.values;
+  const name = gem.name || describeDebt(values).slice(0, 2).join(", ") || "Its gem";
+  const saves = gemSaves(values);
+  const following = gemGoalFields(gem);
+  let balance = plan.balance;
+  let interest = null;
+  if (following?.kind === "account") {
+    const summary = accountSummaries().find(item => cleanString(item.name) === cleanString(following.account));
+    if (summary?.interest) interest = { rate: summary.interest.rate, compound: summary.interest.compound, every: summary.interest.every, day: summary.interest.day, debt: summary.interest.debt };
+  } else if (!following) {
+    balance = saves ? (values.balance ?? 0) : -(values.owed ?? 0);
+    if (typeof values.rate === "number" && values.rate > 0) interest = { rate: values.rate, compound: values.compound || "monthly", every: values.every || 1, day: values.day || today.getDate() };
+  }
+  if (balance === null || balance >= goal.amount) return "";
+  const payment = Math.round(((values.payment || 0) + (values.extra || 0)) * 100) / 100;
+  const frequency = values.frequency in PAYMENT_FREQUENCIES ? values.frequency : "monthly";
+  if (payment <= 0 && !interest) return `${name} keeps no ${saves ? "deposit" : "payment"}, so it can't say when this gets there.`;
+  const apart = PAYMENT_FREQUENCIES[frequency];
+  const first = apart ? addDays(today, apart) : addMonths(today, 1);
+  const each = `${formatMoney(payment)} ${PAYMENT_CHOICES.find(choice => choice.value === frequency).label.toLowerCase()}`;
+  const result = growTo({ balance, interest, payment, frequency, first, from: today, target: goal.amount });
+  return result.reached
+    ? `With ${name}'s ${each}, it gets there on ${showDate(result.reached)} (in ${howLong(today, result.reached)}).`
+    : `With ${name}'s ${each}, it doesn't get there within ${PAYOFF_YEARS} years.`;
 }
 
 // How far along a goal is, 0 to 100: from what it was for held when it was set (or $0, for one set before that was kept)
@@ -1433,18 +2234,34 @@ function goalShare(goal, balance) {
   return Math.max(0, Math.min(99, Math.floor((balance - from) / (goal.amount - from) * 100)));
 }
 
-// New goal (index null) or change one: a title of its own if you like, what it's for (In Bank, the Total, or an Equity
-// account, each with what it holds under its name), its amount (or a % of what it's for today, which stays that amount),
-// and a day to reach it by, if it has one
-function openGoalPanel(origin, index = null) {
+// New goal (index null) or change one: a title of its own if you like, the Accrual Calculator gem it follows if any (one
+// with In Bank or an Equity account says what it's for and its amount, so those boxes hide), what it's for (In Bank, the
+// Total, or an Equity account, each with what it holds under its name), its amount (or a % of what it's for today, which
+// stays that amount), and a day to reach it by, if it has one. link: from Add To Goals, { gem (its id), date }.
+function openGoalPanel(origin, index = null, link = {}) {
   const existing = index === null ? null : (accountsData?.goals || [])[index];
   BudgetUI.openPanel({
     origin,
     size: "small",
     title: existing ? "Change Goal" : "New Goal",
     build(form, panel) {
-      const intro = BudgetUI.element("p", "panelHint", "An amount for In Bank, the Total, or an Equity account to reach, like $2000.00 in Savings, or a credit card at $0.00 (a blank amount). Bob works out what reaching it takes.");
-      const title = BudgetUI.textField({ label: "Title", value: existing ? existing.title : "", placeholder: "Vacation, emergency fund...", optional: true, maxLength: MAX_TITLE });
+      const intro = BudgetUI.element("p", "panelHint", "An amount for In Bank, the Total, or an Equity account to reach, like $2000.00 in Savings, or a credit card at $0.00 (a blank amount), or one following an Accrual Calculator gem. Bob works out what reaching it takes.");
+      // The gem it follows (Accrual Calculator gems), and what following it means. (From Add To Goals, the title starts as the
+      // gem's name.)
+      const gems = calculatorStore("gems");
+      const linkedName = link.gem ? gems.find(gem => gem.id === link.gem)?.name || "" : "";
+      const title = BudgetUI.textField({ label: "Title", value: existing ? existing.title : linkedName, placeholder: "Vacation, emergency fund...", optional: true, maxLength: MAX_TITLE });
+      const gemName = (gem) => gem.name || describeDebt(gem.values).join(", ") || "Gem";
+      const pickedGem = existing?.gem || link.gem || "";
+      const gemPick = gems.length === 0 ? null : BudgetUI.selectField({
+        label: "Gem",
+        options: [{ value: "", label: "None" }, ...gems.map(gem => ({ value: gem.id, label: gemName(gem) }))],
+        value: gems.some(gem => gem.id === pickedGem) ? pickedGem : "",
+        hint: "Optional: an Accrual Calculator gem for this goal to follow."
+      });
+      if (gemPick) BudgetUI.noTranslate(gemPick.input);
+      const follows = BudgetUI.element("p", "panelHint goalFollows");
+      follows.hidden = true;
       const amount = BudgetUI.amountField({ label: "Amount", amount: existing ? existing.amount : null, percent: existing ? existing.percent : null, signs: BudgetUI.BALANCE_SIGNS });
       const accounts = otherAccounts();
       const savings = accountRows().find(account => isDefaultAccount(account.row));
@@ -1459,12 +2276,33 @@ function openGoalPanel(origin, index = null) {
       target.el.classList.add("accountChoices");
       const targetField = BudgetUI.field("For", target.el, { hint: "A % goal is that percent of it today, and stays that amount." });
       amount.setPercentAllowed(true);
-      const date = BudgetUI.dateField({ label: "By", date: existing && existing.date ? createSafeMidnight(existing.date, true) : null, optional: true, hint: "Leave it blank for no day: Bob says when your budget gets there." });
+      const date = BudgetUI.dateField({ label: "By", date: existing && existing.date ? createSafeMidnight(existing.date, true) : link.date || null, optional: true, hint: "Leave it blank for no day: Bob says when your budget gets there." });
+
+      // A gem with In Bank or an Equity account says what the goal is for (and its amount, for what's owed, or what's saved
+      // with a Goal amount), so those boxes hide; one typed in by hand leaves them to the goal
+      const showGem = () => {
+        const gem = gems.find(item => item.id === gemPick?.input.value);
+        const following = gem ? gemGoalFields(gem) : null;
+        targetField.hidden = !!following;
+        amount.el.hidden = !!following && following.amount !== null;
+        follows.hidden = !gem;
+        if (!gem) return;
+        const each = gemSaves(gem.values) ? "deposits" : "payments";
+        if (following) {
+          const what = following.kind === "inBank" ? "In Bank" : following.account;
+          const howMuch = following.amount === null ? "" : following.amount === 0 && !gemSaves(gem.values) ? ", at $0.00 (paid off)" : `, at ${formatMoney(following.amount)}`;
+          follows.textContent = `It follows ${gemName(gem)}: it's for ${what}${howMuch}. When the gem changes, so does this goal, and Bob says when the gem's ${each} get it there.`;
+        } else {
+          follows.textContent = `${gemName(gem)} is typed in by hand, so pick what this goal is for and its amount below. Bob says when the gem's ${each} get it there.`;
+        }
+      };
+      gemPick?.input.addEventListener("change", showGem);
+      showGem();
 
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: removeIt }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Goal", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(...(existing ? [] : [intro]), title.el, targetField, amount.el, date.el, BudgetUI.buttonRow(buttons));
+      form.append(...(existing ? [] : [intro]), title.el, ...(gemPick ? [gemPick.el, follows] : []), targetField, amount.el, date.el, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -1476,8 +2314,16 @@ function openGoalPanel(origin, index = null) {
         const by = date.value();
         if (by === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
         const [kind, ...name] = target.value().split(":");
-        const fields = { title: title.value(), kind, account: name.join(":"), amount: value, percent, date: by };
-        BudgetUI.submit(panel, () => saveGoal(fields, index));
+        const fields = { title: title.value(), kind, account: name.join(":"), amount: value, percent, date: by, gem: gemPick?.input.value || "" };
+        // (From Add To Goals while the Goals card is off, the card comes on, so the new goal shows)
+        BudgetUI.submit(panel, async () => {
+          const result = await saveGoal(fields, index);
+          if (result.ok && !bobCardOn("goals")) {
+            const on = await turnBobCard("goals", true);
+            if (!on.ok) return on;
+          }
+          return result;
+        });
       });
 
       function removeIt() {
@@ -2055,7 +2901,7 @@ function renderCatchupCard(card, shared) {
   const catchup = shared.catchup();
   const over = catchup.total >= CATCHUP_LIMIT;
   const text = over
-    ? `Your Catchup entries add up to ${formatMoney(Math.round(catchup.total))} in the last ${CATCHUP_DAYS} days, so some purchases are slipping by. Try adding each one as it happens (the Quick Entry icon on your phone's home screen makes it quick), so your In Bank stays right without guessing.`
+    ? `Your Catchup entries add up to ${formatMoney(Math.round(catchup.total))} in the last ${CATCHUP_DAYS} days, so some purchases are slipping by. Try adding each one as it happens (the Quick Budget icon on your phone's home screen makes it quick), so your In Bank stays right without guessing.`
     : `Your Catchup entries add up to ${formatMoney(catchup.total)} in the last ${CATCHUP_DAYS} days. Under ${formatMoney(CATCHUP_LIMIT)}, so your entries are keeping up with your bank.`;
   showTip(card, text, catchup.entries.length > 0 ? { label: "See them", open: (origin) => openEntriesWindow(origin, `Catchup Entries, Last ${CATCHUP_DAYS} Days`, catchup.entries, "") } : null);
   return { text, warn: over };

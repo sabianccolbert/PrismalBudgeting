@@ -1,7 +1,7 @@
 // Process Budget: the budget itself, for every page that shows one. Loading the open budget from the API (an account can
 // have several, and budgets shared with it: Budgets.js says which) and saving what changed to that same one, the daily
 // update that brings it up to today, every change (calendar entries, recurring entries, the
-// tracker, Equity, connected spreadsheets, Quick Entry), the budget math, Bob's message on Home and his page's
+// tracker, Equity, connected spreadsheets, Quick Budget), the budget math, Bob's message on Home and his page's
 // settings, Search, Undo and Redo, and the helpers the pages share (dates, amounts, titles). Pages draw from it and redraw
 // on its "budget:updated" event.
 
@@ -39,9 +39,9 @@ const TABLE_SHAPES = {
   logs:       { cols: 10, minRows: 1 }  // [0] column titles, then [time, duration, action, 4 details, status, what it changed (for its Undo, see CHANGE LOG UNDO), who made it]
 };
 
-// Limits on what's typed in. Amounts go up to a billion dollars (the API's Quick Entry has the same limit):
+// Limits on what's typed in. Amounts go up to a billion dollars (the API's Quick Budget has the same limit):
 // bigger numbers can't be kept to the cent, and past 1e21 JavaScript writes them as "1e+21". Titles go up to 100
-// characters, like Quick Entry's and connected spreadsheets'.
+// characters, like Quick Budget's and connected spreadsheets'.
 const MAX_AMOUNT = 1000000000;
 const AMOUNT_TOO_BIG = "Amounts can be up to $1,000,000,000.";
 const MAX_TITLE = 100;
@@ -182,7 +182,7 @@ async function loadWorkspace() {
     openedBudget(data.budget);
     workspaceLoaded = true;
     // Accounts that were just set up (like Savings in a new budget) are saved right away, so the
-    // Quick Entry page can list them too
+    // Quick Budget page can list them too
     if (!unsavableTables.has("accounts") && JSON.stringify(accountsData) !== JSON.stringify(storedAccounts)) accountsEdited = true;
 
     // Use the date from the database (yesterday if it's missing). A brand-new account (never
@@ -225,7 +225,7 @@ async function loadWorkspace() {
     if (allSaved && pendingProcessedDate) {
       if (await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
     }
-    await holdQuickEntries(data.quick_entries); // Made with Quick Entry icons: this device's are added, the rest wait on Home
+    await holdQuickEntries(data.quick_entries); // Made with Quick Budget icons: this device's are added, the rest wait on Home
     queueReminderPlanSync();
     return true;
 
@@ -235,7 +235,7 @@ async function loadWorkspace() {
   }
 }
 
-// Where the budget loads from: /api/data/load, naming the budget (see budgetQuery) and the Quick Entry icons this device
+// Where the budget loads from: /api/data/load, naming the budget (see budgetQuery) and the Quick Budget icons this device
 // made or used (ownQuickIcons), whose waiting entries it adds as it loads (the API marks only those as picked up; see
 // holdQuickEntries)
 function budgetLoadAddress() {
@@ -247,7 +247,7 @@ function budgetLoadAddress() {
 // about the budget names the one this page has open, so a save never lands in another one; the API refuses a budget the
 // account can't open (a 404 saying budgetGone), and then the page opens the account's own instead.
 
-// The budget this page has open, as the API's addresses name it ("budget=12"; "" on the Quick Entry page, which has none)
+// The budget this page has open, as the API's addresses name it ("budget=12"; "" on the Quick Budget page, which has none)
 function budgetQuery() {
   return window.Budgets ? window.Budgets.query() : "";
 }
@@ -1308,15 +1308,15 @@ function updateSheetReads(reads) {
   return runBudgetAction("", () => applySheetReads(reads));
 }
 
-/* ---------- Quick Entry (the home screen icon's page, quick.html) ---------- */
-// The Quick Entry page can't open the budget (its key can only queue entries), so its entries wait in the API until a
+/* ---------- Quick Budget (the home screen icon's page, quick.html) ---------- */
+// The Quick Budget page can't open the budget (its key can only queue entries), so its entries wait in the API until a
 // budget opens. The ones from this device's own icons are added then, each like a New Entry (the load picks them up, so
 // the icon can't change them or take them back anymore); the ones from other devices' icons (someone else sharing the
 // budget) wait on Home (Calendar Page.js), still their icon's to change or take back, until whoever has it open adds them
 // (Add picks each one up first, as it is then) or deletes them. One that's added leaves the API's queue in the same
 // request that saves the table it landed in (see saveChanges): never lost, never added twice.
 
-// Refraction types by name, as the Quick Entry page sends them
+// Refraction types by name, as the Quick Budget page sends them
 const QUICK_ENTRY_TYPES = { auto: "", regular: "❗️", hidden: "✖️", transfer: "⭕️" };
 // Queued entry ids to send with the next save of the table each one landed in
 let quickEntryAcks = { calendar: [], history: [], future: [] };
@@ -1324,7 +1324,7 @@ let quickEntryAcks = { calendar: [], history: [], future: [] };
 // icon }], oldest first
 let waitingQuickEntries = [];
 
-// The Quick Entry icons this device made (Home's Quick Entry button) or used (the Quick Entry page, where it shares this
+// The Quick Budget icons this device made (Home's Quick Budget button) or used (the Quick Budget page, where it shares this
 // site's storage), each as the start of its key's hash (the API's icon for each waiting entry), newest first. Kept on
 // this device, even after signing out, so its own entries are still its own.
 const OWN_ICONS_KEY = "prismal_quick_icons";
@@ -1386,8 +1386,8 @@ async function holdQuickEntries(queue) {
   if (typeof BudgetUI === "undefined") return;
   const plural = (count) => `${count} quick ${count === 1 ? "entry" : "entries"}`;
   const messages = [];
-  if (added > 0) messages.push(`Added ${plural(added)} from this device's Quick Entry icon.`);
-  if (passed.length > 0) messages.push(`Left out ${passed.length === 1 ? "a placeholder" : passed.length + " placeholders"} from your Quick Entry icons: ${passed.length === 1 ? "its day has" : "their days have"} passed.`);
+  if (added > 0) messages.push(`Added ${plural(added)} from this device's Quick Budget icon.`);
+  if (passed.length > 0) messages.push(`Left out ${passed.length === 1 ? "a placeholder" : passed.length + " placeholders"} from your Quick Budget icons: ${passed.length === 1 ? "its day has" : "their days have"} passed.`);
   if (failed.length > 0) {
     const first = failed[0];
     messages.push(`Couldn't add ${failed.length === 1 ? "the quick entry" : plural(failed.length) + ", like"} "${first.quick?.entry?.title ?? "Untitled"}": ${first.message}`);
@@ -1446,7 +1446,7 @@ async function deleteWaitingQuickEntry(id) {
   const answer = await budgetApi("/api/quick/dismiss", { ids: [id] });
   if (!answer.ok) return { ok: false, message: "That quick entry couldn't be deleted. Please check your connection and try again." };
   waitingQuickEntries = waitingQuickEntries.filter(item => item !== quick);
-  return runBudgetAction("⚡ Delete Quick Entry", () => {
+  return runBudgetAction("⚡ Delete Quick Budget Entry", () => {
     formEntryRow[3] = describeQuickEntry(quick.entry);
     return {};
   });
@@ -1461,7 +1461,7 @@ function quickEntry(quick) {
   if (table === "history" && !historyHasDay(date)) {
     throw new BudgetInputError(`${showDate(date)} is before your budget's History starts.`);
   }
-  // (A % entry is worked out again here; on a day that passed before the budget opened, it's the amount the Quick Entry
+  // (A % entry is worked out again here; on a day that passed before the budget opened, it's the amount the Quick Budget
   // page worked out)
   const hasPercent = typeof entry.percent === "number" && date >= today;
   const landed = unique({
@@ -1475,8 +1475,8 @@ function quickEntry(quick) {
     ...(entry.placeholder === true && typeof entry.until === "string" ? { until: createSafeMidnight(entry.until, true) } : {}),
     adding: true
   });
-  formEntryRow[5] = "⚡ Quick Entry"; // Where "Move To" goes (quick entries never move)
-  noteEntryPurpose(entry.title, entry.purpose, true); // (Picked on the Quick Entry page, or left out to stay as it is)
+  formEntryRow[5] = "⚡ Quick Budget"; // Where "Move To" goes (quick entries never move)
+  noteEntryPurpose(entry.title, entry.purpose, true); // (Picked on the Quick Budget page, or left out to stay as it is)
   addEntryNote(date, entry.title, landed.entryType, entry.note, true);
   addEntryReminder(date, entry.title, landed.entryType, typeof entry.remind === "number" ? entry.remind : null, true);
   return { quickEntry: { id: quick.id, table } };
@@ -1627,6 +1627,7 @@ function finishChangeLog(record = null) {
   const status = hadError ? "Error" : (notFound ? "Not Found" : "");
   logsData.splice(1, 0, [...formEntryRow.slice(0, 7), status, hadError ? "" : record || "", signedInName()]);
   if (logsData.length > MAX_LOG_ROWS + 1) logsData.length = MAX_LOG_ROWS + 1;
+  noteOwnLogRow(logsData[1]);
   trimLogUndo();
   logsEdited = true;
 }
@@ -1635,6 +1636,101 @@ function finishChangeLog(record = null) {
 // (logs are only ever read by people)
 function formatLogTime(date) {
   return `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")} ${showDate(date)}`;
+}
+
+/* ---------- Edits from other devices (Home's count, see OTHER DEVICES' EDITS in Calendar Page.js) ---------- */
+// How many Change Logs rows were made somewhere else (another device, or anyone the budget is shared with) since the
+// Change Logs were last looked at in this browser. Rows don't say which device made them, so this browser remembers, for
+// each account and budget, the newest row it had seen ("seen") and the rows it made itself since ("mine"):
+// localStorage LOGS_SEEN_KEY, { <the account and budget, scrambled>: { seen, mine: [...] } }. It's kept after signing out (Layout.js
+// DEVICE_SETTINGS), since a sign-in ends after 15 idle minutes and the count is about what happened meanwhile. A row is
+// known by a short hash of the parts that never change (its time, action, details, and who made it; not its Undo
+// record, which a later Undo clears), so what's kept says nothing about the budget. The daily update isn't anyone's
+// edit, so it never counts.
+const LOGS_SEEN_KEY = "prismal_logs_seen";
+const LOGS_SEEN_BUDGETS = 30; // The most accounts and budgets remembered (the oldest go first)
+const LOGS_MINE_MAX = 200;
+const DAILY_UPDATE_ACTION = "🕛 Daily Update";
+
+// A row's hash (53 bits: two 32-bit FNV-style halves, so 1,000 rows never share one by chance)
+function logMark(row) {
+  const text = JSON.stringify([...row.slice(0, 7), row[9]].map(value => String(value ?? "")));
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+const isLogRow = (row) => Array.isArray(row) && row.some(value => String(value ?? "").trim() !== "");
+
+function logsSeenBook() {
+  try {
+    const book = JSON.parse(localStorage.getItem(LOGS_SEEN_KEY) || "{}");
+    return book && typeof book === "object" && !Array.isArray(book) ? book : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+// This account's and budget's place in the book, or null before both are known: a scrambled form of the two (logMark), so
+// what's kept after signing out names no account
+function logsSeenSlot() {
+  const budget = window.Budgets && typeof window.Budgets.id === "function" ? window.Budgets.id() : null;
+  const user = signedInName();
+  return budget === null || budget === undefined || !user ? null : logMark([user, String(budget)]);
+}
+
+function writeLogsSeen(slot, entry) {
+  const book = logsSeenBook();
+  delete book[slot];
+  book[slot] = entry; // (Last, so the ones not used for longest go first)
+  const slots = Object.keys(book);
+  for (const old of slots.slice(0, Math.max(0, slots.length - LOGS_SEEN_BUDGETS))) delete book[old];
+  try { localStorage.setItem(LOGS_SEEN_KEY, JSON.stringify(book)); } catch (e) {}
+}
+
+// A row this browser just made (finishChangeLog): it never counts as another device's
+function noteOwnLogRow(row) {
+  const slot = logsSeenSlot();
+  const entry = slot ? logsSeenBook()[slot] : null;
+  if (!entry) return; // (Nothing seen here yet: the first count starts from the newest row anyway)
+  entry.mine = [...(Array.isArray(entry.mine) ? entry.mine : []), logMark(row)].slice(-LOGS_MINE_MAX);
+  writeLogsSeen(slot, entry);
+}
+
+// The Change Logs were looked at (or the budget opened here for the first time): every row in them now counts as seen
+function markLogsSeen() {
+  const slot = logsSeenSlot();
+  if (!slot || !logsData) return;
+  const newest = logsData.slice(1).find(isLogRow);
+  writeLogsSeen(slot, { seen: newest ? logMark(newest) : null, mine: [] });
+}
+
+// How many rows other devices made since this browser last looked (0 the first time it opens this budget)
+function otherDevicesEdits() {
+  const slot = logsSeenSlot();
+  if (!slot || !logsData) return 0;
+  const entry = logsSeenBook()[slot];
+  if (!entry) {
+    markLogsSeen();
+    return 0;
+  }
+  const mine = new Set(Array.isArray(entry.mine) ? entry.mine : []);
+  let count = 0;
+  for (let i = 1; i < logsData.length; i++) {
+    const row = logsData[i];
+    if (!isLogRow(row)) continue;
+    const mark = logMark(row);
+    if (mark === entry.seen) break;
+    if (!mine.has(mark) && String(row[2]).trim() !== DAILY_UPDATE_ACTION) count++;
+  }
+  return count;
 }
 
 /* ---------- The budget flow ---------- */
@@ -1701,7 +1797,7 @@ function refreshBudgetData() {
 //          had),
 //          percent: a % amount instead of amount (see PERCENT_MARK): its percent (signed with "set"; "subtract" and "add"
 //          sign it), or null for a plain amount; left out, an entry that has one keeps it unless its amount changes,
-//          adding: true for a new entry (New Entry, Quick Entry), which a placeholder only joins as one if the entry
+//          adding: true for a new entry (New Entry, Quick Budget), which a placeholder only joins as one if the entry
 //          already there is one too }
 function unique(entry) {
   // 1. Variables
@@ -2356,6 +2452,9 @@ function trackerEntry(fields, index) {
   }
 
   if (row) {
+    // (The Spectrum Graph's lines for it follow its new title)
+    const oldTitle = String(row[0]).trim();
+    for (const line of accountsData?.bob?.spectrum || []) if (line.kind === "tracker" && line.name === oldTitle) line.name = fullTitle;
     row[0] = fullTitle;
     row[4] = aliases;
     formEntryRow[3] = "Changed: " + row[0];
@@ -2429,12 +2528,12 @@ function describeAliases(text) {
 // its entries changes it too. Typing a balance on the Equity page changes the starting amount (no entry
 // is made). An account can also get interest (a credit card, a loan, or savings that earn it), compounding and added
 // how and when it says: see interestStepper; and escrow, like a mortgage's: see accountEscrow. accountsData.list: [0]
-// column titles, then [name, balance today (filled in by updateAccountBalances, so the Quick Entry page can show it),
+// column titles, then [name, balance today (filled in by updateAccountBalances, so the Quick Budget page can show it),
 // "default" | "cash" | "", starting amount ("" is $0.00), interest rate (a year, in %; "" for none), the day interest
 // and escrow started counting (MM/DD/YYYY), max, how interest compounds, every how many months it's added, the day of
 // the month it's added, Separate Interest and its interest balance then (see accountInterest), escrow a month, its day,
 // and what was due then (see accountEscrow), and the day interest counts from (see interestPeriodStart)].
-// accountsData.coming: each account's changes after today, which the Quick Entry page counts once their day comes (see
+// accountsData.coming: each account's changes after today, which the Quick Budget page counts once their day comes (see
 // accountChangesAhead). accountsData.inBank: In Bank from today through the 28 days after the calendar, for the Quick
 // Entry page (see inBankAhead). The default account, Savings, is always there and can't be deleted.
 
@@ -2545,7 +2644,7 @@ function titleEntryLines(titleText, sprite) {
 let interestAdded = [];
 
 // Each account's balance today goes in its row, and its changes still to come go with them (interest and escrow too,
-// worked out with its changes after the calendar), and so does In Bank from today on (the Quick Entry page can't add up
+// worked out with its changes after the calendar), and so does In Bank from today on (the Quick Budget page can't add up
 // the budget itself)
 function updateAccountBalances() {
   const lastDay = addDays(gridEndDate, 28);
@@ -2589,7 +2688,7 @@ function inBankAhead() {
   return days;
 }
 
-// Each account's changes after today, for the Quick Entry page, which adds the ones whose day has come to the
+// Each account's changes after today, for the Quick Budget page, which adds the ones whose day has come to the
 // balances stored with them (the API's readAccounts), so a page opened days after the budget was last open is still
 // right: the calendar's days after today as they are, then the 28 days after the calendar the way the daily update
 // will fill them in (Upcoming entries, then recurring and connected spreadsheets' entries, which a day more than a
@@ -3139,10 +3238,11 @@ function interestCredits(start, entries, interest, until) {
   return runAccount(start, entries, interest, null, until).credits;
 }
 
-/* ---------- Paying a balance off (the Debt Calculator) ---------- */
-// How long paying off a balance owed takes (a loan, a credit card), with interest worked out the way an Equity account's
-// is (interestStepper): the same payment on a schedule from a first payment day, and what paying more does. For an
-// Equity account, its own pace too, from the budget (accountPayoff).
+/* ---------- Paying a balance off, or growing one (the Accrual Calculator) ---------- */
+// How long paying off a balance owed takes (a loan, a credit card: payOff), or what a balance saved grows to and when it
+// reaches an amount (a savings account, In Bank: growTo), with interest worked out the way an Equity account's is
+// (interestStepper): the same payment (or deposit) on a schedule from a first day, and what paying more does. For an Equity
+// account or In Bank, its own pace too, from the budget (accountReach, inBankReach).
 
 // How often payments come: days apart, or null for every month (on the first payment's day of the month)
 const PAYMENT_FREQUENCIES = { weekly: 7, biweekly: 14, monthly: null };
@@ -3220,13 +3320,78 @@ function paymentToPayOffBy(options, by) {
   return high / 100;
 }
 
-// An Equity account's own pace back up to $0 from below (its row index), from today: its entries, the ones the budget
-// still has coming for ACCOUNT_PAYOFF_YEARS (projection: projectBudget, to that day), and its interest, and the same
-// with `extra` more on each payment day (paymentDays from first, every frequency). { owed (today, above $0 when it's
-// below), now: { paidOff, interest }, withExtra: { paidOff, interest } } (paidOff: the day it's back to $0, or null
-// when it isn't in the years looked at; interest: what it pays from today until then), or null for an account it
-// doesn't know.
-function accountPayoff(index, projection, { extra = 0, frequency = "monthly", first = addDays(today, 1) } = {}) {
+// Growing a balance toward `target` with `payment` added on each payment day from `first` (the last one only what's left
+// to reach it), and interest ({ rate, compound, every, day }, or null for none) counting from the day after `from`, through
+// until (at most PAYOFF_YEARS). For what's saved (a savings account, In Bank), but a balance below $0 works too (a debt
+// climbing to a target of $0). { schedule: [{ date, payment, interest (added since the one before: above $0 earned), balance
+// (after it) }] (a day interest alone gets it there has a row with no payment), reached (the day it's at target or more,
+// from today when it's there already; null: not by until, or never, when a year of payments leaves it no closer), interest
+// (all of it), paid (every payment), balance (at the end) }. Without a target (null), it runs through until.
+function growTo({ balance, interest, payment, frequency, first, from, target = null, until = addMonths(from, PAYOFF_YEARS * 12) }) {
+  const round = (amount) => Math.round(amount * 100) / 100;
+  const start = round(balance);
+  if (target !== null && start >= target) return { schedule: [], reached: from, interest: 0, paid: 0, balance: start };
+  const stepper = interest ? interestStepper({ ...interest, since: from, from }) : null;
+  const days = new Set(paymentDays(first, frequency, until).map(day => day.getTime()));
+  const yearIn = addMonths(first, 12);
+  const schedule = [];
+  let now = start;
+  let addedSince = 0;
+  let addedAll = 0;
+  let paid = 0;
+  for (let day = addDays(from, 1); day <= until; day = addDays(day, 1)) {
+    if (stepper) {
+      const change = stepper.step(day, now);
+      now = round(now + change);
+      addedSince += change;
+      addedAll += change;
+    }
+    const isPaymentDay = days.has(day.getTime());
+    if (isPaymentDay) {
+      const amount = target === null ? payment : Math.max(0, Math.min(payment, round(target - now)));
+      now = round(now + amount);
+      stepper?.pay(amount);
+      paid += amount;
+      schedule.push({ date: day, payment: amount, interest: round(addedSince), balance: now });
+      addedSince = 0;
+    }
+    if (target !== null && now >= target) {
+      if (!isPaymentDay) schedule.push({ date: day, payment: 0, interest: round(addedSince), balance: now });
+      return { schedule, reached: day, interest: round(addedAll), paid: round(paid), balance: now };
+    }
+    if (target !== null && isPaymentDay && day >= yearIn && now <= start) break;
+  }
+  return { schedule, reached: null, interest: round(addedAll), paid: round(paid), balance: now };
+}
+
+// The smallest payment (to the cent) that gets a balance to options.target by the day `by` (options: as growTo takes
+// them, without a payment), or null when none can: a day before the first payment, one more than PAYOFF_YEARS away, or
+// one it takes more than MAX_AMOUNT a payment to reach
+function paymentToReachBy(options, by) {
+  if (options.target === null || by < options.first || by > addMonths(options.from, PAYOFF_YEARS * 12)) return null;
+  const works = (cents) => growTo({ ...options, payment: cents / 100, until: by }).reached !== null;
+  if (works(0)) return 0;
+  let high = Math.ceil(Math.max(1, options.target - options.balance) * 100) + 100;
+  while (!works(high)) {
+    if (high > MAX_AMOUNT * 100) return null;
+    high *= 2;
+  }
+  let low = 0;
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+    if (works(middle)) high = middle;
+    else low = middle;
+  }
+  return high / 100;
+}
+
+// An Equity account's own pace up to `target` (its row index; $0 for one paying a debt off), from today: its entries, the
+// ones the budget still has coming for ACCOUNT_PAYOFF_YEARS (projection: projectBudget, to that day), and its interest,
+// and the same with `extra` more on each payment day (paymentDays from first, every frequency). { start (today's
+// balance), now: { reached, interest }, withExtra: { reached, interest } } (reached: the day it's there, today when it
+// already is, or null when it isn't in the years looked at; interest: what it gets from today until then, below $0 for
+// interest paid), or null for an account it doesn't know.
+function accountReach(index, projection, { target = 0, extra = 0, frequency = "monthly", first = addDays(today, 1) } = {}) {
   const parts = projection.accountParts(index);
   if (!parts) return null;
   const until = projection.until;
@@ -3238,22 +3403,42 @@ function accountPayoff(index, projection, { extra = 0, frequency = "monthly", fi
     let balance = parts.start;
     let at = 0;
     while (at < events.length && events[at].date <= today) balance += events[at++].change;
-    const owed = round(-balance);
+    const start = round(balance);
+    if (start >= target) return { start, reached: today, interest: 0 };
     let interest = 0;
-    while (at < events.length && balance < 0) {
+    while (at < events.length) {
       const date = events[at].date;
       while (at < events.length && events[at].date.getTime() === date.getTime()) {
         balance += events[at].change;
         if (events[at].interest) interest += events[at].change;
         at++;
       }
-      if (round(balance) >= 0) return { owed, paidOff: date, interest: round(-interest) };
+      if (round(balance) >= target) return { start, reached: date, interest: round(interest) };
     }
-    return { owed, paidOff: owed <= 0 ? today : null, interest: round(-interest) };
+    return { start, reached: null, interest: round(interest) };
   };
   const now = run([]);
   const extras = extra > 0 ? paymentDays(first, frequency, until).filter(day => day > today).map(date => ({ date, change: extra })) : [];
-  return { owed: now.owed, now: { paidOff: now.paidOff, interest: now.interest }, withExtra: extra > 0 ? run(extras) : null };
+  return { start: now.start, now: { reached: now.reached, interest: now.interest }, withExtra: extra > 0 ? run(extras) : null };
+}
+
+// In Bank's own pace up to `target` ($0 for one climbing back from below), the way accountReach works for an account
+// (In Bank has no interest): { start, now: { reached, interest: 0 }, withExtra }
+function inBankReach(projection, { target = 0, extra = 0, frequency = "monthly", first = addDays(today, 1) } = {}) {
+  const extraDays = extra > 0 ? paymentDays(first, frequency, projection.until).filter(day => day > today) : [];
+  const run = (more) => {
+    let added = 0;
+    let next = 0;
+    for (const day of projection.inBank) {
+      while (more && next < extraDays.length && extraDays[next] <= day.date) {
+        added += extra;
+        next++;
+      }
+      if (Math.round((day.amount + added) * 100) / 100 >= target) return { reached: day.date, interest: 0 };
+    }
+    return { reached: null, interest: 0 };
+  };
+  return { start: projection.inBankOn(today), now: run(false), withExtra: extra > 0 ? run(true) : null };
 }
 
 // New account (index null) or change the tapped one. fields: { name, balance (today's, a number; leave it out
@@ -3477,9 +3662,13 @@ function renameAccountEntries(oldClean, newName) {
     row[4] = normalizeAliases(aliases.map(alias => ({ title: alias.clean === oldClean ? newName : alias.title, count: alias.count })));
   }
 
-  // Goals for it, and the notes on its entries
+  // Goals for it, the Spectrum Graph's lines for it (and for tracker aliases for it), and the notes on its entries
   for (const goal of accountsData.goals || []) {
     if (goal.kind === "account" && cleanString(goal.account) === oldClean) goal.account = newName;
+  }
+  for (const line of accountsData.bob?.spectrum || []) {
+    if (line.kind === "account" && cleanString(line.name) === oldClean) line.name = newName;
+    if (line.kind === "tracker" && line.part === oldClean) line.part = cleanString(newName);
   }
   renameAccountNotes(oldClean, newName);
 
@@ -3557,7 +3746,8 @@ function combineSameUpcoming() {
 // ("" for none), kind: "inBank" | "total" | "account" ("none": one set before goals needed what they're for, kept until
 // it's changed), account (the account's name, for "account"), amount, percent (null for a plain amount), date (the day to
 // reach it by, "" for none), made (the day it was set), start (what it was for held then, so how far along it is counts
-// from there, like a credit card climbing to $0; left out by goals set before it was kept) }], dates as MM/DD/YYYY.
+// from there, like a credit card climbing to $0; left out by goals set before it was kept), gem (the id of the Accrual
+// Calculator gem it follows, left out for none: see Gems and goals) }], dates as MM/DD/YYYY.
 
 const MAX_GOALS = 20;
 const GOAL_KINDS = ["none", "inBank", "total", "account"];
@@ -3585,7 +3775,8 @@ function normalizeGoals(list) {
       percent: Number.isFinite(goal.percent) ? goal.percent : null,
       date: String(goal.date ?? "").slice(0, 10),
       made: String(goal.made ?? "").slice(0, 10),
-      ...(Number.isFinite(goal.start) ? { start: Math.round(goal.start * 100) / 100 } : {})
+      ...(Number.isFinite(goal.start) ? { start: Math.round(goal.start * 100) / 100 } : {}),
+      ...(typeof goal.gem === "string" && PRESET_ID.test(goal.gem) ? { gem: goal.gem } : {})
     }));
 }
 
@@ -3614,8 +3805,9 @@ function goalBalance(goal, calendar = calendarData) {
 
 // fields: { title ("" for none), kind ("inBank", "total", or "account"), account (its name, for "account"), amount (a
 // number), percent (a signed percent of what it's for today, instead of amount), date (the day to reach it by, or null
-// for none) }. A % goal that keeps its percent and what it's for keeps its amount (the one worked out when it was set).
-// calendar: the calendar as it was before the change (with In Bank).
+// for none), gem (the id of a gem for it to follow, or "" for none) }. A % goal that keeps its percent and what it's for
+// keeps its amount (the one worked out when it was set). A gem with an Equity account (or In Bank) says what it's for and
+// its amount instead (gemGoalFields). calendar: the calendar as it was before the change (with In Bank).
 function goalEntry(fields, index, calendar = calendarData) {
   const goals = accountsData.goals || [];
   const isNew = index === null || index === undefined;
@@ -3624,6 +3816,19 @@ function goalEntry(fields, index, calendar = calendarData) {
   if (isNew && goals.length >= MAX_GOALS) throw new BudgetInputError(`You can have up to ${MAX_GOALS} goals. Delete one first.`);
   const title = capitalize(String(fields.title || "").replace(/\s+/g, " ").trim());
   if (title.length > MAX_TITLE) throw new BudgetInputError(`Titles can be up to ${MAX_TITLE} characters.`);
+  // The gem it follows (its id is kept with the gems, so it lasts: one saved before gems had ids gets it now)
+  let gem = null;
+  if (fields.gem) {
+    const gems = calculatorStore("gems");
+    gem = gems.find(item => item.id === fields.gem) || null;
+    if (!gem) throw new BudgetInputError("That gem isn't one of your gems anymore. Pick another, or None.");
+    writeCalculatorStore("gems", gems.map(item => ({ id: item.id, name: item.name, values: item.values })));
+    const following = gemGoalFields(gem);
+    if (following) {
+      fields = { ...fields, kind: following.kind, account: following.account };
+      if (following.amount !== null) fields = { ...fields, amount: following.amount, percent: null };
+    }
+  }
   const kind = fields.kind;
   if (!["inBank", "total", "account"].includes(kind)) throw new BudgetInputError("Pick what it's for: In Bank, the Total, or one of your Equity accounts.");
   let account = "";
@@ -3655,6 +3860,7 @@ function goalEntry(fields, index, calendar = calendarData) {
   const sameTarget = !!old && old.kind === kind && cleanString(old.account) === cleanString(account);
   const start = sameTarget && Number.isFinite(old.start) ? old.start : goalBalance(goal, calendar);
   if (Number.isFinite(start)) goal.start = Math.round(start * 100) / 100;
+  if (gem) goal.gem = gem.id;
   if (isNew) goals.push(goal);
   else goals[index] = goal;
   accountsData.goals = goals;
@@ -3662,7 +3868,7 @@ function goalEntry(fields, index, calendar = calendarData) {
   formEntryRow[2] = isNew ? "🎯 New Goal" : "🎯 Change Goal";
   formEntryRow[3] = "Goal: " + (title ? `${title} (${goalTarget(goal)})` : goalTarget(goal));
   formEntryRow[4] = "By: " + (date ? showDate(date) : "Any Day");
-  formEntryRow[5] = "";
+  formEntryRow[5] = gem ? `Gem: ${gem.name || "One without a name"}` : "";
   formEntryRow[6] = "Amount: " + (percent !== null ? `${showPercent(percent)} (${formatMoney(goal.amount)})` : formatMoney(goal.amount));
   return {};
 }
@@ -3684,11 +3890,12 @@ function removeGoal(index) {
 }
 
 /* ---------- Bob's page (menu/bob.html, drawn by Bob Page.js) ---------- */
-// Bob's page is a column of cards. Data and Accounts always show; each of the rest has its own on/off switch, and
+// Bob's page is a column of cards. The Spectrum Graph and Data always show; each of the rest has its own on/off switch, and
 // starts off (a budget that had goals before the page did starts with Goals on, so they don't go missing). Which ones
 // are on is kept with the budget, so every device, and anyone sharing the budget, sees the same page:
-// accountsData.bob = { cards: [the ids of the cards that are on], purposes, wavelengths (see WAVELENGTH PLANNING) }.
-// It's left out until something's been set, so loading a budget alone never counts as a change.
+// accountsData.bob = { cards: [the ids of the cards that are on], purposes, wavelengths (see WAVELENGTH PLANNING), spectrum
+// (the Spectrum Graph's lines, see SPECTRUM_KINDS) }. It's left out until something's been set, so loading a budget alone
+// never counts as a change.
 
 // Each switchable card's id and its name (for Change Logs; the page has its own words)
 const BOB_CARDS = new Map([
@@ -3708,14 +3915,38 @@ const BOB_CARDS = new Map([
 // okayed (MM/DD/YYYY), each left out without one.
 const BOB_WARNING_CARDS = [...BOB_CARDS.keys()].filter(id => id !== "purposes");
 
-// The stored settings, checked: { cards, purposes, wavelengths (only when they aren't the defaults), warnings, okayed
-// (each only when there's one) }, or null with nothing stored (and no goals)
+// The Spectrum Graph's lines (Bob Page.js spectrumGraph): [{ kind, name, part }], each kind one of these (name: an account's
+// name, a tracker row's title, a figure's key, or a wavelength's id; part: a tracker row's alias, as compared, or ""), up to
+// MAX_SPECTRUM_LINES, each once
+const SPECTRUM_KINDS = ["inBank", "total", "account", "tracker", "figure", "wavelength"];
+const MAX_SPECTRUM_LINES = 12;
+
+// Stored lines, checked (null when there's no list)
+function normalizeSpectrum(list) {
+  if (!Array.isArray(list)) return null;
+  const kept = [];
+  const seen = new Set();
+  for (const item of list) {
+    if (!item || typeof item !== "object" || !SPECTRUM_KINDS.includes(item.kind)) continue;
+    const line = { kind: item.kind, name: String(item.name ?? "").slice(0, MAX_TITLE + 10), part: String(item.part ?? "").slice(0, MAX_TITLE + 10) }; // (A row's title can start with ⭕️)
+    const key = `${line.kind}|${line.name}|${line.part}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(line);
+    if (kept.length >= MAX_SPECTRUM_LINES) break;
+  }
+  return kept;
+}
+
+// The stored settings, checked: { cards, purposes, wavelengths (only when they aren't the defaults), warnings, okayed,
+// spectrum (each only when there's one) }, or null with nothing stored (and no goals)
 function normalizeBob(stored, hasGoals) {
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return hasGoals ? { cards: ["goals"], purposes: {} } : null;
   const cards = Array.isArray(stored.cards) ? [...BOB_CARDS.keys()].filter(id => stored.cards.includes(id)) : [];
   const warnings = Array.isArray(stored.warnings) ? BOB_WARNING_CARDS.filter(id => stored.warnings.includes(id)) : [];
   const okayed = typeof stored.okayed === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(stored.okayed) ? stored.okayed : "";
-  const extras = { ...(warnings.length > 0 ? { warnings } : {}), ...(okayed ? { okayed } : {}) };
+  const spectrum = normalizeSpectrum(stored.spectrum);
+  const extras = { ...(warnings.length > 0 ? { warnings } : {}), ...(okayed ? { okayed } : {}), ...(spectrum ? { spectrum } : {}) };
   const wavelengths = normalizeWavelengths(stored.wavelengths);
   const known = new Set((wavelengths || DEFAULT_WAVELENGTHS).map(wave => wave.id));
   const purposes = {};
@@ -3780,6 +4011,46 @@ function okayBobWarnings() {
 // Were Bob's warnings okayed today?
 function bobWarningsOkayed() {
   return accountsData?.bob?.okayed === formatToMMDDYYYY(today);
+}
+
+/* ---------- The Snapshot page (snapshot.html, drawn by Snapshot Page.js) ---------- */
+// The Snapshot page is cards picked from across the site (a number, a list, a Bob card, a graph...), in the order they're
+// put in. They're kept with the budget, so every device, and anyone sharing it, sees the same page: accountsData.snapshot
+// = { cards: [{ id, type (what it shows, like "home.inBank" or "graph.equity"), ref (which one, for a type that has
+// more than one: an account's name, a goal's place, a gem's id...; "" for none) }] }, left out until it's changed (the
+// page starts with a few of its own). Logged as "📸 Snapshot".
+const MAX_SNAPSHOT_CARDS = 40;
+
+// The kept cards, checked (null without any kept)
+function normalizeSnapshot(stored) {
+  if (!stored || typeof stored !== "object" || !Array.isArray(stored.cards)) return null;
+  const seen = new Set();
+  const cards = stored.cards
+    .filter(card => card && typeof card === "object" && /^[a-z0-9]{4,16}$/.test(String(card.id ?? "")) && /^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9]+){0,3}$/.test(String(card.type ?? "")) && String(card.type).length <= 60)
+    .filter(card => !seen.has(card.id) && seen.add(card.id))
+    .slice(0, MAX_SNAPSHOT_CARDS)
+    .map(card => ({ id: card.id, type: card.type, ref: String(card.ref ?? "").slice(0, 200) }));
+  return { cards };
+}
+
+// The Snapshot page's cards, all of them, after an add, a move, or a delete (words: what changed, for Change Logs)
+function setSnapshotCards(cards, words) {
+  return runBudgetAction("📸 Snapshot", () => {
+    if (!Array.isArray(cards) || cards.length > MAX_SNAPSHOT_CARDS) throw new BudgetInputError(`The Snapshot page can have up to ${MAX_SNAPSHOT_CARDS} cards. Take one off first.`);
+    accountsData.snapshot = normalizeSnapshot({ cards: cards.map(card => ({ ...card, id: /^[a-z0-9]{4,16}$/.test(String(card.id ?? "")) ? card.id : newPresetId() })) });
+    formEntryRow[3] = String(words ?? "").slice(0, 200);
+    formEntryRow[4] = `Cards: ${accountsData.snapshot.cards.length}`;
+    return {};
+  });
+}
+
+// The Spectrum Graph's lines, all of them (words: what changed, for Change Logs, like "Added In Bank")
+function setSpectrumLines(list, words) {
+  return runBudgetAction("💡 Bob's Spectrum Graph", () => {
+    bobSettings().spectrum = normalizeSpectrum(list) || [];
+    formEntryRow[3] = String(words ?? "").slice(0, 200);
+    return {};
+  });
 }
 
 /* ---------- Wavelength Planning (Bob's card for it) ---------- */
@@ -4357,6 +4628,7 @@ function readBackup(text, which = 0) {
     accounts: has("otherAccounts") ? normalizeApiAccounts(budget.otherAccounts) : null,
     tracker: tracker ? tracker.slice(1) : null,
     sheets: has("connectedSpreadsheets") ? normalizeApiSheets(budget.connectedSpreadsheets).list : null,
+    linked: has("connectedSpreadsheets") ? normalizeApiSheets(budget.connectedSpreadsheets).linked || [] : null,
     calculator: has("paycheckCalculator") ? normalizeApiTable(budget.paycheckCalculator, TABLE_SHAPES.calculator) : null,
     notes: has("notes") ? normalizeApiNotes(budget.notes) : null,
     logs: has("changeLogs") ? normalizeApiTable(budget.changeLogs, TABLE_SHAPES.logs).slice(1) : null
@@ -4539,14 +4811,27 @@ function backupPlans(backup) {
       const mine = Object.entries(mineBob.purposes);
       const theirs = Object.entries(theirBob.purposes);
       const countPurposes = (choice) => mergeKeyed(keyed(mine, ([key]) => key), keyed(theirs, ([key]) => key), choice);
-      // (Which of his cards are on, and the wavelengths, go with the side that wins; a title on a wavelength that side
-      // doesn't have has none)
+      // (Which of his cards are on, the wavelengths, and the Spectrum Graph's lines go with the side that wins; a title on
+      // a wavelength that side doesn't have has none)
       plan("bob", "Bob's Page", "titles on a wavelength", mine.length, theirs.length, countPurposes(null).clashes, (choice) => {
         const winner = choice === "current" && accountsData.bob ? mineBob : theirBob;
         const known = new Set((winner.wavelengths || DEFAULT_WAVELENGTHS).map(wave => wave.id));
         const purposes = {};
         for (const [key, purpose] of countPurposes(choice).items.slice(0, MAX_PURPOSES)) if (known.has(purpose)) purposes[key] = purpose;
-        accountsData.bob = { cards: [...winner.cards], purposes, ...(winner.wavelengths ? { wavelengths: winner.wavelengths.map(wave => ({ ...wave })) } : {}) };
+        const spectrum = normalizeSpectrum(winner.spectrum);
+        accountsData.bob = { cards: [...winner.cards], purposes, ...(winner.wavelengths ? { wavelengths: winner.wavelengths.map(wave => ({ ...wave })) } : {}), ...(spectrum ? { spectrum } : {}) };
+      });
+    }
+
+    // The Snapshot page's cards (one showing the same thing as another, its type and which one, is the same card)
+    const theirCards = backup.accounts.snapshot?.cards || [];
+    if (theirCards.length > 0) {
+      const mineCards = accountsData.snapshot?.cards || [];
+      const cardKey = (card) => `${card.type}|${card.ref}`;
+      const countCards = (choice) => mergeKeyed(keyed(mineCards, cardKey), keyed(theirCards, cardKey), choice, () => true);
+      const order = mineCards.length > 0 && theirCards.length > 0 && JSON.stringify(mineCards.map(cardKey)) !== JSON.stringify(theirCards.map(cardKey)) ? 1 : 0;
+      plan("snapshot", "Snapshot", "cards", mineCards.length, theirCards.length, order, (choice) => {
+        accountsData.snapshot = normalizeSnapshot({ cards: countCards(choice).items.slice(0, MAX_SNAPSHOT_CARDS) });
       });
     }
   }
@@ -4565,6 +4850,18 @@ function backupPlans(backup) {
     const count = (choice) => mergeKeyed(keyed(mine, sheet => sheet.id), keyed(backup.sheets, sheet => sheet.id), choice);
     plan("sheets", "Connected Spreadsheets And Calendars", "spreadsheets and calendars", mine.length, backup.sheets.length, count(null).clashes, (choice) => {
       sheetsData.list = count(choice).items.slice(0, MAX_SHEETS);
+    });
+  }
+
+  // Linked Calendar Fractals (one reading the same calendar, its link or its connected calendar, is the same one)
+  if (backup.linked && backup.linked.length > 0) {
+    const mine = sheetsData.linked || [];
+    const linkKey = (item) => (item.connection ? `connection|${item.connection}` : `link|${item.link}`);
+    const count = (choice) => mergeKeyed(keyed(mine, linkKey), keyed(backup.linked, linkKey), choice);
+    plan("linked", "Linked Calendar Fractals", "linked calendars", mine.length, backup.linked.length, count(null).clashes, (choice) => {
+      const linked = normalizeLinkedFractals(count(choice).items);
+      if (linked.length > 0) sheetsData.linked = linked;
+      else delete sheetsData.linked;
     });
   }
 
@@ -4743,14 +5040,78 @@ const MAX_SHEETS = 10; // Spreadsheets and calendars, together
 const MAX_SHEET_NAME = 60;
 const MAX_KEPT_PAYCHECKS = 120;
 
-// The stored connected spreadsheets, checked and tidied: { version, list }
+// The stored connected spreadsheets, checked and tidied: { version, list, linked (only when there are any, see LINKED
+// CALENDAR FRACTALS) }
 function normalizeApiSheets(rawData) {
   let parsed = rawData;
   if (typeof parsed === "string") {
     try { parsed = JSON.parse(parsed); } catch (e) { parsed = null; }
   }
   const list = parsed && Array.isArray(parsed.list) ? parsed.list : [];
-  return { version: SHEETS_VERSION, list: list.filter(item => item && typeof item === "object" && typeof item.id === "string" && item.id).map(normalizeSheetConnection) };
+  const linked = parsed && Array.isArray(parsed.linked) ? normalizeLinkedFractals(parsed.linked) : [];
+  return { version: SHEETS_VERSION, list: list.filter(item => item && typeof item === "object" && typeof item.id === "string" && item.id).map(normalizeSheetConnection), ...(linked.length > 0 ? { linked } : {}) };
+}
+
+/* ---------- Linked Calendar Fractals ---------- */
+// A linked Calendar Fractal shows a calendar from somewhere else (its subscription link, or one of the connected calendars)
+// on Home's calendar, in its own name and color, and its entries can't be changed here: they come from that calendar
+// (Fractals.js reads and draws them). They're kept with the budget beside the connected calendars, as sheetsData.linked:
+// [{ id, name, color ("#rrggbb"), link (its own subscription link; "" for a connected calendar's), connection (a connected
+// calendar's id; "" for its own link) }], logged as "🔗 Linked Calendar".
+const MAX_LINKED = 10;
+const MAX_LINKED_NAME = 30;
+
+// Kept linked fractals, checked
+function normalizeLinkedFractals(list) {
+  const seen = new Set();
+  return list.filter(item => item && typeof item === "object" && /^[a-z0-9]{4,16}$/.test(String(item.id ?? "")) && !seen.has(item.id) && seen.add(item.id))
+    .slice(0, MAX_LINKED)
+    .map(item => ({
+      id: item.id,
+      name: String(item.name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_LINKED_NAME) || "Linked Calendar",
+      color: /^#[0-9a-f]{6}$/i.test(String(item.color ?? "")) ? String(item.color).toLowerCase() : "#8a8fa8",
+      link: String(item.connection ?? "") ? "" : String(item.link ?? "").trim().slice(0, 2000),
+      connection: String(item.connection ?? "").slice(0, 40)
+    }))
+    .filter(item => item.link || item.connection);
+}
+
+// A new linked fractal (id null) or a change to one: fields { name, color, link, connection } (a link, or a connected
+// calendar's id). Fractals.js reads the calendar once before it's saved, so it's known to open.
+function saveLinkedFractal(fields, id = null) {
+  return runBudgetAction("🔗 Linked Calendar", () => {
+    const linked = sheetsData.linked || [];
+    const old = id ? linked.find(item => item.id === id) : null;
+    if (id && !old) throw new BudgetInputError("That linked calendar couldn't be found. Please try again.");
+    if (!id && linked.length >= MAX_LINKED) throw new BudgetInputError(`You can link up to ${MAX_LINKED} calendars. Unlink one first.`);
+    const name = String(fields.name ?? "").replace(/\s+/g, " ").trim();
+    if (!name) throw new BudgetInputError("Give the calendar fractal a name.");
+    if (name.length > MAX_LINKED_NAME) throw new BudgetInputError(`Names can be up to ${MAX_LINKED_NAME} characters.`);
+    const connection = String(fields.connection ?? "");
+    if (connection && !sheetsData.list.some(item => item.id === connection && item.kind === "calendar")) throw new BudgetInputError("That connected calendar isn't there anymore. Pick another.");
+    const link = connection ? "" : String(fields.link ?? "").trim();
+    if (!connection && !link) throw new BudgetInputError("Paste the calendar's subscription link, or pick a connected calendar.");
+    const [item] = normalizeLinkedFractals([{ id: old ? old.id : newPresetId(), name, color: fields.color, link, connection }]);
+    if (!item) throw new BudgetInputError("That calendar couldn't be linked. Please check its link.");
+    sheetsData.linked = old ? linked.map(other => (other === old ? item : other)) : [...linked, item];
+    formEntryRow[3] = `${old ? "Changed" : "Linked"}: ${item.name}`;
+    formEntryRow[4] = connection ? `Connected calendar: ${sheetConnectionById(connection)?.name || ""}` : "From its own link";
+    return {};
+  });
+}
+
+// Unlink one (its calendar, and a connected calendar it showed, stay as they are)
+function deleteLinkedFractal(id) {
+  return runBudgetAction("🔗 Linked Calendar", () => {
+    const linked = sheetsData.linked || [];
+    const item = linked.find(other => other.id === id);
+    if (!item) throw new BudgetInputError("That linked calendar couldn't be found. Please try again.");
+    const rest = linked.filter(other => other !== item);
+    if (rest.length > 0) sheetsData.linked = rest;
+    else delete sheetsData.linked;
+    formEntryRow[3] = `Unlinked: ${item.name}`;
+    return {};
+  });
 }
 
 // One connection, with only what it should have (and always in the same order, so comparing copies works). A
@@ -4877,12 +5238,18 @@ function switchSheet(id, on) {
   return {};
 }
 
-// Delete a connection (releaseSheetTemps then lets go of its temps from today on)
+// Delete a connection (releaseSheetTemps then lets go of its temps from today on). A linked Calendar Fractal showing it
+// goes with it.
 function removeSheet(id) {
   const connection = sheetConnectionById(id);
   if (!connection) throw new BudgetInputError("That couldn't be found. Please try again.");
   const noun = connectionNoun(connection);
   sheetsData.list = sheetsData.list.filter(item => item !== connection);
+  if (sheetsData.linked) {
+    const rest = sheetsData.linked.filter(item => item.connection !== connection.id);
+    if (rest.length > 0) sheetsData.linked = rest;
+    else delete sheetsData.linked;
+  }
   formEntryRow[2] = `➕ Delete ${noun}`;
   formEntryRow[3] = `${noun}: ` + connection.name;
   return {};
@@ -5745,7 +6112,7 @@ function dayMath(lines) {
 }
 
 // In Bank on each of the 28 days after the calendar, as getPredictionData works it out: [[Date, amount], ...] (for the
-// Quick Entry page, see inBankAhead)
+// Quick Budget page, see inBankAhead)
 let predictedInBank = [];
 
 // The 28 days after the calendar: lowest balance (and when) and the balance on day 28, with recurring entries,
@@ -6229,27 +6596,49 @@ function calculator(values) {
   return { paycheck };
 }
 
-/* ---------- Crystals, Gems, and the Debt Calculator's boxes ---------- */
+/* ---------- Crystals, Gems, and the Accrual Calculator's boxes ---------- */
 // The calculators keep a few more things in the calculator table, each a row of [label, JSON]: the Paycheck Calculator's
-// crystals (row 21) and the Debt Calculator's gems (row 23), presets of their boxes like Quick Entry's prisms (each { name
-// ("" for none), values: { box: what it keeps } }, only the boxes that were filled in), and the Debt Calculator's boxes
-// as they were last left (row 22: { box: value }), which start it the next time.
-const CALCULATOR_STORES = { crystals: [21, "Crystals"], debt: [22, "Debt Calculator"], gems: [23, "Gems"] };
+// crystals (row 21) and the Accrual Calculator's gems (row 23), presets of their boxes like Quick Budget's prisms (each { id,
+// name ("" for none), values: { box: what it keeps } }, only the boxes that were filled in), and the Accrual Calculator's
+// boxes as they were last left (row 22: { box: value }), which start it the next time. A preset's id stays with it through
+// changes, so a goal can follow a gem (see Gems and goals).
+const CALCULATOR_STORES = { crystals: [21, "Crystals"], debt: [22, "Accrual Calculator"], gems: [23, "Gems"] };
 const MAX_PRESETS = 30;
 const MAX_PRESET_NAME = 40;
+const PRESET_ID = /^[a-z0-9]{4,16}$/;
 
-// A store's contents (see CALCULATOR_STORES): crystals and gems as a list ([] for none), the Debt Calculator's boxes as
-// { box: value } (null before they were kept)
+// A store's contents (see CALCULATOR_STORES): crystals and gems as a list ([] for none), each with its id (one kept from
+// before ids were has one made from what it keeps, the same every time, until it's saved with it), the Accrual Calculator's
+// boxes as { box: value } (null before they were kept)
 function calculatorStore(name) {
   const [row] = CALCULATOR_STORES[name];
   let stored = null;
   try { stored = JSON.parse(String(calculatorData[row]?.[1] ?? "") || "null"); } catch (e) {}
   if (name === "debt") return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : null;
-  return Array.isArray(stored) ? stored.filter(preset => preset && typeof preset === "object" && preset.values && typeof preset.values === "object") : [];
+  if (!Array.isArray(stored)) return [];
+  return stored.filter(preset => preset && typeof preset === "object" && preset.values && typeof preset.values === "object")
+    .map((preset, at) => ({ ...preset, id: PRESET_ID.test(String(preset.id ?? "")) ? preset.id : `k${shortHash(JSON.stringify([at, preset.name, preset.values]))}` }));
 }
 
-// A preset's or the Debt Calculator's boxes, checked: each a number from 0 to MAX_AMOUNT or a short word (a pick, like an
-// Equity account's name or "monthly"), at most 20 of them
+// A short hash of some text, in letters and numbers (FNV-1a)
+function shortHash(text) {
+  let hash = 0x811c9dc5;
+  for (let at = 0; at < text.length; at++) {
+    hash ^= text.charCodeAt(at);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+// A new preset's id
+function newPresetId() {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map(byte => (byte % 36).toString(36)).join("") + Date.now().toString(36).slice(-4);
+}
+
+// A preset's or the Accrual Calculator's boxes, checked: each a number from 0 to MAX_AMOUNT or a short word (a pick, like
+// an Equity account's name or "monthly"), at most 20 of them
 function readCalculatorValues(values) {
   const kept = {};
   for (const [box, value] of Object.entries(values || {}).slice(0, 20)) {
@@ -6268,32 +6657,97 @@ function writeCalculatorStore(name, value) {
   calculatorData[row][1] = value === null ? "" : JSON.stringify(value);
 }
 
-// A calculator's presets, the whole list after an add, a move, or a delete (name: "crystals" or "gems"). Logged as "💎
-// Crystals" or "💠 Gems".
+// A calculator's presets, the whole list after an add, a change, a move, or a delete (name: "crystals" or "gems"). Each keeps
+// its id (a new one gets one). Goals following a gem take what it's for and its amount from it again (syncGemGoals). Logged
+// as "💎 Crystals" or "💠 Gems".
 function saveCalculatorPresets(name, list) {
   const label = CALCULATOR_STORES[name][1];
-  return runBudgetAction(name === "crystals" ? "💎 Crystals" : "💠 Gems", () => {
+  return runBudgetAction(name === "crystals" ? "💎 Crystals" : "💠 Gems", (before) => {
     if (!Array.isArray(list) || list.length > MAX_PRESETS) throw new BudgetInputError(`You can have up to ${MAX_PRESETS} ${label.toLowerCase()}. Delete one first.`);
-    const presets = list.map(preset => ({ name: String(preset?.name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_PRESET_NAME), values: readCalculatorValues(preset?.values) }));
+    const ids = new Set();
+    const presets = list.map(preset => {
+      let id = PRESET_ID.test(String(preset?.id ?? "")) ? preset.id : newPresetId();
+      if (ids.has(id)) id = newPresetId();
+      ids.add(id);
+      return { id, name: String(preset?.name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_PRESET_NAME), values: readCalculatorValues(preset?.values) };
+    });
     if (presets.some(preset => Object.keys(preset.values).length === 0)) throw new BudgetInputError("Fill in at least one box for it to keep.");
-    const before = calculatorStore(name).length;
+    const old = calculatorStore(name);
     writeCalculatorStore(name, presets);
+    if (name === "gems") syncGemGoals(presets, () => JSON.parse(before.calendar));
+    const changed = presets.find(preset => old.some(was => was.id === preset.id && (was.name !== preset.name || JSON.stringify(was.values) !== JSON.stringify(preset.values))));
     formEntryRow[3] = `${label}: ${presets.length}`;
-    formEntryRow[4] = presets.length > before ? `Added: ${presets.at(-1).name || "One without a name"}` : presets.length < before ? "Deleted one" : "New order";
+    formEntryRow[4] = presets.length > old.length ? `Added: ${presets.at(-1).name || "One without a name"}`
+      : presets.length < old.length ? "Deleted one"
+        : changed ? `Changed: ${changed.name || "One without a name"}` : "New order";
     return {};
   });
 }
 
-// The Debt Calculator's boxes as they were left (they start it the next time), only when they changed
+// The Accrual Calculator's boxes as they were left (they start it the next time), only when they changed
 function saveDebtFields(values) {
-  return runBudgetAction("🧮 Debt Calculator", () => {
+  return runBudgetAction("🧮 Accrual Calculator", () => {
     const kept = readCalculatorValues(values);
     writeCalculatorStore("debt", kept);
-    formEntryRow[3] = typeof kept.owed === "number" ? "Balance owed: " + formatMoney(kept.owed) : "";
-    formEntryRow[4] = typeof kept.payment === "number" ? "Payment: " + formatMoney(kept.payment) : "";
-    formEntryRow[5] = kept.account ? "Account: " + kept.account : "";
+    formEntryRow[3] = typeof kept.owed === "number" ? "Balance owed: " + formatMoney(kept.owed) : typeof kept.balance === "number" ? "Balance: " + formatMoney(kept.balance) : "";
+    formEntryRow[4] = typeof kept.payment === "number" ? (kept.kind === "saved" ? "Deposit: " : "Payment: ") + formatMoney(kept.payment) : "";
+    formEntryRow[5] = kept.inBank ? "In Bank" : kept.account ? "Account: " + kept.account : "";
     return {};
   });
+}
+
+/* ---------- Gems and goals ---------- */
+// A goal on Bob's page can follow one of the Accrual Calculator's gems (goal.gem: the gem's id). A gem that keeps an Equity
+// account (or In Bank) says what the goal is for, and its amount: $0.00 (paid off) for what's owed, or the gem's Goal
+// amount for what's saved (a saved gem without one leaves the goal's own). When the gem changes, so does the goal, and a
+// goal whose gem is deleted keeps what it has. A gem typed in by hand leaves what the goal is for and its amount to the
+// goal. Either way, Bob says when the gem's payments get the goal there (Bob Page.js gemPlanWords).
+
+// Is a gem for what's saved (a savings account, In Bank), not what's owed? (A gem from before the calculator did both
+// is for what's owed)
+function gemSaves(values) {
+  return values?.kind === "saved" || (!values?.kind && typeof values?.balance === "number");
+}
+
+// What a goal following a gem takes from it: { kind, account, amount (null: the goal keeps its own) }, or null for a gem
+// typed in by hand (or one whose account is gone)
+function gemGoalFields(gem) {
+  const values = gem?.values || {};
+  const amount = gemSaves(values) ? (typeof values.target === "number" ? values.target : null) : 0;
+  if (values.inBank) return { kind: "inBank", account: "", amount };
+  if (typeof values.account === "string" && values.account) {
+    const found = accountRows().find(known => known.clean === cleanString(values.account));
+    if (found) return { kind: "account", account: found.name, amount };
+  }
+  return null;
+}
+
+// Each goal following a gem takes what it's for and its amount from it again (gems: the list as saved), and one whose gem
+// is gone keeps what it has, without one. calendar(): the calendar with its In Bank lines, for a goal whose target changes
+// (how far along it is counts from what that holds now).
+function syncGemGoals(gems, calendar) {
+  for (const goal of accountsData.goals || []) {
+    if (!goal.gem) continue;
+    const gem = gems.find(item => item.id === goal.gem);
+    if (!gem) {
+      delete goal.gem;
+      continue;
+    }
+    const fields = gemGoalFields(gem);
+    if (!fields) continue;
+    const sameTarget = goal.kind === fields.kind && cleanString(goal.account) === cleanString(fields.account);
+    goal.kind = fields.kind;
+    goal.account = fields.account;
+    if (fields.amount !== null) {
+      goal.amount = fields.amount;
+      goal.percent = null;
+    }
+    if (!sameTarget) {
+      const start = goalBalance(goal, calendar());
+      if (Number.isFinite(start)) goal.start = Math.round(start * 100) / 100;
+      else delete goal.start;
+    }
+  }
 }
 
 /* ---------- Daily reminders (the spreadsheet's Google Calendar notification) ---------- */
@@ -6572,9 +7026,9 @@ function normalizeApiTable(rawData, shape) {
 //         missing. Balances come only from entries, so a version 2 store's typed-in balance in [1] isn't kept.
 //   equity: the spreadsheet's business-version (LLC) equity tables, { tabName: table }, kept as stored
 //           (the website doesn't change them). A store without a version is only these tables.
-//   coming: each account's changes after today, for the Quick Entry page (accountChangesAhead fills it in again;
+//   coming: each account's changes after today, for the Quick Budget page (accountChangesAhead fills it in again;
 //           it's kept as stored until then, so loading the budget alone doesn't count as a change)
-//   inBank: In Bank from today on, for the Quick Entry page (inBankAhead; kept as stored until then too)
+//   inBank: In Bank from today on, for the Quick Budget page (inBankAhead; kept as stored until then too)
 //   goals: Bob's Goals card (see Goals in BUDGET LOGIC), and bob: his page's settings (see normalizeBob)
 function normalizeApiAccounts(rawData) {
   let parsed = rawData;
@@ -6620,6 +7074,8 @@ function normalizeApiAccounts(rawData) {
   if (goals.length > 0) accounts.goals = goals; // (Goals, see goalEntry)
   const bob = isCurrent ? normalizeBob(parsed.bob, goals.length > 0) : null;
   if (bob) accounts.bob = bob; // (Bob's page, see normalizeBob)
+  const snapshot = isCurrent ? normalizeSnapshot(parsed.snapshot) : null;
+  if (snapshot) accounts.snapshot = snapshot; // (The Snapshot page's cards, see normalizeSnapshot)
   // (What holds In Bank steady on days before the last Catchup, see IN BANK AND THE LAST CATCHUP)
   if (isCurrent && parsed.bankHolds && typeof parsed.bankHolds === "object" && !Array.isArray(parsed.bankHolds)) {
     const holds = Object.entries(parsed.bankHolds).filter(([day, amount]) => /^\d{2}\/\d{2}\/\d{4}$/.test(day) && Number.isFinite(amount) && amount !== 0);
@@ -7408,9 +7864,10 @@ window.updateGridCell = async function(gridName, row, col, textValue) {
 // here; History draws its table later (and again after a change), so Budget Pages.js wires each one it draws.
 
 // 1. TOUCH: TWO-FINGER PINCH ON A DAY, AND SWIPING BETWEEN ZOOMED DAYS
-// Two fingers on one day pinch, stretch, turn, and move just that day, which settles back when they let go. Two
-// fingers that start on different days (or off the days), or on a zoomed day, zoom the page itself, like anywhere else
-// on it (a zoomed day is part of the page, so it zooms with it).
+// Two fingers on one day pinch, stretch, turn, and move just that day, which settles back when they let go. On a
+// phone's zoomed day, two fingers coming together shrink it the same way (PINCHING THE ZOOMED DAY, below). Two fingers
+// that start on different days (or off the days), or that move apart on a zoomed day, zoom the page itself, like
+// anywhere else on it (a zoomed day is part of the page, so it zooms with it).
 
 let isTransforming = false;
 let targetEl = null;
@@ -7430,6 +7887,17 @@ const DAY_DRAG_STRETCH = 0.3;
 const DAY_SETTLE_MS = 220;
 let daySwipe = null; // { cell, x, y, atLeft, atRight, dragging, base, offset } for the finger on a zoomed day
 
+// PINCHING THE ZOOMED DAY: two fingers on a phone's zoomed day (or beside it: its layout covers the screen) that start
+// by coming together shrink it with them, moving and turning it too, the way a day that isn't zoomed follows them, and
+// the page behind brightens as it shrinks. Let go while it's still at least DAY_PINCH_CLOSE of its size (a little
+// pinch, to see more of it and of the calendar behind it) and it grows back. Smaller than that, the page brightens
+// more, and letting go closes the day (it shrinks on back into its spot). Fingers that start by moving apart zoom the
+// page instead (the browser's own zoom), and so does any pinch on a page that's zoomed in.
+const DAY_PINCH_CLOSE = 0.6;
+const DAY_PINCH_STRETCH = 0.3; // Moving apart again after coming together, the day grows only this share as much
+const DAY_PINCH_SETTLE_MS = 260;
+let dayPinch = null; // { cell, ids, dist, angle, x, y, cx, cy, base, shrinking (null until the fingers first move), scale }
+
 const wiredTables = new WeakSet();
 
 // Pinching a day, swiping a zoomed one, and tapping a day to zoom it, on this table (once)
@@ -7439,6 +7907,7 @@ function wireElasticTable(table) {
 
   table.addEventListener('touchstart', (e) => {
     noteDaySwipe(e);
+    noteDayPinch(e);
     if (e.touches.length !== 2) return;
     const t1 = e.touches[0];
     const t2 = e.touches[1];
@@ -7459,7 +7928,7 @@ function wireElasticTable(table) {
   }, { passive: false });
 
   table.addEventListener('touchmove', (e) => {
-    if (followDaySwipe(e) || !isTransforming || e.touches.length !== 2) return;
+    if (followDaySwipe(e) || followDayPinch(e) || !isTransforming || e.touches.length !== 2) return;
     e.preventDefault();
     const t1 = e.touches[0];
     const t2 = e.touches[1];
@@ -7471,11 +7940,13 @@ function wireElasticTable(table) {
 
   table.addEventListener('touchend', (e) => {
     endTransform(e);
+    finishDayPinch(e);
     finishDaySwipe(e);
   });
   table.addEventListener('touchcancel', (e) => {
     if (daySwipe?.dragging) settleDraggedDay(daySwipe);
     daySwipe = null;
+    finishDayPinch(e, true);
     endTransform(e);
   });
   table.addEventListener('click', zoomTappedDay);
@@ -7568,6 +8039,107 @@ function finishDaySwipe(e) {
   }
   if (slides && swipe.cell === activeEditCell && nextZoomableDay(swipe.cell, step, true)) slideToDay(step, swipe.offset);
   else settleDraggedDay(swipe);
+}
+
+// A touch from a list of them by its identifier, or null
+function touchById(touches, id) {
+  for (let i = 0; i < touches.length; i++) {
+    if (touches[i].identifier === id) return touches[i];
+  }
+  return null;
+}
+
+// Two fingers down on a phone's zoomed day (see PINCHING THE ZOOMED DAY): which, how far apart, at what angle, and
+// where between them. Whose pinch it is waits for their first move (followDayPinch).
+function noteDayPinch(e) {
+  if (dayPinch) {
+    // A third finger changes nothing while both of its fingers are down. (When they aren't, their lifting never got
+    // here, like a finger on a line the page drew again since: the day grows back now.)
+    if (touchById(e.touches, dayPinch.ids[0]) && touchById(e.touches, dayPinch.ids[1])) return;
+    finishDayPinch(e, true);
+  }
+  const cell = activeEditCell;
+  if (e.touches.length !== 2 || !cell || !cell.classList.contains('is-fullZoom') || cell.classList.contains('isZoomClosing') || pageZoomedIn()) return;
+  const t1 = e.touches[0];
+  const t2 = e.touches[1];
+  if (t1.target.closest?.('td') !== cell || t2.target.closest?.('td') !== cell) return;
+  const center = getCenter(t1, t2);
+  dayPinch = { cell, ids: [t1.identifier, t2.identifier], dist: Math.max(getDistance(t1, t2), 1), angle: getAngle(t1, t2), x: center.x, y: center.y, cx: 0, cy: 0, base: '', shrinking: null, scale: 1 };
+}
+
+// The zoomed day's transform while it's pinched: moved (x, y), turned, and scaled around where the fingers started
+const pinchedDay = (pinch, x, y, turn, scale) => `${pinch.base} translate(${x}px, ${y}px) translate(${pinch.cx}px, ${pinch.cy}px) rotate(${turn}deg) scale(${scale}) translate(${-pinch.cx}px, ${-pinch.cy}px)`;
+
+// How much of the page's dimming stays behind a pinched day: less as it shrinks, and much less once letting go
+// would close it
+const pinchedBackdrop = (scale) => (scale < DAY_PINCH_CLOSE ? 0.25 : 0.55 + 0.45 * Math.min(1, (scale - DAY_PINCH_CLOSE) / (1 - DAY_PINCH_CLOSE)));
+
+// The two fingers moving. Their first move says whose pinch it is: coming together (or no farther apart), the day's;
+// apart, the page's (the browser zooms it). From then on the day follows them. Says whether the move was the day's.
+function followDayPinch(e) {
+  const pinch = dayPinch;
+  if (!pinch) return false;
+  const t1 = touchById(e.touches, pinch.ids[0]);
+  const t2 = touchById(e.touches, pinch.ids[1]);
+  if (pinch.shrinking === null) {
+    // (A move the browser won't let the page stop is the page's too: it was already scrolling)
+    if (!t1 || !t2 || pinch.cell !== activeEditCell || !e.cancelable || getDistance(t1, t2) > pinch.dist + 2) {
+      dayPinch = null;
+      return false;
+    }
+    startDayPinch(pinch);
+  }
+  if (e.cancelable) e.preventDefault();
+  if (!t1 || !t2 || pinch.cell !== activeEditCell) return true; // (Nothing to follow until it ends)
+  let scale = Math.max(getDistance(t1, t2) / pinch.dist, 0.05);
+  if (scale > 1) scale = 1 + (scale - 1) * DAY_PINCH_STRETCH;
+  pinch.scale = scale;
+  // (Turned the short way, so growing back turns it back the short way too)
+  const turn = ((getAngle(t1, t2) - pinch.angle + 540) % 360) - 180;
+  const center = getCenter(t1, t2);
+  pinch.cell.style.transform = pinchedDay(pinch, center.x - pinch.x, center.y - pinch.y, turn, scale);
+  if (zoomBackdrop) zoomBackdrop.style.opacity = String(pinchedBackdrop(scale));
+  return true;
+}
+
+// The day's pinch begins: the day stops any growing in, sliding in, or growing back it was still doing, and the
+// fingers' starting point is measured from its top left corner (which its transform turns around, see fitZoomedDay)
+function startDayPinch(pinch) {
+  const cell = pinch.cell;
+  for (const animation of cell.getAnimations ? cell.getAnimations() : []) {
+    if (!animation.animationName && !animation.transitionProperty) animation.finish();
+  }
+  pinch.shrinking = true;
+  pinch.base = /^\s*none\s*$/.test(cell.style.transform) ? '' : cell.style.transform;
+  const box = cell.getBoundingClientRect();
+  pinch.cx = pinch.x - box.left;
+  pinch.cy = pinch.y - box.top;
+  cell.style.willChange = 'transform';
+}
+
+// A finger lifted (or the browser took the touch away: cancelled, which never closes it). Pinched smaller than
+// DAY_PINCH_CLOSE, the day closes; otherwise it grows back to its zoomed size, and the page dims again.
+function finishDayPinch(e, cancelled = false) {
+  const pinch = dayPinch;
+  if (!pinch) return;
+  if (!cancelled && touchById(e.touches, pinch.ids[0]) && touchById(e.touches, pinch.ids[1])) return; // (Both still down)
+  dayPinch = null;
+  if (!pinch.shrinking) return;
+  const cell = pinch.cell;
+  cell.style.removeProperty('will-change');
+  const dim = zoomBackdrop ? zoomBackdrop.style.opacity : '';
+  if (zoomBackdrop) zoomBackdrop.style.removeProperty('opacity');
+  if (cell !== activeEditCell) return; // (Closed some other way meanwhile)
+  if (!cancelled && pinch.scale < DAY_PINCH_CLOSE) {
+    closeZoomedDay();
+    return;
+  }
+  const pinched = cell.style.transform;
+  cell.style.transform = pinch.base;
+  if (!cell.animate || reducedMotion()) return;
+  const settle = { duration: DAY_PINCH_SETTLE_MS, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' };
+  cell.animate([{ transform: pinched }, { transform: pinchedDay(pinch, 0, 0, 0, 1) }], settle);
+  if (zoomBackdrop && dim) zoomBackdrop.animate([{ opacity: dim }, { opacity: 1 }], settle);
 }
 
 // 2. CLICK TO EDIT (PERSISTENT ZOOM)
@@ -7678,8 +8250,6 @@ function zoomDay(cell, animate = true) {
   // Its calendar entries' times go in before it's measured (Fractals.js)
   if (window.Fractals) window.Fractals.dayZoomed(cell);
   updateDayAccess(cell);
-  // (It's read out, and the Tab key goes on to its entries; a day drawn again under an open window leaves the focus there)
-  if (animate && !document.querySelector('.budgetPanel')) cell.querySelector('.cell-content')?.focus({ preventScroll: true });
   if (!zoomBackdrop) {
     // In the page's own layer, just under the zoomed day (a backdrop in <body> would cover the day too)
     zoomBackdrop = document.createElement('div');
@@ -7690,10 +8260,14 @@ function zoomDay(cell, animate = true) {
   document.documentElement.classList.add('dayZoomed');
   if (!fullZoomQuery.matches) {
     keepDoubledDayOnScreen(cell, place);
-    return;
+  } else {
+    cell.classList.add('is-fullZoom');
+    fitZoomedDay(animate);
   }
-  cell.classList.add('is-fullZoom');
-  fitZoomedDay(animate);
+  // (It's read out, and the Tab key goes on to its entries; a day drawn again under an open window leaves the focus there.
+  // Last, once it's laid out at its new size: focusing it sooner made the browser lay it out once more, in between, which
+  // a slow phone felt.)
+  if (animate && !document.querySelector('.budgetPanel')) cell.querySelector('.cell-content')?.focus({ preventScroll: true });
 }
 
 // immediate: no shrinking back into the day (leaving the page)
@@ -8533,14 +9107,14 @@ function historySpot(date, history = historyData) {
 // Home's Undo. What's worked out from those (In Bank, balances, the tracker's sums) is worked out again, like after any
 // change. The Undo is a change of its own, logged with what it did, so it can be undone too (that's a Redo, and the
 // change it undid can be undone again). A change too big to keep (like Upload A Backup, or an account rename across years
-// of History) has no Undo, and neither do a Search, the Debt Calculator's boxes being kept (saveDebtFields), and what
+// of History) has no Undo, and neither do a Search, the Accrual Calculator's boxes being kept (saveDebtFields, "🧮 Debt Calculator" in older rows), and what
 // reading the connected spreadsheets and calendars again finds (the next read would only bring it back). The records are
 // measured as they're saved (the Change Logs table has to stay under MAX_TABLE_BYTES), so the newest rows keep theirs.
 
 const LOG_UNDO_COLUMN = 8;          // A Change Logs row's [8]: what its change did (see changeRecord)
 const MAX_LOG_UNDO_BYTES = 60000;   // One change's record, at most, as it's saved
 const MAX_LOG_UNDO_TOTAL = 800000;  // Every row's together, as they're saved: the oldest rows' Undo goes first past this
-const NO_LOG_UNDO = ["🔎 Search", "📥 Upload Backup", "🧮 Debt Calculator", "➕ Spreadsheet Update", "➕ Calendar Update"];
+const NO_LOG_UNDO = ["🔎 Search", "📥 Upload Backup", "🧮 Accrual Calculator", "🧮 Debt Calculator", "➕ Spreadsheet Update", "➕ Calendar Update"];
 
 // A row table's rows as a change compares them: what's the person's own in each (the rest is worked out every time; a
 // tracker section is its title)
@@ -8558,6 +9132,7 @@ const RECORD_ROWS = {
 const RECORD_VALUES = {
   goals: [() => accountsData.goals ?? null, (value) => { if (value) accountsData.goals = value; else delete accountsData.goals; }],
   bob: [() => accountsData.bob ?? null, (value) => { if (value) accountsData.bob = value; else delete accountsData.bob; }],
+  snapshot: [() => accountsData.snapshot ?? null, (value) => { if (value) accountsData.snapshot = value; else delete accountsData.snapshot; }],
   equity: [() => accountsData.equity ?? null, (value) => { accountsData.equity = value || {}; }],
   sheets: [() => sheetsData, (value) => { sheetsData = value; }],
   calculator: [() => calculatorData, (value) => { calculatorData = value; }]
@@ -8657,6 +9232,7 @@ function changeRecord(snapshot, changedTables, undid = null) {
   const valueBefore = {
     goals: () => accountsBefore.goals ?? null,
     bob: () => accountsBefore.bob ?? null,
+    snapshot: () => accountsBefore.snapshot ?? null,
     equity: () => accountsBefore.equity ?? null,
     sheets: () => JSON.parse(snapshot.sheets),
     calculator: () => JSON.parse(snapshot.calculator)
@@ -8758,7 +9334,7 @@ function staleRecordPart(record) {
       counts.set(key, counts.get(key) - 1);
     }
   }
-  const parts = { goals: "your Goals", bob: "Bob's page", equity: "your Equity accounts", sheets: "your connected spreadsheets and calendars", calculator: "the calculators" };
+  const parts = { goals: "your Goals", bob: "Bob's page", snapshot: "your Snapshot page", equity: "your Equity accounts", sheets: "your connected spreadsheets and calendars", calculator: "the calculators" };
   for (const value of record.values) {
     if (JSON.stringify(RECORD_VALUES[value.part][0]()) !== JSON.stringify(value.after)) return parts[value.part];
   }
@@ -8878,8 +9454,31 @@ let liveLoadOwed = false;  // A load picked this device's quick entries up but w
 // Is the page in the middle of something the budget loading again would change under it?
 function liveUpdateWaits() {
   const active = document.activeElement;
-  const typing = !!active?.closest?.("#dataView") && active.matches("input, textarea, select");
-  return typing || !!document.querySelector(".budgetPanel:not(.isClosing), .dataTable.isEditing, .dataTable.isDragging, form[data-typing]");
+  // (A box on a page's cards: Bob's, the Snapshot page's, or a menu data page's)
+  const typing = !!active?.closest?.("#dataView, #snapshotView") && active.matches("input, textarea, select");
+  return typing || !!document.querySelector(".budgetPanel:not(.isClosing), .dataTable.isEditing, .dataTable.isDragging, form[data-typing], .snapshotGrid.isEditing");
+}
+
+// A newer version of the site went live while this page was open: the page loads again (when nothing here is unsaved,
+// open, or being typed in, like any live update), so it never saves the budget with an older version's code, which would
+// leave out whatever the newer version keeps that it doesn't know about. Checked every VERSION_CHECK_MS while the page
+// is on the screen, and again as it comes back into view (Boot.js is never cached, so it's always the live one).
+const VERSION_CHECK_MS = 10 * 60 * 1000;
+let versionCheckedAt = Date.now();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") versionCheckedAt = 0;
+});
+
+// Does the site have a newer version than this page's? (No answer: no)
+async function newerSiteVersion() {
+  try {
+    const response = await fetch("/Javascript/Boot.js", { cache: "no-store" });
+    if (!response.ok) return false;
+    const live = (await response.text()).match(/const SITE_VERSION = "([^"]+)"/);
+    return !!live && !!window.SITE_VERSION && live[1] !== window.SITE_VERSION;
+  } catch (e) {
+    return false;
+  }
 }
 
 // One check: the budget's revision (and its waiting quick entries) on the server, and the budget again when they changed
@@ -8895,6 +9494,15 @@ async function liveCheck() {
   if (savingNow || hasUnsavedChanges() || liveUpdateWaits() || navigator.onLine === false) return;
   liveChecking = true;
   try {
+    if (Date.now() - versionCheckedAt > VERSION_CHECK_MS) {
+      versionCheckedAt = Date.now();
+      if (await newerSiteVersion() && !savingNow && !hasUnsavedChanges() && !liveUpdateWaits()) {
+        reloadingBudget = true;
+        workspaceLoaded = false;
+        window.location.reload();
+        return;
+      }
+    }
     const known = dataRevision;
     const result = await budgetApi("/api/data/revision");
     if (!result.ok || !result.data || !Number.isInteger(result.data.revision)) return;
@@ -8971,7 +9579,7 @@ function loadInPlace() {
   return run.then(async (queue) => {
     if (!queue) return;
     await holdQuickEntries(queue);
-    notifyBudgetChanged(); // (Home's Quick Entries To Add)
+    notifyBudgetChanged(); // (Home's Quick Budget Entries To Add)
   }).catch(err => console.error("The budget couldn't be loaded again here:", err));
 }
 
@@ -8998,7 +9606,7 @@ if (window.PAGE !== "quick") {
 
 // Load (and daily-update) the workspace. Page scripts wait on this before rendering:
 //   window.workspaceReady.then(loaded => { if (loaded) render(); });
-// The Quick Entry and Quick Calendar pages only borrow the helpers here: they have no login, so they never load a
+// The Quick Budget and Quick Calendar pages only borrow the helpers here: they have no login, so they never load a
 // budget.
 window.workspaceReady = window.PAGE === "quick" || window.PAGE === "quickcal" ? Promise.resolve(false) : loadWorkspace();
 window.workspaceReady.then(loaded => { if (loaded) showRememberedBudgetNotice(); });
