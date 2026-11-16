@@ -192,10 +192,7 @@ document.addEventListener("budget:updated", () => {
 // #region THE PAGE
 // =====================================================================
 
-// The page, top to bottom: Bob's highlights; Bob's Cards, a row for each of his cards (what it says, or Off), each opening
-// the card in a window with its switches; then what he works from, as cards that fold open and shut: the Spectrum Graph
-// and Data's groups (DATA_GROUPS). Made once: titles, help, switches, and boxes stay while the page is open (so a box being
-// typed in or a switch just tapped stays put), and what they show is drawn again with every change.
+// Bob's Cards' help, and what the page keeps of its rows and folding cards
 const CARDS_HELP = "Each of Bob's cards, with what it says right now. Tap one to open it: its switch turns it on or off (off, it works nothing out), Warnings lets it speak up on Home, and its ? says what it's for.";
 const OPEN_KEY = "prismal_bob_open"; // The folding cards open in this browser (In Bank And Equity, to start)
 let cardRows = new Map();  // Each of Bob's cards' row in Bob's Cards, by its id: { row, note, value }
@@ -203,6 +200,10 @@ let folds = new Map();     // The folding cards, by id: { el, body, summary, tog
 let spectrumCard = null;   // The Spectrum Graph, drawn like his cards (see buildCard), in its folding card
 let dataHighlight = null;  // Data's highlight, for the top card
 
+// The page, top to bottom: Bob's highlights; Bob's Cards, a row for each of his cards (what it says, or Off), each opening
+// the card in a window with its switches; then what he works from, as cards that fold open and shut: the Spectrum Graph
+// and Data's groups (DATA_GROUPS). Made once: titles, help, switches, and boxes stay while the page is open (so a box being
+// typed in or a switch just tapped stays put), and what they show is drawn again with every change.
 function buildPage() {
   const top = document.getElementById("bobTop");
   const { head, help } = cardHead("Bob's Highlights", TOP_HELP, "bobTop");

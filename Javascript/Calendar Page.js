@@ -844,8 +844,11 @@ function renderAfterCalendar() {
     el.textContent = after ? formatMoney(after.amount) : "--";
     el.classList.toggle("negative", !!after && after.amount < 0);
   };
-  // (Its day from the worked-out days, since a look ahead of months can reach the same day of next year)
-  const lowDay = found.lowest ? predictedInBank.find(([day]) => formatToMMDD(day) === found.lowest.date) : null;
+  // (Its day from the worked-out days, since a look ahead of months can reach the same day of next year: the first one
+  // with its date and amount, the way the lowest is picked)
+  const lowDay = found.lowest
+    ? predictedInBank.find(([day, amount]) => formatToMMDD(day) === found.lowest.date && Math.abs(amount - found.lowest.amount) < 0.005)
+    : null;
   document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${lowDay ? showDay(lowDay[0]) : showStoredDate(found.lowest.date)}` : "Lowest is on --";
   show("afterLowest", found.lowest);
   show("afterLastAmount", found.last);

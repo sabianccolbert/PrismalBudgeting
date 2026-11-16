@@ -761,7 +761,7 @@ function applyCellBudgetMath(cellText, lastInBank, hold = 0) {
   return { text: finalLines.join("\n"), inBank: inBank };
 }
 
-// History format: MM/DD/YYYY header, In Bank line, entries (no gains, costs, or next 28 lines)
+// History format: MM/DD/YYYY header, In Bank line, entries (no Gains, Costs, or the lines about the days after the calendar)
 function formatHistoryCell(cellText, cellDate) {
   let lines = String(cellText).split("\n");
   let kept = [formatToMMDDYYYY(cellDate)];
@@ -6163,7 +6163,7 @@ function lookAhead() {
 
 // A stored look ahead, checked: { count, unit }, or null when it isn't one
 function normalizeLookAhead(value) {
-  if (!value || typeof value !== "object" || !Object.hasOwn(LOOK_AHEAD_MOST, value.unit)) return null;
+  if (!value || typeof value !== "object" || !Object.prototype.hasOwnProperty.call(LOOK_AHEAD_MOST, value.unit)) return null;
   const count = Number(value.count);
   if (!Number.isInteger(count) || count < 1 || count > LOOK_AHEAD_MOST[value.unit]) return null;
   return { count, unit: value.unit };
@@ -7059,7 +7059,8 @@ async function budgetApi(endpoint, payload) {
 // (the server would refuse it), and the login page says why. It slides right, like any sign-out.
 let signingOut = false;
 function signedOutElsewhere() {
-  if (signingOut || window.PAGE === "quick" || window.PAGE === "quickcal") return;
+  // (A Snapshot icon's page has no session of its own: whatever login this browser holds is left alone)
+  if (signingOut || window.PAGE === "quick" || window.PAGE === "quickcal" || SNAPSHOT_KEY) return;
   signingOut = true;
   workspaceLoaded = false;
   if (typeof clearSignedInData === "function") clearSignedInData();

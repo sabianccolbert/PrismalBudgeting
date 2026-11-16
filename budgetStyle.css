@@ -50,7 +50,7 @@
   flex-direction: column; /* One element per line (date, system lines, entries) */
   align-items: flex-start;
   justify-content: flex-start;
-  /* No will-change here: it kept a graphics layer for each of the 28 days at all times, and phones (Safari
+  /* No will-change here: it kept a graphics layer for each of the calendar's days at all times, and phones (Safari
      especially) ran out of room for them, leaving parts of days unpainted until the calendar was touched.
      A zoom gets its layer while it runs. */
   transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -630,7 +630,7 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 }
 
 /* The guest row (Process Budget.js ONE DAY AFTER ANOTHER): seven days laid over a row of the page's days, for a day
-   the four weeks showing don't have (one a zoomed day was swiped on to). Only the one that's zoomed (or shrinking back)
+   the five weeks showing don't have (one a zoomed day was swiped on to). Only the one that's zoomed (or shrinking back)
    shows, or can be tapped. */
 .elastic-table.guestDays {
   position: absolute;
@@ -810,6 +810,11 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 .lineWeekday {
   font-weight: normal;
   color: var(--TEXT_DIM);
+}
+
+/* (On a day below $0, which turns red, the dim grey is too faint: it's as bright as the date) */
+.elastic-table td.isNegative .lineWeekday {
+  color: var(--TEXT_BRIGHT);
 }
 
 .lineWeekdayFull,
@@ -6856,6 +6861,8 @@ html:not(.frontPage) .frontSignIn,
    page has no login: its note links to the site instead) */
 .controlsCard p.snapshotKeyNote {
   margin: 0;
+  font-size: clamp(12px, 2.4vmin, 16px);
+  line-height: 1.4;
 }
 
 html.snapshotKey .navButtons {

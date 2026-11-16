@@ -4,8 +4,8 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=31e535ffeb">
-    <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
+    <link rel="stylesheet" href="/budgetStyle.css?v=767dfdda9b">
+    <link rel="stylesheet" href="/themes.css?v=965ad2ed41">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -141,7 +141,7 @@
                 <p><strong>Saved in this browser only.</strong> Every other place you use Prismal Planning keeps a theme of its own, so pick this one again in each:</p>
                 <ul>
                   <li><strong>Other browsers</strong>, on this device or another (like Chrome as well as Safari).</li>
-                  <li><strong>Quick Budget and Quick Calendar icons</strong> already on a home screen. Each one is an app of its own, and keeps the theme it was added with: add it again from Home's Quick Budget or Quick Calendar button for this one.</li>
+                  <li><strong>Quick Budget, Quick Calendar, and Snapshot icons</strong> already on a home screen. Each one is an app of its own, and keeps the theme it was added with: add it again (Home's Quick Budget or Quick Calendar button, or Snapshot's Add To Home Screen) for this one.</li>
                   <li><strong>Prismal Planning added to a home screen</strong> as an app, which keeps its own as well (pick it in Settings there).</li>
                 </ul>
               </div>
@@ -252,7 +252,7 @@
               <section class="budgetCard settingsCard" aria-labelledby="passwordHeading">
                 <h3 id="passwordHeading">Password</h3>
                 <form id="passwordForm" class="settingsForm">
-                  <p class="panelHint">A new password signs out your other devices and turns off your Quick Budget icons. This device stays signed in.</p>
+                  <p class="panelHint">A new password signs out your other devices and turns off your Quick Budget, Quick Calendar, and Snapshot icons. This device stays signed in.</p>
                   <!-- Lets password managers save the new password for the right account -->
                   <input id="passwordFormUsername" type="text" autocomplete="username" readonly hidden>
                   <label class="settingsField">
@@ -368,8 +368,8 @@
               <h3 id="updatesHeading">Updates</h3>
               <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
               <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
-                <section class="updatesRelease" aria-labelledby="updateNext">
-                  <h4 id="updateNext">Coming Next (Being Tested)</h4>
+                <section class="updatesRelease" aria-labelledby="update20261115">
+                  <h4 id="update20261115">11.15.2026.A</h4>
                   <p class="updatesKind">Bigger changes</p>
                   <ul>
                     <li>Your budget is five weeks now, everywhere: Home's calendar, Lowest, Bob, reminders, and Quick Budget all count the same five weeks.</li>
@@ -382,7 +382,7 @@
                   <p class="updatesKind">Smaller changes</p>
                   <ul>
                     <li>Not Now, when Home asks about notifications, stops it asking on that device.</li>
-                    <li>Money going out shows as negative everywhere, Bob's graph of purchases added up included.</li>
+                    <li>Money going out shows below $0 in Bob's figures and graphs, like his purchases added up.</li>
                   </ul>
                 </section>
                 <section class="updatesRelease" aria-labelledby="update20261114">

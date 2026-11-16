@@ -675,7 +675,7 @@ html[data-theme="blue"] {
   --PANEL_DARK: rgba(10, 32, 70, 0.62);
   --PANEL_LINE: rgba(200, 225, 255, 0.18);
   --PANEL_BORDER: rgba(215, 235, 255, 0.4);
-  --NEGATIVE_TEXT: #ffb3bf;
+  --NEGATIVE_TEXT: #ffbcc8;
   --NEGATIVE_ON_RED: #ffc4cf;
   --POSITIVE_TEXT: #8ff0b4;
   --ZERO_TEXT: #9fb3d1;

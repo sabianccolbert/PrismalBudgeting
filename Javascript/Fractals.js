@@ -1637,8 +1637,9 @@ window.Fractals = (() => {
       const result = await change("link", { fractal: fractalId, on });
       if (!result.ok) toast(problem(result, "That didn't work. Please try again."), true);
     };
-    if (!link) buttons.append(button("Make A Link", "", () => turn(true), `Make a calendar link for ${label}`));
-    else buttons.append(button("New Link", "", () => turn(true), `Make a new calendar link for ${label}`), button("Turn Off", "danger", () => turn(false), `Turn off the calendar link for ${label}`));
+    // (Each name starts with the button's own words, so a screen reader and voice control both find it)
+    if (!link) buttons.append(button("Make A Link", "", () => turn(true), `Make A Link: a calendar link for ${label}`));
+    else buttons.append(button("New Link", "", () => turn(true), `New Link: a new calendar link for ${label}`), button("Turn Off", "danger", () => turn(false), `Turn Off the calendar link for ${label}`));
     item.append(about, buttons);
     if (link) item.append(linkBox(link, label));
     return item;

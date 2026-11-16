@@ -4,8 +4,8 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=31e535ffeb">
-    <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
+    <link rel="stylesheet" href="/budgetStyle.css?v=767dfdda9b">
+    <link rel="stylesheet" href="/themes.css?v=965ad2ed41">
     <title>Prismal Planning - Snapshot</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -115,7 +115,9 @@
 
         <p id="dataStatus" class="dataStatus">Loading...</p>
         <p id="snapshotStartNote" class="panelHint snapshotStartNote" hidden>These are the cards it starts with. Tap Edit to add your own, move them, or take them off.</p>
-        <!-- The cards (Javascript/Snapshot Page.js): side by side on a wide screen, one under another on a narrow one -->
+        <!-- The cards (Javascript/Snapshot Page.js): side by side on a wide screen, one under another on a narrow one. Their
+             titles are h3s, under this heading for screen readers. -->
+        <h2 class="srOnly">Your Cards</h2>
         <div id="snapshotView" class="snapshotGrid" aria-label="Your Snapshot cards"></div>
 
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
@@ -149,7 +151,7 @@
           <h4>Add To Home Screen</h4>
           <p><strong>Add To Home Screen</strong> puts this page on your phone's home screen (iPhone, Samsung, Pixel, OnePlus, and more), so your Snapshot is one tap away. It first says what a no-login icon means, then gives two ways:</p>
           <ul>
-            <li><strong>Make A No-Login Icon</strong> opens your Snapshot with no login, like Quick Budget's and Quick Calendar's icons. It shows this budget's cards and the numbers and graphs they come from, and can't change anything (it doesn't show your calendar's entries, Change Logs, or notes). Anyone holding the phone, or anyone its link reaches, can see your budget's numbers, so only make one on a phone you keep locked. Settings (Signed-In Devices) turns Snapshot icons off, and so do a new password and Sign Out Everywhere.</li>
+            <li><strong>Make A No-Login Icon</strong> opens your Snapshot with no login, like Quick Budget's and Quick Calendar's icons. It shows this budget's cards, can read everything they're worked out from (the budget's entries, recurring entries, Upcoming entries, History, tracker, Equity accounts, goals, and calculators), and can't change anything. It never reads your Change Logs, notes, Calendar Fractals, or the links of your connected spreadsheets and calendars. Anyone holding the phone, or anyone its link reaches, can see your budget's numbers, so only make one on a phone you keep locked. Settings (Signed-In Devices) turns Snapshot icons off, and so do a new password and Sign Out Everywhere.</li>
             <li><strong>Keep The Login</strong> shows how to put this page on your home screen as it is: it asks you to log in, and after logging in it opens your Snapshot again.</li>
           </ul>
         </section>

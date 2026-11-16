@@ -929,7 +929,7 @@ function renderAccount() {
   renderPasswordless();
 }
 
-// A new password: the other devices are signed out and Quick Budget icons stop; this one gets a new session
+// A new password: the other devices are signed out and Quick Budget, Quick Calendar, and Snapshot icons stop; this one gets a new session
 async function changePassword(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1133,8 +1133,8 @@ function renderPasswordless() {
   const passwordButton = document.querySelector("#passwordForm button[type=submit]");
   passwordButton.textContent = noPassword ? "Set Password" : "Change Password";
   document.querySelector("#passwordForm .panelHint").textContent = noPassword
-    ? "Your account doesn't have a password yet. Set one to sign in with your username or email too. It signs out your other devices and turns off your Quick Budget icons."
-    : "A new password signs out your other devices and turns off your Quick Budget icons. This device stays signed in.";
+    ? "Your account doesn't have a password yet. Set one to sign in with your username or email too. It signs out your other devices and turns off your Quick Budget, Quick Calendar, and Snapshot icons."
+    : "A new password signs out your other devices and turns off your Quick Budget, Quick Calendar, and Snapshot icons. This device stays signed in.";
 
   clearTimeout(confirmTimer);
   const card = document.getElementById("confirmYou");
@@ -1380,7 +1380,7 @@ function renderSnapshotIcons() {
     status.textContent = "Snapshot icons: none right now. Snapshot's Add To Home Screen can make one that opens with no login.";
     return;
   }
-  status.textContent = `Snapshot icons: ${count} on home screens. Each one shows a budget's Snapshot (its cards, and the numbers and graphs they come from) without signing in, to anyone who has it, and can't change anything.`;
+  status.textContent = `Snapshot icons: ${count} on home screens. Each one shows a budget's Snapshot, and what its cards are worked out from (its entries, History, accounts, and the rest), to anyone who has it, with no login. They can't change anything.`;
   buttons.append(settingsButton(count === 1 ? "Turn Off The Snapshot Icon" : "Turn Off Snapshot Icons", "danger", turnOffSnapshotIcons));
 }
 

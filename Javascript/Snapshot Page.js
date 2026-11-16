@@ -83,8 +83,8 @@
         const whose = budgetInfo?.name ? `${budgetInfo.name}'s` : "this budget's";
         form.append(
           text("Put an icon on your phone's home screen that opens this Snapshot, with no login needed."),
-          text(`It shows ${whose} Snapshot: your cards, and the In Bank, accounts, goals, and graphs they come from. It can't change anything, and it never sees your Change Logs, notes, or calendar.`),
-          text("Anyone holding the phone, or anyone its link reaches, can see your budget's numbers this way, so only make one on a phone you keep locked, and never send its link to anyone."),
+          text(`It shows ${whose} Snapshot, and it can read everything your cards are worked out from: the budget's entries, recurring entries, Upcoming entries, History, tracker, Equity accounts, goals, and calculators. It can't change anything, and it never reads your Change Logs, notes, Calendar Fractals, or the links of your connected spreadsheets and calendars.`),
+          text("Anyone holding the phone, or anyone its link reaches, can see your budget this way, so only make one on a phone you keep locked, and never send its link to anyone."),
           text("Settings turns Snapshot icons off whenever you like, and so do a new password and Sign Out Everywhere. Keep The Login puts this page on your home screen with your login instead."),
           BudgetUI.buttonRow([
             { label: "Make A No-Login Icon", kind: "primary", type: "submit" },
@@ -529,7 +529,8 @@
     view.replaceChildren(...parts);
     // (A card taken off is forgotten)
     for (const id of [...built.keys()]) if (!list.some(card => card.id === id)) built.delete(id);
-    document.getElementById("snapshotStartNote").hidden = Array.isArray(accountsData?.snapshot?.cards);
+    // (An icon's page has no Edit, so it never says to tap it)
+    document.getElementById("snapshotStartNote").hidden = !!window.SNAPSHOT_KEY || Array.isArray(accountsData?.snapshot?.cards);
   }
 
   // Each card as it's drawn, by its id: { key (its type and which one), section, body, keep (what its kind keeps between
