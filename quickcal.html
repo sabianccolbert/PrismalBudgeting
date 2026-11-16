@@ -7,8 +7,8 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=767dfdda9b">
-    <link rel="stylesheet" href="/themes.css?v=965ad2ed41">
+    <link rel="stylesheet" href="/budgetStyle.css?v=ca59e3f5eb">
+    <link rel="stylesheet" href="/themes.css?v=ae228a8c81">
     <title>Prismal Planning - Quick Calendar</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
     <meta name="robots" content="noindex, nofollow">
@@ -160,6 +160,8 @@
           </table>
         </section>
 
+        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Quick Calendar.js checks the key) -->
+        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
@@ -173,6 +175,7 @@
             <li><strong>Waiting entries</strong> (with a dashed edge) are the ones this icon added that haven't joined your calendar yet. They join the next time Prismal Planning opens on the device that made this icon (on any other device, they wait on Home to be added). Until then, tap one here to change it or delete it.</li>
             <li>Entries already on your calendar can be looked at here, and changed after signing in.</li>
             <li><strong>Home</strong> goes to Prismal Planning (its login page, in this page's theme, when this browser isn't signed in). Opened from your home screen, Home opens Prismal Planning in your phone's browser, and this page stays here.</li>
+            <li><strong>Customize</strong> (at the bottom) changes this icon's picture and colors (a calendar, to start). It's kept with this icon; one already on your home screen shows the new look once it's added again.</li>
             <li>The icon stops working when your password changes, on Sign Out Everywhere, or when Quick Calendar icons are turned off in Settings.</li>
           </ul>
         </section>

@@ -138,10 +138,10 @@ function calendarItem(connection) {
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const PAY_FIELDS = [
   { section: "Paydays", key: "from", kind: "date" },
-  { section: "Paydays", key: "payEvery", kind: "select", label: "How often", options: [["week", "Every week"], ["2weeks", "Every other week"], ["twiceMonth", "Twice a month"], ["month", "Once a month"]] },
+  { section: "Paydays", key: "payEvery", kind: "select", label: "How often", options: [["week", "Every week"], ["2weeks", "Every other week"], ["days", "On days of the month"]] },
   { section: "Paydays", key: "payWeekday", kind: "weekday", label: "Payday", shown: (s) => s.payEvery === "week" },
   { section: "Paydays", key: "payAnchor", kind: "date", label: "One of its paydays", hint: "Any payday, so every other week lines up with yours. Blank: the first paycheck.", shown: (s) => s.payEvery === "2weeks" },
-  { section: "Paydays", key: "payDays", kind: "payDays", label: "Paid on the", shown: (s) => s.payEvery === "twiceMonth" || s.payEvery === "month" },
+  { section: "Paydays", key: "payDays", kind: "payDays", label: "Paid on the", shown: (s) => ["days", "twiceMonth", "month"].includes(s.payEvery) },
   { section: "Paydays", key: "weekend", kind: "select", label: "A payday on a weekend", options: [["none", "Is paid that day"], ["before", "Is paid the Friday before"], ["after", "Is paid the Monday after"]] },
   { section: "Paydays", key: "period", kind: "select", label: "Each paycheck pays", options: [["weeks", "Full workweeks before payday's week"], ["days", "Days up to a few days before payday"]], hint: "Full workweeks: the weeks that ended before the week its payday is in, since the last paycheck's." },
   { section: "Paydays", key: "periodLag", kind: "number", unit: "days before payday", label: "Its pay period ends", hint: "0: it pays through payday itself.", shown: (s) => s.period === "days" },
@@ -330,9 +330,13 @@ function typedNumber(text) {
   return Number.isFinite(number) && number >= 0 ? number : NaN;
 }
 
+// How often, as settings saved before "On days of the month" say it (Calendars.js payDaysOf)
+const OLD_PAY_EVERY = { twiceMonth: "Twice a month", month: "Once a month" };
+
 // How a setting reads in a box's hint ("15.5", "Every other week", "Friday", "Yes")
 function settingWords(spec, value) {
   if (value === null || value === undefined || value === "") return "blank";
+  if (spec.key === "payEvery" && OLD_PAY_EVERY[value]) return OLD_PAY_EVERY[value];
   if (spec.kind === "weekday") return WEEKDAY_NAMES[value];
   if (spec.kind === "yesNo") return value ? "Yes" : "No";
   if (spec.kind === "select") {
@@ -728,7 +732,9 @@ function openCalendarPanel(id, origin) {
             });
             return BudgetUI.field(spec.label, box, { hint: hint(spec.hint) });
           }
-          return BudgetUI.field(spec.label, select(spec.key, options, version[spec.key], PAY_REDRAWS.includes(spec.key)), { hint: hint(spec.hint) });
+          // (Twice a month and once a month, saved before, show as On days of the month, with their days)
+          const value = spec.key === "payEvery" && OLD_PAY_EVERY[version.payEvery] ? "days" : version[spec.key];
+          return BudgetUI.field(spec.label, select(spec.key, options, value, PAY_REDRAWS.includes(spec.key)), { hint: hint(spec.hint) });
         }
         if (spec.kind === "weekday") {
           return BudgetUI.field(spec.label, select(spec.key, WEEKDAY_NAMES.map((day, index) => [index, day]), version[spec.key], false), { hint: hint(spec.hint) });
@@ -747,33 +753,73 @@ function openCalendarPanel(id, origin) {
           return BudgetUI.field(spec.label, input, { hint: hint(spec.hint) });
         }
         if (spec.kind === "payDays") {
+          // A box for each payday of the month, each with × (while there's more than one), and + Add A Payday. A change
+          // that keeps the days before shows them as Same as before, with Change to pick its own. Settings saved as twice
+          // or once a month show the days they pay on, and become On days of the month once one is changed.
           const dayOptions = [...Array.from({ length: 30 }, (_, day) => [day + 1, ordinal(day + 1)]), [31, "last day"]];
-          const current = version.payDays || null;
-          const twice = (version.payEvery || before.payEvery) === "twiceMonth";
-          const first = BudgetUI.element("select", "selectInput");
-          const second = BudgetUI.element("select", "selectInput");
-          first.dataset.key = "payDays0";
-          second.dataset.key = "payDays1";
-          for (const box of twice ? [first, second] : [first]) {
-            if (later) box.append(new Option("Same as before", ""));
-            for (const [day, label] of dayOptions) box.append(new Option(label, String(day)));
-          }
-          const shownDays = current || (later ? null : before.payDays);
-          first.value = shownDays ? String(shownDays[0]) : "";
-          second.value = shownDays && shownDays[1] ? String(shownDays[1]) : (later ? "" : "31");
-          // (In a change, a box left on Same as before keeps that day, so changing one of two paydays keeps the other)
+          const every = version.payEvery || before.payEvery;
+          const effective = (days) => Calendars.payDaysOf({ payEvery: every, payDays: days });
+          let days = version.payDays ? effective(version.payDays) : later ? null : effective(before.payDays);
+          const list = BudgetUI.element("div", "payDayList");
           const write = () => {
-            if (!first.value && (!twice || !second.value)) return set("payDays", undefined);
-            const firstDay = first.value ? Number(first.value) : before.payDays[0];
-            if (!twice) return set("payDays", [firstDay]);
-            set("payDays", [firstDay, second.value ? Number(second.value) : (before.payDays[1] ?? firstDay)]);
+            if (OLD_PAY_EVERY[every]) version.payEvery = "days";
+            set("payDays", [...new Set(days)].sort((a, b) => a - b));
           };
-          first.addEventListener("change", write);
-          second.addEventListener("change", write);
-          const row = BudgetUI.element("div", "calendarPair");
-          row.append(first);
-          if (twice) row.append(BudgetUI.element("span", "rangeWord", "and the"), second);
-          return BudgetUI.field(spec.label, row, { hint: "Of each month (a month without that day pays on its last)." });
+          const words = (picked) => picked.map(day => (day === 31 ? "the last day" : `the ${ordinal(day)}`)).join(", ");
+          const draw = () => {
+            if (days === null) {
+              const change = BudgetUI.element("button", "budgetButton", "Change");
+              change.type = "button";
+              change.addEventListener("click", () => {
+                days = effective(before.payDays);
+                write();
+                draw();
+              });
+              list.replaceChildren(BudgetUI.element("span", "rangeWord", `Same as before (${words(effective(before.payDays))})`), change);
+              return;
+            }
+            const rows = days.map((day, at) => {
+              const row = BudgetUI.element("div", "calendarPair payDayRow");
+              const box = BudgetUI.element("select", "selectInput");
+              box.dataset.key = `payDays${at}`;
+              box.setAttribute("aria-label", `Payday ${at + 1}`);
+              for (const [value, label] of dayOptions) box.append(new Option(label, String(value)));
+              box.value = String(day);
+              box.addEventListener("change", () => {
+                days[at] = Number(box.value);
+                write();
+              });
+              row.append(box);
+              if (days.length > 1) {
+                const remove = BudgetUI.element("button", "panelClose payDayRemove", "×");
+                remove.type = "button";
+                remove.setAttribute("aria-label", `Take off payday ${at + 1}`);
+                remove.addEventListener("click", () => {
+                  days.splice(at, 1);
+                  write();
+                  draw();
+                  list.querySelector("select")?.focus();
+                });
+                row.append(remove);
+              }
+              return row;
+            });
+            const add = BudgetUI.element("button", "budgetButton termAdd", "+ Add A Payday");
+            add.type = "button";
+            add.hidden = days.length >= Calendars.MAX_PAYDAYS;
+            add.addEventListener("click", () => {
+              // (The first day after the last one that isn't a payday yet, or failing that, the first that isn't)
+              const last = days[days.length - 1] || 0;
+              const free = dayOptions.map(([value]) => value).filter(value => !days.includes(value));
+              days.push(free.find(value => value > last) ?? free[0]);
+              write();
+              draw();
+              list.querySelectorAll("select")[days.length - 1]?.focus();
+            });
+            list.replaceChildren(...rows, add);
+          };
+          draw();
+          return BudgetUI.field(spec.label, list, { hint: "Days of each month, as many as you're paid on (like the 1st, the 10th, and the 20th). A month without a day pays on its last day." });
         }
         if (spec.kind === "night") {
           const time = (key) => {

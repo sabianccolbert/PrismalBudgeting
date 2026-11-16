@@ -1982,7 +1982,8 @@ function rowOrder(body) {
 
 // New recurring entry (index null) or change the tapped one. Two can share a title only when their refraction type
 // or Equity account is different, so one that matches another in all three is refused with a message saying so. fill: what a
-// new one starts with: { title, account, sprite, amount, frequency, start } (see askAddRecurring).
+// new one starts with: { title, account, sprite, amount, frequency, start, end } (see askAddRecurring, and a goal's Add
+// Recurring on Bob's page).
 function openRecurringPanel(origin, index, fill = null) {
   const existing = index === null ? null : recurringData[index];
   BudgetUI.openPanel({
@@ -2000,7 +2001,7 @@ function openRecurringPanel(origin, index, fill = null) {
       const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : fill?.amount ?? null, percent: existing ? percentOf(existing[5]) : null });
       const frequency = BudgetUI.frequencyField({ value: existing ? existing[3] : fill?.frequency ?? "Every Month" });
       const start = BudgetUI.dateField({ label: "Start Date", date: existing ? (isNaN(existingStart) ? null : existingStart) : fill?.start ?? today });
-      const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : null, optional: true });
+      const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : fill?.end ?? null, optional: true });
       // Hidden and Transfer entries can move money into or out of an Equity account (like a savings transfer). The type and
       // account come before the amount, which can be a % of the account picked.
       const account = BudgetUI.accountField({ accounts: otherAccounts(), amount, type: () => refraction.value(), account: existingTitle.account, from: existingTitle.from });

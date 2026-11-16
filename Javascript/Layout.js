@@ -1066,7 +1066,7 @@ document.addEventListener("click", (EVENT) => {
 // calendar is in List Mode, and which Change Logs rows it has seen (Home's count of other devices' edits, see
 // markLogsSeen in Process Budget.js).
 const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
-  "prismal_theme", "prismal_custom_theme", "prismal_quick_icon", "prismal_still_stars", "prismal_less_motion", "prismal_push_off",
+  "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off",
   "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen"];
 function clearSignedInData() {
   try {

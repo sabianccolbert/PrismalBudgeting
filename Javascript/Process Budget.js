@@ -207,6 +207,7 @@ async function loadWorkspace() {
     }
 
     const data = await response.json();
+    if (SNAPSHOT_KEY) window.snapshotLook = data.look || null; // (The icon's own look, for its page: Quick Icon.js)
     const storedAccounts = readLoadedTables(data);
     openedBudget(data.budget);
     workspaceLoaded = true;
@@ -3813,8 +3814,25 @@ function normalizeGoals(list) {
       date: String(goal.date ?? "").slice(0, 10),
       made: String(goal.made ?? "").slice(0, 10),
       ...(Number.isFinite(goal.start) ? { start: Math.round(goal.start * 100) / 100 } : {}),
-      ...(typeof goal.gem === "string" && PRESET_ID.test(goal.gem) ? { gem: goal.gem } : {})
+      ...(typeof goal.gem === "string" && PRESET_ID.test(goal.gem) ? { gem: goal.gem } : {}),
+      ...(readGoalPlan(goal.plan) ? { plan: readGoalPlan(goal.plan) } : {})
     }));
+}
+
+const GOAL_PLAN_PARTS = ["frequency", "each", "date"];
+
+// How a goal gets there, as its window's How You'll Get There has it: { frequency (how often, "Every 2 Weeks", or "" when
+// it wasn't typed), each (the amount each time, above $0, or null when it wasn't typed), typed (the ones typed, in the
+// order they were: "frequency", "each", and "date", the goal's By) }; the others were worked out from them. null when
+// it has none.
+function readGoalPlan(plan) {
+  if (!plan || typeof plan !== "object") return null;
+  const parsed = typeof plan.frequency === "string" && plan.frequency ? parseFrequency(plan.frequency) : null;
+  const frequency = parsed && parsed.unit !== "semimonthly" ? formatFrequency(parsed) : "";
+  const each = Number.isFinite(plan.each) && plan.each > 0 && plan.each <= MAX_AMOUNT ? Math.round(plan.each * 100) / 100 : null;
+  const typed = Array.isArray(plan.typed) ? [...new Set(plan.typed.filter(part => GOAL_PLAN_PARTS.includes(part)))] : [];
+  if (!frequency && each === null && typed.length === 0) return null;
+  return { frequency, each, typed };
 }
 
 // What a goal is for, as people read it: "Savings", "In Bank", "Total", or ""
@@ -3842,9 +3860,10 @@ function goalBalance(goal, calendar = calendarData) {
 
 // fields: { title ("" for none), kind ("inBank", "total", or "account"), account (its name, for "account"), amount (a
 // number), percent (a signed percent of what it's for today, instead of amount), date (the day to reach it by, or null
-// for none), gem (the id of a gem for it to follow, or "" for none) }. A % goal that keeps its percent and what it's for
-// keeps its amount (the one worked out when it was set). A gem with an Equity account (or In Bank) says what it's for and
-// its amount instead (gemGoalFields). calendar: the calendar as it was before the change (with In Bank).
+// for none), gem (the id of a gem for it to follow, or "" for none), plan (how it gets there: see readGoalPlan) }. A %
+// goal that keeps its percent and what it's for keeps its amount (the one worked out when it was set). A gem with an
+// Equity account (or In Bank) says what it's for and its amount instead (gemGoalFields). calendar: the calendar as it
+// was before the change (with In Bank).
 function goalEntry(fields, index, calendar = calendarData) {
   const goals = accountsData.goals || [];
   const isNew = index === null || index === undefined;
@@ -3898,6 +3917,8 @@ function goalEntry(fields, index, calendar = calendarData) {
   const start = sameTarget && Number.isFinite(old.start) ? old.start : goalBalance(goal, calendar);
   if (Number.isFinite(start)) goal.start = Math.round(start * 100) / 100;
   if (gem) goal.gem = gem.id;
+  const plan = readGoalPlan(fields.plan);
+  if (plan) goal.plan = plan;
   if (isNew) goals.push(goal);
   else goals[index] = goal;
   accountsData.goals = goals;
@@ -8307,9 +8328,12 @@ function updateDayAccess(cell) {
 }
 
 // A zoomed day's round buttons in its top right corner, for Home's days and History's: + (New Entry on that day) and ×
-// (close)
+// (close). On Home, the day also gets what the calendar shows (cellViewButtons), on the same row, between its date and them
+// (first, so the Tab key reaches them in the order they're seen).
 function zoomDayButtons() {
   const buttons = document.createDocumentFragment();
+  const view = cellViewButtons();
+  if (view) buttons.appendChild(view);
   for (const [kind, text, label] of [['cellAdd', '+', 'New entry on this day'], ['cellClose', '×', 'Close day']]) {
     const button = document.createElement('button');
     button.className = `cell-action-btn ${kind}`;
@@ -8319,6 +8343,42 @@ function zoomDayButtons() {
     buttons.appendChild(button);
   }
   return buttons;
+}
+
+// The calendar header's three buttons, again on a zoomed day (Home only, where the calendar can show the budget, its
+// entries, or both): the same choice, so tapping one here changes the whole calendar (Fractals.setView). Shown only while
+// the day is zoomed (budgetStyle.css .cellView).
+function cellViewButtons() {
+  if (!window.Fractals || typeof window.Fractals.view !== 'function' || window.Fractals.isQuick() || !document.getElementById('calendarView')) return null;
+  const group = document.createElement('div');
+  group.className = 'cellView';
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', 'What the calendar shows');
+  const shown = window.Fractals.view();
+  for (const [key, money, calendar, label] of [['budget', true, false, 'Show the budget only'], ['both', true, true, 'Show the budget and the calendar'], ['calendar', false, true, 'Show the calendar only']]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cellViewButton';
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', String(key === shown));
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    if (money) button.append('$');
+    if (calendar) {
+      const icon = document.createElement('span');
+      icon.className = 'buttonIcon iconCalendar';
+      icon.setAttribute('aria-hidden', 'true');
+      button.appendChild(icon);
+    }
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (key !== window.Fractals.view()) window.Fractals.setView(key);
+      // (The day draws again with new buttons: the one tapped keeps the focus)
+      requestAnimationFrame(() => activeEditCell?.querySelector(`.cellViewButton[aria-label="${label}"]`)?.focus({ preventScroll: true }));
+    });
+    group.appendChild(button);
+  }
+  return group;
 }
 
 // Zoom a day in (closing any other): doubled on a computer, laid out to fill the screen on a phone.
@@ -8347,6 +8407,7 @@ function zoomDay(cell, animate = true) {
   zoomBackdrop.classList.add('shown');
   document.documentElement.classList.add('dayZoomed');
   if (!fullZoomQuery.matches) {
+    placeCellView(cell);
     keepDoubledDayOnScreen(cell, place);
   } else {
     cell.classList.add('is-fullZoom');
@@ -8395,7 +8456,7 @@ function unzoomCell(cell) {
   // Straight back to the day: the day's own transform transition (budgetStyle.css) would otherwise slide it in
   // from the middle of the screen, where the zoomed layout was, after it had already shrunk into place
   cell.style.transition = 'none';
-  cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom', 'isZoomClosing');
+  cell.classList.remove('is-editing', 'is-magnified', 'is-fullZoom', 'isZoomClosing', 'cellViewOwnRow');
   updateDayAccess(cell);
   for (const property of ZOOM_PROPERTIES) cell.style.removeProperty(property);
   if (animation) animation.cancel(); // It held its last frame until now (fill: forwards)
@@ -8685,7 +8746,7 @@ function widestDayLine(content) {
   const padding = parseFloat(getComputedStyle(content).paddingRight) || 0;
   let widest = 0;
   for (const line of content.children) {
-    if (!line.classList.contains('cell-action-btn')) widest = Math.max(widest, line.offsetWidth);
+    if (!line.classList.contains('cell-action-btn') && !line.classList.contains('cellView')) widest = Math.max(widest, line.offsetWidth);
   }
   return widest > 0 ? widest + 2 * padding : 0;
 }
@@ -8695,9 +8756,19 @@ function widestDayLine(content) {
 function dayLinesHeight(content) {
   let height = 0;
   for (const line of content.children) {
-    if (!line.classList.contains('cell-action-btn') && line.getClientRects().length > 0) height += line.getBoundingClientRect().height;
+    if (!line.classList.contains('cell-action-btn') && !line.classList.contains('cellView') && line.getClientRects().length > 0) height += line.getBoundingClientRect().height;
   }
   return height;
+}
+
+// A computer's zoomed day too narrow for its date beside its view buttons (cellViewButtons: the date line would end in
+// "...", in a window under about 1,200 pixels wide) gives them a row of their own, the round buttons' row, with the date
+// under them (budgetStyle.css .cellViewOwnRow)
+function placeCellView(cell) {
+  cell.classList.remove('cellViewOwnRow');
+  const date = cell.querySelector('.cell-content > .lineDate');
+  if (!date || !cell.querySelector('.cellView')) return;
+  if (date.scrollWidth > date.clientWidth + 1) cell.classList.add('cellViewOwnRow');
 }
 
 // On a computer the day doubles where it is (budgetStyle.css). When its widest entry would run off the right
@@ -8921,7 +8992,7 @@ window.addEventListener('pointerup', (e) => {
 
 document.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || e.pointerType !== 'mouse') return;
-  if (e.target.closest('.cell-action-btn')) return;
+  if (e.target.closest('.cell-action-btn, .cellView')) return;
 
   const cell = e.target.closest('.elastic-table td');
   if (!cell) return;

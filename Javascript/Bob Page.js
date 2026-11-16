@@ -556,11 +556,12 @@ function sharedFigures() {
 // rows in one list.
 
 const DATA_GROUPS = [
-  { id: "balances", title: "In Bank And Equity", help: "In Bank today, the lowest it gets after today (through Lowest's last day, picked on Home's Lowest card), and your Equity accounts. Tap one to see it on a graph, or Equity's window: each account today and on a day you pick." },
-  { id: "spending", title: "Paydays And Spending", help: `Your paydays, and what goes out besides your recurring bills: in the last 7 days, and between paychecks. Payday and Spending Pace work from these, out of your last ${HISTORY_MONTHS} months of History.` },
-  { id: "purchases", title: "Purchases And Catchups", help: `Regular costs you add by hand or with Quick Budget: the last ${REFUND_DAYS} days, the ones still to come before the lowest day, and your Catchup entries. Refunds and Catchup Entries work from these.` },
-  { id: "bills", title: "Bills And The Tracker", help: `What your recurring entries come to each month, the big bills of the next ${BILL_DAYS} days, and the tracker's costs between its two days (its window has every row, New Row, and Edit).` }
+  { id: "balances", title: "In Bank And Equity", help: "In Bank today and the lowest it gets after today (through Lowest's last day, picked on Home's Lowest card), and your Equity accounts. Tap In Bank to see it on a graph, or Equity for its window: each account today and on a day you pick, and when each loan or card is paid off." },
+  { id: "spending", title: "Paydays And Spending", help: `Your paydays and what usually goes out between them, what goes out besides your recurring bills in a week, and your purchases: Regular costs you add by hand or with Quick Budget in the last ${REFUND_DAYS} days, the ones still to come before the lowest day, and your Catchup entries. Payday, Spending Pace, Refunds, and Catchup Entries work from these, out of your last ${HISTORY_MONTHS} months of History.` },
+  { id: "bills", title: "Bills And The Tracker", help: `The tracker's costs between its two days, with what your recurring entries come to each month (its window has every row, New Row, Edit, and each recurring entry), and the big bills of the next ${BILL_DAYS} days.` }
 ];
+// Data's rows that were renamed, so a Snapshot card made with the old name still finds its row (Snapshot Page.js "bob.data")
+const DATA_RENAMED = { "In Bank today": "In Bank", [`Purchases, last ${REFUND_DAYS} days`]: "Purchases" };
 
 // Data's figures in their groups ({ balances: { summary: { text, amount }, rows: [<li>] }, ... }, see DATA_GROUPS), and Data's
 // highlight
@@ -588,12 +589,18 @@ function dataGroups(shared) {
   const trackedCosts = tracked.get(trackerRowIndex("costs"))?.total ?? 0;
   const trackedGains = tracked.get(trackerRowIndex("gains"))?.total ?? 0;
 
+  const lowestNote = `The lowest after today: ${formatMoney(lowest.amount)}, on ${showDay(lowest.date)}`;
+  const usually = payday.average === null ? ` (what usually goes out between paydays needs ${HISTORY_MONTHS} months of History)` : `. Usually ${formatMoney(-payday.average)} goes out in the ${payday.span} days from one, besides recurring bills`;
+  const purchaseParts = [
+    `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} in the last ${REFUND_DAYS} days`,
+    coming.length > 0 ? `${formatMoney(-comingSpent)} more by the lowest day, ${showDay(lowest.date)}` : "",
+    `${formatMoney(-catchup.total)} in Catchup entries in the last ${CATCHUP_DAYS} days`
+  ].filter(Boolean);
   const groups = {
     balances: {
       summary: { text: formatMoney(inBank), amount: inBank },
       rows: [
-        dataRow("In Bank today", formatMoney(inBank), "", { amount: inBank, open: (origin) => openGraphWindow(origin, "In Bank", "In Bank at the end of each day, from History and the calendar. Pick a later day to see what your budget expects.", inBankGraph("In Bank Over Time")) }),
-        dataRow("Lowest in bank after today", formatMoney(lowest.amount), `On ${showDay(lowest.date)}`, { amount: lowest.amount, open: (origin) => openGraphWindow(origin, "Lowest In Bank", `The lowest In Bank gets from today through ${showDate(lookAheadEnd())} (${lookAheadWords()} past the calendar, picked on Home's Lowest card) is ${formatMoney(lowest.amount)}, on ${showDate(lowest.date)}. Pick a later day to see it on the graph.`, inBankGraph("In Bank Over Time")) }),
+        dataRow("In Bank", formatMoney(inBank), `Today. ${lowestNote}`, { amount: inBank, open: (origin) => openGraphWindow(origin, "In Bank", `In Bank at the end of each day, from History and the calendar. Pick a later day to see what your budget expects. The lowest it gets from today through ${showDate(lookAheadEnd())} (${lookAheadWords()} past the calendar, picked on Home's Lowest card) is ${formatMoney(lowest.amount)}, on ${showDate(lowest.date)}.`, inBankGraph("In Bank Over Time")) }),
         dataRow("Equity", formatMoney(accountsTotal), `${summaries.length} ${summaries.length === 1 ? "account" : "accounts"} today; with In Bank, the Total is ${formatMoney(inBank + accountsTotal)}`,
           { amount: accountsTotal, open: (origin) => openEquityWindow(origin) })
       ]
@@ -601,36 +608,23 @@ function dataGroups(shared) {
     spending: {
       summary: { text: formatMoney(-weekSpent), amount: -weekSpent },
       rows: [
-        dataRow("Paydays", payday.next ? showDay(payday.next) : "None coming", payday.next ? `The next one, in ${dayCount(payday.next)} ${dayCount(payday.next) === 1 ? "day" : "days"}` : `No paycheck in the next ${PAYDAY_LOOK} days`,
+        dataRow("Paydays", payday.next ? showDay(payday.next) : "None coming", `${payday.next ? `The next one, in ${dayCount(payday.next)} ${dayCount(payday.next) === 1 ? "day" : "days"}` : `No paycheck in the next ${PAYDAY_LOOK} days`}${usually}`,
           { open: (origin) => openPaydaysWindow(origin, spending, payday) }),
         dataRow("Spent besides recurring bills", formatMoney(-weekSpent), pace ? `In the last 7 days (a usual week: ${formatMoney(-pace.usualWeek)})` : "In the last 7 days",
           { amount: -weekSpent, open: (origin) => openWeeksWindow(origin, spending) }),
-        dataRow("Usually spent between paychecks", payday.average === null ? "--" : formatMoney(-payday.average),
-          payday.average === null ? `Needs ${HISTORY_MONTHS} months of History` : `In the ${payday.span} days from a payday, besides recurring bills`,
-          payday.average === null ? {} : { amount: -payday.average }),
+        dataRow("Purchases", formatMoney(-spent), purchaseParts.join("; "),
+          { amount: -spent, open: (origin) => openPurchasesWindow(origin, purchases, coming, catchup, lowest) }),
         dataRow("History", oldest ? `From ${showDate(oldest)}` : "None yet",
           oldest ? (spending.enough ? `${HISTORY_MONTHS} months or more: enough for every card` : `Payday and Spending Pace need ${HISTORY_MONTHS} months of it`) : "Each week moves into History as it passes")
       ]
     },
-    purchases: {
-      summary: { text: formatMoney(-spent), amount: -spent },
-      rows: [
-        dataRow(`Purchases, last ${REFUND_DAYS} days`, formatMoney(-spent), `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} added by hand or with Quick Budget`,
-          { amount: -spent, open: (origin) => openEntriesWindow(origin, `Purchases, Last ${REFUND_DAYS} Days`, purchases, `None in the last ${REFUND_DAYS} days.`, () => runningGraph("Purchases, Added Up", "Purchases", REFUND_DAYS, purchasesBetween, "None in these days.")) }),
-        dataRow("Purchases still to come", formatMoney(-comingSpent), lowest.date > today ? `${coming.length} by the lowest day, ${showDay(lowest.date)}` : "None before the lowest day",
-          { amount: -comingSpent, open: (origin) => openEntriesWindow(origin, "Purchases Still To Come", coming, "None before the lowest day.", () => runningGraph("Purchases Still To Come, Added Up", "Purchases", 0, purchasesBetween, "Pick a later day to see what's planned, added up.")) }),
-        dataRow(`Catchup entries, last ${CATCHUP_DAYS} days`, formatMoney(-catchup.total), `${catchup.entries.length} ${catchup.entries.length === 1 ? "entry" : "entries"}`,
-          { amount: -catchup.total, open: (origin) => openEntriesWindow(origin, `Catchup Entries, Last ${CATCHUP_DAYS} Days`, catchup.entries, `None in the last ${CATCHUP_DAYS} days.`, () => runningGraph("Catchup Entries, Added Up", "Catchups", CATCHUP_DAYS, catchupsBetween, "None in these days.")) })
-      ]
-    },
     bills: {
-      summary: { text: formatMoney(recurring.costs), amount: recurring.costs },
+      summary: { text: formatMoney(trackedCosts), amount: trackedCosts },
       rows: [
-        dataRow("Recurring entries each month", formatMoney(recurring.costs), `In bills, and ${formatMoney(recurring.gains)} in gains`, { amount: recurring.costs, open: (origin) => openRecurringWindow(origin, recurring) }),
+        dataRow("Tracker", formatMoney(trackedCosts), `Costs from ${showDay(trackerDays().from)} through ${showDay(trackerDays().to)}, and ${formatMoney(trackedGains)} in gains. Recurring entries come to about ${formatMoney(recurring.costs)} a month in bills and ${formatMoney(recurring.gains)} in gains.`,
+          { amount: trackedCosts, open: (origin) => openTrackerWindow(origin) }),
         dataRow(`Big bills, next ${BILL_DAYS} days`, String(bills.length), bills[0] ? `The first: ${capitalize(bills[0].title)} on ${showDay(bills[0].date)}` : "None",
-          { open: (origin) => openEntriesWindow(origin, `Big Bills, Next ${BILL_DAYS} Days`, bills, `None in the next ${BILL_DAYS} days.`, () => runningGraph("Big Bills, Added Up", "Big bills", 0, (first, until) => bigBills().filter(bill => bill.date >= first && bill.date <= until), `Pick a later day, up to ${BILL_DAYS} days from today, to see the bills ahead added up.`)) }),
-        dataRow("Tracker", formatMoney(trackedCosts), `Costs from ${showDay(trackerDays().from)} through ${showDay(trackerDays().to)}, and ${formatMoney(trackedGains)} in gains`,
-          { amount: trackedCosts, open: (origin) => openTrackerWindow(origin) })
+          { open: (origin) => openEntriesWindow(origin, `Big Bills, Next ${BILL_DAYS} Days`, bills, `None in the next ${BILL_DAYS} days.`, () => runningGraph("Big Bills, Added Up", "Big bills", 0, (first, until) => bigBills().filter(bill => bill.date >= first && bill.date <= until), `Pick a later day, up to ${BILL_DAYS} days from today, to see the bills ahead added up.`)) })
       ]
     }
   };
@@ -1024,7 +1018,34 @@ function openEntriesWindow(origin, title, entries, empty, graph = null) {
   });
 }
 
-// Recurring entries each month: each one, how often, its amount, and what it comes to in a month
+// Purchases (Data's row): the last 30 days', the ones still to come by the lowest day, and the Catchup entries of the last 30
+// days, newest first, each saying which it is, with a graph of the purchases and the Catchups each added up
+function openPurchasesWindow(origin, purchases, coming, catchup, lowest) {
+  const rows = [
+    ...coming.map(entry => ({ entry, kind: "Still to come" })),
+    ...purchases.map(entry => ({ entry, kind: "Purchase" })),
+    ...catchup.entries.map(entry => ({ entry, kind: "Catchup" }))
+  ].sort((a, b) => b.entry.date - a.entry.date);
+  openTableWindow(origin, {
+    title: "Purchases And Catchups",
+    intro: `Regular costs added by hand or with Quick Budget in the last ${REFUND_DAYS} days, the ones still to come before the lowest day (${showDay(lowest.date)}), and Catchup entries (the ones that fix In Bank to match your bank) from the last ${CATCHUP_DAYS} days.`,
+    columns: ["Day", "Entry", "Which", "Amount"],
+    rows: rows.map(({ entry, kind }) => [showDate(entry.date), capitalize(String(entry.title)), kind, amountCell(entry.amount)]),
+    empty: `No purchases or Catchup entries in the last ${REFUND_DAYS} days, and none still to come.`,
+    graph: () => LineGraph.create({
+      label: "Purchases And Catchups, Added Up",
+      from: (until) => graphStart(until, REFUND_DAYS),
+      max: aheadLimit(),
+      series: (first, until) => [
+        runningLine("Purchases", purchasesBetween(first, until), first, until),
+        runningLine("Catchups", catchupsBetween(first, until), first, until)
+      ].filter(line => line.points.some(point => point.value !== 0)),
+      emptyNote: "None in these days."
+    })
+  });
+}
+
+// Recurring entries each month: each one, how often, its amount, and what it comes to in a month (from the Tracker's window)
 function openRecurringWindow(origin, recurring) {
   openTableWindow(origin, {
     title: "Recurring Entries Each Month",
@@ -1117,11 +1138,100 @@ function openWeeksWindow(origin, spending) {
 // =====================================================================
 // In Bank, each Equity account, and the Total: what each holds now and the most it can hold, what it will on the day in the box at
 // the top of its column (this device remembers it), and each one's interest: what it gets from now to then and how it's
-// worked out (a column that only shows when an account has interest). Under them, a graph of all of it.
+// worked out (a column that only shows when an account has interest). A loan, mortgage, or credit card below $0.00 says when
+// it's paid off (payoffDays), and under the table, a recurring payment into it that keeps going after that day says so, with
+// End It Then (its End Date set to that day: the payments after it would only take In Bank's money and put the account above
+// $0.00). Under them, a graph of all of it, through that day, or through the last payoff when it's later.
+
+let payoffCache = null;
+document.addEventListener("budget:updated", () => { payoffCache = null; });
+
+// When each Equity account that's money owed (a car loan, a mortgage, or a credit card: DEBT_KINDS) and below $0.00 today
+// gets to $0.00 with everything planned (recurring entries, connected spreadsheets, Upcoming, and interest), looking as far
+// as aheadLimit: Map(account row index -> { day (its first day at $0.00 or more, or null when that's further), left (what
+// it still owed the day before, so what that day's payment needs) }). Worked out once per change to the budget, since a
+// decade of days is too much to work out each time the window draws (payoffCache, cleared by every change).
+function payoffDays(summaries) {
+  const kinds = new Map(accountRows().map(account => [account.index, accountKind(account.row)]));
+  const owed = summaries.filter(summary => summary.today < 0 && DEBT_KINDS.includes(kinds.get(summary.index)));
+  const key = `${formatToYMD(today)}|${owed.map(summary => summary.index).join(",")}`;
+  if (payoffCache && payoffCache.key === key) return payoffCache.days;
+  const days = new Map();
+  if (owed.length > 0) {
+    const projection = projectBudget(aheadLimit(), summaries);
+    for (const summary of owed) {
+      let found = { day: null, left: 0 };
+      for (let day = addDays(today, 1); day <= projection.until; day = addDays(day, 1)) {
+        if (projection.accountOn(summary.index, day) >= 0) {
+          found = { day, left: Math.round(-projection.accountOn(summary.index, addDays(day, -1)) * 100) / 100 };
+          break;
+        }
+      }
+      days.set(summary.index, found);
+    }
+  }
+  payoffCache = { key, days };
+  return days;
+}
+
+// A paid-off day in words, for an account's line in Equity's window
+function payoffWords({ day }) {
+  return day ? `Paid off on ${showDate(day)}, with everything planned.` : `Not paid off by ${showDate(aheadLimit())} with what's planned.`;
+}
+
+// The recurring entries that keep paying into an account after the day it's paid off (no End Date, or a later one):
+// [{ index (its row in recurringData), title, frequency, amount (each payment, or null for a % one) }]
+function paymentsAfterPayoff(accountName, payoffDay) {
+  const found = [];
+  const clean = cleanString(accountName);
+  for (let i = 2; i < recurringData.length; i++) {
+    const row = recurringData[i];
+    const title = String(row?.[0] ?? "").trim();
+    if (!title || title === "-") continue;
+    const named = splitAccount(title).account;
+    if (!named || cleanString(named) !== clean || accountChange(String(row[5] || ""), parseAmount(row[1])) <= 0) continue;
+    const end = String(row[4] ?? "").trim();
+    const ends = end && end !== "None" ? createSafeMidnight(end, true) : null;
+    if (ends && !isNaN(ends.getTime()) && ends <= payoffDay) continue;
+    const amount = Math.abs(parseAmount(row[1]));
+    found.push({ index: i, title, frequency: String(row[3] || "").trim(), amount: percentOf(row[5]) === null && Number.isFinite(amount) ? amount : null });
+  }
+  return found;
+}
+
+// Under Equity's table: each account paid off whose recurring payments keep going after that, with End It Then for each
+function payoffNotices(holder, summaries, payoffs) {
+  const names = new Map(accountRows().map(account => [account.index, account.name]));
+  const notices = [];
+  for (const [index, { day, left }] of payoffs) {
+    if (!day) continue;
+    for (const payment of paymentsAfterPayoff(names.get(index), day)) {
+      const item = BudgetUI.element("div", "payoffNotice");
+      // (The last payment's own amount, when it's less than the others)
+      const lastPayment = left > 0 && !(payment.amount !== null && left >= payment.amount - 0.005) ? ` Its last one, that day, only needs ${formatMoney(left)}.` : "";
+      item.append(BudgetUI.element("p", "panelHint", `${names.get(index)} is paid off on ${showDate(day)}, but ${payment.title} (${payment.frequency.toLowerCase()}) keeps going after that, so In Bank keeps paying into it and it goes above $0.00.${lastPayment}`));
+      const end = BudgetUI.element("button", "budgetButton", "End It Then");
+      end.type = "button";
+      end.setAttribute("aria-label", `End ${payment.title} on ${showDate(day)}`);
+      end.addEventListener("click", async () => {
+        end.disabled = true;
+        const result = await saveRecurringEntry({ title: payment.title, endDate: day }, payment.index);
+        end.disabled = false;
+        if (!result.ok) return BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+        BudgetUI.warnIfUnsaved(result);
+        BudgetUI.showToast(`${payment.title} ends on ${showDate(day)}.`);
+      });
+      item.append(end);
+      notices.push(item);
+    }
+  }
+  holder.replaceChildren(...notices);
+  holder.hidden = notices.length === 0;
+}
 
 // The figures on a day (projection: projectBudget, through at least that day): { rows: [{ name, now, then, max, interest,
-// rate, about }], total, hasInterest }
-function equityFigures(day, projection, summaryList) {
+// rate, about }], total, hasInterest }. payoffs: payoffDays, for Equity's window (each one paid off says when in its about).
+function equityFigures(day, projection, summaryList, payoffs = null) {
   const summaries = new Map(summaryList.map(summary => [summary.index, summary]));
   const hasInterest = summaryList.some(summary => summary.interest);
   const round = (amount) => Math.round(amount * 100) / 100;
@@ -1135,7 +1245,7 @@ function equityFigures(day, projection, summaryList) {
       then: projection.accountOn(account.index, day),
       interest: summary?.interest ? projection.interestBetween(account.index, today, day) : null,
       rate: summary?.interest?.rate,
-      about: summary?.interest ? describeInterest(summary.interest) : ""
+      about: [summary?.interest ? describeInterest(summary.interest) : "", payoffs && payoffs.has(account.index) ? payoffWords(payoffs.get(account.index)) : ""].filter(Boolean).join(" ")
     });
   }
   const total = {
@@ -1173,13 +1283,20 @@ function openEquityWindow(origin) {
       const note = BudgetUI.element("p", "panelHint bobAccountsNote");
       const box = BudgetUI.element("div", "bobAccountsBox");
       box.append(BudgetUI.spanHeaderBar(table));
-      const graph = equityGraph();
+      // (The graph runs through the day picked, or through the last account's payoff when that's later, so it shows it)
+      const graphUntil = () => {
+        const latest = [...payoffDays(accountSummaries()).values()].map(payoff => payoff.day).filter(Boolean).reduce((last, day) => (day > last ? day : last), readAccountsDay());
+        return latest > aheadLimit() ? aheadLimit() : latest;
+      };
+      let graph = equityGraph(graphUntil());
 
       const draw = () => {
         const day = readAccountsDay();
         if (document.activeElement !== input) input.value = showDate(day);
         const summaryList = accountSummaries();
-        const { rows, total, hasInterest } = equityFigures(day, projectBudget(day, summaryList), summaryList);
+        const payoffs = payoffDays(summaryList);
+        const { rows, total, hasInterest } = equityFigures(day, projectBudget(day, summaryList), summaryList, payoffs);
+        payoffNotices(notices, summaryList, payoffs);
         table.tBodies[0].replaceChildren(...[...rows, total].flatMap(row => {
           const tr = BudgetUI.element("tr", row.isTotal ? "totalRow" : "");
           tr.append(BudgetUI.noTranslate(BudgetUI.element("td", "titleCell", row.name)));
@@ -1211,6 +1328,10 @@ function openEquityWindow(origin) {
         }
         try { localStorage.setItem(ACCOUNTS_DAY_KEY, formatToMMDDYYYY(createSafeMidnight(day))); } catch (e) {}
         draw();
+        // (The graph follows the new day)
+        const moved = equityGraph(graphUntil());
+        graph.el.replaceWith(moved.el);
+        graph = moved;
         renderPage();
       });
       const follow = () => {
@@ -1219,7 +1340,9 @@ function openEquityWindow(origin) {
         graph.draw();
       };
       document.addEventListener("budget:updated", follow);
-      form.append(BudgetUI.element("p", "panelHint", "What In Bank, each Equity account, and the Total hold now, and what your budget says they'll hold on the day picked at the top of the column (counting recurring entries, connected spreadsheets, Upcoming, and interest). This device remembers the day."), box, note, graph.el, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+      const notices = BudgetUI.element("div", "payoffNotices");
+      notices.setAttribute("role", "status");
+      form.append(BudgetUI.element("p", "panelHint", "What In Bank, each Equity account, and the Total hold now, and what your budget says they'll hold on the day picked at the top of the column (counting recurring entries, connected spreadsheets, Upcoming, and interest). This device remembers the day."), box, note, notices, graph.el, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
       draw();
     }
   });
@@ -1562,8 +1685,11 @@ function openTrackerWindow(origin) {
       form.append(
         BudgetUI.element("p", "panelHint", `What each row came to from From through To (the last ${TRACKER_MONTHS} months to start; a day after today counts what's planned). Tap a row for what each of its aliases came to, and a line graph of them.`),
         boxes.el, bar, search, found, view,
-        BudgetUI.element("p", "panelHint", "New Row adds one. Edit moves rows (hold a row's ≡ and drag it), adds sections (+ Section), and deletes the rows checked. Costs, Gains, Transfers, Interest, and Undefined fill in by themselves (🔒 in Edit). To see the entries behind a row, search for its title with the Tracker button in Home's Search."),
-        BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }])
+        BudgetUI.element("p", "panelHint", "New Row adds one. Edit moves rows (hold a row's ≡ and drag it), adds sections (+ Section), and deletes the rows checked. Costs, Gains, Transfers, Interest, and Undefined fill in by themselves (🔒 in Edit). To see the entries behind a row, search for its title with the Tracker button in Home's Search. Recurring Entries Each Month lists each recurring entry and what it comes to in a month."),
+        BudgetUI.buttonRow([
+          { label: "Recurring Entries Each Month", onClick: (event) => openRecurringWindow(event.currentTarget, recurringEachMonth()) },
+          { label: "Close", onClick: () => panel.close() }
+        ])
       );
       trackerWindow = { view, search, found, boxes };
     }
@@ -1758,11 +1884,12 @@ function inBankLine(first, until) {
 // A window's In Bank graph
 const inBankGraph = (label) => LineGraph.create({ label, from: (until) => graphStart(until), max: aheadLimit(), series: inBankLine });
 
-// Equity's graph: In Bank, the Total, and each account with something in it
-function equityGraph() {
+// Equity's graph: In Bank, the Total, and each account with something in it, through until (today to start)
+function equityGraph(until = today) {
   return LineGraph.create({
     label: "Equity Over Time",
-    from: (until) => graphStart(until),
+    from: (last) => graphStart(last),
+    until,
     max: aheadLimit(),
     series(first, until) {
       const over = equityOverTime(first, until);
@@ -2474,6 +2601,7 @@ function openGoalPanel(origin, index = null, link = {}) {
       const targetField = BudgetUI.field("For", target.el, { hint: "A % goal is that percent of it today, and stays that amount." });
       amount.setPercentAllowed(true);
       const date = BudgetUI.dateField({ label: "By", date: existing && existing.date ? createSafeMidnight(existing.date, true) : link.date || null, optional: true, hint: "Leave it blank for no day: Bob says when your budget gets there." });
+      const plan = goalPlanFields({ date, existing, title, amount, target, gemPick, gems, panel });
 
       // A gem with In Bank or an Equity account says what the goal is for (and its amount, for what's owed, or what's saved
       // with a Goal amount), so those boxes hide; one typed in by hand leaves them to the goal
@@ -2499,7 +2627,7 @@ function openGoalPanel(origin, index = null, link = {}) {
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: removeIt }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Goal", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(...(existing ? [] : [intro]), title.el, ...(gemPick ? [gemPick.el, follows] : []), targetField, amount.el, date.el, BudgetUI.buttonRow(buttons));
+      form.append(...(existing ? [] : [intro]), title.el, ...(gemPick ? [gemPick.el, follows] : []), targetField, amount.el, date.el, plan.el, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -2511,7 +2639,7 @@ function openGoalPanel(origin, index = null, link = {}) {
         const by = date.value();
         if (by === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
         const [kind, ...name] = target.value().split(":");
-        const fields = { title: title.value(), kind, account: name.join(":"), amount: value, percent, date: by, gem: gemPick?.input.value || "" };
+        const fields = { title: title.value(), kind, account: name.join(":"), amount: value, percent, date: by, gem: gemPick?.input.value || "", plan: plan.value() };
         // (From Add To Goals while the Goals card is off, the card comes on, so the new goal shows)
         BudgetUI.submit(panel, async () => {
           const result = await saveGoal(fields, index);
@@ -2529,6 +2657,204 @@ function openGoalPanel(origin, index = null, link = {}) {
       }
     }
   });
+}
+
+const GOAL_PLAN_UNITS = [{ key: "days", label: "Days" }, { key: "weeks", label: "Weeks" }, { key: "months", label: "Months" }];
+
+// A goal window's How You'll Get There: how often (Every N days, weeks, or months), how much each time, and By (the
+// window's own date box). Typed in, any two work out the third; one alone uses every month for how often, or with only
+// how often, a year from today for By. Typing a third clears the one typed first (three can't all be right), which is then
+// worked out. Payments start tomorrow. Whenever one is worked out, Add Recurring opens a new recurring Transfer for the
+// goal's Equity account with all of it filled in (title, account, amount, how often, the first day, and the last).
+// Returns { el, value() (the plan to save: see readGoalPlan in Process Budget.js) }.
+function goalPlanFields({ date, existing, title, amount, target, gemPick, gems, panel }) {
+  const saved = existing?.plan || null;
+  const savedFrequency = saved?.frequency ? parseFrequency(saved.frequency) : null;
+  const count = BudgetUI.element("input", "frequencyCount");
+  count.type = "text";
+  count.inputMode = "numeric";
+  count.placeholder = "1";
+  count.setAttribute("aria-label", "How many days, weeks, or months apart");
+  const unit = BudgetUI.element("select", "selectInput frequencyUnit");
+  for (const option of GOAL_PLAN_UNITS) unit.append(new Option(option.label, option.key));
+  unit.value = savedFrequency?.unit || "months";
+  unit.setAttribute("aria-label", "Days, weeks, or months");
+  if (savedFrequency) count.value = String(savedFrequency.count);
+  const frequencyRow = BudgetUI.element("div", "frequencyRow");
+  frequencyRow.append(BudgetUI.element("span", "frequencyEvery", "Every"), count, unit);
+  const each = BudgetUI.element("input", "textInput goalEach");
+  each.type = "text";
+  each.inputMode = "decimal";
+  each.placeholder = "$300.00";
+  each.translate = false;
+  if (saved?.each) each.value = formatMoney(saved.each);
+  const note = BudgetUI.element("p", "panelHint goalPlanNote");
+  note.setAttribute("aria-live", "polite");
+  const add = BudgetUI.element("button", "budgetButton", "Add Recurring");
+  add.type = "button";
+  add.hidden = true;
+  const box = BudgetUI.element("div", "goalPlan");
+  box.append(
+    BudgetUI.element("h4", "settingsSubheading", "How You'll Get There"),
+    BudgetUI.element("p", "panelHint", "Optional. Fill in any two of how often, how much each time, and By (above), and Bob works out the third. With one, how often starts as every month. Filling in a third clears the one you filled in first."),
+    BudgetUI.field("How often", frequencyRow),
+    BudgetUI.field("Each time", each),
+    note,
+    add
+  );
+
+  // Which were typed, in order (a saved plan's, or the boxes that start filled in), and which one is worked out
+  const parts = { frequency: () => count.value.trim() !== "", each: () => each.value.trim() !== "", date: () => date.input.value.trim() !== "" };
+  let typed = saved ? saved.typed.filter(part => parts[part]()) : Object.keys(parts).filter(part => parts[part]());
+  const marks = { frequency: count, each, date: date.input };
+  const typedIn = (part) => {
+    const filled = parts[part]();
+    marks[part].classList.remove("isWorkedOut");
+    typed = typed.filter(other => other !== part);
+    if (filled) typed.push(part);
+    // (A third clears the first: it's worked out instead)
+    if (typed.length > 2) {
+      const first = typed.shift();
+      if (first === "frequency") count.value = "";
+      if (first === "each") each.value = "";
+      if (first === "date") date.input.value = "";
+    }
+    work();
+  };
+  count.addEventListener("input", () => typedIn("frequency"));
+  unit.addEventListener("change", () => {
+    if (!parts.frequency()) count.value = "1";
+    typedIn("frequency");
+  });
+  each.addEventListener("input", () => typedIn("each"));
+  date.input.addEventListener("input", () => typedIn("date"));
+  date.input.addEventListener("change", () => { if (!typed.includes("date") || !parts.date()) typedIn("date"); });
+
+  // What's left to reach: from what it's for today to the goal's amount (a gem it follows says what it's for; a % goal's
+  // amount is worked out the way saveGoal does, kept from when it was set while its percent and what it's for are)
+  const needed = () => {
+    const gem = gems.find(item => item.id === gemPick?.input.value);
+    const following = gem ? gemGoalFields(gem) : null;
+    const [kind, ...name] = (following ? `${following.kind}:${following.account || ""}` : target.value()).split(":");
+    const account = name.join(":");
+    const balance = goalBalance({ kind, account });
+    if (balance === null) return null;
+    let goalAmount = amount.value() ?? 0;
+    if (following && following.amount !== null) goalAmount = following.amount;
+    else if (amount.isPercent()) {
+      const percent = amount.percent();
+      if (!percent || Number.isNaN(percent)) return null;
+      const kept = existing && existing.percent === percent && existing.kind === kind && cleanString(existing.account) === cleanString(account);
+      goalAmount = kept ? existing.amount : percentValue(percent, balance);
+    }
+    if (!Number.isFinite(goalAmount)) return null;
+    return { kind, account, left: Math.round((goalAmount - balance) * 100) / 100 };
+  };
+  const first = addDays(today, 1);
+  const payDay = (frequency, k) => (frequency.unit === "months" ? addMonths(first, k * frequency.count) : addDays(first, k * frequency.count * (frequency.unit === "weeks" ? 7 : 1)));
+  let worked = null; // { frequency, each, last, payments, lastPays, goal } once one is worked out
+
+  // The one not typed, worked out from the ones typed and shown in its box, with a line saying what it comes to (or what's
+  // still needed), and Add Recurring once there's something to add
+  function work() {
+    worked = null;
+    add.hidden = true;
+    // (What was worked out before goes, to be worked out again)
+    for (const part of Object.keys(marks)) {
+      if (typed.includes(part) || !marks[part].classList.contains("isWorkedOut")) continue;
+      marks[part].value = "";
+      marks[part].classList.remove("isWorkedOut");
+    }
+    const goal = needed();
+    if (typed.length === 0) return (note.textContent = "");
+    if (!goal) return (note.textContent = "Pick what the goal is for and its amount first.");
+    const left = Math.abs(goal.left);
+    if (left < 0.005) return (note.textContent = "It's already there, so there's nothing to set aside.");
+    const has = new Set(typed);
+    // One alone: every month to start, and with only how often, a year from today
+    let frequency = has.has("frequency") ? { count: Math.max(1, Math.min(999, Math.round(Number(count.value)) || 1)), unit: unit.value } : null;
+    if (has.has("frequency") && !(Number(count.value) >= 1)) return (note.textContent = "How often needs a whole number, like 2 (every 2 weeks).");
+    const eachAmount = has.has("each") ? readMoneyInput(each.value) : null;
+    if (has.has("each") && !(eachAmount > 0)) return (note.textContent = "Each time needs an amount, like 300.00.");
+    let by = has.has("date") ? date.value() : null;
+    if (has.has("date") && !(by instanceof Date)) return (note.textContent = `By needs a real day. Use ${datePattern()}.`);
+    if (by && by < first) return (note.textContent = "By needs a day after today.");
+    if (typed.length === 1 && !frequency) frequency = { count: 1, unit: "months" };
+    if (typed.length === 1 && has.has("frequency")) by = addMonths(today, 12);
+
+    let payments;
+    let amountEach;
+    if (frequency && eachAmount) {
+      payments = Math.ceil(left / eachAmount - 1e-9);
+      amountEach = eachAmount;
+      by = payDay(frequency, payments - 1);
+    } else if (frequency && by) {
+      payments = 0;
+      while (payDay(frequency, payments) <= by && payments < 5000) payments++;
+      if (payments === 0) return (note.textContent = "By comes before the first payment. Pick a later day, or pay more often.");
+      amountEach = Math.ceil(left / payments * 100) / 100;
+    } else {
+      // How much each time and By: as far apart as fits them all in by then
+      payments = Math.ceil(left / eachAmount - 1e-9);
+      amountEach = eachAmount;
+      const span = getDayDifference(by, first);
+      if (payments > span + 1) return (note.textContent = `${payments} payments of ${formatMoney(eachAmount)} don't fit by then, even one a day. Pay more each time, or pick a later day.`);
+      const apart = payments > 1 ? Math.floor(span / (payments - 1)) : Math.max(1, span);
+      frequency = apart >= 28 ? { count: Math.max(1, Math.floor(apart / 30.44)), unit: "months" } : apart % 7 === 0 ? { count: apart / 7, unit: "weeks" } : { count: apart, unit: "days" };
+      while (frequency.unit === "months" && frequency.count > 1 && payDay(frequency, payments - 1) > by) frequency.count--;
+      if (frequency.unit === "months" && payDay(frequency, payments - 1) > by) frequency = apart % 7 === 0 ? { count: apart / 7, unit: "weeks" } : { count: apart, unit: "days" };
+    }
+    const last = payDay(frequency, payments - 1);
+    const lastPays = Math.round((left - amountEach * (payments - 1)) * 100) / 100;
+    // The one worked out shows in its box, marked as worked out
+    if (!has.has("frequency")) {
+      count.value = String(frequency.count);
+      unit.value = frequency.unit;
+      count.classList.add("isWorkedOut");
+    }
+    if (!has.has("each")) {
+      each.value = formatMoney(amountEach);
+      each.classList.add("isWorkedOut");
+    }
+    if (!has.has("date")) {
+      date.input.value = showDate(last);
+      date.input.classList.add("isWorkedOut");
+    }
+    worked = { frequency, each: amountEach, last, payments, lastPays, goal };
+    const lastWords = lastPays > 0 && Math.abs(lastPays - amountEach) >= 0.005 ? ` (the last one only ${formatMoney(lastPays)})` : "";
+    note.textContent = `That's ${payments} ${payments === 1 ? "payment" : "payments"} of ${formatMoney(amountEach)}${lastWords}, ${formatFrequency(frequency).toLowerCase()} from ${showDate(first)} through ${showDate(last)}.${goal.kind === "account" ? "" : " Add Recurring needs an Equity account: pick one under For."}`;
+    add.hidden = goal.kind !== "account" || typeof openRecurringPanel !== "function";
+  }
+
+  // Add Recurring: a new recurring Transfer into (or out of, for a goal below what it holds now) the goal's account
+  add.addEventListener("click", () => {
+    if (!worked) return;
+    const into = worked.goal.left > 0;
+    openRecurringPanel(add, null, {
+      title: title.value() || `${worked.goal.account} Goal`,
+      account: worked.goal.account,
+      sprite: "⭕️",
+      amount: into ? -worked.each : worked.each,
+      frequency: formatFrequency(worked.frequency),
+      start: first,
+      end: worked.last
+    });
+  });
+  // (What it's for, its amount, or its gem changing works it out again: typed, picked, or tapped)
+  panel.form.addEventListener("click", (event) => { if (!box.contains(event.target) && event.target.closest("button")) setTimeout(work); });
+  panel.form.addEventListener("change", (event) => { if (!box.contains(event.target) && event.target !== date.input) work(); });
+  panel.form.addEventListener("input", (event) => { if (!box.contains(event.target) && event.target !== date.input) work(); });
+  for (const part of Object.keys(parts)) if (!typed.includes(part) && parts[part]()) marks[part].classList.add("isWorkedOut");
+  work();
+
+  return {
+    el: box,
+    value: () => ({
+      frequency: typed.includes("frequency") && Number(count.value) >= 1 ? formatFrequency({ count: Math.round(Number(count.value)), unit: unit.value }) : "",
+      each: typed.includes("each") && readMoneyInput(each.value) > 0 ? readMoneyInput(each.value) : null,
+      typed
+    })
+  };
 }
 
 //#endregion

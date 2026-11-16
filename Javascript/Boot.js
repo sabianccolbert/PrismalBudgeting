@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.15.2026.B";
+  const SITE_VERSION = "11.16.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,30 +26,30 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "002967fc0c",
-    "/Javascript/Budget Pages.js": "c7ab6d5bd0",
-    "/Javascript/Budget Search.js": "0b53f07b91",
-    "/Javascript/Budget UI.js": "2d4b6200fe",
+    "/Javascript/Bob Page.js": "7eb207aa4b",
+    "/Javascript/Budget Pages.js": "f2569ca55f",
+    "/Javascript/Budget Search.js": "7fd273fe6b",
+    "/Javascript/Budget UI.js": "b6bf5a3ec5",
     "/Javascript/Budgets.js": "48b18d72a5",
-    "/Javascript/Calendar Page.js": "8120eee210",
-    "/Javascript/Calendars Page.js": "91388f50de",
-    "/Javascript/Calendars.js": "0d778ceb17",
+    "/Javascript/Calendar Page.js": "00e330d00b",
+    "/Javascript/Calendars Page.js": "ff5890f7c3",
+    "/Javascript/Calendars.js": "8531637a8e",
     "/Javascript/Dates.js": "331a3e1cb1",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "325eea07f5",
+    "/Javascript/Fractals.js": "21d5aa1b66",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "040b0fd9b2",
-    "/Javascript/Line Graph.js": "852a44c28d",
+    "/Javascript/Layout.js": "fe4ae883c4",
+    "/Javascript/Line Graph.js": "3a2585001d",
     "/Javascript/Login.js": "5869bb48e7",
     "/Javascript/Notifications.js": "08aab68469",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "e9dea1b531",
-    "/Javascript/Quick Calendar.js": "7910e773dd",
-    "/Javascript/Quick Entry.js": "b26972c2f1",
-    "/Javascript/Quick Icon.js": "a54709cbc5",
+    "/Javascript/Process Budget.js": "99c4600273",
+    "/Javascript/Quick Calendar.js": "26d1f9f6a8",
+    "/Javascript/Quick Entry.js": "1cdf60bd5c",
+    "/Javascript/Quick Icon.js": "944d097f5a",
     "/Javascript/Session.js": "2ba7a04b3e",
-    "/Javascript/Settings Page.js": "ef221f9394",
-    "/Javascript/Snapshot Page.js": "da1eefe611",
+    "/Javascript/Settings Page.js": "c21c43059b",
+    "/Javascript/Snapshot Page.js": "0d50568752",
     "/Javascript/Sounds.js": "dc92737a93",
     "/Javascript/Spreadsheets Page.js": "cc69112cb2",
     "/Javascript/Spreadsheets.js": "fd11909f30",
@@ -78,7 +78,7 @@
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",
     "/Resources/Star.webp": "f2d3021d0b",
-    "/themes.css": "965ad2ed41"
+    "/themes.css": "ae228a8c81"
   };
   // </stamp:files>
 
@@ -124,6 +124,21 @@
 
   // GitHub Pages shows 404.html at whatever address was asked for, so that page says what it is
   window.PAGE = document.documentElement.dataset.page === "notfound" ? "notfound" : pageKeyOf(location.pathname);
+
+  // A page that's gone sends an old bookmark on to where it is now (search engines still get the 404, so they drop the old
+  // address): the menu folder's old capital M, the Tracker and History pages (on Bob's page and Home now), Jeremy's (Bob's
+  // now), and the site notes (How It Works)
+  const MOVED = { "/menu/tracker": "/menu/bob.html", "/menu/jeremy": "/menu/bob.html", "/menu/history": "/", "/future-proofing": "/how-it-works.html" };
+  let forwarded = false; // (Then the rest of this page's start is skipped: the browser stops reading it to go on)
+  if (window.PAGE === "notfound") {
+    const path = location.pathname;
+    const bare = path.replace(/\.html$/, "").replace(/\/$/, "");
+    const moved = MOVED[bare.toLowerCase()] || (/^\/Menu(\/|$)/.test(path) ? `/menu${path.slice(5) || "/"}` : null);
+    if (moved && moved !== path) {
+      forwarded = true;
+      location.replace(`${moved}${location.search}${location.hash}`);
+    }
+  }
 
   // A Snapshot icon (snapshot.html?key=): its key, not a login, reads the budget it was made in, to look at only (the API's
   // snapshot.js). Its page works signed out, and never loads analytics (its link carries the key).
@@ -745,8 +760,8 @@
       // The calendar (Calendar Fractals and their entries): Home shows it, the Budgets, Calendars & Spreadsheets page
       // manages it, Settings has its links, the Quick Calendar page is it, and Snapshot can show its entries
       if (page === "home" || page === "spreadsheets" || page === "settings" || page === "quickcal" || page === "snapshot") scripts.push("/Javascript/Fractals.js");
-      // The Quick Budget icon: Settings makes it, and the Quick Budget page puts it in its icon links
-      if (page === "settings" || page === "quick") scripts.push("/Javascript/Quick Icon.js");
+      // Home screen icons' looks: the Customize window when Home or Snapshot makes one, and on each icon's own page
+      if (page === "home" || page === "quick" || page === "quickcal" || page === "snapshot") scripts.push("/Javascript/Quick Icon.js");
       // The line graphs (Bob's page, the Accrual Calculator, and Snapshot)
       if (page === "bob" || page === "payments" || page === "snapshot") scripts.push("/Javascript/Line Graph.js");
       // Push notifications on this device: Settings turns them on and off, and Home asks once after a sign-in
@@ -797,6 +812,7 @@
   }
 
   onDOMReady(() => {
+    if (forwarded || !document.body) return;
     // The page holds still until it has slid in (Layout.js gives scrolling back)
     const CONTAINER = document.getElementById("transitionContainer");
     if (CONTAINER) {

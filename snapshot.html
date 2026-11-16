@@ -4,8 +4,8 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=767dfdda9b">
-    <link rel="stylesheet" href="/themes.css?v=965ad2ed41">
+    <link rel="stylesheet" href="/budgetStyle.css?v=ca59e3f5eb">
+    <link rel="stylesheet" href="/themes.css?v=ae228a8c81">
     <title>Prismal Planning - Snapshot</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -120,6 +120,8 @@
         <h2 class="srOnly">Your Cards</h2>
         <div id="snapshotView" class="snapshotGrid" aria-label="Your Snapshot cards"></div>
 
+        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Snapshot Page.js checks the key) -->
+        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
@@ -149,11 +151,12 @@
           <p>A card whose account, goal, gem, or row was deleted or renamed says so: take it off in Edit, and add it again. A card with <strong>More ›</strong> opens what's behind it, the same as its page does.</p>
 
           <h4>Add To Home Screen</h4>
-          <p><strong>Add To Home Screen</strong> puts this page on your phone's home screen (iPhone, Samsung, Pixel, OnePlus, and more), so your Snapshot is one tap away. It first says what a no-login icon means, then gives two ways:</p>
+          <p><strong>Add To Home Screen</strong> puts this page on your phone's home screen (iPhone, Samsung, Pixel, OnePlus, and more), so your Snapshot is one tap away. It starts with the icon's picture and colors (tap Next to keep them), then says what a no-login icon means, and gives two ways:</p>
           <ul>
             <li><strong>Make A No-Login Icon</strong> opens your Snapshot with no login, like Quick Budget's and Quick Calendar's icons. It shows this budget's cards, can read everything they're worked out from (the budget's entries, recurring entries, Upcoming entries, History, tracker, Equity accounts, goals, and calculators), and can't change anything. It never reads your Change Logs, notes, Calendar Fractals, or the links of your connected spreadsheets and calendars. Anyone holding the phone, or anyone its link reaches, can see your budget's numbers, so only make one on a phone you keep locked. Settings (Signed-In Devices) turns Snapshot icons off, and so do a new password and Sign Out Everywhere.</li>
             <li><strong>Keep The Login</strong> shows how to put this page on your home screen as it is: it asks you to log in, and after logging in it opens your Snapshot again.</li>
           </ul>
+          <p>A no-login icon's own page has <strong>Customize</strong> at the bottom, which changes that icon's picture and colors (an icon already on your home screen shows the new look once it's added again).</p>
         </section>
       </main>
     </div>

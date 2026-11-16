@@ -446,6 +446,7 @@ const BudgetUI = (() => {
   // What each refraction type does (the same as Home's Help, in short)
   function refractionHelp(allowAuto) {
     const list = element("ul");
+    list.appendChild(element("li", "", "An entry's refraction type says how it counts: Regular for most, Hidden and Transfer for money outside your budget's bank account or moving between your accounts."));
     const item = (sprite, name, text) => {
       const li = element("li", "", sprite ? `${sprite} ` : "");
       li.append(element("strong", "", name), `: ${text}`);
@@ -454,6 +455,9 @@ const BudgetUI = (() => {
     item("❗️", "Regular", "a normal cost or gain. It changes In Bank, and the tracker counts it.");
     item("✖️", "Hidden", "money spent or received outside your budget's account, like spending cash. It's a cost or gain (the day's Gains and Costs show it, and the tracker counts it), but In Bank stays the same. With an Equity account picked, that account changes by the same amount: a cost takes from it, and a gain adds to it.");
     item("⭕️", "Transfer", "money moving between your own accounts, like depositing cash. It changes In Bank, but it isn't a cost or gain, so the day's Gains and Costs leave it out, and in the tracker only the Transfers row (and rows set to count transfers) count it. With an Equity account picked, that account gets the opposite: a cost here adds to it, and a gain takes from it.");
+    const example = element("li");
+    example.append(element("strong", "", "Paying a loan or card"), " from your bank account (a car payment, say): a ⭕️ Transfer, as a cost, with its Equity account picked. In Bank goes down by the payment, and the loan comes up by it, toward $0.00.");
+    list.appendChild(example);
     if (allowAuto) item("", "Auto", "uses the type of an entry with this title already on that day, or Regular if there isn't one.");
     else list.appendChild(element("li", "", "Recurring entries show these behind a ✔️ (✔️ is Regular), and connected spreadsheets' entries behind a ➕."));
     return list;
@@ -490,6 +494,29 @@ const BudgetUI = (() => {
     });
     fieldEl.querySelector(".fieldLabel").appendChild(button);
     fieldEl.insertBefore(help, fieldEl.children[1].nextSibling);
+  }
+
+  // The same ? beside a switch (checkboxField's el, a label: the ? goes beside it, not in it, so tapping it never flips the
+  // switch), with its explanation under them
+  function addSwitchHelp(switchEl, label, content) {
+    const row = element("div", "switchWithHelp");
+    switchEl.replaceWith(row);
+    const help = element("div", "fieldHelp");
+    help.id = `fieldHelp${++fieldHelpCount}`;
+    help.hidden = true;
+    help.appendChild(content);
+    const button = element("button", "fieldHelpButton", "?");
+    button.type = "button";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-controls", help.id);
+    button.setAttribute("aria-expanded", "false");
+    button.title = label;
+    button.addEventListener("click", () => {
+      help.hidden = !help.hidden;
+      button.setAttribute("aria-expanded", String(!help.hidden));
+    });
+    row.append(switchEl, button);
+    row.after(help);
   }
 
   // A table row that opens something, for keyboards: a stop for the Tab key that Enter or Space presses (Layout.js's ACCESSIBILITY)
@@ -711,6 +738,14 @@ const BudgetUI = (() => {
     const choices = dropdownList([], "", () => describe(), "Equity Account");
     choices.el.classList.add("accountDropdown");
     const wrapper = field("Equity Account", choices.el, { optional: true });
+    addFieldHelp(wrapper, "What picking an Equity account does", helpList([
+      ["Equity accounts ", "are money outside your budget's bank account that you keep track of: savings, cash, a car loan, a credit card (set them up on the Equity tab)."],
+      ["Hidden: ", "the account changes by the entry's own amount, and In Bank stays the same: a cost takes from the account (like paying with cash), and a gain adds to it."],
+      ["Transfer: ", "money moves between In Bank and the account: a cost leaves In Bank and goes into the account (putting money in savings, or a car payment), and a gain comes out of the account into In Bank."],
+      ["A loan or card ", "is below $0.00 (money owed), so paying it is a Transfer cost with it picked, which brings it up toward $0.00."],
+      ["From: ", "a Transfer can come from another of your accounts instead of In Bank (like Savings to an HSA). In Bank doesn't change then."],
+      ["$ or %: ", "with an account picked, the amount can be a percent of what's in it as that day starts."]
+    ]));
     const fromChoices = dropdownList([], "", () => describe(), "From");
     fromChoices.el.classList.add("accountDropdown");
     const fromField = field("From", fromChoices.el);
@@ -948,6 +983,12 @@ const BudgetUI = (() => {
     toggle.input.addEventListener("change", showUntil);
     showUntil();
     el.append(toggle.el, element("span", "panelHint", hint), untilBox.el);
+    addSwitchHelp(toggle.el, "What a placeholder is", helpList([
+      ["What it's for: ", "an entry you expect but don't know exactly yet, like an electric bill you guess will be $120.00. Put your best guess in, and fix it when you know."],
+      ["How it counts: ", "like any entry: In Bank, Lowest, and Bob count it. It shows in yellow, so it's easy to spot."],
+      ["When it goes: ", "the budget deletes it by itself once its own day passes, so a guess never stays behind as if it were real. Delete it after picks another day for that instead."],
+      ["When you know the real amount: ", "tap it, change its amount, and turn Placeholder off, so it stays."]
+    ]));
     return {
       el,
       input: toggle.input,
@@ -989,6 +1030,11 @@ const BudgetUI = (() => {
     });
     showDays();
     el.append(toggle.el, daysField);
+    addSwitchHelp(toggle.el, "How an entry's reminder works", helpList([
+      ["What it does: ", "a reminder naming the entry, at your reminder time, that many days before its day (0: on its day)."],
+      ["It needs: ", "notifications on for one of your devices, or the calendar link, with 🔔 Entry reminders on (all in Settings' Reminders). Without either, it has nowhere to go."],
+      ["A recurring entry's ", "comes before each day it lands on."]
+    ]));
     return {
       el,
       setDate(date) { el.hidden = !(date instanceof Date && !isNaN(date.getTime()) && date > today); },
@@ -1971,6 +2017,7 @@ const BudgetUI = (() => {
     refractionField,
     helpList,
     addFieldHelp,
+    addSwitchHelp,
     dateField,
     selectField,
     checkboxField,

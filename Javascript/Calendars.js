@@ -633,7 +633,7 @@ const Calendars = (() => {
     postTaxPercent: 0, postTaxFixed: 0, nontaxableReimbursements: 0
   };
   const CHOICES = {
-    payEvery: ["week", "2weeks", "twiceMonth", "month"], weekend: ["none", "before", "after"], period: ["weeks", "days"],
+    payEvery: ["week", "2weeks", "days", "twiceMonth", "month"], weekend: ["none", "before", "after"], period: ["weeks", "days"],
     otRate: ["blended", "own"], overnight: ["start", "split"], fedMode: ["percent", "w4", "none"], fedFiling: ["single", "married", "head"],
     stateMode: ["percent", "table", "none"], stateFiling: ["single", "married"], otFederal: ["taxed", "extra", "none"], otState: ["taxed", "extra", "none"]
   };
@@ -644,6 +644,7 @@ const Calendars = (() => {
   const MAX_WORDS = 300;
   const MAX_HOURLY = 100000;
   const MAX_LOOK_AHEAD_DAYS = 366;
+  const MAX_PAYDAYS = 10; // Paydays a month, with payEvery "days"
 
   // The Paycheck Calculator's boxes a crystal can fill in, and the pay settings each one is (the same names, so a crystal
   // fills in its own; the hours come from the calendar, so those three aren't used)
@@ -674,7 +675,7 @@ const Calendars = (() => {
     if (key === "payAnchor") return isDay(value) ? value : undefined;
     if (key === "payDays") {
       if (!Array.isArray(value)) return undefined;
-      const days = value.map(Number).filter(day => Number.isInteger(day) && day >= 1 && day <= 31).slice(0, 2);
+      const days = [...new Set(value.map(Number).filter(day => Number.isInteger(day) && day >= 1 && day <= 31))].slice(0, MAX_PAYDAYS);
       return days.length > 0 ? days : undefined;
     }
     if (key === "nightFrom" || key === "nightTo") return isTime(value) ? value : undefined;
@@ -795,12 +796,25 @@ const Calendars = (() => {
   // #region PAYDAYS
   // =====================================================================
   // Each version's paydays run from its from until the next version's: every week (on a weekday), every other week
-  // (lined up with one of its paydays), twice a month, or once a month (on days of the month: 31 is the last day of any
-  // month). A payday on a weekend can move to the Friday before or the Monday after. Each paycheck pays a pay period:
-  // the full workweeks that ended before the week its payday is in (period "weeks"), or the days up to periodLag days
-  // before its payday (period "days"), from the day after the period before it.
+  // (lined up with one of its paydays), or on days of the month (payEvery "days": each of payDays, up to MAX_PAYDAYS, like
+  // the 1st, 10th, and 20th; 31 is the last day of any month). Settings saved before "days" can say "twiceMonth" (the
+  // first two of payDays) or "month" (the first). A payday on a weekend can move to the Friday before or the Monday after.
+  // Each paycheck pays a pay period: the full workweeks that ended before the week its payday is in (period "weeks"), or
+  // the days up to periodLag days before its payday (period "days"), from the day after the period before it.
 
-  const PAY_PERIODS_PER_YEAR = { week: 52, "2weeks": 26, twiceMonth: 24, month: 12 };
+  // The days of the month a version pays on, in order (payEvery "days", "twiceMonth", or "month")
+  function payDaysOf(version) {
+    const days = Array.isArray(version.payDays) ? version.payDays : PAY_DEFAULTS.payDays;
+    const picked = version.payEvery === "month" ? days.slice(0, 1) : version.payEvery === "twiceMonth" ? days.slice(0, 2) : days;
+    return [...new Set(picked)].sort((a, b) => a - b);
+  }
+
+  // How many paychecks a version's schedule has in a year (withholding works a year out from one)
+  function periodsPerYear(version) {
+    if (version.payEvery === "week") return 52;
+    if (version.payEvery === "2weeks") return 26;
+    return 12 * Math.max(1, payDaysOf(version).length);
+  }
 
   // A version's paydays (as their schedule has them, before a weekend moves them) from day from (a Date) up to until
   // (not included), with the one before the first: { days: [Date], before: Date }
@@ -820,7 +834,7 @@ const Calendars = (() => {
       for (let day = first; day < until && days.length < 2000; day = addDays(day, step)) days.push(day);
       before.push(addDays(first, -step));
     } else {
-      const picks = version.payEvery === "month" ? [version.payDays[0]] : [...new Set(version.payDays.slice(0, 2))].sort((a, b) => a - b);
+      const picks = payDaysOf(version);
       const inMonth = (y, m) => picks.map(pick => new Date(y, m, Math.min(pick, new Date(y, m + 1, 0).getDate())));
       let y = from.getFullYear();
       let m = from.getMonth();
@@ -1402,7 +1416,7 @@ const Calendars = (() => {
     const extraMedicareWages = medicarePercent > 0 ? Math.max(0, yearWages + ficaBase - Math.max(yearWages, EXTRA_MEDICARE_FROM)) : 0;
     const fica = roundCents(roundCents(socialSecurityWages * (version.ficaPercent - medicarePercent) / 100) + roundCents(ficaBase * medicarePercent / 100) + roundCents(extraMedicareWages * 0.9 / 100));
     const overtimeOut = (choice) => (choice === "none" ? check.overtime : choice === "extra" ? check.overtimeExtra : 0);
-    const periods = PAY_PERIODS_PER_YEAR[version.payEvery];
+    const periods = periodsPerYear(version);
 
     // Federal
     let federal = 0;
@@ -1717,7 +1731,9 @@ const Calendars = (() => {
     CRYSTAL_KEYS,
     STATE_TABLES,
     FEDERAL_TABLES,
-    PAY_PERIODS_PER_YEAR,
+    payDaysOf,
+    periodsPerYear,
+    MAX_PAYDAYS,
     DEFAULT_TITLE
   };
 })();

@@ -25,8 +25,8 @@ window.Fractals = (() => {
   const DAY_MINUTES = 1440;
   const HOUR_EM = 2.2;         // How tall an hour is beside a zoomed day's times
   const MIN_BLOCK_MINUTES = 30; // The shortest a block is drawn (so its title fits)
-  const INDENT_EM = 1.5;       // How far each overlapping block starts to the right of the one before
-  const LAST_BLOCK_EM = 7;     // The least room the rightmost block keeps (more blocks than fit scroll sideways)
+  const SIDE_BY_SIDE = 3;      // Blocks that overlap share the day's width up to this many across...
+  const COLUMN_EM = 6;         // ...and past it, each column is this wide, and the blocks scroll sideways
   const TRAVEL_CHOICES = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120];
   const REPEAT_UNITS = [{ value: "days", label: "Days" }, { value: "weeks", label: "Weeks" }, { value: "months", label: "Months" }];
   const ALERT_UNITS = [{ value: "minutes", label: "Minutes" }, { value: "days", label: "Days" }, { value: "weeks", label: "Weeks" }, { value: "months", label: "Months" }];
@@ -180,6 +180,13 @@ window.Fractals = (() => {
     return fractal ? fractal.color : SHARED_COLOR;
   }
 
+  // A fractal's name (Shared With You for entries shared with the account)
+  function nameOf(fractalId) {
+    if (fractalId === SHARED) return "Shared With You";
+    const fractal = (data && data.fractals.find(item => item.id === fractalId)) || (String(fractalId).startsWith("linked:") ? linkedFractal(fractalId) : null);
+    return fractal ? fractal.name : "";
+  }
+
   // Black or white, whichever reads better on a color (by its contrast with each)
   function textOn(hex) {
     const channel = (index) => {
@@ -274,6 +281,14 @@ window.Fractals = (() => {
     }
   }
 
+  // Every entry that happens from one day through another (YYYY-MM-DD), checked here or not, linked fractals' too:
+  // [{ event, day, last }] (Home's Search)
+  function occurrencesBetween(from, to) {
+    if (!data) return [];
+    const linked = linkedFractals().flatMap(fractal => linkedEventsIn(fractal, from, to));
+    return [...data.events, ...linked].flatMap(event => occurrences(event, from, to));
+  }
+
   // The calendar entries on a day (a Date), in order: the ones all day, then by when they start
   function eventsOn(date) {
     if (!data) return [];
@@ -360,32 +375,47 @@ window.Fractals = (() => {
     return line;
   }
 
-  // The entries with a time, laid out beside the hours: each in the first column that's free when it starts (so they go
-  // left to right, and start at the left again once the first ones end), with its travel time counted as part of it.
-  // { blocks: [{ part, column, from (with its travel time), start, end, dot }], columns }
+  // The entries with a time, laid out beside the hours, with each one's travel time counted as part of it. Entries that
+  // overlap (one starting before another ends, through a chain of them) are a group, side by side: each in its group's
+  // first column that's free when it starts, and every column of a group as wide as the others, so no block covers
+  // another and each one's whole left side shows. { blocks: [{ part, column, columns (its group's), from (with its travel
+  // time), start, end }], widest (the most columns any group has) }
   function layOut(parts) {
-    const ends = [];
-    const blocks = parts.map(part => {
-      const from = Math.max(0, part.start - (part.on === part.day ? part.event.travel || 0 : 0));
-      const end = Math.min(DAY_MINUTES, Math.max(part.end, part.start + MIN_BLOCK_MINUTES));
-      let column = ends.findIndex(taken => taken <= from);
-      if (column === -1) column = ends.length;
-      ends[column] = end;
-      return { part, column, from, start: part.start, end };
-    });
-    // A block's title is covered when one to its right starts within the hour after it: only the block's left edge
-    // shows, so its title runs down that edge (budgetStyle.css .timeBlock.isCovered)
+    const blocks = parts.map(part => ({
+      part,
+      from: Math.max(0, part.start - (part.on === part.day ? part.event.travel || 0 : 0)),
+      start: part.start,
+      end: Math.min(DAY_MINUTES, Math.max(part.end, part.start + MIN_BLOCK_MINUTES))
+    })).sort((a, b) => a.from - b.from || b.end - a.end);
+    let widest = 0;
+    let group = [];
+    let ends = [];
+    let groupEnd = -1;
+    const close = () => {
+      for (const block of group) block.columns = ends.length;
+      widest = Math.max(widest, ends.length);
+      group = [];
+      ends = [];
+    };
     for (const block of blocks) {
-      block.dot = blocks.some(other => other.column > block.column && other.from >= block.start && other.from - block.start < 60 && other.from < block.end);
+      if (block.from >= groupEnd && group.length > 0) close();
+      let column = ends.findIndex(taken => taken <= block.from);
+      if (column === -1) column = ends.length;
+      ends[column] = block.end;
+      block.column = column;
+      group.push(block);
+      groupEnd = Math.max(group.length === 1 ? 0 : groupEnd, block.end);
     }
-    return { blocks, columns: ends.length };
+    if (group.length > 0) close();
+    return { blocks, widest };
   }
 
   // A zoomed day's times: the hours down the left (midnight to midnight), and a block for each entry with a time, in its
-  // fractal's color with a little of the page showing through, its travel time dimmer above it. More blocks side by side
-  // than fit scroll sideways inside it; it's as tall as its hours, so the page scrolls, never the day.
+  // fractal's color with a little of the page showing through, its travel time dimmer above it (over anything under it).
+  // A group of up to SIDE_BY_SIDE blocks shares the width; one with more gives each column COLUMN_EM, and they scroll
+  // sideways inside it. It's as tall as its hours, so the page scrolls, never the day.
   function timesBlock(parts) {
-    const { blocks, columns } = layOut(parts);
+    const { blocks, widest } = layOut(parts);
     const scroller = el("div", "dayTimesScroll");
     const grid = el("div", "dayTimesGrid");
     grid.style.height = `${24 * HOUR_EM}em`;
@@ -397,15 +427,19 @@ window.Fractals = (() => {
       hours.append(label);
     }
     const area = el("div", "dayBlocks");
-    area.style.minWidth = `${(columns - 1) * INDENT_EM + LAST_BLOCK_EM}em`;
+    if (widest > SIDE_BY_SIDE) area.style.minWidth = `${widest * COLUMN_EM}em`;
     for (const block of blocks) {
-      const left = `${block.column * INDENT_EM}em`;
+      // (Its column's place and width: a share of the day, or past SIDE_BY_SIDE, COLUMN_EM each)
+      const shared = block.columns <= SIDE_BY_SIDE;
+      const left = shared ? `${(block.column / block.columns) * 100}%` : `${block.column * COLUMN_EM}em`;
+      const width = shared ? `${100 / block.columns}%` : `${COLUMN_EM}em`;
       const color = colorOf(block.part.event.fractal);
       if (block.from < block.start) {
         const travel = el("div", "timeTravel");
         travel.style.top = `${(block.from / 60) * HOUR_EM}em`;
         travel.style.height = `${((block.start - block.from) / 60) * HOUR_EM}em`;
         travel.style.left = left;
+        travel.style.width = width;
         travel.style.background = seeThrough(color, 0.35);
         travel.setAttribute("aria-hidden", "true");
         area.append(travel);
@@ -416,12 +450,12 @@ window.Fractals = (() => {
       node.style.top = `${(block.start / 60) * HOUR_EM}em`;
       node.style.height = `${((block.end - block.start) / 60) * HOUR_EM}em`;
       node.style.left = left;
+      node.style.width = width;
       node.setAttribute("role", "button");
       node.tabIndex = 0;
       node.setAttribute("aria-label", `${block.part.event.title}, ${partWords(block.part, false)}`);
-      node.classList.toggle("isCovered", block.dot);
       node.append(el("span", "timeBlockTitle", block.part.event.title));
-      if (!block.dot && block.end - block.start >= 60) node.append(el("span", "timeBlockTime", partWords(block.part, false)));
+      if (block.end - block.start >= 60) node.append(el("span", "timeBlockTime", partWords(block.part, false)));
       area.append(node);
     }
     grid.append(hours, area);
@@ -1237,7 +1271,8 @@ window.Fractals = (() => {
     const fractalField = BudgetUI.selectField({
       label: "Calendar Fractal",
       options: fractals.map(fractal => ({ value: fractal.id, label: fractal.name })),
-      value: event && fractals.some(fractal => fractal.id === event.fractal) ? event.fractal : (fractals.find(fractal => isShown(fractal.id)) || fractals[0] || { id: "" }).id
+      // (A new one starts in the default fractal, or without one, the first one showing)
+      value: event && fractals.some(fractal => fractal.id === event.fractal) ? event.fractal : (fractals.find(fractal => fractal.isDefault) || fractals.find(fractal => isShown(fractal.id)) || fractals[0] || { id: "" }).id
     });
     const allDay = BudgetUI.checkboxField({ label: "All day", checked: event ? event.allDay : false });
     const starts = BudgetUI.dateField({ label: "Starts", date: dayOf(startDay), hint: " " });
@@ -1400,6 +1435,44 @@ window.Fractals = (() => {
     return stored;
   }
 
+  // A repeating entry's Delete, Just this day: the days before it keep the entry, which now stops repeating the day
+  // before (with none before, it goes), and a new one starts on its next day, repeating the same way through the same
+  // last day, with its alerts, notes, and people (shared with whoever the old one is). One with no next day only stops.
+  // A monthly one whose next day a shorter month moved (the 31st, on April 30th) would go on repeating on that day, so
+  // that day is only left out instead. When the new one can't be saved, the old one goes back to how it was. Resolves to
+  // { ok, message }.
+  async function deleteOneDay(event, day) {
+    const stored = storedOf(event);
+    const span = daysBetween(event.start, event.end);
+    const earlier = occurrences(event, event.start, plusDays(day, -1)).some(item => item.day < day);
+    let next = null;
+    let index = firstOccurrenceFrom(event, plusDays(day, 1));
+    for (let tries = 0; tries < 4000; tries++, index++) {
+      const candidate = occurrenceDay(event, index);
+      if (event.until && candidate > event.until) break;
+      if (candidate <= day || (event.skip && event.skip.includes(candidate))) continue;
+      next = candidate;
+      break;
+    }
+    const after = (from) => (event.skip || []).filter(skipped => skipped > from);
+    if (!earlier && !next) {
+      const result = await store.remove(event.id);
+      if (!result.ok || !result.data) return { ok: false, message: problem(result, "Couldn't delete it. Please try again.") };
+      if (Array.isArray(result.data.fractals)) took(result.data);
+      return result.data.error ? { ok: false, message: result.data.error } : { ok: true };
+    }
+    if (next && event.repeat.unit === "months" && next.slice(8) !== event.start.slice(8)) {
+      return saveEvent(event.id, event.fractal, { ...stored, skip: [...(event.skip || []), day] });
+    }
+    if (!earlier) return saveEvent(event.id, event.fractal, { ...stored, start: next, end: plusDays(next, span), skip: after(next) });
+    const ended = await saveEvent(event.id, event.fractal, { ...stored, until: plusDays(day, -1), skip: (event.skip || []).filter(skipped => skipped < day) });
+    if (!ended.ok || !next) return ended;
+    const made = await saveEvent(null, event.fractal, { ...stored, start: next, end: plusDays(next, span), until: event.until || null, skip: after(next) }, [], event.id);
+    if (made.ok) return made;
+    const restored = await saveEvent(event.id, event.fractal, stored);
+    return { ok: false, message: restored.ok ? made.message : `It ends before ${showDate(dayOf(day))} now, but its days after couldn't be saved. Check your connection, then change its end back.` };
+  }
+
   // A tapped entry's window. One shared with the account (or, on the Quick Calendar page, one already on the calendar)
   // only shows; the account's own can be changed or deleted, and a repeating one asks whether that's for the tapped day
   // or every time. It says it opened ("entry:opened"), so Home can give it ‹ and › to the entries around it.
@@ -1456,10 +1529,16 @@ window.Fractals = (() => {
             const one = repeating && scope.value() === "one";
             if (!window.confirm(one ? `Delete ${event.title} on ${showDate(dayOf(day))} only?` : `Delete ${event.title}${repeating ? ", every time it repeats" : ""}? This can't be undone.`)) return;
             panel.setBusy(true);
-            const result = one ? await store.save(event.id, event.fractal, { ...storedOf(event), skip: [...(event.skip || []), day] }) : await store.remove(event.id);
-            panel.setBusy(false);
-            if (!result.ok) return panel.setError(problem(result, "Couldn't delete it. Please try again."));
-            if (result.data && Array.isArray(result.data.fractals)) took(result.data);
+            if (one) {
+              const split = await deleteOneDay(event, day);
+              panel.setBusy(false);
+              if (!split.ok) return panel.setError(split.message || "Couldn't delete it. Please try again.");
+            } else {
+              const result = await store.remove(event.id);
+              panel.setBusy(false);
+              if (!result.ok) return panel.setError(problem(result, "Couldn't delete it. Please try again."));
+              if (result.data && Array.isArray(result.data.fractals)) took(result.data);
+            }
             panel.close();
             toast(`Deleted ${event.title}${one ? ` on ${showDate(dayOf(day))}` : ""}.`);
           } },
@@ -1558,7 +1637,21 @@ window.Fractals = (() => {
         const count = data.events.filter(event => event.fractal === fractal.id).length;
         about.append(name, el("span", "budgetDetail", `${count} ${count === 1 ? "entry" : "entries"}${data.links.fractals[fractal.id] ? " · calendar link on" : ""}`));
         const buttons = el("div", "budgetInvitationButtons");
-        buttons.append(button("Edit", "", (event) => openFractal(event.currentTarget, fractal), `Edit ${fractal.name}`));
+        // Default: new entries start in it (pressed on the one that is)
+        const isDefault = !!fractal.isDefault;
+        const defaultButton = button(isDefault ? "Default ✓" : "Default", isDefault ? "primary" : "", async (event) => {
+          if (isDefault) return toast(`${fractal.name} is already where new entries start.`);
+          const pressed = event.currentTarget;
+          pressed.disabled = true;
+          const result = await change("default", { id: fractal.id });
+          if (!result.ok || result.data?.error) {
+            pressed.disabled = false;
+            return toast(result.data?.error || problem(result, "Couldn't change the default. Please try again."), true);
+          }
+          toast(`New calendar entries start in ${fractal.name} now.`);
+        }, isDefault ? `${fractal.name} is the default: new entries start in it` : `Make ${fractal.name} the default, where new entries start`);
+        defaultButton.setAttribute("aria-pressed", String(isDefault));
+        buttons.append(defaultButton, button("Edit", "", (event) => openFractal(event.currentTarget, fractal), `Edit ${fractal.name}`));
         item.append(about, buttons);
         list.append(item);
       }
@@ -1730,10 +1823,13 @@ window.Fractals = (() => {
     addSteps,
     whenWords,
     partWords,
+    timeText,
     renderManager,
     renderLinks,
     readLinked,
     linkedFractals,
-    occurrences
+    occurrences,
+    occurrencesBetween,
+    nameOf
   };
 })();
