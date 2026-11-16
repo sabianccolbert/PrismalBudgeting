@@ -71,9 +71,25 @@
     homeCard.scrollIntoView({ block: "nearest", behavior: window.lessMotion() ? "auto" : "smooth" });
   }
 
-  // Add To Home Screen: what a no-login icon means first (anyone with it sees this budget's Snapshot), then its key, and the
-  // page opened with it, showing how to add it. Or Keep The Login: the steps for the page as it is.
+  // Add To Home Screen: how the icon looks first (Quick Icon.js's Customize window, starting from Snapshot's own), then what
+  // a no-login icon means (anyone with it sees this budget's Snapshot), then its key with that look, and the page opened
+  // with it, showing how to add it. Or Keep The Login: the steps for the page as it is, with that look in its icon links.
   function openHomeScreenSetup(origin) {
+    QuickIcon.openEditor({
+      origin,
+      kind: "snapshot",
+      title: "Snapshot Icon",
+      saveLabel: "Next",
+      intro: "First, how the icon looks on your home screen. Tap Next to keep this one, or pick its picture and colors. A no-login icon's own page has Customize at the bottom to change it later.",
+      onSave: (look) => {
+        showHomeScreenChoice(origin, look);
+        return { ok: true, keepOpen: true }; // (The next window takes this one's place)
+      }
+    });
+  }
+
+  // Its second window: what a no-login icon means, then Make A No-Login Icon (its key, with that look) or Keep The Login
+  function showHomeScreenChoice(origin, look) {
     BudgetUI.openPanel({
       origin,
       size: "large",
@@ -88,7 +104,7 @@
           text("Settings turns Snapshot icons off whenever you like, and so do a new password and Sign Out Everywhere. Keep The Login puts this page on your home screen with your login instead."),
           BudgetUI.buttonRow([
             { label: "Make A No-Login Icon", kind: "primary", type: "submit" },
-            { label: "Keep The Login", onClick: () => { panel.close(); showHomeScreenSteps(); } },
+            { label: "Keep The Login", onClick: () => { panel.close(); QuickIcon.apply(look.picture); showHomeScreenSteps(); } },
             { label: "Cancel", onClick: () => panel.close() }
           ])
         );
@@ -96,7 +112,7 @@
           event.preventDefault();
           panel.setError("");
           panel.setBusy(true);
-          const result = await budgetApi("/api/snapshot/key", {});
+          const result = await budgetApi("/api/snapshot/key", { look });
           if (!result.ok || !result.data || !result.data.key) {
             panel.setBusy(false);
             panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't make the icon. Please try again.");
@@ -118,6 +134,21 @@
     document.getElementById("snapshotHomeScreen").hidden = true;
     document.getElementById("snapshotKeyNote").hidden = false;
     document.getElementById("snapshotKeyBudget").textContent = budgetInfo?.name || "your budget";
+    // This icon's own look, in the links a phone reads when the page is added to its home screen, and its Customize button
+    window.QuickIcon?.wirePage({
+      kind: "snapshot",
+      look: window.snapshotLook,
+      send: async (look) => {
+        try {
+          const response = await fetch(`${window.API_BASE_URL}/api/snapshotkey/look`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: window.SNAPSHOT_KEY, look }) });
+          let data = null;
+          try { data = await response.json(); } catch (e) {}
+          return { ok: response.ok, status: response.status, data };
+        } catch (e) {
+          return { ok: false, status: 0, data: null };
+        }
+      }
+    });
     if (new URLSearchParams(location.search).has("setup")) {
       document.getElementById("homeScreenLogin").hidden = true;
       document.getElementById("homeScreenKeyed").hidden = false;
@@ -360,9 +391,10 @@
       }
     },
     "bob.data": {
-      title: (ref) => ref,
+      title: (ref) => (typeof DATA_RENAMED !== "undefined" && DATA_RENAMED[ref]) || ref,
       render(body, ref) {
-        const row = dataRows().find(item => item.label === ref);
+        const label = typeof DATA_RENAMED !== "undefined" && DATA_RENAMED[ref] ? DATA_RENAMED[ref] : ref;
+        const row = dataRows().find(item => item.label === label);
         if (!row) throw new Gone();
         numberBody(body, row.value, row.note, { amount: row.amount, open: row.open });
       }

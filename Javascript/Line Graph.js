@@ -6,7 +6,8 @@
 // More than one line has a legend: each line's name is a button that goes, one tap at a time, Separate (its own line and
 // color), Red, Blue, Hidden, and back to Separate. Every line set to Red is added together into one thicker red line, and every
 // one set to Blue into a blue one, so a few lines can be seen as one (like Coffee, Coffees, and Drinks) next to others. A "?"
-// first in the legend says so. Past MAX_LINES lines (as many as there are colors), the rest start Hidden.
+// first in the legend says so, and All after it sets every line the same way at once (it's grey while the lines differ).
+// Past MAX_LINES lines (as many as there are colors), the rest start Hidden.
 //
 // LineGraph.create({ label, from, series, note, money, min, max, pickDay, start, until, dashAhead, emptyNote, level }):
 //   label: what it shows, for the title over it and for screen readers
@@ -32,6 +33,7 @@ window.LineGraph = (function () {
   const MODES_HELP = [
     "Tap a line's name to change how it's drawn. Each tap goes to the next: Separate (its own line, in its own color), Red, Blue, Hidden, then back to Separate.",
     "Every line set to Red is added together into one thicker red line, and every line set to Blue into one blue line. That way a few lines can be seen as one, like Coffee, Coffees, and Drinks in red, next to Groceries in blue.",
+    "All sets every line at once, going through the same four. It's grey while the lines are set differently; tap it then to set them all back to Separate.",
     `Point at the graph (or tap it) to read each line on that day. A graph with more than ${MAX_LINES} lines starts with the rest Hidden.`
   ];
   const WIDE_ENOUGH = 460;    // Pixels wide before each line's name fits at its right end
@@ -333,8 +335,31 @@ window.LineGraph = (function () {
       point(next);
     });
 
-    // The legend (with two lines or more): its "?", then each line's key and name, a button that goes to the line's next
-    // mode (MODES), saying the one it's on unless that's Separate
+    // The legend (with two lines or more): its "?", All (every line's mode at once: the next one after the mode they all
+    // share, or Separate while they differ, when it's grey), then each line's key and name, a button that goes to the line's
+    // next mode (MODES), saying the one it's on unless that's Separate
+    function allButton() {
+      const shared = lines.every(line => modeOf(line.name) === modeOf(lines[0].name)) ? modeOf(lines[0].name) : null;
+      const next = shared ? MODES[(MODES.indexOf(shared) + 1) % MODES.length] : "separate";
+      const item = BudgetUI.element("li");
+      const button = BudgetUI.element("button", `lineGraphAll ${shared ? `is${MODE_WORDS[shared]}` : "isMixed"}`);
+      button.type = "button";
+      button.title = shared ? `Every line: ${MODE_WORDS[shared]}. Tap to set them all to ${MODE_WORDS[next]}.` : "The lines are set differently. Tap to set them all to Separate.";
+      button.setAttribute("aria-label", button.title);
+      button.append(BudgetUI.element("span", "", "All"));
+      if (shared && shared !== "separate") button.append(BudgetUI.element("span", "lineGraphMode", MODE_WORDS[shared]));
+      button.addEventListener("click", () => {
+        for (const line of lines) modes.set(line.name, next);
+        drawn = drawnLines();
+        drawLegend();
+        paint();
+        fillTable();
+        legend.querySelector(".lineGraphAll")?.focus({ preventScroll: true });
+      });
+      item.append(button);
+      return item;
+    }
+
     function drawLegend() {
       legend.hidden = lines.length < 2;
       if (legend.hidden) {
@@ -342,7 +367,7 @@ window.LineGraph = (function () {
         helpButton.setAttribute("aria-expanded", "false");
         return legend.replaceChildren();
       }
-      legend.replaceChildren(helpItem, ...lines.map((line, at) => {
+      legend.replaceChildren(helpItem, allButton(), ...lines.map((line, at) => {
         const mode = modeOf(line.name);
         const next = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
         const item = BudgetUI.element("li");
@@ -360,8 +385,8 @@ window.LineGraph = (function () {
           drawLegend();
           paint();
           fillTable();
-          // (The button was drawn again: the focus stays on this line's)
-          legend.children[at + 1]?.querySelector("button")?.focus({ preventScroll: true });
+          // (The button was drawn again: the focus stays on this line's, after the "?" and All)
+          legend.children[at + 2]?.querySelector("button")?.focus({ preventScroll: true });
         });
         item.append(button);
         return item;

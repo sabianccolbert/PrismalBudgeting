@@ -4,8 +4,8 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=767dfdda9b">
-    <link rel="stylesheet" href="/themes.css?v=965ad2ed41">
+    <link rel="stylesheet" href="/budgetStyle.css?v=ca59e3f5eb">
+    <link rel="stylesheet" href="/themes.css?v=ae228a8c81">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -68,51 +68,45 @@
         <div class="wideColumns">
           <div class="wideColumn">
             <div id="settingsView" hidden>
-              <!-- The reminders: which kinds this account gets (a switch for each), when, and with more than one budget, which
-                   budget they're about (Settings Page.js). They come as push notifications and on the calendar link, the two
-                   cards after it. -->
+              <!-- Reminders, in one card: how they come (push notifications on this device, and the calendar link), then which
+                   kinds this account gets (a switch for each), when, and with more than one budget, which budget they're
+                   about. The choices show once either way is on: push here, or the calendar link (Settings Page.js
+                   showReminderChoices). -->
               <section id="reminderCard" class="budgetCard settingsCard" aria-labelledby="reminderHeading">
                 <h3 id="reminderHeading">Reminders</h3>
-                <p>A "🗓️ Check Budget" reminder at your reminder time, on the days your budget needs a look. Pick what's worth one:</p>
-                <div id="reminderKinds" class="reminderKinds" role="group" aria-labelledby="reminderHeading"></div>
-                <label class="settingsField">
-                  <span class="fieldLabel">Reminder time</span>
-                  <input id="reminderTime" class="timeInput" type="time" step="300">
-                </label>
-                <p id="timeZoneNote" class="panelHint"></p>
-                <!-- With more than one budget: which one the reminders are about (Settings Page.js) -->
-                <label id="reminderBudgetField" class="settingsField" hidden>
-                  <span class="fieldLabel">Reminders are about</span>
-                  <select id="reminderBudget" class="selectInput"></select>
-                </label>
-                <p class="panelHint">They come as push notifications, on your calendar, or both: turn those on below. Reminders for entries are on to start; the rest start off.</p>
-              </section>
+                <p>A "🗓️ Check Budget" reminder at a time you pick, on the days your budget needs a look. It can come as a notification on this device, as an event in your calendar app, or both. Turn one on, then pick what gets a reminder.</p>
 
-              <section class="budgetCard settingsCard" aria-labelledby="pushHeading">
-                <h3 id="pushHeading">Push Notifications</h3>
-                <p>Your reminders (picked under Reminders) as a "🗓️ Check Budget" notification on this device, at your reminder time.</p>
+                <h4 id="pushHeading" class="settingsSubheading">Notifications On This Device</h4>
                 <p id="pushStatus"></p>
                 <div id="pushButtons" class="panelButtons"></div>
-                <ul class="settingsList settingsNotes">
-                  <li>Its title shows what it's about (like 🗓️🔔⛔️ Check Budget), and its lines say why. An entry's reminder shows the entry's title and its day; the rest never show amounts or entry titles. Tapping it opens the budget it's about.</li>
-                  <li>Each device is turned on by itself, from that device, and right after you sign in, Home asks once whether to turn them on there (Not Now stops it asking on that device; this card turns them on any time).</li>
-                  <li>On an iPhone or iPad (iOS 16.4 or later), add Prismal Planning to your Home Screen first (Share, then Add to Home Screen), and turn these on from there.</li>
-                  <li>The days come from your budget as it was the last time it was opened or changed on any device (from today through Lowest's last day, and the days of entries' reminders), so opening it now and then keeps them up to date.</li>
-                  <li>Send Test sends one right away. Turn Off stops them on this device (so does turning off this site's notifications in your device's settings).</li>
-                </ul>
-              </section>
 
-              <section class="budgetCard settingsCard" aria-labelledby="calendarHeading">
-                <h3 id="calendarHeading">Calendar Link</h3>
-                <p>A private link your calendar app can subscribe to (Apple Calendar, Google Calendar, Outlook, and most others can). Each day with one of your reminders (picked under Reminders) gets a 30-minute "🗓️ Check Budget" event at your reminder time, with an alert.</p>
+                <h4 id="calendarHeading" class="settingsSubheading">Calendar Link</h4>
+                <p class="panelHint">A private link that Apple Calendar, Google Calendar, Outlook, and most other calendar apps can subscribe to. Each reminder becomes a 30-minute event there, with an alert.</p>
                 <p id="calendarStatus"></p>
                 <input id="calendarUrl" class="linkInput" type="text" readonly aria-label="Calendar link" hidden>
                 <div id="calendarButtons" class="panelButtons"></div>
+
+                <div id="reminderChoices" class="reminderChoices" hidden>
+                  <h4 id="reminderKindsHeading" class="settingsSubheading">What Gets A Reminder</h4>
+                  <div id="reminderKinds" class="reminderKinds" role="group" aria-labelledby="reminderKindsHeading"></div>
+                  <label class="settingsField">
+                    <span class="fieldLabel">Reminder time</span>
+                    <input id="reminderTime" class="timeInput" type="time" step="300">
+                  </label>
+                  <p id="timeZoneNote" class="panelHint"></p>
+                  <!-- With more than one budget: which one the reminders are about (Settings Page.js) -->
+                  <label id="reminderBudgetField" class="settingsField" hidden>
+                    <span class="fieldLabel">Reminders are about</span>
+                    <select id="reminderBudget" class="selectInput"></select>
+                  </label>
+                </div>
+                <p id="reminderOffNote" class="panelHint">Turn on notifications on this device, or the calendar link, to pick what gets a reminder.</p>
+
                 <ul class="settingsList settingsNotes">
-                  <li>Each event's title shows what it's about (like 🗓️⛔️ Check Budget), and its notes spell it out, with a link to Prismal Planning. Like push notifications, only an entry's reminder shows its title.</li>
-                  <li>To add it: Apple Calendar opens it with the Apple Calendar button. In Google Calendar, use the Google Calendar button, or on a computer, Other calendars, then From URL, and paste the link. In Outlook, use Add calendar, then Subscribe from web.</li>
-                  <li>Calendar apps check the link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
-                  <li>Keep the link private: anyone who has it can see your reminder days (and the titles of entries with a reminder). New Link makes a new one (the old one stops working), and Turn Off stops the events.</li>
+                  <li><strong>What they say:</strong> the title shows what it's about (like 🗓️🔔⛔️ Check Budget), and the rest says why. Only an entry's reminder names an entry (its title and day); the rest never show titles or amounts.</li>
+                  <li><strong>Notifications</strong> are turned on one device at a time, from that device (Home asks once after you sign in). On an iPhone or iPad, add Prismal Planning to your Home Screen first (Share, then Add to Home Screen) and turn them on there. Send Test sends one now.</li>
+                  <li><strong>The calendar link:</strong> Apple Calendar and Google Calendar open it with their buttons; in Outlook, use Add calendar, then Subscribe from web. Calendar apps check it on their own schedule (Google Calendar every several hours), so changes take a while there. Keep it private: anyone with it sees your reminder days. New Link replaces it.</li>
+                  <li><strong>Which days:</strong> worked out from your budget as it was the last time it was opened or changed on any device, so opening it now and then keeps them right.</li>
                 </ul>
               </section>
             </div>
@@ -146,8 +140,6 @@
                 </ul>
               </div>
               <p class="panelHint">Custom makes one of your own, starting from any of the others. This browser keeps it, even when you sign out or pick another theme: tap Custom to bring it back, and tap it again while it's on to change it. The login page and the front page look like Prismal (the login page keeps your theme when Quick Budget's or Quick Calendar's Home opens it).</p>
-              <!-- How the Quick Budget icon looks on this device's home screen (Settings Page.js, Quick Icon.js) -->
-              <div id="quickIconEditor" class="quickIconEditor"></div>
             </section>
 
             <section id="languageView" class="budgetCard settingsCard" aria-labelledby="languageHeading">
@@ -368,6 +360,29 @@
               <h3 id="updatesHeading">Updates</h3>
               <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
               <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
+                <section class="updatesRelease" aria-labelledby="update20261116">
+                  <h4 id="update20261116">11.16.2026.A</h4>
+                  <p class="updatesKind">Bigger changes</p>
+                  <ul>
+                    <li>Each home screen icon has its own look: Customize (at the bottom of its page) picks its picture and colors, and making a new one starts there. Quick Calendar's icon starts as a calendar.</li>
+                    <li>Search can look through your budget, your calendar, or both, and find calendar entries between two times.</li>
+                    <li>Goals can say how often and how much you'll put toward them, and when you'll get there: fill in any two and Bob works out the third, with Add Recurring to make it a recurring entry.</li>
+                    <li>Equity's window on Bob's page says when each loan or card is paid off, and offers to end a payment that would keep going after that.</li>
+                    <li>Connected calendars can pay on any days of the month, like the 1st, 10th, and 20th.</li>
+                    <li>A zoomed day's calendar entries that overlap sit side by side, so each one shows in full, and travel time shows over other entries.</li>
+                    <li>Settings' reminders are one card, and what gets a reminder shows once notifications or the calendar link is on.</li>
+                  </ul>
+                  <p class="updatesKind">Smaller changes</p>
+                  <ul>
+                    <li>A zoomed day has the calendar's three buttons (your budget, both, or your calendar) beside its date.</li>
+                    <li>Deleting just one day of a repeating calendar entry ends it the day before and starts it again on its next day.</li>
+                    <li>A Calendar Fractal can be your Default, where new calendar entries start.</li>
+                    <li>Graphs with more than one line have All, which sets every line at once.</li>
+                    <li>Bob's figures are fewer and grouped: In Bank with its lowest, Purchases with Catchups, and the Tracker with your recurring entries.</li>
+                    <li>More "?" buttons: on Home's calendar, and for a new entry's Equity account, Placeholder, and Remind me.</li>
+                    <li>Download My Data includes each home screen icon's look, and which Calendar Fractal is your Default.</li>
+                  </ul>
+                </section>
                 <section class="updatesRelease" aria-labelledby="update20261115b">
                   <h4 id="update20261115b">11.15.2026.B</h4>
                   <p class="updatesKind">Smaller changes</p>
@@ -426,8 +441,7 @@
           <ul>
             <li><strong>Your budgets</strong> are on their own page now: open the menu, then Budgets, Calendars &amp; Spreadsheets. The name above the buttons at the top of every page switches between them too.</li>
             <li><strong>Calendar Fractals' Links:</strong> a private link to your calendar's entries (every Calendar Fractal together, or one of them) that Apple Calendar, Google Calendar, Outlook, and spreadsheets can subscribe to. Make A Link shows it, with Copy, Share, and buttons that add it to Apple or Google Calendar (each fractal's Edit window on Home has it too, under Share); New Link makes a new one (the old one stops working), and Turn Off ends it. The other calendar shows your entries, and changes made there don't come back.</li>
-            <li><strong>Reminders are about:</strong> with more than one budget, the Reminders card picks which one your reminders follow.</li>
-            <li><strong>Reminders:</strong> a switch for each kind: 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start). They come as push notifications and on the calendar link, at the reminder time. Right after you sign in, Home asks once whether to turn notifications on there; Not Now stops it asking on that device.</li>
+            <li><strong>Reminders</strong> is one card. First, how they reach you: <strong>Notifications On This Device</strong> (turned on one device at a time, from that device; right after you sign in, Home asks once, and Not Now stops it asking there), and the <strong>Calendar Link</strong> (a private link your calendar app subscribes to, where each reminder is a 30-minute event). Once either is on, <strong>What Gets A Reminder</strong> shows: a switch for each kind, 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start), then the reminder time, and with more than one budget, which one they're about. On a device with neither on, that part stays hidden there.</li>
           </ul>
 
           <h4>Your Account</h4>
@@ -440,7 +454,7 @@
             <li>Change your password, add passkeys, turn off Quick Budget icons, sign out everywhere, download your data, or delete your account.</li>
             <li><strong>Upload A Backup:</strong> pick a file Download My Data saved (one with more than one budget asks which), and it goes into the budget that's open: for each part of the budget it has (History, Home's Calendar, Upcoming, Recurring Entries, Equity, Goals, Bob's Page, Tracker, Connected Spreadsheets And Calendars, Paycheck Calculator, Notes, and Change Logs), pick one: <strong>Prefer Current Data</strong> keeps yours where the two clash (like an entry with the same title and type on the same day) and adds the rest from the backup; <strong>Prefer Uploaded Data</strong> does the same, but the backup's wins where they clash; <strong>Remove Current Data</strong> puts the backup's in place of yours. Parts the backup doesn't have stay as they are. Undo can't take it back, so the window offers Download My Data first.</li>
             <li><strong>Sounds:</strong> turn Music (a quiet bed of far-off twinkles, with a clearer few now and then) and Sound effects (a soft crystal sound for what you tap) on or off for this device. They mix with your own audio instead of stopping it.</li>
-            <li><strong>Quick Budget Icon</strong> (under Theme): how the icon looks when Quick Budget is added to this device's home screen. Pick its Colors (one from each theme, and your Custom one), then its Icon: the usual Prismal picture, a minimal one, a blank one (just the colors), an emoji you type, or an image you upload. It's kept in this browser with the theme, even when you sign out. An icon already on a home screen keeps the look it was added with: tap Quick Budget on Home and add it again for the new one.</li>
+            <li><strong>Home screen icons' pictures</strong> aren't in Settings: each Quick Budget, Quick Calendar, and Snapshot icon has its own, picked when it's made and changed with Customize at the bottom of its page.</li>
             <li><strong>Theme:</strong> how Prismal Planning looks in this browser. Other browsers, and apps on a home screen (Prismal Planning added there, and each Quick Budget and Quick Calendar icon), keep their own: once you pick one, the card lists where to pick it again. Tap one to switch, or Custom (at the end) to make your own: start from any theme, pick five colors (the background, the cards, the words, the glow, and what's chosen) and the corners, font, stars, and icons, and watch it change behind the window; Save Theme keeps it. The login page and the front page always look like Prismal.</li>
             <li><strong>Reduced Motion:</strong> Hold the starfield still keeps the stars where they are, and Turn off other animations stops pages sliding, windows growing out of their buttons, and days zooming, on this device. If your device asks for less motion in its own settings, both are on already.</li>
             <li><strong>Snapshot icons:</strong> Signed-In Devices says how many no-login Snapshot icons work (Snapshot's Add To Home Screen makes them). Turning them off stops every one right away.</li>

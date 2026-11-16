@@ -72,7 +72,6 @@ quickHomeLink?.addEventListener("click", () => {
 quickBackLink?.addEventListener("click", () => {
   if (!signedInNow()) quickBackLink.setAttribute("href", quickLogin());
 });
-window.QuickIcon?.apply(); // This device's look for the icon, in the links a phone reads when it's added to its home screen
 
 checkQuickKey();
 
@@ -108,6 +107,8 @@ async function checkQuickKey() {
     quickBudget = typeof result.data.budget === "string" && result.data.budget ? result.data.budget : null;
     quickWavelengths = Array.isArray(result.data.wavelengths) && result.data.wavelengths.length > 0 ? result.data.wavelengths : null;
     showQuickAnswer(result.data);
+    // This icon's own look, in the links a phone reads when the page is added to its home screen, and its Customize button
+    window.QuickIcon?.wirePage({ kind: "quick", look: result.data.look, send: (look) => quickApi("/api/quick/look", { key: quickKey, look }) });
     // Prisms need the server, so they show once the key is known to work
     quickPrisms = Array.isArray(result.data.prisms) ? result.data.prisms : [];
     document.getElementById("prismSection").hidden = false;

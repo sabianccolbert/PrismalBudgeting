@@ -62,7 +62,7 @@
 }
 
 /* A day that isn't zoomed (or magnified) cuts a line too long for it short, with "..." at its edge */
-.elastic-table td:not(.is-editing):not(.is-magnified) .cell-content > :not(.cell-action-btn) {
+.elastic-table td:not(.is-editing):not(.is-magnified) .cell-content > :not(.cell-action-btn):not(.cellView) {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -177,7 +177,7 @@
 
 /* Its lines stop at the screen's right edge (with a little room, and the content's padding after them), ending in "..."
    when they're longer, so nothing in it reaches past the screen sideways */
-.elastic-table td.is-editing.is-fullZoom .cell-content > :not(.cell-action-btn) {
+.elastic-table td.is-editing.is-fullZoom .cell-content > :not(.cell-action-btn):not(.cellView) {
   max-width: calc(var(--viewW, 100vw) - var(--dayX, 0px) - 8px * var(--zoomText, 1) - 2vw);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -322,6 +322,133 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 
 .elastic-table td.is-fullZoom .cell-action-btn.cellAdd {
   left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * var(--DAY_BUTTON_SPOT) - 2 * var(--DAY_BUTTON_INSET));
+}
+
+/* On Home, what the calendar shows (the header's three buttons again: Process Budget.js cellViewButtons), on the zoomed
+   day's first row, to the left of its + (so its date, these, and the round buttons line up). Sized like the round
+   buttons, divided by the day's zoom. Its date line stops short of them, ending in "..." on a narrow phone. */
+:root {
+  --DAY_VIEW_WIDTH: 84px;
+}
+
+.cellView {
+  position: absolute;
+  top: calc(var(--DAY_BUTTON_INSET) / var(--zoom, 1));
+  right: calc((3 * var(--DAY_BUTTON_INSET) + 2 * var(--DAY_BUTTON_SPOT)) / var(--zoom, 1));
+  z-index: 5;
+  display: flex;
+  box-sizing: border-box;
+  width: calc(var(--DAY_VIEW_WIDTH) / var(--zoom, 1));
+  height: calc(var(--DAY_BUTTON_SPOT) / var(--zoom, 1));
+  overflow: hidden;
+  background: var(--GLASS_BUTTON);
+  border: calc(1.5px / var(--zoom, 1)) solid var(--GLASS_LINE_BRIGHT);
+  border-radius: calc(var(--DAY_BUTTON_SPOT) / 2 / var(--zoom, 1));
+  text-shadow: none;
+  pointer-events: auto; /* (A day's content takes no taps of its own: its buttons do, like the round ones) */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.elastic-table td.is-editing .cellView {
+  opacity: 1;
+  visibility: visible;
+}
+
+.cellViewButton {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(1px / var(--zoom, 1));
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--TEXT_BRIGHT);
+  font-family: inherit;
+  font-size: calc(var(--DAY_BUTTON_SIZE) * 0.78 / var(--zoom, 1));
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cellViewButton + .cellViewButton {
+  border-left: calc(1px / var(--zoom, 1)) solid var(--GLASS_LINE_BRIGHT);
+}
+
+.cellViewButton .buttonIcon {
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0;
+}
+
+.cellViewButton[aria-checked="true"] {
+  background: var(--PICK_FILL);
+}
+
+.cellViewButton:focus-visible {
+  outline: calc(2px / var(--zoom, 1)) solid var(--GLOW_EDGE);
+  outline-offset: calc(-2px / var(--zoom, 1));
+}
+
+.elastic-table td.is-editing:has(.cellView) .cell-content > .lineDate {
+  padding-right: calc((var(--DAY_VIEW_WIDTH) + 2 * var(--DAY_BUTTON_SPOT) + 3 * var(--DAY_BUTTON_INSET)) / var(--zoom, 1));
+}
+
+/* A computer's zoomed day is the day itself, doubled, so beside these there's only room for the short day of the week
+   ("Mon"), and the date line keeps to the day's width, ending in "..." if it still doesn't fit (its padding keeps it
+   clear of the buttons) */
+.elastic-table td.is-editing:not(.is-fullZoom):has(.cellView) .cell-content > .lineDate {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.elastic-table td.is-editing:not(.is-fullZoom):has(.cellView) .lineWeekdayFull {
+  display: none;
+}
+
+.elastic-table td.is-editing:not(.is-fullZoom):has(.cellView) .lineWeekday:not(.lineWeekdayFull) {
+  display: inline;
+}
+
+/* One too narrow even for that (Process Budget.js placeCellView) gives them the left of the round buttons' row, with the
+   date under them, the day's whole width */
+.elastic-table td.is-editing.cellViewOwnRow .cellView {
+  right: auto;
+  left: calc(var(--DAY_BUTTON_INSET) / var(--zoom, 1));
+}
+
+.elastic-table td.is-editing.cellViewOwnRow:has(.cellView) .cell-content > .lineDate {
+  padding-right: 0;
+  margin-top: calc((var(--DAY_BUTTON_SPOT) + var(--DAY_BUTTON_INSET)) / var(--zoom, 1));
+}
+
+.elastic-table td.is-fullZoom .cellView {
+  top: calc(var(--dayY, 0px) + var(--DAY_BUTTON_INSET));
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * var(--DAY_BUTTON_SPOT) - 3 * var(--DAY_BUTTON_INSET) - var(--DAY_VIEW_WIDTH));
+  right: auto;
+  width: var(--DAY_VIEW_WIDTH);
+  height: var(--DAY_BUTTON_SPOT);
+  border-width: 1.5px;
+  border-radius: calc(var(--DAY_BUTTON_SPOT) / 2);
+}
+
+.elastic-table td.is-fullZoom .cellViewButton {
+  font-size: calc(var(--DAY_BUTTON_SIZE) * 0.78);
+}
+
+.elastic-table td.is-fullZoom .cellViewButton + .cellViewButton {
+  border-left-width: 1px;
+}
+
+.elastic-table td.is-fullZoom.is-editing .cell-content > .lineDate {
+  padding-right: calc(var(--DAY_VIEW_WIDTH) + 2 * var(--DAY_BUTTON_SPOT) + 3 * var(--DAY_BUTTON_INSET));
+  box-sizing: border-box;
 }
 
 /*========================================*
@@ -1874,6 +2001,87 @@ button.dropdownBox:focus-visible {
   margin: -0.3em 0 0.5em;
   font-size: 0.85em;
   color: var(--TEXT_DIM);
+}
+
+/* What Search looks through (Budget Search.js wireSearchScope): the calendar header's three buttons, in the box's header
+   between its title and its ×. Between times shows under the dates while the calendar is in it; with only the calendar,
+   the budget's filters and each title's All / Costs / Gains / Tracker (and their ?) go. */
+.searchBar .panelHeader .searchScope {
+  margin-left: auto;
+}
+
+.searchBar .searchDates .searchTimes {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.3em 0.6em;
+}
+
+.searchTimes[hidden] {
+  display: none !important;
+}
+
+.searchTime {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  min-width: 0;
+}
+
+.searchTime .timeInput {
+  flex: 0 0 auto; /* (Search's boxes grow along their row; in this column that would be their height) */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.searchTimesHint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.searchBar .searchDates.withTimes #searchAdd,
+.searchBar .searchDates.withTimes [type="submit"] {
+  grid-row: 4;
+}
+
+@media (min-width: 560px) {
+  .searchBar .searchDates.withTimes #searchAdd,
+  .searchBar .searchDates.withTimes [type="submit"] {
+    grid-row: 3;
+  }
+}
+
+.searchBox.calendarOnly .searchFilters,
+.searchBox.calendarOnly .termControls .segmented,
+.searchBox.calendarOnly .termControls .termHelpButton,
+.searchBox.calendarOnly .termHelp {
+  display: none;
+}
+
+/* With both, each one's results under its own heading */
+.searchSection {
+  margin: 0.9em 0 0.4em;
+  font-size: 1em;
+}
+
+/* A calendar result: its color, its title, then its Calendar Fractal, dimmer; its day and time can wrap */
+.searchFractalDot {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
+.searchFractal {
+  color: var(--TEXT_DIM);
+}
+
+.searchCalendarTable td.searchDate {
+  white-space: normal;
+  min-width: 9em;
 }
 
 /* A result's day stays on one line ("Fri 11/12/2026") */
@@ -3524,12 +3732,11 @@ button.listDayAdd:focus-visible {
   border-bottom: 1px solid rgba(var(--TINT_RGB), 0.16);
 }
 
-/* An entry's block: from its column's left edge to the right edge, over the ones before it (a little of what's under it
-   shows through), with a dark edge so they tell apart */
+/* An entry's block, with a dark edge so blocks side by side tell apart: each is placed and sized by Fractals.js timesBlock
+   (its left and width: a share of the day, or a column of its own past three across) */
 .timeBlock,
 .timeTravel {
   position: absolute;
-  right: 0;
   box-sizing: border-box;
   border-radius: 0.35em;
 }
@@ -3561,21 +3768,10 @@ button.listDayAdd:focus-visible {
 
 /* A block covered by one to its right that starts within the hour after it (Fractals.js layOut): only its left edge
    shows, so its title runs down that edge, sideways, as far as the block goes ("..." when it's longer) */
-.timeBlock.isCovered {
-  padding: 0.25em 0.1em;
-}
-
-.timeBlock.isCovered .timeBlockTitle {
-  writing-mode: vertical-rl;
-  align-self: flex-start; /* (At the left edge: stretched, sideways words would start at the block's right) */
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: 100%;
-  font-size: 0.9em;
-}
-
-/* Travel time: dimmer, above the block, with a dashed edge */
+/* Travel time: dimmer, above the block, with a dashed edge, and over any block under it (taps go through to that one) */
 .timeTravel {
+  z-index: 2;
+  pointer-events: none;
   border: 1px dashed rgba(var(--TINT_RGB), 0.5);
   border-bottom: none;
   border-radius: 0.35em 0.35em 0 0;
@@ -4806,6 +5002,50 @@ html.lessMotion .sheetForm.isOpening {
   min-width: 0;
 }
 
+/* A switch with a ? beside it (Budget UI.js addSwitchHelp) */
+.switchWithHelp {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+/* Home's calendar header's ? and what it opens, under the header */
+.calendarHeaderHelp {
+  margin: 0.3em 0 0.6em;
+}
+
+/* A goal's How You'll Get There (Bob Page.js goalPlanFields): the one Bob worked out is dimmer and slanted, so the two you
+   filled in stand out */
+.goalPlan .isWorkedOut,
+.dateInput.isWorkedOut {
+  font-style: italic;
+  color: var(--TEXT_DIM);
+}
+
+.goalPlan .goalEach {
+  max-width: 12em;
+}
+
+.goalPlanNote:empty {
+  display: none;
+}
+
+/* A calendar's paydays on days of the month: a box for each, with its ×, then + Add A Payday */
+.payDayList {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4em;
+}
+
+.payDayList > .termAdd {
+  align-self: flex-start;
+}
+
+.payDayRow .payDayRemove {
+  flex: 0 0 auto;
+}
+
 .budgetPanel input[type="time"] {
   box-sizing: border-box;
   flex: 1 1 7em;
@@ -5092,6 +5332,11 @@ html.lessMotion .sheetForm.isOpening {
   padding: calc(var(--UI_TEXT) * 0.35) calc(var(--UI_TEXT) * 1.1);
   font-size: max(12px, 2.4vmin);
   line-height: 1.1;
+}
+
+/* An icon's Customize button, over its page's Help */
+.helpButton.customizeIcon {
+  margin-bottom: max(8px, 1.5vmin);
 }
 
 /* (A footer with the Help button keeps it close under its line) */
@@ -6207,7 +6452,7 @@ html.lightCards {
   list-style: none;
 }
 
-.lineGraphLegendButton {
+:is(.lineGraphLegendButton, .lineGraphAll) {
   display: inline-flex;
   align-items: center;
   gap: 0.4em;
@@ -6222,19 +6467,19 @@ html.lightCards {
 }
 
 /* A name's mode (Line Graph.js MODES): Red and Blue edged in their color, Hidden crossed out */
-.lineGraphLegendButton.isRed {
+:is(.lineGraphLegendButton, .lineGraphAll).isRed {
   border-color: var(--GRAPH_RED);
 }
 
-.lineGraphLegendButton.isBlue {
+:is(.lineGraphLegendButton, .lineGraphAll).isBlue {
   border-color: var(--GRAPH_BLUE);
 }
 
-.lineGraphLegendButton.isHidden {
+:is(.lineGraphLegendButton, .lineGraphAll).isHidden {
   color: var(--TEXT_DIM);
 }
 
-.lineGraphLegendButton.isHidden > span:not(.lineGraphMode) {
+:is(.lineGraphLegendButton, .lineGraphAll).isHidden > span:not(.lineGraphMode) {
   text-decoration: line-through;
 }
 
@@ -6248,12 +6493,45 @@ html.lightCards {
   color: var(--TEXT_DIM);
 }
 
-.lineGraphLegendButton.isRed .lineGraphMode {
+:is(.lineGraphLegendButton, .lineGraphAll).isRed .lineGraphMode {
   color: var(--GRAPH_RED);
 }
 
-.lineGraphLegendButton.isBlue .lineGraphMode {
+:is(.lineGraphLegendButton, .lineGraphAll).isBlue .lineGraphMode {
   color: var(--GRAPH_BLUE);
+}
+
+/* Under Equity's table on Bob's page: a loan paid off whose recurring payment keeps going, with End It Then */
+.payoffNotices {
+  display: grid;
+  gap: 0.6em;
+  margin: 0.6em 0;
+}
+
+.payoffNotice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em 0.8em;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: var(--GLASS_RADIUS);
+}
+
+.payoffNotice .panelHint {
+  flex: 1 1 16em;
+  margin: 0;
+}
+
+/* All: bold, and grey while the lines are set differently (tapping it then sets them all to Separate) */
+.lineGraphAll {
+  font-weight: 700;
+}
+
+.lineGraphAll.isMixed {
+  color: var(--TEXT_DIM);
+  border-style: dashed;
+  font-weight: 600;
 }
 
 /* The legend's "?" first, lined up with the names, and what it opens under them */

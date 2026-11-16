@@ -168,6 +168,9 @@
     }
     window.Fractals.took(result.data);
     status.hidden = true;
+    // This icon's own look (a calendar until another is picked), in the links a phone reads when the page is added to its
+    // home screen, and its Customize button
+    window.QuickIcon?.wirePage({ kind: "calendar", look: result.data.look, send: (look) => window.Fractals.call("/api/quickcal/look", { key, look }) });
     document.getElementById("quickCalendarControls").hidden = false;
     document.getElementById("calendarCard").hidden = false;
     // (This device used the icon: on Home here, what it adds joins the calendar by itself)

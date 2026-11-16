@@ -486,7 +486,18 @@ function wireCalendarHeader() {
   viewBox.replaceWith(view.el);
   view.el.id = "calendarView";
   view.el.classList.add("calendarView");
+  // (Picked somewhere else, like a zoomed day's own three buttons, it shows here too)
+  document.addEventListener("fractals:changed", () => {
+    if (view.value() !== window.Fractals.view()) view.set(window.Fractals.view());
+  });
   window.Fractals.wirePicker(document.getElementById("fractalPicker"));
+  // (Its ?: what the header's buttons do, under it)
+  const helpButton = document.getElementById("calendarHelpButton");
+  helpButton?.addEventListener("click", () => {
+    const help = document.getElementById("calendarHeaderHelp");
+    help.hidden = !help.hidden;
+    helpButton.setAttribute("aria-expanded", String(!help.hidden));
+  });
 
   const range = calendarRange();
   const stepMonth = (step) => {
@@ -958,11 +969,31 @@ function renderBobWarnings() {
 
 // (New Entry is BudgetUI.openNewEntry: a zoomed day's + opens it too)
 
-// Quick Budget Icon: makes a key (only while signed in) and opens the Quick Budget page with it in the
-// link, ready to add to the home screen. The icon then opens that New Entry form with no login. The key
-// can only add entries (they join the budget the next time it opens), and stops working when the
-// password changes.
+// What a new icon looks like comes first (Quick Icon.js's Customize window, starting from the kind's own, so Next keeps it
+// as it is), then what the icon can do, which makes it with that look
+function customizeNewIcon(origin, kind, title, next) {
+  QuickIcon.openEditor({
+    origin,
+    kind,
+    title,
+    saveLabel: "Next",
+    intro: "First, how the icon looks on your home screen. Tap Next to keep this one, or pick its picture and colors. Customize, at the bottom of the icon's own page, changes it later.",
+    onSave: (look) => {
+      next(look);
+      return { ok: true, keepOpen: true }; // (The next window takes this one's place)
+    }
+  });
+}
+
+// Quick Budget Icon: its look, then a key (only while signed in) with that look, and the Quick Budget page opened with it
+// in the link, ready to add to the home screen. The icon then opens that New Entry form with no login. The key can only
+// add entries (they join the budget the next time it opens), and stops working when the password changes.
 function openQuickEntrySetup(origin) {
+  customizeNewIcon(origin, "quick", "Quick Budget Icon", (look) => showQuickEntrySetup(origin, look));
+}
+
+// Its second window: what the icon does and who can use it, then Set It Up makes its key, with the look picked first
+function showQuickEntrySetup(origin, look) {
   BudgetUI.openPanel({
     origin,
     size: "large",
@@ -985,7 +1016,7 @@ function openQuickEntrySetup(origin) {
         event.preventDefault();
         panel.setError("");
         panel.setBusy(true);
-        const result = await budgetApi("/api/quick/key", {});
+        const result = await budgetApi("/api/quick/key", { look });
         if (!result.ok || !result.data || !result.data.key) {
           panel.setBusy(false);
           panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't set it up. Please try again.");
@@ -1001,10 +1032,16 @@ function openQuickEntrySetup(origin) {
   });
 }
 
-// Quick Calendar Icon: makes a key (only while signed in) and opens the Quick Calendar page with it in the link, ready
-// to add to the home screen. The icon then opens the calendar with no login: it shows the calendar's entries and adds
-// new ones, which join the calendar the next time Prismal Planning opens on this device (or from Home's card on another).
+// Quick Calendar Icon: its look (a calendar, to start), then a key (only while signed in) with that look, and the Quick
+// Calendar page opened with it in the link, ready to add to the home screen. The icon then opens the calendar with no
+// login: it shows the calendar's entries and adds new ones, which join the calendar the next time Prismal Planning opens
+// on this device (or from Home's card on another).
 function openQuickCalendarSetup(origin) {
+  customizeNewIcon(origin, "calendar", "Quick Calendar Icon", (look) => showQuickCalendarSetup(origin, look));
+}
+
+// Its second window: what the icon does, then Set It Up makes its key, with the look picked first
+function showQuickCalendarSetup(origin, look) {
   BudgetUI.openPanel({
     origin,
     size: "large",
@@ -1025,7 +1062,7 @@ function openQuickCalendarSetup(origin) {
         event.preventDefault();
         panel.setError("");
         panel.setBusy(true);
-        const result = await window.Fractals.call("/api/fractals/key", {});
+        const result = await window.Fractals.call("/api/fractals/key", { look });
         if (!result.ok || !result.data || !result.data.key) {
           panel.setBusy(false);
           panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't set it up. Please try again.");

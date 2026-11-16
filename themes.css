@@ -1925,23 +1925,12 @@ html:is([data-theme="professional"], [data-theme="dark"], [data-theme="elements"
 /* Custom, until there's one: every color (once there is, Settings Page.js paints it in its own) */
 .themeSwatch[data-swatch="custom"]       { background: linear-gradient(90deg, #ff4d4d, #ffd166, #7dff5a, #46c8ff, #8d5cff, #e050ff); }
 
-/* The Quick Budget icon: what it looks like beside its words, then its Colors and its Icon */
-.quickIconEditor {
-  margin-top: 1em;
-  padding-top: 0.9em;
-  border-top: 1px solid var(--PANEL_LINE);
-}
-
+/* A home screen icon's Customize window (Quick Icon.js): what it looks like beside its words, then its Icon and Colors */
 .quickIconTop {
   display: flex;
   align-items: flex-start;
   gap: 0.9em;
   margin-bottom: 0.6em;
-}
-
-.quickIconWords h4 {
-  margin: 0 0 0.25em;
-  font-size: 1.05em;
 }
 
 .quickIconWords .panelHint {
