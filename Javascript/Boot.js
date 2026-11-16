@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.14.2026.A";
+  const SITE_VERSION = "11.15.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,30 +26,30 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "0c6a8bc31d",
-    "/Javascript/Budget Pages.js": "d3742cdbd1",
-    "/Javascript/Budget Search.js": "7848a0fe36",
+    "/Javascript/Bob Page.js": "002967fc0c",
+    "/Javascript/Budget Pages.js": "c7ab6d5bd0",
+    "/Javascript/Budget Search.js": "0b53f07b91",
     "/Javascript/Budget UI.js": "2d4b6200fe",
     "/Javascript/Budgets.js": "48b18d72a5",
-    "/Javascript/Calendar Page.js": "44b5689449",
+    "/Javascript/Calendar Page.js": "8120eee210",
     "/Javascript/Calendars Page.js": "91388f50de",
     "/Javascript/Calendars.js": "0d778ceb17",
     "/Javascript/Dates.js": "331a3e1cb1",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "0982018a40",
+    "/Javascript/Fractals.js": "325eea07f5",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
     "/Javascript/Layout.js": "040b0fd9b2",
     "/Javascript/Line Graph.js": "852a44c28d",
     "/Javascript/Login.js": "5869bb48e7",
-    "/Javascript/Notifications.js": "facb1b76b2",
+    "/Javascript/Notifications.js": "08aab68469",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "d110b28e77",
+    "/Javascript/Process Budget.js": "e9dea1b531",
     "/Javascript/Quick Calendar.js": "7910e773dd",
     "/Javascript/Quick Entry.js": "b26972c2f1",
     "/Javascript/Quick Icon.js": "a54709cbc5",
     "/Javascript/Session.js": "2ba7a04b3e",
-    "/Javascript/Settings Page.js": "123ccad00e",
-    "/Javascript/Snapshot Page.js": "ece1fa56a9",
+    "/Javascript/Settings Page.js": "ef221f9394",
+    "/Javascript/Snapshot Page.js": "da1eefe611",
     "/Javascript/Sounds.js": "dc92737a93",
     "/Javascript/Spreadsheets Page.js": "cc69112cb2",
     "/Javascript/Spreadsheets.js": "fd11909f30",
@@ -78,7 +78,7 @@
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",
     "/Resources/Star.webp": "f2d3021d0b",
-    "/themes.css": "fa9fa48911"
+    "/themes.css": "965ad2ed41"
   };
   // </stamp:files>
 
@@ -125,8 +125,18 @@
   // GitHub Pages shows 404.html at whatever address was asked for, so that page says what it is
   window.PAGE = document.documentElement.dataset.page === "notfound" ? "notfound" : pageKeyOf(location.pathname);
 
-  // Pages that work without logging in (Quick Budget and Quick Calendar use the key in their links instead; How It
-  // Works and the Not Found page are for anyone, search engines included)
+  // A Snapshot icon (snapshot.html?key=): its key, not a login, reads the budget it was made in, to look at only (the API's
+  // snapshot.js). Its page works signed out, and never loads analytics (its link carries the key).
+  const SNAPSHOT_KEY = (() => {
+    if (window.PAGE !== "snapshot") return null;
+    const key = new URLSearchParams(location.search).get("key");
+    return key && /^[A-Za-z0-9_-]{43}$/.test(key) ? key : null;
+  })();
+  window.SNAPSHOT_KEY = SNAPSHOT_KEY;
+  if (SNAPSHOT_KEY) document.documentElement.classList.add("snapshotKey");
+
+  // Pages that work without logging in (Quick Budget and Quick Calendar use the key in their links instead, and so does
+  // a Snapshot icon's; How It Works and the Not Found page are for anyone, search engines included)
   const PUBLIC_PAGES = ["login", "privacy", "quick", "quickcal", "guide", "notfound"];
 
   /* ===============================
@@ -199,7 +209,7 @@
   window.FRONT_PAGE = FRONT_PAGE;
   document.documentElement.classList.toggle("frontPage", FRONT_PAGE);
   if (PAGE === "home" && !FRONT_PAGE) document.title = "Prismal Planning - Home";
-  const IS_PUBLIC = FRONT_PAGE || PUBLIC_PAGES.includes(PAGE);
+  const IS_PUBLIC = FRONT_PAGE || PUBLIC_PAGES.includes(PAGE) || !!SNAPSHOT_KEY;
   window.PUBLIC_PAGE = IS_PUBLIC;
 
   if (!storage && (PAGE === "login" || !IS_PUBLIC)) {
@@ -291,7 +301,7 @@
   };
   // Which theme's stars each Stars choice borrows (dots: Professional's on light cards, Dark's on dark ones)
   const CUSTOM_STARS = { stars: "prismal", embers: "spooky", elements: "elements", bubbles: "poison", leaves: "fall", snow: "winter", ornaments: "festive", flowers: "floral", pixels: "digital", hearts: "love", clovers: "clovers", eggs: "playful", gears: "mechanical" };
-  const THEMED = !IS_PUBLIC || PAGE === "quick" || PAGE === "quickcal";
+  const THEMED = !IS_PUBLIC || PAGE === "quick" || PAGE === "quickcal" || !!SNAPSHOT_KEY;
   const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
   // The theme this device keeps (Prismal when it has none, or one it doesn't know)
@@ -304,12 +314,12 @@
     }
   }
 
-  // The look a link hands on (Quick Budget's and Quick Calendar's Home, to the login page, and a Quick Budget or Quick
-  // Calendar icon's own address, for a phone whose home screen app keeps its own storage): { theme, custom (a Custom
-  // theme's parts) }, or null
+  // The look a link hands on (Quick Budget's and Quick Calendar's Home, to the login page, and a Quick Budget, Quick
+  // Calendar, or Snapshot icon's own address, for a phone whose home screen app keeps its own storage): { theme, custom (a
+  // Custom theme's parts) }, or null
   let lookGiven = null;
   function readLookGiven() {
-    if (PAGE !== "login" && PAGE !== "quick" && PAGE !== "quickcal") return null;
+    if (PAGE !== "login" && PAGE !== "quick" && PAGE !== "quickcal" && !SNAPSHOT_KEY) return null;
     const params = new URLSearchParams(location.search);
     const theme = params.get("look");
     if (!THEMES.includes(theme) || theme === "prismal") return null;
@@ -333,7 +343,7 @@
   // The theme this page shows
   function shownTheme() {
     if (PAGE === "login") return lookGiven ? lookGiven.theme : "prismal";
-    if ((PAGE === "quick" || PAGE === "quickcal") && lookGiven && !keepsTheme()) return lookGiven.theme;
+    if ((PAGE === "quick" || PAGE === "quickcal" || SNAPSHOT_KEY) && lookGiven && !keepsTheme()) return lookGiven.theme;
     return THEMED ? savedTheme() : "prismal";
   }
 
@@ -694,9 +704,11 @@
   // The scripts a page needs, in order: the shared ones, sign-in, then the budget and the page's own
   function scriptsFor(page, signedIn){
     const frontPage = page === "home" && !signedIn;
-    const isPublic = frontPage || PUBLIC_PAGES.includes(page);
-    // Quick Budget's and Quick Calendar's links carry their keys, so those pages never load analytics
-    const keyPage = page === "quick" || page === "quickcal";
+    // (A Snapshot icon's page: this page, opened with its key)
+    const keyed = page === "snapshot" && page === PAGE && !!SNAPSHOT_KEY;
+    const isPublic = frontPage || PUBLIC_PAGES.includes(page) || keyed;
+    // Quick Budget's, Quick Calendar's, and Snapshot icons' links carry their keys, so those pages never load analytics
+    const keyPage = page === "quick" || page === "quickcal" || keyed;
     const scripts = GLOBAL_SCRIPTS.filter(src => !keyPage || !src.endsWith("/Analytics.js"));
 
     // Passkeys (Face ID, Touch ID, Windows Hello): signing in on the login page, managing them in Settings

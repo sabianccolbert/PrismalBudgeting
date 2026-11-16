@@ -29,6 +29,7 @@ window.workspaceReady.then((loaded) => {
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget, { kind: "budget" }));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
   document.getElementById("quickCalendarButton")?.addEventListener("click", (event) => openQuickCalendarSetup(event.currentTarget));
+  document.getElementById("lookAheadButton")?.addEventListener("click", (event) => openLookAheadPanel(event.currentTarget));
   // The calendar's entries come in after the budget's, so the budget never waits on them
   window.Fractals.load().then((calendar) => {
     if (!calendar) BudgetUI.showToast("Couldn't load your calendar's entries. Refresh to try again.", true);
@@ -320,13 +321,7 @@ async function setStartingBalance(event) {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// Home's calendar shows five weeks. The budget itself keeps four (its calendar, gridDates), so to start, the five are the
-// budget's own four and the week after them, which is drawn from the days the daily update will fill in, like any later
-// week (aheadDaysThrough in Process Budget.js). (Making the budget itself five weeks is still to do: the API repo's
-// HANDOFF.md.)
-const CALENDAR_WEEKS = 5;
-const CALENDAR_DAYS = CALENDAR_WEEKS * 7;
-const OWN_DAYS = 28; // The budget's own calendar's days (calendarData's 4 rows)
+// Home's calendar shows five weeks, the budget's own (CALENDAR_ROWS and CALENDAR_DAYS in Process Budget.js).
 
 // The five weeks showing. They start on the budget's own week (this week's Sunday); the calendar's header moves them to
 // any five weeks in its range (calendarRange in Process Budget.js), where each day is drawn from wherever the budget has
@@ -335,13 +330,11 @@ const OWN_DAYS = 28; // The budget's own calendar's days (calendarData's 4 rows)
 let viewAnchor = null;
 let viewStart = null;
 
-// Do the five weeks start on the budget's own week (its four weeks, then the one after them)?
+// Do the five weeks showing start on the budget's own week?
 const showsOwnWeeks = () => !viewStart || viewStart.getTime() === gridStartDate.getTime();
 
 // The day in one of the calendar's 35 spots
-const dayAt = (index) => (showsOwnWeeks()
-  ? (index < OWN_DAYS ? gridDates[Math.floor(index / 7)][index % 7] : addDays(gridStartDate, index))
-  : addDays(viewStart, index));
+const dayAt = (index) => (showsOwnWeeks() ? gridDates[Math.floor(index / 7)][index % 7] : addDays(viewStart, index));
 
 // The last day showing
 const lastDayShown = () => dayAt(CALENDAR_DAYS - 1);
@@ -359,24 +352,25 @@ function moveCalendar(date) {
   renderCalendar();
 }
 
-// The last day's two lines about the 28 days after the calendar (writeBudgetMath in Process Budget.js writes them
-// under its In Bank: "✅ $812.40 Lowest: 11/14" and "✅ $905.10 Day 28 In Bank"). Home shows them in the Lowest card
-// instead of on the day. { kind: "lowest" | "day28", amount, date (MM/DD, for "lowest") }, or null for any other line.
+// The last day's two lines about the days after the calendar through Lowest's last day (writeBudgetMath in Process
+// Budget.js writes them under its In Bank: "✅ $812.40 Lowest: 11/14" and "✅ $905.10 Last Day: 02/20"; a budget saved
+// before Lowest's look ahead has "✅ $905.10 Day 28 In Bank" until it's worked out). Home shows them in the Lowest card
+// instead of on the day. { kind: "lowest" | "last", amount, date (MM/DD, for "lowest") }, or null for any other line.
 function afterCalendarLine(line) {
   const parts = getParts(line);
   if (!BudgetUI.isSystemLine(parts[0])) return null;
   const words = parts.slice(2).join(" ");
   const lowest = words.match(/^Lowest: (\d{1,2}\/\d{1,2})$/);
   if (lowest) return { kind: "lowest", amount: parseAmount(parts[1]), date: lowest[1] };
-  if (words === "Day 28 In Bank") return { kind: "day28", amount: parseAmount(parts[1]) };
+  if (/^Last Day: \d{1,2}\/\d{1,2}$/.test(words) || words === "Day 28 In Bank") return { kind: "last", amount: parseAmount(parts[1]) };
   return null;
 }
 
 // Draw each day: date, system lines, then entries (one element per line so entries are tappable), then the calendar's
-// entries (Fractals.js). The weekdays over the days come from the days themselves. The budget's own four weeks are
-// drawn from its calendar; the week after them, and any days the calendar was moved to, are drawn from wherever the
-// budget has them (fillGuestDay in Process Budget.js), and their taps work the way that day's do there. List Mode draws
-// the same days as one list instead (renderCalendarList).
+// entries (Fractals.js). The weekdays over the days come from the days themselves. The budget's own five weeks are
+// drawn from its calendar; any days the calendar was moved to are drawn from wherever the budget has them (fillGuestDay
+// in Process Budget.js), and their taps work the way that day's do there. List Mode draws the same days as one list
+// instead (renderCalendarList).
 function renderCalendar() {
   const own = showsOwnWeeks();
   const mode = window.Fractals.view();
@@ -395,7 +389,7 @@ function renderCalendar() {
     const content = td.querySelector(".cell-content");
     const date = dayAt(index);
     if (!content) return;
-    if (!own || index >= OWN_DAYS) {
+    if (!own) {
       delete td.dataset.row;
       delete td.dataset.col;
       fillGuestDay(td, budgetDayAt(date) || { date, text: formatToMMDD(date), kind: "blank" });
@@ -404,7 +398,7 @@ function renderCalendar() {
     if (!calendarData[r]) return;
     delete td.dataset.date;
     delete td.dataset.kind;
-    const isLastDay = r === 3 && c === 6;
+    const isLastDay = r === CALENDAR_ROWS - 1 && c === 6;
 
     const fragment = document.createDocumentFragment();
     String(calendarData[r][c] ?? "").split("\n").forEach((line, l) => {
@@ -420,7 +414,7 @@ function renderCalendar() {
     td.dataset.col = c;
     td.classList.toggle("isToday", date.getTime() === today.getTime());
     td.classList.toggle("isPast", date < today);
-    // (The 28 days after the calendar going below $0 turns the Lowest card red instead, see renderAfterCalendar. A day
+    // (The days after the calendar going below $0 turn the Lowest card red instead, see renderAfterCalendar. A day
     // isn't red while the calendar shows only its own entries: the day's In Bank is hidden then.)
     td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0 && mode !== "calendar");
     labelDay(td, date, calendarData[r][c]);
@@ -803,9 +797,8 @@ function renderInfoRow() {
   const list = document.getElementById("upcomingList");
   if (!list) return;
   list.replaceChildren();
-  // (Past the five weeks the calendar starts on: the week after the budget's own four is on the calendar already)
-  const shownThrough = addDays(gridEndDate, CALENDAR_DAYS - OWN_DAYS);
-  const later = upcomingEntries.filter(entry => entry.date > shownThrough);
+  // (Past the five weeks the calendar starts on)
+  const later = upcomingEntries.filter(entry => entry.date > gridEndDate);
   if (later.length === 0) {
     list.appendChild(BudgetUI.element("li", "upcomingEmpty", "Nothing scheduled past this calendar."));
     return;
@@ -827,32 +820,77 @@ function renderInfoRow() {
   }
 }
 
-// The Lowest card's look further ahead, from the budget's last day's two lines (see afterCalendarLine): the day In Bank
-// is lowest in the 28 days after the budget's own four weeks and how low, and In Bank on the last of them. Since the
-// first week of those days is on Home's five-week calendar, they're named by their dates ("From 12/06 to 01/02"), not
-// as "after the calendar". Red below $0, and the whole card turns red when any of its amounts is below $0.
+// The Lowest card's look past the calendar, from the budget's last day's two lines (see afterCalendarLine): the day In
+// Bank is lowest from the day after the calendar through Lowest's last day (LOWEST'S LOOK AHEAD in Process Budget.js),
+// how low, and In Bank on that last day, named by their dates ("From 12/20 to 02/20"). Red below $0, and the whole
+// card turns red when any of its amounts is below $0. Its Look Ahead button picks how far past the calendar it goes.
 function renderAfterCalendar() {
   const box = document.getElementById("afterCalendar");
-  if (!box || !calendarData[3]) return;
-  const lastAhead = addDays(gridEndDate, 28);
-  document.getElementById("afterSpan").textContent = `From ${showDay(nextFourStart)} to ${showDay(lastAhead)}`;
-  document.getElementById("afterLastDay").textContent = `On ${showDay(lastAhead)}`;
+  if (!box || !calendarData[CALENDAR_ROWS - 1]) return;
+  const lastDay = lookAheadEnd();
+  document.getElementById("afterSpan").textContent = `From ${showDay(afterCalendarStart)} to ${showDay(lastDay)}`;
+  document.getElementById("afterLastDay").textContent = `On ${showDay(lastDay)}`;
+  document.getElementById("lookAheadWords").textContent = lookAheadWords();
   const found = {};
-  for (const line of String(calendarData[3][6] ?? "").split("\n")) {
+  for (const line of String(calendarData[CALENDAR_ROWS - 1][6] ?? "").split("\n")) {
     const after = afterCalendarLine(line);
     if (after) found[after.kind] = after;
   }
-  const belowZero = lowestInBank < 0 || [found.lowest, found.day28].some(after => after && after.amount < 0);
+  const belowZero = lowestInBank < 0 || [found.lowest, found.last].some(after => after && after.amount < 0);
   box.closest(".lowestCard")?.classList.toggle("isNegative", belowZero);
-  box.hidden = !found.lowest && !found.day28;
+  box.hidden = !found.lowest && !found.last;
   const show = (id, after) => {
     const el = document.getElementById(id);
     el.textContent = after ? formatMoney(after.amount) : "--";
     el.classList.toggle("negative", !!after && after.amount < 0);
   };
-  document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${showStoredDate(found.lowest.date)}` : "Lowest is on --";
+  // (Its day from the worked-out days, since a look ahead of months can reach the same day of next year: the first one
+  // with its date and amount, the way the lowest is picked)
+  const lowDay = found.lowest
+    ? predictedInBank.find(([day, amount]) => formatToMMDD(day) === found.lowest.date && Math.abs(amount - found.lowest.amount) < 0.005)
+    : null;
+  document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${lowDay ? showDay(lowDay[0]) : showStoredDate(found.lowest.date)}` : "Lowest is on --";
   show("afterLowest", found.lowest);
-  show("afterDay28", found.day28);
+  show("afterLastAmount", found.last);
+}
+
+// Look Ahead (on the Lowest card): how far past the calendar Lowest counts, in days, weeks, or months (2 months to
+// start). It's kept with the budget, so Quick Budget and reminders count the same days.
+function openLookAheadPanel(origin) {
+  BudgetUI.openPanel({
+    origin,
+    size: "small",
+    title: "Look Ahead",
+    build(form, panel) {
+      const ahead = lookAhead();
+      const count = BudgetUI.element("input", "frequencyCount");
+      count.type = "text";
+      count.inputMode = "numeric";
+      count.value = String(ahead.count);
+      count.setAttribute("aria-label", "How far past the calendar");
+      const unit = BudgetUI.element("select", "selectInput frequencyUnit");
+      unit.append(new Option("days", "days"), new Option("weeks", "weeks"), new Option("months", "months"));
+      unit.value = ahead.unit;
+      unit.setAttribute("aria-label", "Days, weeks, or months");
+      const row = BudgetUI.element("div", "frequencyRow");
+      row.append(count, unit);
+      const field = BudgetUI.field("Past the calendar", row, { hint: "Lowest counts In Bank from today through this far past the calendar's five weeks: 2 months to start, about three months from today. Up to 12 months, 52 weeks, or 366 days." });
+      form.append(field, BudgetUI.buttonRow([
+        { label: "Save", kind: "primary", type: "submit" },
+        { label: "Cancel", onClick: () => panel.close() }
+      ]));
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        panel.setError("");
+        panel.setBusy(true);
+        const result = await setLookAhead(count.value.trim(), unit.value);
+        panel.setBusy(false);
+        if (!result.ok) return panel.setError(result.message || "That didn't work. Please try again.");
+        panel.close();
+        BudgetUI.warnIfUnsaved(result);
+      });
+    }
+  });
 }
 
 //#endregion

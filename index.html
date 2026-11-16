@@ -6,10 +6,10 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ed9dfe1487">
-    <link rel="stylesheet" href="/themes.css?v=fa9fa48911">
-    <title>Prismal Planning - See Your Bank Balance Four Weeks Ahead</title>
-    <meta name="description" content="Prismal Planning is a calendar budget that shows what will be in your bank account at the end of every day for the next four weeks. It fills in your paychecks and bills, and points out low days before they happen.">
+    <link rel="stylesheet" href="/budgetStyle.css?v=767dfdda9b">
+    <link rel="stylesheet" href="/themes.css?v=965ad2ed41">
+    <title>Prismal Planning - See Your Bank Balance Five Weeks Ahead</title>
+    <meta name="description" content="Prismal Planning is a calendar budget that shows what will be in your bank account at the end of every day for the next five weeks. It fills in your paychecks and bills, and points out low days before they happen.">
     <link rel="canonical" href="https://prismalplanning.org/">
     <meta charset="UTF-8">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,8 +21,8 @@
     <meta name="theme-color" content="#000000">
 
     <!-- Open Graph / Social Media Preview Cards -->
-    <meta property="og:title" content="Prismal Planning - See Your Bank Balance Four Weeks Ahead">
-    <meta property="og:description" content="A calendar budget that shows what will be in your bank account at the end of every day for the next four weeks.">
+    <meta property="og:title" content="Prismal Planning - See Your Bank Balance Five Weeks Ahead">
+    <meta property="og:description" content="A calendar budget that shows what will be in your bank account at the end of every day for the next five weeks.">
     <meta property="og:image" content="https://prismalplanning.org/Favicon/og-image.jpg">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://prismalplanning.org/">
@@ -83,7 +83,7 @@
         <article id="frontView" class="guide frontView">
           <p class="frontDisclaimer">Prismal Planning (formerly Prismal Budget) is not in any way affiliated with Prism Wallet, Prism Data, Prism Financial, Prism Money, Prism Bill Pay, Prism Planning, or any other entity not named exactly "Prismal Planning".</p>
           <section class="frontHero" aria-labelledby="frontTitle">
-            <h1 id="frontTitle">Know what's in your bank account every day, four weeks ahead</h1>
+            <h1 id="frontTitle">Know what's in your bank account every day, five weeks ahead</h1>
             <p>Prismal Planning is a budget built around a calendar. Add what you spend and what you earn, and it works out what will be in your bank account at the end of every day, so you can see a tight week coming long before it gets here.</p>
             <div class="frontButtons">
               <a class="budgetButton primary" href="/login.html?new">Create Account</a>
@@ -93,7 +93,7 @@
 
           <section aria-labelledby="whatTitle">
             <h2 id="whatTitle">What It Is</h2>
-            <p>Prismal Planning is a web app for planning your money day by day. Instead of sorting last month's spending into categories, it looks ahead: a four-week calendar where each day lists its entries (costs and gains) and <strong>In Bank</strong>, what your bank account will hold at the end of that day.</p>
+            <p>Prismal Planning is a web app for planning your money day by day. Instead of sorting last month's spending into categories, it looks ahead: a five-week calendar where each day lists its entries (costs and gains) and <strong>In Bank</strong>, what your bank account will hold at the end of that day.</p>
             <p>It runs in any web browser, on your phone or your computer, with nothing to install. Your budget is saved with your account, so it's the same everywhere you sign in.</p>
           </section>
 
@@ -104,7 +104,7 @@
               <li><strong>Fills in your bills and paychecks.</strong> Add rent, a paycheck, or a subscription once, with how often it comes (every week, every 2 weeks, every month, and so on), and it lands on every day it should.</li>
               <li><strong>Connects your own spreadsheet.</strong> Already keep bills or a pay schedule in Google Sheets or Excel? Verify your email, connect it, and pick which cells hold the dates and amounts, and its entries land on your calendar and follow the spreadsheet as it changes.</li>
               <li><strong>Works out your paychecks from your work calendar.</strong> Keep your shifts on a calendar (Apple, Google, Outlook, or a work scheduling app)? Connect it with your pay, and each paycheck lands on its payday, worked out like a paystub (overtime, night pay, bonuses, deductions, and taxes), and follows the calendar as shifts change.</li>
-              <li><strong>Looks past the calendar.</strong> Lowest in bank after today shows the lowest your balance gets, counting the 28 days after your budget's four weeks too.</li>
+              <li><strong>Looks past the calendar.</strong> Lowest in bank after today shows the lowest your balance gets, months past the calendar too (as far as you like, up to a year).</li>
               <li><strong>Bob keeps an eye on it.</strong> Bob looks over your budget, points out days that go below $0, and has a new affirmation for you every day. His own page goes further: each account on any day ahead, goals with what reaching them takes, Wavelength Planning (a spectrum of where your money goes, across wavelengths you name yourself, like Needs, Wants, and Future), and tips like how much you tend to spend before payday, all switched on as you like.</li>
               <li><strong>Tracks savings and other accounts.</strong> Keep Savings and Cash (every budget has both), and accounts like a credit card with its interest (its rate, how it compounds, and the day it's added) and its limit, next to your budget, with everything added up at the top. Moving money in or out keeps both balances right, and each account lists every entry made on it.</li>
               <li><strong>Shows where your money goes.</strong> The tracker adds up your spending and income by category over any stretch of days (the last 3 months to start), with a graph of each category. Search finds any entry, and History keeps every week that's passed.</li>
@@ -336,8 +336,8 @@
         </section>
 
         <!-- Under the calendar (Calendar Page.js fills them in): Lowest in bank after today, with the lowest In Bank in the
-             28 days after the budget's own four weeks and In Bank on the last of them (named by their dates, since the
-             first week of them is on the calendar); then Bob, and Upcoming (past the weeks on the calendar) -->
+             days after the calendar through Lowest's last day and In Bank on that day (named by their dates), and Look
+             Ahead, which picks how far past the calendar that is; then Bob, and Upcoming (past the weeks on the calendar) -->
         <section class="infoRow">
           <div class="infoCard lowestCard">
             <span class="cardIcon walletIcon"><img src="/Resources/Icons/Wallet.webp?v=41dca9f9c0" alt=""></span>
@@ -348,7 +348,8 @@
             <div id="afterCalendar" class="afterCalendar" hidden>
               <span id="afterSpan" class="infoLabel">Further ahead</span>
               <p class="afterLine"><span id="afterLowestDay">Lowest is on --</span>: <span id="afterLowest" class="afterAmount" translate="no"></span></p>
-              <p class="afterLine"><span id="afterLastDay">On the last day</span>: <span id="afterDay28" class="afterAmount" translate="no"></span></p>
+              <p class="afterLine"><span id="afterLastDay">On the last day</span>: <span id="afterLastAmount" class="afterAmount" translate="no"></span></p>
+              <button id="lookAheadButton" class="lookAheadButton" type="button">Look ahead: <span id="lookAheadWords">2 months</span></button>
             </div>
           </div>
           <!-- Bob's message (Calendar Page.js); the card opens his page. His warnings (and Okay) show under it while he has
@@ -392,11 +393,11 @@
           <ul>
             <li><strong>What it shows:</strong> the three buttons over the calendar's top left show your budget ($), your budget and your calendar together ($ with a calendar), or just your calendar (a calendar). This device remembers which, even after you sign out.</li>
             <li><strong>Calendar Fractals</strong> (beside them) are your calendars, each with its own name and color. Check the ones to show on the calendar, and uncheck the rest (this device remembers that too). Edit changes one's name or color, and Share there gives its calendar link, to add to a calendar app or send to someone. New Calendar Fractal makes another, or links one from another calendar (From another calendar: a connected calendar, or a calendar's link), whose entries show here but can't be changed here. Entries someone shared with you are under Shared With You, and invitations to one wait in the list with Join and Decline (a pink dot means one is waiting).</li>
-            <li><strong>Five weeks:</strong> the calendar shows this week and the four after it to start. The first four are your budget's own weeks; the fifth, and any week further ahead, shows what your budget expects then.</li>
+            <li><strong>Five weeks:</strong> the calendar shows this week and the four after it to start: your budget's own five weeks. Any week further ahead shows what your budget expects then.</li>
             <li><strong>Moving it:</strong> at the top right, <strong>Today</strong> comes back to this week, ‹ and › go to the month before or the next, and the month and year lists pick a month and a year: the calendar moves to that month's first week. It goes back to a year before your budget began, and ahead to five years from today. Days that passed are duller.</li>
             <li><strong>Edits from other devices:</strong> the round number beside the year counts the changes made since you last looked at the Change Logs in this browser, on another device or by anyone you share this budget with (the daily update doesn't count, and neither do changes made here). It's a grey 0, or red when there are some: tap it to see them in the Change Logs, which sets it back to 0.</li>
             <li><strong>List Mode</strong> (the switch at the top right) turns the calendar into one list of its days that scrolls, starting at today: each day with its In Bank and its entries (whatever the three buttons at the left show), and a + to add an entry on that day. Tap an entry to see it, change it, or delete it. This browser remembers it.</li>
-            <li>Past days show what History has for them, and days after your budget's own four weeks show what your budget expects (your recurring entries, connected spreadsheets and calendars, and Upcoming entries), the way they'll fill in when they come.</li>
+            <li>Past days show what History has for them, and days after your budget's own five weeks show what your budget expects (your recurring entries, connected spreadsheets and calendars, and Upcoming entries), the way they'll fill in when they come.</li>
           </ul>
 
           <h4>Viewing A Day</h4>
@@ -472,11 +473,11 @@
 
           <h4>Lowest In Bank, Bob, And Upcoming</h4>
           <ul>
-            <li><strong>Lowest in bank after today</strong> is the lowest In Bank from today through the 28 days after your budget's own four weeks (the calendar's fifth week is the first of them). To see those days, move the calendar there (› or the month list), or swipe on from the last day.</li>
-            <li>Next to it, those 28 days by their dates (like <strong>From 12/06 to 01/02</strong>, counting your recurring entries, connected spreadsheets' entries, and Upcoming entries, but not Hidden ones): <strong>Lowest is on</strong> the day In Bank is lowest in them, and how low it gets, and <strong>On</strong> their last day, what In Bank will be then. Amounts below $0 show in red, and when any of them is below $0, the whole Lowest card turns red.</li>
-            <li><strong>Bob</strong> looks over your budget and lets you know what to keep in mind: days that go below $0, going below $0 in the 28 days after your budget's four weeks, uncommon recurring entries (ones that land every 3 months or less often) on the calendar, and Upcoming entries. Bob also has a new affirmation for you every day.</li>
-            <li><strong>Tap Bob's card</strong> to open his page (the Bob tab opens it too), where he goes further, with a card for each thing he works out: each account on any day ahead, goals and what reaching them takes, Wavelength Planning (where your money goes, on a spectrum), and his tips (payday, spending pace, big bills, the weekly check, Catchup entries, and refunds). You pick which cards are on. Its Help has the details.</li>
-            <li><strong>Bob's warnings:</strong> on his page, a card that's on has a <strong>Warnings</strong> switch beside its own. With it on, when that card needs a look (like Catchup entries adding up, or a goal in danger), Bob says so on his card here, and his card moves up over the calendar. Tap <strong>Okay</strong> to put the warnings away and his card back down until tomorrow.</li>
+            <li><strong>Lowest in bank after today</strong> is the lowest In Bank from today through Lowest's last day: 2 months after the calendar's five weeks to start (about three months from today). <strong>Look Ahead</strong>, under the dates beside it, changes how far: a number of days, weeks, or months (up to 12 months), kept with your budget, so Quick Budget and your reminders count the same days. To see those days, move the calendar there (› or the month list), or swipe on from the last day.</li>
+            <li>Next to it, the days after the calendar by their dates (like <strong>From 12/13 to 02/12</strong>, counting your recurring entries, connected spreadsheets' entries, and Upcoming entries, but not Hidden ones): <strong>Lowest is on</strong> the day In Bank is lowest in them, and how low it gets, and <strong>On</strong> their last day, what In Bank will be then. Amounts below $0 show in red, and when any of them is below $0, the whole Lowest card turns red.</li>
+            <li><strong>Bob</strong> looks over your budget and lets you know what to keep in mind: days that go below $0, going below $0 after the calendar's five weeks (through Lowest's last day), uncommon recurring entries (ones that land every 3 months or less often) on the calendar, and Upcoming entries. Bob also has a new affirmation for you every day.</li>
+            <li><strong>Tap Bob's card</strong> to open his page (the Bob tab opens it too), where he goes further: Bob's Cards lists his cards (goals and what reaching them takes, Wavelength Planning, where your money goes, on a spectrum, and his tips: payday, spending pace, big bills, the weekly check, Catchup entries, and refunds), each opening in a window, where you turn it on; under it, the Spectrum Graph and the figures he works from fold open and shut. Its Help has the details.</li>
+            <li><strong>Bob's warnings:</strong> on his page, a card that's on has a <strong>Warnings</strong> switch beside its own (in the card's window). With it on, when that card needs a look (like Catchup entries adding up, or a goal in danger), Bob says so on his card here, and his card moves up over the calendar. Tap <strong>Okay</strong> to put the warnings away and his card back down until tomorrow.</li>
             <li><strong>Upcoming</strong> lists entries dated after the five weeks the calendar starts on. Tap one to change, move, or delete it, like an entry on a zoomed day. Each one moves onto the calendar when its day shows up.</li>
           </ul>
 

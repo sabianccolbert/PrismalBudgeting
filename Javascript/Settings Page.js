@@ -84,6 +84,8 @@ wireSounds();
 wireMotion();
 loadBudgets();
 showFractalLinks();
+// Updates: the version this page is (each update's list is in settings.html)
+document.getElementById("updatesVersion").textContent = window.SITE_VERSION || "--";
 
 window.workspaceReady.then(async (loaded) => {
   // Account settings don't need the budget, so they show even when it didn't load
@@ -274,7 +276,7 @@ function renderReminderTime() {
 const REMINDER_KINDS = [
   { key: "entries", label: "🔔 Entry reminders", detail: "An entry you set a reminder on (Remind me, in New Entry or its options): that many days before it" },
   { key: "negative", label: "⛔️ In Bank below $0", detail: "A day In Bank goes below $0" },
-  { key: "uncommon", label: "✔️ Uncommon recurring payments", detail: "An uncommon recurring payment (every 3 months or less often) in the current four weeks" },
+  { key: "uncommon", label: "✔️ Uncommon recurring payments", detail: "An uncommon recurring payment (every 3 months or less often) in the calendar's five weeks" },
   { key: "cost", label: "❗️ Days with a cost", detail: "A day you have a cost" }
 ];
 function renderReminderCard() {
@@ -921,12 +923,13 @@ function renderAccount() {
   }
   renderOtherEmails();
   renderQuickIcons();
+  renderSnapshotIcons();
   renderQuickBalances();
   renderAnalytics();
   renderPasswordless();
 }
 
-// A new password: the other devices are signed out and Quick Budget icons stop; this one gets a new session
+// A new password: the other devices are signed out and Quick Budget, Quick Calendar, and Snapshot icons stop; this one gets a new session
 async function changePassword(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1130,8 +1133,8 @@ function renderPasswordless() {
   const passwordButton = document.querySelector("#passwordForm button[type=submit]");
   passwordButton.textContent = noPassword ? "Set Password" : "Change Password";
   document.querySelector("#passwordForm .panelHint").textContent = noPassword
-    ? "Your account doesn't have a password yet. Set one to sign in with your username or email too. It signs out your other devices and turns off your Quick Budget icons."
-    : "A new password signs out your other devices and turns off your Quick Budget icons. This device stays signed in.";
+    ? "Your account doesn't have a password yet. Set one to sign in with your username or email too. It signs out your other devices and turns off your Quick Budget, Quick Calendar, and Snapshot icons."
+    : "A new password signs out your other devices and turns off your Quick Budget, Quick Calendar, and Snapshot icons. This device stays signed in.";
 
   clearTimeout(confirmTimer);
   const card = document.getElementById("confirmYou");
@@ -1367,9 +1370,38 @@ async function turnOffQuickIcons(event) {
   renderQuickIcons();
 }
 
-// Every device and browser (this one too) is signed out, and Quick Budget icons stop
+// How many Snapshot icons work (the no-login ones Snapshot's Add To Home Screen makes), with Turn Off while there are any
+function renderSnapshotIcons() {
+  const status = document.getElementById("snapshotIconStatus");
+  const buttons = document.getElementById("snapshotIconButtons");
+  buttons.replaceChildren();
+  const count = account.snapshotIcons || 0;
+  if (count === 0) {
+    status.textContent = "Snapshot icons: none right now. Snapshot's Add To Home Screen can make one that opens with no login.";
+    return;
+  }
+  status.textContent = `Snapshot icons: ${count} on home screens. Each one shows a budget's Snapshot, and what its cards are worked out from (its entries, History, accounts, and the rest), to anyone who has it, with no login. They can't change anything.`;
+  buttons.append(settingsButton(count === 1 ? "Turn Off The Snapshot Icon" : "Turn Off Snapshot Icons", "danger", turnOffSnapshotIcons));
+}
+
+// Turn Off Snapshot Icons (after asking): every Snapshot icon stops working
+async function turnOffSnapshotIcons(event) {
+  const count = account.snapshotIcons;
+  if (!window.confirm(`Turn off ${count === 1 ? "your Snapshot icon" : `all ${count} of your Snapshot icons`}? ${count === 1 ? "It stops" : "They stop"} working right away. Snapshot can make a new one.`)) return;
+  event.currentTarget.disabled = true;
+  const result = await budgetApi("/api/snapshot/off", {});
+  if (result.ok && result.data) {
+    account.snapshotIcons = 0;
+    BudgetUI.showToast(count === 1 ? "Your Snapshot icon is off." : "Your Snapshot icons are off.");
+  } else {
+    BudgetUI.showToast(accountError(result, "Couldn't turn off the icons. Please try again."), true);
+  }
+  renderSnapshotIcons();
+}
+
+// Every device and browser (this one too) is signed out, and Quick Budget, Quick Calendar, and Snapshot icons stop
 async function signOutEverywhere(event) {
-  if (!window.confirm("Sign out every device and browser, this one too? Your Quick Budget icons will stop working, and you'll sign in again here.")) return;
+  if (!window.confirm("Sign out every device and browser, this one too? Your Quick Budget, Quick Calendar, and Snapshot icons will stop working, and you'll sign in again here.")) return;
   const button = event.currentTarget;
   button.disabled = true;
   const result = await budgetApi("/api/account/sign-out-everywhere", {});

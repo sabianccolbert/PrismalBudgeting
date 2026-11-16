@@ -50,7 +50,7 @@
   flex-direction: column; /* One element per line (date, system lines, entries) */
   align-items: flex-start;
   justify-content: flex-start;
-  /* No will-change here: it kept a graphics layer for each of the 28 days at all times, and phones (Safari
+  /* No will-change here: it kept a graphics layer for each of the calendar's days at all times, and phones (Safari
      especially) ran out of room for them, leaving parts of days unpainted until the calendar was touched.
      A zoom gets its layer while it runs. */
   transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -630,7 +630,7 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 }
 
 /* The guest row (Process Budget.js ONE DAY AFTER ANOTHER): seven days laid over a row of the page's days, for a day
-   the four weeks showing don't have (one a zoomed day was swiped on to). Only the one that's zoomed (or shrinking back)
+   the five weeks showing don't have (one a zoomed day was swiped on to). Only the one that's zoomed (or shrinking back)
    shows, or can be tapped. */
 .elastic-table.guestDays {
   position: absolute;
@@ -810,6 +810,11 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 .lineWeekday {
   font-weight: normal;
   color: var(--TEXT_DIM);
+}
+
+/* (On a day below $0, which turns red, the dim grey is too faint: it's as bright as the date) */
+.elastic-table td.isNegative .lineWeekday {
+  color: var(--TEXT_BRIGHT);
 }
 
 .lineWeekdayFull,
@@ -2200,8 +2205,8 @@ button.dropdownBox:focus-visible {
   color: var(--TEXT_DIM);
 }
 
-/* Lowest: the wallet, Lowest in bank after today, and at the right, the 28 days after the calendar (under it on
-   phones), over a faint wave */
+/* Lowest: the wallet, Lowest in bank after today, and at the right, the days after the calendar through Lowest's last
+   day (under it on phones), over a faint wave */
 .lowestCard {
   grid-area: lowest;
   display: grid;
@@ -2214,7 +2219,7 @@ button.dropdownBox:focus-visible {
     var(--GLASS);
 }
 
-/* Below $0 (today through the 28 days after the calendar): the card turns red, like a day below $0 */
+/* Below $0 (today through Lowest's last day): the card turns red, like a day below $0 */
 .lowestCard.isNegative {
   border-color: var(--NEGATIVE_DAY_EDGE);
   background:
@@ -2260,6 +2265,14 @@ button.dropdownBox:focus-visible {
 
 .afterAmount {
   font-variant-numeric: tabular-nums;
+}
+
+/* Look Ahead: how far past the calendar Lowest counts (it opens a small window to change it) */
+.lookAheadButton {
+  margin-top: 0.6em;
+  padding: 0.35em 0.9em;
+  font-size: 0.85em;
+  border-radius: 999px;
 }
 
 @media (max-width: 560px) {
@@ -5118,6 +5131,49 @@ footer.hasHelp > hr {
   background: rgba(var(--SHADE_RGB), 0.6);
 }
 
+/* Settings' Updates: the version, then every update, newest first, in a list that scrolls inside the card */
+.updatesList {
+  max-height: min(60vh, 520px);
+  margin-top: 0.4em;
+  padding: 0 0.6em 0 0.2em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--PANEL_LINE);
+  border-radius: 8px;
+}
+
+.updatesList:focus-visible {
+  outline: 2px solid var(--GLOW_EDGE);
+  outline-offset: 2px;
+}
+
+.updatesRelease + .updatesRelease {
+  border-top: 1px solid var(--PANEL_LINE);
+}
+
+.updatesRelease h4 {
+  margin: 0.9em 0 0.3em;
+  font-size: 1.1em;
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
+}
+
+.budgetCard p.updatesKind {
+  margin: 0.5em 0 0.2em;
+  font-size: 0.9em;
+  color: var(--TEXT_DIM);
+}
+
+.updatesRelease ul {
+  margin: 0 0 0.6em;
+  padding-left: 1.4em;
+}
+
+.updatesRelease li {
+  margin-bottom: 0.3em;
+}
+
 .helpView h4 {
   margin: 1.2em 0 0.4em;
   font-size: 1.1em;
@@ -5540,6 +5596,117 @@ button.bobDataRow:focus-visible {
   flex-shrink: 0;
   font-size: 1.2em;
   color: var(--TEXT_DIM);
+}
+
+/* Bob's Cards: a row for each of his cards, its note (what it says) cut to two lines, On or Off at the right; one that
+   needs a look has the red-orange edge, like its highlight */
+.bobCardRow .bobDataNote {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bobDataRow.bobCardRow.isWarning {
+  box-shadow: inset 2px 0 0 #ff6a1a;
+}
+
+.bobDataValue.isOffValue {
+  color: var(--TEXT_DIM);
+}
+
+/* One of his cards in its window: the window's title stands in for the card's, and the card has no frame of its own */
+.budgetPanel .budgetCard.bobSection.inWindow {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+.bobSection.inWindow .sectionTitle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The cards that fold open and shut (the Spectrum Graph and Data's groups): the title is the button, with a figure from
+   the card (shown while it's shut) and a › that turns down while it's open */
+.budgetCard.bobFold .sectionHead {
+  flex-wrap: nowrap;
+}
+
+.bobFold .sectionTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.foldToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.15em 0.2em;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  text-shadow: inherit;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.foldToggle:hover,
+.foldToggle:focus-visible {
+  transform: none;
+  outline: none;
+  background: rgba(var(--GLOW_RGB), 0.14);
+  box-shadow: inset 0 0 0 1px var(--PANEL_BORDER);
+}
+
+.foldTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.foldSummary {
+  flex-shrink: 0;
+  font-size: 0.75em;
+  font-variant-numeric: tabular-nums;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: none;
+}
+
+.foldSummary.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.bobFold.isOpen .foldSummary {
+  visibility: hidden;
+}
+
+.foldChevron {
+  flex-shrink: 0;
+  font-size: 0.9em;
+  color: var(--TEXT_DIM);
+  transition: transform 0.2s ease;
+}
+
+.bobFold.isOpen .foldChevron {
+  transform: rotate(90deg);
+}
+
+html.lessMotion .foldChevron {
+  transition: none;
 }
 
 /* Accounts: the table, with the day's box at the top of its third column; the Total row stands out, and the Interest
@@ -6690,6 +6857,18 @@ html:not(.frontPage) .frontSignIn,
   margin: 0;
 }
 
+/* Opened with a Snapshot icon's key: which budget, in place of Edit and Add To Home Screen, and no header buttons (the
+   page has no login: its note links to the site instead) */
+.controlsCard p.snapshotKeyNote {
+  margin: 0;
+  font-size: clamp(12px, 2.4vmin, 16px);
+  line-height: 1.4;
+}
+
+html.snapshotKey .navButtons {
+  display: none;
+}
+
 .budgetCard p.snapshotStartNote {
   width: var(--PAGE_WIDTH);
   margin: 0 auto 1em;
@@ -6959,4 +7138,49 @@ button.snapshotChoice:focus-visible {
 .waitingItem.isPlaceholder .waitingAmount,
 .sheetPreviewList.isPlaceholder li {
   color: var(--PLACEHOLDER_TEXT);
+}
+
+/*========================================*
+ *  Wide screens: a page's cards in two columns, each growing on its own (Settings, Bob, both calculators, and Budgets,
+ *  Calendars & Spreadsheets put their cards in a .wideColumns of two .wideColumn), and the Menu's links across the whole
+ *  page. Only a computer's window or a tablet held sideways: phones and tablets held upright keep one card under another,
+ *  in the same order.
+ */
+
+/* (The Accrual Calculator's parts keep their spacing in either column) */
+.paymentsPage .wideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 2vmin;
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+  .wideColumns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 clamp(14px, 1.6vw, 28px);
+    align-items: start;
+    box-sizing: border-box;
+    width: min(96vw, 1560px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .wideColumn {
+    min-width: 0;
+  }
+
+  /* Each card as wide as its column */
+  .wideColumn > *,
+  .wideColumn .budgetCard {
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .menuLinks {
+    width: var(--PAGE_WIDTH);
+  }
 }

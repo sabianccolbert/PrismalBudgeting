@@ -405,12 +405,15 @@ function renderCalculatorPage(view) {
     card.appendChild(amount);
     results.appendChild(card);
   }
-  view.appendChild(results);
-
-  if (saved) view.appendChild(paycheckBreakdown(computePaycheck(inputs), inputs));
-  else view.appendChild(emptyMessage("Fill in your pay below, then tap Calculate."));
+  // (The results, then the crystals and the boxes: side by side on a wide screen, see .wideColumns)
+  const columns = BudgetUI.element("div", "wideColumns");
+  const shown = BudgetUI.element("div", "wideColumn");
+  const typed = BudgetUI.element("div", "wideColumn");
+  shown.append(results, saved ? paycheckBreakdown(computePaycheck(inputs), inputs) : emptyMessage("Fill in your pay, then tap Calculate."));
   const form = typing || calculatorForm(inputs);
-  view.append(crystalShelf(form), form);
+  typed.append(crystalShelf(form), form);
+  columns.append(shown, typed);
+  view.append(columns);
 }
 
 // How the take-home pay adds up ($0 lines are left out)
@@ -720,7 +723,13 @@ function paymentCalculator() {
     fill: (values) => fillDebt(values),
     describe: describeDebt
   });
-  el.append(graphCard, gems, form, results, pace);
+  // (The graph, gems, and boxes, then the results: side by side on a wide screen, see .wideColumns)
+  const typed = BudgetUI.element("div", "wideColumn");
+  const shown = BudgetUI.element("div", "wideColumn");
+  typed.append(graphCard, gems, form);
+  shown.append(results, pace);
+  el.classList.add("wideColumns");
+  el.append(typed, shown);
 
   // What's picked: In Bank, an Equity account ({ summary, name, balance, interest }), or null for none
   const pickedSource = () => {
@@ -1086,7 +1095,7 @@ function paymentCalculator() {
   const openGoalFor = async (id) => {
     await keepNow();
     const by = payBy.value();
-    const url = `/menu/bob.html?goalGem=${encodeURIComponent(id)}${by instanceof Date ? `&by=${formatToYMD(by)}` : ""}#goalsCard`;
+    const url = `/menu/bob.html?goalGem=${encodeURIComponent(id)}${by instanceof Date ? `&by=${formatToYMD(by)}` : ""}#bobCardsCard`;
     if (typeof window.transitionTo === "function") window.transitionTo(url);
     else location.href = url;
   };
