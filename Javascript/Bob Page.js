@@ -68,7 +68,7 @@ const CARDS = [
   {
     id: "purposes",
     title: "Wavelength Planning",
-    help: "Once it's on, every entry form asks which wavelength an entry's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Add Or Change Wavelengths makes them), and Undefined, which is always there. It's that entry's alone, unless Per Title is on: then every entry with its title is on it (except one given a wavelength of its own). The spectrum adds up what each cost between the days picked, long wavelengths at the left to short at the right; tap a stretch to see its titles. A wavelength can have a goal, like $300 per 2 weeks, or 20% (of what your Regular gains come to) per month, and Bob warns you once one is 85% used: a way to hold back spending you want less of, like fast food or gambling.",
+    help: "Once it's on, every entry form asks which wavelength an entry's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Add Or Change Wavelengths makes them), and Undefined, which is always there. It's that entry's alone, unless Per Title is on: then every entry with its title is on it (except one given a wavelength of its own). The spectrum adds up what each cost in its Days (the past so many days, weeks, or months; since your last paycheck; or from one day to another, which each card keeps on each device), long wavelengths at the left to short at the right; tap a stretch to see its titles. A wavelength can have a goal, like $300 per 2 weeks, or 20% (of what your Regular gains come to) per month, and Bob warns you once one is 85% used: a way to hold back spending you want less of, like fast food or gambling.",
     setup: setupPurposesCard,
     render: renderPurposesCard
   },
@@ -2964,16 +2964,16 @@ function goalPlanFields({ date, existing, title, amount, target, gemPick, gems, 
 // it, long at the left and shorter and shorter toward the right, each wavelength's stretch as wide as its share and in
 // its own color (the first red, through orange, yellow, green, and blue, to the last violet). A legend says each one's
 // amount and share (tap one, or its stretch, for its titles), and what the costs on no wavelength yet come to (tap it
-// to give titles one, right there). The days are the card's From and To, which its windows share; Wavelengths names
-// them, orders them, and adds or takes them out.
+// to give titles one, right there). The days are the card's own (WAVELENGTH DAYS below), which its windows share;
+// Wavelengths names them, orders them, and adds or takes them out.
 
-let purposeRange = null; // { from, to }: the days the spectrum adds up
-const purposeBoxes = new Set(); // Every From and To pair showing them (the card's, and an open window's)
-
-// The card's From and To (on the last 30 days to start), and its Wavelengths button
+// The card's days (the last 30 days to start), and its Wavelengths and Week By Week buttons. card.waveKey says whose days
+// they are: "bob" (the card on Bob's page, which his highlights and Home's warnings go by too) unless the Snapshot page
+// gave the card its own.
 function setupPurposesCard(card) {
-  purposeRange = { from: addDays(today, -(PURPOSE_DAYS - 1)), to: today };
-  card.purposes = purposeDateBoxes();
+  card.waveKey = card.waveKey || "bob";
+  card.waveDays = waveDaysOf(card.waveKey);
+  card.purposes = purposeDaysControl(card);
   const edit = BudgetUI.element("button", "budgetButton wavelengthsButton", "Add Or Change Wavelengths");
   edit.type = "button";
   edit.addEventListener("click", () => openWavelengthsWindow(edit));
@@ -2990,15 +2990,17 @@ const WAVE_GOAL_WARN = 0.85; // How much of a wavelength's goal is used when it 
 // The spectrum (or a note while nothing in these days was spent), what's Undefined yet, each goal and how much of it is
 // used, and the highlight: each wavelength's share, or a heads-up for any goal at least WAVE_GOAL_WARN used
 function renderPurposesCard(card) {
-  const totals = purposeTotals(purposeRange.from, purposeRange.to);
+  const range = purposeRangeOf(card);
+  card.purposes?.show(range);
+  const totals = purposeTotals(range.from, range.to);
   const sum = totals.slices.reduce((all, slice) => all + slice.total, 0);
   const parts = [];
-  if (sum > 0) parts.push(wavelengthSpectrum(totals, sum));
+  if (sum > 0) parts.push(wavelengthSpectrum(totals, sum, card, range));
   else parts.push(BudgetUI.element("p", "panelHint", "Nothing spent in these days yet. Pick a wavelength at the bottom of an entry's form (tap an entry on a zoomed day, or add a new one), or give titles one below."));
   if (totals.none > 0) {
     const unsorted = BudgetUI.element("button", "budgetButton purposeUnsorted", `${formatMoney(totals.none)} is Undefined ›`);
     unsorted.type = "button";
-    unsorted.addEventListener("click", () => openUnsortedWindow(unsorted));
+    unsorted.addEventListener("click", () => openUnsortedWindow(unsorted, card));
     parts.push(unsorted);
   }
   const goals = waveGoalStatus();
@@ -3012,7 +3014,7 @@ function renderPurposesCard(card) {
       : `${goal.name} is past its goal (${formatMoney(goal.used)} ${goalWindowWords(goal.goal)}, with no Regular gains then, so its ${goal.goal.percent}% of them is $0.00)`));
     return { text: `Heads up: ${words.join("; ")}.`, warn: true };
   }
-  const days = `from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}`;
+  const days = `from ${showDate(range.from)} to ${showDate(range.to)}`;
   if (sum === 0) return { text: `Nothing spent ${days} yet.`, warn: false };
   const shares = totals.slices.filter(slice => slice.total > 0).map(slice => `${slice.name} ${sharePercent(slice.total, sum)}%`);
   return { text: `${shares.join(", ")} ${days}.`, warn: false };
@@ -3164,12 +3166,14 @@ function wavelengthColor(index, count) {
   return `hsl(${hue}, 95%, 64%)`;
 }
 
+let spectrumCount = 0; // (Each spectrum's own ids)
+
 // The spectrum and its legend. Each wavelength with something in it gets a stretch of the bar as wide as its share, in
 // the wavelengths' order, with a small gap between stretches; the wave along the bar gets shorter all the way across.
 // Pointing at a stretch (or tabbing to it) says its amount and share under the bar, and tapping it (or Enter) opens its
-// titles. The legend says each one's name, amount, and share (so the colors never have to), and opens the same.
-let spectrumCount = 0;
-function wavelengthSpectrum(totals, sum) {
+// titles. The legend says each one's name, amount, and share (so the colors never have to), and opens the same. card: the
+// Wavelength Planning card it's on (its windows share its days); range: those days, { from, to }.
+function wavelengthSpectrum(totals, sum, card, range) {
   const WIDTH = 1000;
   const HEIGHT = 120;
   const GAP = 6;
@@ -3184,7 +3188,7 @@ function wavelengthSpectrum(totals, sum) {
   svg.setAttribute("aria-label", "Wavelength Planning, as a spectrum");
   const caption = BudgetUI.element("p", "spectrumCaption");
   const showCaption = (text) => { caption.textContent = text; };
-  const resting = `${formatMoney(sum)} spent on a wavelength from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}`;
+  const resting = `${formatMoney(sum)} spent on a wavelength from ${showDate(range.from)} to ${showDate(range.to)}`;
   showCaption(resting);
 
   // The faint band behind the wave, every color of the wavelengths in order
@@ -3253,11 +3257,11 @@ function wavelengthSpectrum(totals, sum) {
     stretch.addEventListener("focus", show);
     stretch.addEventListener("pointerleave", () => showCaption(resting));
     stretch.addEventListener("blur", () => showCaption(resting));
-    stretch.addEventListener("click", () => openPurposeWindow(stretch, slice.key));
+    stretch.addEventListener("click", () => openPurposeWindow(stretch, slice.key, card));
     stretch.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      openPurposeWindow(stretch, slice.key);
+      openPurposeWindow(stretch, slice.key, card);
     });
     svg.append(stretch);
   }
@@ -3276,7 +3280,7 @@ function wavelengthSpectrum(totals, sum) {
       BudgetUI.noTranslate(BudgetUI.element("span", "purposeAmount", formatMoney(slice.total))),
       BudgetUI.element("span", "purposeShare", `${sharePercent(slice.total, sum)}%`)
     );
-    button.addEventListener("click", () => openPurposeWindow(button, slice.key));
+    button.addEventListener("click", () => openPurposeWindow(button, slice.key, card));
     item.append(button);
     legend.append(item);
   }
@@ -3284,82 +3288,231 @@ function wavelengthSpectrum(totals, sum) {
   return box;
 }
 
-// From and To boxes for the days the spectrum adds up (each a date box with its calendar button). The card has a pair,
-// and a wavelength's window has its own; picking a day in any of them changes them all, the card, and an open window.
-function purposeDateBoxes() {
-  const el = BudgetUI.element("div", "purposeDates");
+// ---------- WAVELENGTH DAYS ----------
+// The days a Wavelength Planning card adds up are its own, on each device: the card on Bob's page has its days (and his
+// highlights on the Snapshot page and Home's warnings go by them), and each one on the Snapshot page has its own. They're
+// kept in this browser (WAVE_DAYS_KEY: { <the budget's id>: { <the card's key>: its days } }, the newest WAVE_DAYS_CARDS
+// of each budget's, through signing out: Layout.js DEVICE_SETTINGS), as one of:
+//   { kind: "past", count, unit }: the last count days, weeks, or months, through today (the last 30 days to start)
+//   { kind: "paycheck" }: from the last payday (lastPayday) through today
+//   { kind: "dates", from, to }: from one day through another ("YYYY-MM-DD")
+const WAVE_DAYS_KEY = "prismal_wave_days";
+const WAVE_DAYS_START = { kind: "past", count: PURPOSE_DAYS, unit: "days" };
+const WAVE_DAYS_MOST = 366;     // Past goes back up to this many days, weeks, or months
+const WAVE_DAYS_CARDS = 40;     // The most cards one budget keeps days for in a browser
+const PAYCHECK_LOOK_BACK = 366; // How many days back Since Last Paycheck looks for one (a year: its note says so)
+
+// What this browser keeps: { <the budget's id>: { <a card's key>: days } }
+function waveDaysBook() {
+  try {
+    const book = JSON.parse(localStorage.getItem(WAVE_DAYS_KEY) || "{}");
+    return book && typeof book === "object" && !Array.isArray(book) ? book : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+// The open budget, as the book keeps it ("" before one has loaded)
+const waveDaysBudget = () => String(budgetInfo?.id ?? "");
+
+// A card's days on this device (the last 30 days, until some are picked)
+function waveDaysOf(key) {
+  const kept = waveDaysBook()[waveDaysBudget()];
+  const days = kept && typeof kept === "object" && Object.prototype.hasOwnProperty.call(kept, key) ? readWaveDays(kept[key]) : null;
+  return days || { ...WAVE_DAYS_START };
+}
+
+// Days as they're kept, checked: one of the three kinds (From And To's in order), or null
+function readWaveDays(days) {
+  if (!days || typeof days !== "object") return null;
+  if (days.kind === "paycheck") return { kind: "paycheck" };
+  if (days.kind === "past") {
+    const count = Number(days.count);
+    return Number.isInteger(count) && count >= 1 && count <= WAVE_DAYS_MOST && WAVE_GOAL_UNITS.includes(days.unit) ? { kind: "past", count, unit: days.unit } : null;
+  }
+  if (days.kind !== "dates" || !/^\d{4}-\d{2}-\d{2}$/.test(String(days.from)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(days.to))) return null;
+  const from = createSafeMidnight(days.from, true);
+  const to = createSafeMidnight(days.to, true);
+  if (isNaN(from.getTime()) || isNaN(to.getTime())) return null;
+  return { kind: "dates", from: formatToYMD(from <= to ? from : to), to: formatToYMD(from <= to ? to : from) };
+}
+
+// Keep a card's days in this browser, as its budget's newest (the oldest past WAVE_DAYS_CARDS go)
+function keepWaveDays(key, days) {
+  const book = waveDaysBook();
+  const id = waveDaysBudget();
+  const kept = book[id] && typeof book[id] === "object" && !Array.isArray(book[id]) ? book[id] : {};
+  delete kept[key];
+  kept[key] = days;
+  const keys = Object.keys(kept);
+  for (const old of keys.slice(0, Math.max(0, keys.length - WAVE_DAYS_CARDS))) delete kept[old];
+  book[id] = kept;
+  try { localStorage.setItem(WAVE_DAYS_KEY, JSON.stringify(book)); } catch (e) {}
+}
+
+// The last payday on or before today: a day with a paycheck (a Regular gain from a recurring entry, or a connected
+// spreadsheet or calendar: isPaycheckLine) in History or on the calendar, up to PAYCHECK_LOOK_BACK days back, counted the
+// way Payday counts them (two a day or so apart, like two people's, are one payday, on the first). null for none.
+function lastPayday() {
+  const days = [];
+  eachDay(addDays(today, -PAYCHECK_LOOK_BACK), today, (date, lines) => {
+    if (lines.some(isPaycheckLine)) days.push(date);
+  });
+  days.sort((a, b) => a - b);
+  let payday = null;
+  for (const day of days) if (!payday || getDayDifference(day, payday) >= PAYDAY_GAP) payday = day;
+  return payday;
+}
+
+// The days a card adds up: { from, to, payday (Since Last Paycheck's day, or null with none to go by, when it's the last
+// 30 days instead) }
+function purposeRangeOf(card) {
+  const days = card.waveDays;
+  if (days.kind === "dates") return { from: createSafeMidnight(days.from, true), to: createSafeMidnight(days.to, true) };
+  if (days.kind === "paycheck") {
+    const payday = lastPayday();
+    return { from: payday || goalWindowStart(WAVE_DAYS_START), to: today, payday };
+  }
+  return { from: goalWindowStart(days), to: today };
+}
+
+let purposeDaysCount = 0; // (Each days control's own ids)
+
+// A card's days, to pick (the card has one, card.purposes, and each of its windows its own): Days, then Past with a number
+// and Days, Weeks, or Months; Since Last Paycheck; or From And To with two date boxes (each with its calendar button), and
+// a line under them saying which days they come to. A change in any of them is the card's, on this device: the card and
+// its open windows add up the new days, and show them in their own. { el, show(range) }
+function purposeDaysControl(card) {
+  const id = `purposeDays${++purposeDaysCount}`;
+  const el = BudgetUI.element("div", "purposeDays");
+  const label = BudgetUI.element("label", "fieldLabel", "Days");
+  label.htmlFor = `${id}Kind`;
+  const kind = BudgetUI.element("select", "selectInput purposeDaysKind");
+  kind.id = `${id}Kind`;
+  kind.append(new Option("Past", "past"), new Option("Since Last Paycheck", "paycheck"), new Option("From And To", "dates"));
+  const count = BudgetUI.element("input", "textInput purposeDaysCount");
+  count.type = "text";
+  count.inputMode = "numeric";
+  count.maxLength = 3;
+  count.value = String(WAVE_DAYS_START.count);
+  count.setAttribute("aria-label", "How many");
+  const unit = BudgetUI.element("select", "selectInput purposeDaysUnit");
+  unit.append(new Option("Days", "days"), new Option("Weeks", "weeks"), new Option("Months", "months"));
+  unit.setAttribute("aria-label", "Days, weeks, or months");
+  const row = BudgetUI.element("div", "purposeDaysRow");
+  row.append(kind, count, unit);
+  const dates = BudgetUI.element("div", "purposeDates");
   const boxes = {};
-  for (const [key, label] of [["from", "From"], ["to", "To"]]) {
+  const note = BudgetUI.element("p", "panelHint purposeDaysNote");
+
+  const show = (range = purposeRangeOf(card)) => {
+    const days = card.waveDays;
+    if (document.activeElement !== kind) kind.value = days.kind;
+    count.hidden = unit.hidden = days.kind !== "past";
+    if (days.kind === "past") {
+      if (document.activeElement !== count) count.value = String(days.count);
+      if (document.activeElement !== unit) unit.value = days.unit;
+    }
+    dates.hidden = days.kind !== "dates";
+    for (const key of ["from", "to"]) if (document.activeElement !== boxes[key]) boxes[key].value = showDate(range[key]);
+    note.hidden = days.kind === "dates";
+    if (days.kind === "past") note.textContent = `From ${showWeekdayDate(range.from)} through today.`;
+    else if (range.payday) note.textContent = `From ${showWeekdayDate(range.payday)}, the last payday, through today.`;
+    else note.textContent = `There's no paycheck in the last year to go by (one from a recurring entry, or a connected spreadsheet or calendar), so it's the last ${PURPOSE_DAYS} days.`;
+  };
+
+  for (const [key, text] of [["from", "From"], ["to", "To"]]) {
     const input = BudgetUI.element("input", "dateInput");
     input.type = "text";
     input.inputMode = "numeric";
     input.placeholder = datePattern();
     input.translate = false;
-    input.value = showDate(purposeRange[key]);
-    input.setAttribute("aria-label", `${label} date`);
+    input.setAttribute("aria-label", `${text} date`);
     input.addEventListener("change", () => {
       const date = parseTypedDate(input.value);
       if (isNaN(date.getTime())) {
         BudgetUI.showToast(`That date isn't a real day. Use ${datePattern()}.`, true);
-        input.value = showDate(purposeRange[key]);
+        show();
         return;
       }
-      setPurposeRange({ ...purposeRange, [key]: createSafeMidnight(date) });
+      const range = purposeRangeOf(card);
+      setPurposeDays(card, readWaveDays({ kind: "dates", from: formatToYMD(key === "from" ? date : range.from), to: formatToYMD(key === "to" ? date : range.to) }));
     });
-    const row = BudgetUI.element("div", "dateRow");
-    row.append(input, BudgetUI.datePickerButton(input, label));
+    const dateRow = BudgetUI.element("div", "dateRow");
+    dateRow.append(input, BudgetUI.datePickerButton(input, text));
     const part = BudgetUI.element("div", "purposeDate");
-    part.append(BudgetUI.element("span", "fieldLabel", label), row);
-    el.append(part);
+    part.append(BudgetUI.element("span", "fieldLabel", text), dateRow);
+    dates.append(part);
     boxes[key] = input;
   }
-  const pair = {
-    el,
-    show() {
-      for (const key of ["from", "to"]) if (document.activeElement !== boxes[key]) boxes[key].value = showDate(purposeRange[key]);
+
+  // (From And To starts on the days shown now; Past on what its boxes say)
+  kind.addEventListener("change", () => {
+    const range = purposeRangeOf(card);
+    if (kind.value === "paycheck") setPurposeDays(card, { kind: "paycheck" });
+    else if (kind.value === "dates") setPurposeDays(card, readWaveDays({ kind: "dates", from: formatToYMD(range.from), to: formatToYMD(range.to) }));
+    else setPurposeDays(card, readWaveDays({ kind: "past", count: Number(count.value.trim()), unit: unit.value }) || { ...WAVE_DAYS_START });
+  });
+  const pastChanged = () => {
+    const days = readWaveDays({ kind: "past", count: Number(count.value.trim()), unit: unit.value });
+    if (!days) {
+      BudgetUI.showToast(`Use a whole number from 1 to ${WAVE_DAYS_MOST}.`, true);
+      show();
+      return;
     }
+    setPurposeDays(card, days);
   };
-  purposeBoxes.add(pair);
-  return pair;
+  count.addEventListener("change", pastChanged);
+  unit.addEventListener("change", pastChanged);
+
+  el.append(label, row, dates, note);
+  return { el, show };
 }
 
-// New days for the spectrum (From after To swaps them): every pair of boxes shows them, and the card and any open
-// window add up the new days
-function setPurposeRange({ from, to }) {
-  purposeRange = from > to ? { from: to, to: from } : { from, to };
-  for (const pair of purposeBoxes) {
-    if (pair.el.isConnected) pair.show();
-    else purposeBoxes.delete(pair);
+// New days for a card (null: ones that couldn't be read, so it stays as it was), kept for it on this device. The card
+// draws again with them (on Bob's page, its row in Bob's Cards and the highlights too), and its open windows follow.
+function setPurposeDays(card, days) {
+  if (days) {
+    card.waveDays = days;
+    keepWaveDays(card.waveKey, days);
   }
-  const card = pageCards.find(item => item.def.id === "purposes");
-  if (card) {
+  if (pageCards.includes(card)) {
     drawCard(card);
+    renderCardRows();
     renderHighlights();
+  } else {
+    renderPurposesCard(card);
   }
-  document.dispatchEvent(new CustomEvent("bob:purposes"));
+  document.dispatchEvent(new CustomEvent("bob:purposes", { detail: { card } }));
 }
 
-// A wavelength's window: the days (From and To), what it came to and its share, and each title on it, biggest first,
-// with what it cost, its share of the wavelength, and how many entries it has, in a box that scrolls
-function openPurposeWindow(origin, key) {
+// A wavelength's window: the card's days (picked here too), what it came to and its share, and each title on it, biggest
+// first, with what it cost, its share of the wavelength, and how many entries it has, in a box that scrolls
+function openPurposeWindow(origin, key, card) {
   openWindow({
     origin,
     size: "large",
     title: wavelengthName(key),
     build(form, panel) {
-      const dates = purposeDateBoxes();
+      const dates = purposeDaysControl(card);
       const summary = BudgetUI.element("p", "panelText");
       const list = BudgetUI.element("ul", "purposeTitles");
       const box = BudgetUI.element("div", "bobScroll purposeTitlesBox");
       box.append(list);
-      // (Drawn again when the days or the budget change while it's open)
-      const follow = () => {
-        if (panel.panel.isConnected && !panel.panel.classList.contains("isClosing")) return draw();
-        document.removeEventListener("bob:purposes", follow);
-        document.removeEventListener("budget:updated", follow);
+      // (Drawn again when its card's days or the budget change while it's open)
+      const follow = (event) => {
+        if (!panel.panel.isConnected || panel.panel.classList.contains("isClosing")) {
+          document.removeEventListener("bob:purposes", follow);
+          document.removeEventListener("budget:updated", follow);
+          return;
+        }
+        if (event?.type === "bob:purposes" && event.detail?.card !== card) return;
+        draw();
       };
       const draw = () => {
-        const totals = purposeTotals(purposeRange.from, purposeRange.to);
+        const range = purposeRangeOf(card);
+        dates.show(range);
+        const totals = purposeTotals(range.from, range.to);
         const slice = totals.slices.find(item => item.key === key);
         if (!slice) {
           summary.textContent = "That wavelength was taken out.";
@@ -3368,8 +3521,8 @@ function openPurposeWindow(origin, key) {
         }
         const all = totals.slices.reduce((sum, item) => sum + item.total, 0);
         summary.textContent = slice.total > 0
-          ? `${formatMoney(slice.total)} from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}: ${sharePercent(slice.total, all)}% of everything on a wavelength. Each title's entries are added together.`
-          : `Nothing on ${slice.name} from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}.`;
+          ? `${formatMoney(slice.total)} from ${showDate(range.from)} to ${showDate(range.to)}: ${sharePercent(slice.total, all)}% of everything on a wavelength. Each title's entries are added together.`
+          : `Nothing on ${slice.name} from ${showDate(range.from)} to ${showDate(range.to)}.`;
         list.replaceChildren(...slice.titles.map(title => {
           const item = BudgetUI.element("li", "purposeTitle");
           const words = BudgetUI.element("span", "purposeTitleText");
@@ -3388,9 +3541,9 @@ function openPurposeWindow(origin, key) {
   });
 }
 
-// Titles on no wavelength yet (what they cost in the spectrum's days, biggest first), each with a button for every
-// wavelength that puts it on one right there (every entry with that title gets it)
-function openUnsortedWindow(origin) {
+// Titles on no wavelength yet (what they cost in its card's days, biggest first), each with a button for every wavelength
+// that puts it on one right there (every entry with that title gets it)
+function openUnsortedWindow(origin, card) {
   openWindow({
     origin,
     size: "large",
@@ -3401,15 +3554,21 @@ function openUnsortedWindow(origin) {
       const box = BudgetUI.element("div", "bobScroll purposeTitlesBox");
       box.append(list);
       let busy = false;
-      // (Drawn again when the budget changes while it's open)
-      const follow = () => {
-        if (panel.panel.isConnected && !panel.panel.classList.contains("isClosing")) return draw();
-        document.removeEventListener("budget:updated", follow);
+      // (Drawn again when its card's days or the budget change while it's open)
+      const follow = (event) => {
+        if (!panel.panel.isConnected || panel.panel.classList.contains("isClosing")) {
+          document.removeEventListener("bob:purposes", follow);
+          document.removeEventListener("budget:updated", follow);
+          return;
+        }
+        if (event?.type === "bob:purposes" && event.detail?.card !== card) return;
+        draw();
       };
       const draw = () => {
-        const totals = purposeTotals(purposeRange.from, purposeRange.to);
+        const range = purposeRangeOf(card);
+        const totals = purposeTotals(range.from, range.to);
         summary.textContent = totals.unsorted.length > 0
-          ? `What these titles' Undefined entries cost from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}. Tap a wavelength under a title to put the title on it (Per Title: every entry with that title, except one with a wavelength of its own), then go on to the next.`
+          ? `What these titles' Undefined entries cost from ${showDate(range.from)} to ${showDate(range.to)}. Tap a wavelength under a title to put the title on it (Per Title: every entry with that title, except one with a wavelength of its own), then go on to the next.`
           : "Every entry in these days is on a wavelength.";
         list.replaceChildren(...totals.unsorted.map(title => {
           const item = BudgetUI.element("li", "purposeTitle hasChoices");
@@ -3437,6 +3596,7 @@ function openUnsortedWindow(origin) {
         }));
         box.hidden = totals.unsorted.length === 0;
       };
+      document.addEventListener("bob:purposes", follow);
       document.addEventListener("budget:updated", follow);
       form.addEventListener("submit", (event) => event.preventDefault()); // (Nothing to send)
       form.append(summary, box, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));

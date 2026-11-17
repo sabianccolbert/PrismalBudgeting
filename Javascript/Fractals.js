@@ -25,6 +25,7 @@ window.Fractals = (() => {
   const DAY_MINUTES = 1440;
   const HOUR_EM = 2.2;         // How tall an hour is beside a zoomed day's times
   const MIN_BLOCK_MINUTES = 30; // The shortest a block is drawn (so its title fits)
+  const SHORT_BLOCK_MINUTES = 60; // A block shorter than this has a line for its title and no more (no time under it)
   const SIDE_BY_SIDE = 3;      // Blocks that overlap share the day's width up to this many across...
   const OVERLAP_EM = 0.9;      // ...and past it, a block over another in its lane sits this much to the right of it...
   const OVERLAP_MOST = 3;      // ...up to this many deep (more go over at the same place)
@@ -402,8 +403,10 @@ window.Fractals = (() => {
   // columns or fewer goes side by side: each block in its group's first column that's free when it starts, every column as
   // wide as the others, so no block covers another. A group that would need more has SIDE_BY_SIDE lanes instead: each
   // block goes in a lane that's free when it starts, or else the one with the fewest blocks still going, over them and a
-  // little to the right (depth), so the left edge and title of each one under it still show.
-  // { blocks: [{ part, column, columns (its group's, at most SIDE_BY_SIDE), depth, from (with its travel time), start, end }] }
+  // little to the right (depth), so the left edge and title of each one under it still show. Either way, a block also
+  // takes the columns to its right that nothing else is in while it's there (span), so it's only as narrow as it has to be.
+  // { blocks: [{ part, column, columns (its group's, at most SIDE_BY_SIDE), span, depth, from (with its travel time), start,
+  // end }] }
   function layOut(parts) {
     const blocks = parts.map(part => ({
       part,
@@ -436,6 +439,13 @@ window.Fractals = (() => {
           block.columns = SIDE_BY_SIDE;
           block.depth = going;
           lanes[lane].push(block);
+        }
+      }
+      for (const block of group) {
+        block.span = 1;
+        for (let column = block.column + 1; column < block.columns; column++) {
+          if (group.some(other => other !== block && other.column === column && other.from < block.end && block.from < other.end)) break;
+          block.span++;
         }
       }
       group = [];
@@ -473,8 +483,9 @@ window.Fractals = (() => {
 
   // A zoomed day's times: the hours down the left (midnight to midnight), and a block for each entry with a time, in its
   // fractal's color with a little of the page showing through, its travel time dimmer above it (over anything under it).
-  // Blocks share the width up to SIDE_BY_SIDE across, and past that go over one another (see layOut). On today, a line
-  // across it at the time now. It's as tall as its hours, so the page scrolls, never the day.
+  // Blocks share the width up to SIDE_BY_SIDE across, and past that go over one another (see layOut); a title that doesn't
+  // fit shows more of itself once the day has its size (fitTitles). On today, a line across it at the time now. It's as tall
+  // as its hours, so the page scrolls, never the day.
   function timesBlock(parts, date) {
     const { blocks } = layOut(parts);
     const scroller = el("div", "dayTimesScroll");
@@ -489,11 +500,12 @@ window.Fractals = (() => {
     }
     const area = el("div", "dayBlocks");
     for (const block of blocks) {
-      // (Its column's place and width, a share of the day, moved right by how deep it is over others in its lane)
+      // (Its columns' place and width, a share of the day, moved right by how deep it is over others in its lane)
       const inset = Math.min(block.depth, OVERLAP_MOST) * OVERLAP_EM;
       const share = `${(block.column / block.columns) * 100}%`;
+      const wide = `${(block.span / block.columns) * 100}%`;
       const left = inset ? `calc(${share} + ${inset}em)` : share;
-      const width = inset ? `calc(${100 / block.columns}% - ${inset}em)` : `${100 / block.columns}%`;
+      const width = inset ? `calc(${wide} - ${inset}em)` : wide;
       const color = colorOf(block.part.event.fractal);
       if (block.from < block.start) {
         const travel = el("div", "timeTravel");
@@ -507,20 +519,23 @@ window.Fractals = (() => {
       }
       const node = BudgetUI.noTranslate(el("div", "timeBlock"));
       mark(node, block.part);
-      node.style.background = seeThrough(color, 0.86);
+      // (A little of the day shows through; solid while it reaches over other blocks, so its words read as they're colored)
+      node.style.background = node.dataset.fill = seeThrough(color, 0.86);
+      node.dataset.solid = seeThrough(color, 1);
       node.style.top = `${(block.start / 60) * HOUR_EM}em`;
       node.style.height = `${((block.end - block.start) / 60) * HOUR_EM}em`;
-      node.style.left = left;
-      node.style.width = width;
+      node.style.left = node.dataset.left = left;
+      node.style.width = node.dataset.width = width;
       if (block.depth > 0) {
         node.classList.add("isOver");
-        node.style.zIndex = String(1 + block.depth);
+        node.style.zIndex = node.dataset.z = String(1 + block.depth);
       }
       node.setAttribute("role", "button");
       node.tabIndex = 0;
       node.setAttribute("aria-label", `${block.part.event.title}, ${partWords(block.part, false)}`);
       node.append(el("span", "timeBlockTitle", block.part.event.title));
-      if (block.end - block.start >= 60) node.append(el("span", "timeBlockTime", partWords(block.part, false)));
+      if (block.end - block.start >= SHORT_BLOCK_MINUTES) node.append(el("span", "timeBlockTime", partWords(block.part, false)));
+      else node.dataset.short = "1";
       area.append(node);
     }
     const now = nowOn(date);
@@ -532,7 +547,107 @@ window.Fractals = (() => {
     }
     grid.append(hours, area);
     scroller.append(grid);
+    watchTitles(area);
     return scroller;
+  }
+
+  // A zoomed day's blocks get their titles fitted (fitTitles) once the day has its size, and again whenever that changes
+  // (a phone's zoomed day is laid out at the screen's size after it's drawn, and its text can change size). Days that left
+  // the page are let go.
+  const TITLE_AREAS = new Set();
+  const titleSizes = typeof ResizeObserver === "function" ? new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.target.isConnected) fitTitles(entry.target);
+      else letGoOfTitles(entry.target);
+    }
+  }) : null;
+
+  // Stop watching a day's blocks once they've left the page
+  function letGoOfTitles(area) {
+    titleSizes?.unobserve(area);
+    TITLE_AREAS.delete(area);
+  }
+
+  // A zoomed day's blocks, watched for their size (or, without a ResizeObserver, fitted on the next frame)
+  function watchTitles(area) {
+    for (const old of TITLE_AREAS) if (!old.isConnected) letGoOfTitles(old);
+    TITLE_AREAS.add(area);
+    if (titleSizes) titleSizes.observe(area);
+    else requestAnimationFrame(() => fitTitles(area));
+  }
+
+  // A block whose title doesn't fit shows more of it. A short one (a line for its title and no more) reaches over the
+  // columns beside it, to the right and then, for what's left, to the left, as far as its title needs, unless something
+  // there has to stay in sight: another block's title (one starting while it's there), a title that runs down its block,
+  // or another short block's reach. A taller one turns its title sideways, down the block, when the block is taller than
+  // it is wide, or else lets it wrap onto the lines the block has. Past that, its title ends in "..." as always. Each block
+  // starts again from where layOut put it.
+  function fitTitles(area) {
+    const areaWidth = area.clientWidth;
+    if (!areaWidth) return;
+    const nodes = [...area.querySelectorAll(".timeBlock")];
+    for (const node of nodes) {
+      node.classList.remove("isReaching", "isUpright", "isWrapped");
+      node.style.left = node.dataset.left;
+      node.style.width = node.dataset.width;
+      node.style.zIndex = node.dataset.z || "";
+      node.style.background = node.dataset.fill;
+      node.style.removeProperty("--lines");
+    }
+    // (Everything measured at once, as layOut put it, then changed, then measured once more for the reaches)
+    const blocks = nodes.map((node) => {
+      const title = node.querySelector(".timeBlockTitle");
+      const style = getComputedStyle(node);
+      return {
+        node, title,
+        short: node.dataset.short === "1",
+        more: title ? title.scrollWidth - title.clientWidth : 0,
+        left: node.offsetLeft, top: node.offsetTop, width: node.offsetWidth, height: node.offsetHeight,
+        room: node.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+        line: title ? parseFloat(getComputedStyle(title).lineHeight) || title.offsetHeight : 0
+      };
+    });
+    for (const block of blocks) {
+      if (block.short || block.more <= 1) continue;
+      if (block.height > block.width) {
+        block.node.classList.add("isUpright");
+        block.upright = true;
+      } else if (block.line > 0) {
+        block.node.style.setProperty("--lines", String(Math.max(1, Math.floor(block.room / block.line))));
+        block.node.classList.add("isWrapped");
+      }
+    }
+    for (const block of blocks) block.titleBottom = block.title ? block.title.offsetTop + block.title.offsetHeight : 0;
+    const reaches = [];
+    const reaching = blocks.filter(block => block.short && block.more > 1).sort((a, b) => a.top - b.top || a.left - b.left);
+    for (const block of reaching) {
+      const right = block.left + block.width;
+      const bottom = block.top + block.height;
+      // (How far it can go each way: up to what has to stay in sight beside it, while they're both there)
+      let most = areaWidth;
+      let least = 0;
+      const inSight = blocks.filter(other => other !== block && (other.upright || other.top + other.titleBottom > block.top))
+        .map(other => ({ left: other.left, right: other.left + other.width, top: other.top, bottom: other.top + other.height }));
+      for (const other of [...inSight, ...reaches]) {
+        if (other.top >= bottom || other.bottom <= block.top) continue;
+        if (other.left >= right - 1) most = Math.min(most, other.left);
+        else if (other.right <= block.left + 1) least = Math.max(least, other.right);
+        else {
+          most = right;
+          least = block.left;
+        }
+      }
+      const wanted = block.width + block.more + 2;
+      const to = Math.min(Math.max(most, right), block.left + wanted);
+      const from = Math.max(Math.min(least, block.left), to - wanted);
+      if (to - from <= block.width + 1) continue;
+      block.node.style.left = `${(from / areaWidth) * 100}%`;
+      block.node.style.width = `${((to - from) / areaWidth) * 100}%`;
+      block.node.style.zIndex = ""; // (Over whatever it reaches across: budgetStyle.css .isReaching)
+      block.node.style.background = block.node.dataset.solid;
+      block.node.classList.add("isReaching");
+      reaches.push({ left: from, right: to, top: block.top, bottom });
+    }
   }
 
   // Where the now-line goes among a day's entries as lines, on today: before the first one that starts later (all-day
