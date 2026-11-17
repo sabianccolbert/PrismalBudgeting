@@ -1,7 +1,7 @@
-// Calendars: connected calendars (set up on the Budgets, Calendars & Spreadsheets page, in the menu), whose shifts become
-// paychecks. The API downloads a calendar by its subscription link (its calendars.js), and it's read and worked out here;
-// the paychecks it finds land on the calendar like a connected spreadsheet's entries, behind a ➕ (CONNECTED SPREADSHEETS
-// in Process Budget.js says how, and keeps them).
+// Calendars: Automated Calendars & Paychecks (set up on the Budgets, Calendars & Spreadsheets page, in the menu), whose
+// shifts can become paychecks (or costs, for someone you pay). The API downloads a calendar by its subscription link
+// (its calendars.js), and it's read and worked out here; the paychecks it finds land on the calendar like a connected
+// spreadsheet's entries, behind a ➕ (CONNECTED SPREADSHEETS in Process Budget.js says how, and keeps them).
 //   - readCalendarFile(link): the calendar's text, through the API
 //   - parseCalendar(text): its events, as an iCalendar file has them (the .ics kind that Apple's iCloud, Google, Outlook,
 //     and most work scheduling apps share), with repeating events and time zones

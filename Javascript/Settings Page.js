@@ -1,8 +1,8 @@
 // Settings Page: the calendar's links (Fractals.js draws the card: a private link for every Calendar Fractal, and one
-// for each). The daily "🗓️ Check Budget" reminder (the spreadsheet's Google Calendar notification): turn on push
-// notifications (per device) and/or a calendar link for Google or Apple Calendar, both optional; while either is on,
-// the Daily Reminder card picks the reminder time, and with more than one budget, which one they're about. Which days
-// get a reminder comes from that budget (buildReminderPlan in Process Budget.js); the API sends and serves them.
+// for each). Reminders, in one card: how they come (push notifications on this device, see Notifications.js, and a
+// calendar link for Google or Apple Calendar, both optional), then, while either is on, What Gets A Reminder: a switch
+// for each kind, the reminder time, and with more than one budget, which one they're about. Which days get a reminder
+// comes from that budget (buildReminderPlan in Process Budget.js); the API sends and serves them.
 // Then the account: the email (change it, which needs the password, and verify it) and other emails (each confirmed by
 // a link; they sign in too, and their spreadsheets can be connected), the birth date (18 or older: fix one typed
 // wrong), and the password (change it, or email a reset link); passkeys (Face ID, Touch ID, Windows Hello: add or
