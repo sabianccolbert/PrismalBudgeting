@@ -1,15 +1,18 @@
 // Notifications: push notifications on this device. Settings turns them on and off (Settings Page.js), and right after
-// a sign-in, Home asks once whether to turn them on here (askAfterSignIn), since reminders for entries are on to start
-// (see ENTRY REMINDERS in Process Budget.js). It asks only while push isn't on here, the browser can show them and hasn't
-// been told to block them, the server has push set up, and it wasn't told no on this device: Not Now, or Settings' Turn
-// Off (kept through signing out; Settings' Turn On asks nothing). The browser's own question (allow notifications?)
-// comes from a tap on Turn On, the way browsers want it.
+// a sign-in, Home alerts each device once about its reminders (askAfterSignIn), since reminders for entries are on to
+// start (see ENTRY REMINDERS in Process Budget.js): where push can be turned on, a card with Turn On and Not Now; on an
+// iPhone or iPad in Safari (which shows notifications only for a site on its Home Screen), where the browser blocks them,
+// or where it can't show them, a card saying how to get them there, or where else they come. Once per device (kept
+// through signing out, like Not Now and Settings' Turn Off, which also stop it): never while push is on here, or when the
+// server has no push set up. The browser's own question (allow notifications?) comes from a tap on Turn On, the way
+// browsers want it.
 
 window.PushNotifications = (() => {
   "use strict";
 
   const ASK_KEY = "prismal_ask_push"; // A sign-in just happened (Login.js sets it): ask on Home
   const OFF_KEY = "prismal_push_off"; // Not Now, or turned off here on purpose: never ask on this device again
+  const ASKED_KEY = "prismal_push_asked"; // This device had its one alert about reminders
 
   const read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
   const write = (key, value) => {
@@ -91,23 +94,53 @@ window.PushNotifications = (() => {
     write(ASK_KEY, "1");
   }
 
-  // Home, after a sign-in: the card asking to turn push on here, when it should (see the top of this file). place: where
-  // the card goes (before it).
+  // Home, after a sign-in: this device's one alert about its reminders, when it should have one (see the top of this
+  // file). place: where the card goes (before it).
   async function askAfterSignIn(place) {
     if (read(ASK_KEY) !== "1") return;
-    write(ASK_KEY, null); // (Once per sign-in, whatever happens)
-    if (!place || read(OFF_KEY) === "1" || !supported() || needsHomeScreen() || Notification.permission === "denied") return;
+    write(ASK_KEY, null); // (Looked at once per sign-in, whatever happens)
+    if (!place || read(OFF_KEY) === "1" || read(ASKED_KEY) === "1") return;
     const settings = await budgetApi("/api/notify/settings");
     const push = settings.ok && settings.data && settings.data.push;
     if (!push || !push.available || !push.publicKey) return;
+    const kinds = settings.data.kinds || [];
+    // (Where it can't be turned on from here, it says how to get them, or where else they come)
+    if (!supported()) return showNote(place, "🔔 Reminders On This Device", "This browser can't show notifications, so reminders can't come to it. They can come to your calendar app instead: Settings, Reminders, Calendar Link.");
+    if (needsHomeScreen()) return showNote(place, "🔔 Reminders On This Device", "An iPhone or iPad shows notifications only for a site on its Home Screen. To get your reminders here, tap Share, then Add to Home Screen, open Prismal Planning from that icon, and turn them on there. They can also come to your calendar app (Settings, Reminders, Calendar Link).");
+    if (Notification.permission === "denied") return showNote(place, "🔔 Reminders On This Device", BLOCKED_TEXT);
     let subscription = null;
     try { subscription = await current(push.publicKey); } catch {}
     if (subscription) return;
-    showCard(place, push.publicKey, settings.data.kinds || []);
+    showCard(place, push.publicKey, kinds);
+  }
+
+  // A card that only says something (its Okay puts it away), as this device's one alert about reminders
+  function showNote(place, titleText, words) {
+    write(ASKED_KEY, "1");
+    const card = document.createElement("section");
+    card.className = "budgetCard pushAsk";
+    card.setAttribute("aria-labelledby", "pushAskTitle");
+    const title = document.createElement("h3");
+    title.id = "pushAskTitle";
+    title.textContent = titleText;
+    const text = document.createElement("p");
+    text.className = "panelText";
+    text.textContent = words;
+    const buttons = document.createElement("div");
+    buttons.className = "panelButtons";
+    const okay = document.createElement("button");
+    okay.type = "button";
+    okay.className = "budgetButton primary";
+    okay.textContent = "Okay";
+    okay.addEventListener("click", () => card.remove());
+    buttons.append(okay);
+    card.append(title, text, buttons);
+    place.before(card);
   }
 
   // The card: what reminders are for, with Turn On and Not Now
   function showCard(place, publicKey, kinds) {
+    write(ASKED_KEY, "1");
     const card = document.createElement("section");
     card.className = "budgetCard pushAsk";
     card.setAttribute("aria-labelledby", "pushAskTitle");

@@ -1,7 +1,10 @@
-// Calendars Page (the calendars on Menu > Budgets, Calendars & Spreadsheets): connected calendars, whose shifts become paychecks on
-// the budget's calendar. Add one, change its pay, turn it on or off, delete it, and see its paychecks and shifts, worked
-// out like a paystub (Calendars.js reads them and works out the pay; CONNECTED SPREADSHEETS in Process Budget.js keeps
-// them). Like a spreadsheet, connecting one needs a verified email (Spreadsheets Page.js has the account and its note).
+// Calendars Page (Automated Calendars & Paychecks, on Menu > Budgets, Calendars & Spreadsheets): calendars from somewhere
+// else (a calendar app's link, another account's Calendar Fractal link) or one of the account's own Calendar Fractals,
+// added as paychecks (their shifts become paychecks on the budget's calendar), as a linked Calendar Fractal (their events
+// show on the calendar), or both: three buttons at the top of its window, like Home's. Add one, change its pay, turn it
+// on or off, delete it, and see its paychecks and shifts, worked out like a paystub (Calendars.js reads them and works out
+// the pay; CONNECTED SPREADSHEETS in Process Budget.js keeps them, and Linked Calendar Fractals the linked ones). Like a
+// spreadsheet, connecting one needs a verified email (Spreadsheets Page.js has the account and its note).
 
 // =====================================================================
 // #region SETUP
@@ -12,6 +15,7 @@ window.workspaceReady.then((loaded) => {
   document.getElementById("addCalendarButton").addEventListener("click", (event) => openCalendarPanel(null, event.currentTarget));
   document.addEventListener("budget:updated", renderCalendars);
   document.addEventListener("calendars:read", renderCalendars);
+  document.addEventListener("fractals:changed", renderCalendars);
   renderCalendars();
 });
 
@@ -26,7 +30,8 @@ window.workspaceReady.then((loaded) => {
 
 const CALENDAR_PREVIEW_LINES = 6;
 
-// The connected calendars, and whether one can be added (a verified email, and room for one more)
+// The calendars added (for paychecks, and the ones only on the calendar), and whether one can be added (a verified email,
+// and room for one more)
 function renderCalendars() {
   const view = document.getElementById("calendarsView");
   if (!view || !sheetsData) return;
@@ -34,11 +39,50 @@ function renderCalendars() {
   const list = document.getElementById("calendarList");
   list.replaceChildren();
   const calendars = sheetsData.list.filter(connection => connection.kind === "calendar");
-  if (calendars.length === 0) list.append(BudgetUI.element("li", "sheetEmpty panelHint", "No calendars connected yet."));
+  const onlyOnCalendar = (sheetsData.linked || []).filter(item => !item.connection);
+  if (calendars.length + onlyOnCalendar.length === 0) list.append(BudgetUI.element("li", "sheetEmpty panelHint", "No calendars added yet."));
   for (const connection of calendars) list.append(calendarItem(connection));
+  for (const item of onlyOnCalendar) list.append(onCalendarItem(item));
   const unverified = !!account && !account.emailVerified;
   document.getElementById("calendarsVerify").hidden = !unverified;
   document.getElementById("addCalendarButton").disabled = unverified || sheetsData.list.length >= MAX_SHEETS;
+}
+
+// The linked Calendar Fractal showing a connection's events on the calendar too ("both"), or null
+function linkedFor(connection) {
+  return (sheetsData?.linked || []).find(item => item.connection === connection?.id) || null;
+}
+
+// A calendar that's only on the calendar (a linked Calendar Fractal with its own link): its color, name, and where it
+// shows, opening its window (Fractals.js: Save, Read Again, Share, Unlink)
+function onCalendarItem(item) {
+  const li = BudgetUI.element("li", "sheetItem calendarItem");
+  const row = BudgetUI.element("div", "sheetRow");
+  const fractal = window.Fractals?.linkedFractals().find(found => found.linked.id === item.id) || null;
+  const open = settingsButton("", "sheetButton", (event) => { if (fractal) window.Fractals.openLinkedFractal(event.currentTarget, fractal); });
+  const name = BudgetUI.noTranslate(BudgetUI.element("span", "sheetName"));
+  name.append(fractalSwatch(item.color), item.name);
+  open.append(name, BudgetUI.element("span", "sheetCount", "On your calendar only (a linked Calendar Fractal)"));
+  open.setAttribute("aria-label", `Change ${item.name}, on your calendar only`);
+  open.disabled = !fractal;
+  row.append(open);
+  li.append(row);
+  return li;
+}
+
+// The account's own Calendar Fractal a connection reads (its link is "prismal:fractal:<number>"), or null
+function calendarFractal(connection) {
+  const number = Calendars.fractalOf(connection?.link);
+  if (!number || !window.Fractals?.data()) return null;
+  return window.Fractals.data().fractals.find(fractal => fractal.id === number) || null;
+}
+
+// A fractal's color, as a small dot
+function fractalSwatch(color) {
+  const dot = BudgetUI.element("span", "fractalSwatch");
+  dot.style.background = color;
+  dot.setAttribute("aria-hidden", "true");
+  return dot;
 }
 
 // The paycheck coming up next (a kept summary), or null
@@ -52,8 +96,15 @@ function calendarStatus(connection) {
   const checked = connection.checked;
   if (!checked) return "";
   const at = Calendars.lastReadAt(connection.id);
-  const when = at ? `Read ${showDay(new Date(at))} ${new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ` : "";
+  const when = at ? `Read ${showDay(new Date(at))} ${showClockTime(new Date(at))}: ` : "";
   return `${when}${checked.shifts} ${checked.shifts === 1 ? "shift" : "shifts"}, ${checked.paychecks} ${checked.paychecks === 1 ? "paycheck" : "paychecks"} with hours, looking ahead to ${showDate(Calendars.lookAheadDay(connection.pay))}.`;
+}
+
+// The small calendar on a button (stylesheet.css .iconCalendar), like Home's three buttons
+function addAsIcon() {
+  const icon = BudgetUI.element("span", "buttonIcon iconCalendar");
+  icon.setAttribute("aria-hidden", "true");
+  return icon;
 }
 
 // One calendar: its button, On/Off, Delete, its paychecks and shifts, and its problems
@@ -65,9 +116,17 @@ function calendarItem(connection) {
   const { landing, keptOff } = sheetLanding(connection.entries);
   const next = nextPaycheck(connection);
   const noun = connection.placeholder ? (landing === 1 ? "placeholder" : "placeholders") : (landing === 1 ? "paycheck" : "paychecks");
-  const count = `${landing} ${noun} from today on${next ? `, next ${showDay(createSafeMidnight(next.date))} ${formatMoney(next.takeHome)}` : ""}`;
+  const cost = connection.fields?.direction?.value === "cost";
+  const count = `${landing} ${noun} ${cost ? "to pay " : ""}from today on${next ? `, next ${showDay(createSafeMidnight(next.date))} ${formatMoney(cost ? -next.takeHome : next.takeHome)}` : ""}`;
+  // (One of the account's own Calendar Fractals shows its color and name beside the connection's)
+  const name = BudgetUI.noTranslate(BudgetUI.element("span", "sheetName"));
+  const fractal = calendarFractal(connection);
+  const linked = linkedFor(connection);
+  if (fractal) name.append(fractalSwatch(fractal.color), `${connection.name}`, BudgetUI.element("span", "sheetFrom", ` (Calendar Fractal: ${fractal.name})`));
+  else if (linked) name.append(fractalSwatch(linked.color), `${connection.name}`, BudgetUI.element("span", "sheetFrom", " (paychecks, and on your calendar)"));
+  else name.append(`📅 ${connection.name}`);
   open.append(
-    BudgetUI.noTranslate(BudgetUI.element("span", "sheetName", `📅 ${connection.name}`)),
+    name,
     BudgetUI.noTranslate(BudgetUI.element("span", `sheetCount${connection.placeholder && connection.on ? " isPlaceholder" : ""}`, connection.on ? count : "Off"))
   );
   open.setAttribute("aria-label", `Change ${connection.name}`);
@@ -357,6 +416,29 @@ function openCalendarPanel(id, origin) {
     size: "large",
     title: existing ? existing.name : "Add Calendar",
     build(form, panel) {
+      // What it's added as (three buttons at the top, like Home's): its shifts as paychecks in the budget ("budget"), its
+      // events on the calendar as a linked Calendar Fractal ("calendar"), or both. One that's here already is paychecks,
+      // and "both" while a linked fractal shows it (it can't become calendar-only: deleting it and adding it again does
+      // that). One of the account's own Calendar Fractals is on the calendar already, so it can only be paychecks, and the
+      // buttons hide.
+      const linkedHere = linkedFor(existing);
+      let mode = linkedHere ? "both" : "budget";
+      const modePick = BudgetUI.segmented([
+        { key: "budget", label: "$", name: "Paychecks in your budget" },
+        { key: "both", label: "$", name: "Paychecks, and on your calendar" },
+        ...(existing ? [] : [{ key: "calendar", label: "", name: "On your calendar only" }])
+      ], mode, (key) => {
+        mode = key;
+        showMode();
+      });
+      modePick.el.classList.add("calendarView", "calendarAddAs");
+      modePick.el.setAttribute("aria-label", "What it's added as");
+      [...modePick.el.children].slice(1).forEach(button => button.append(addAsIcon()));
+      const modeWords = BudgetUI.element("p", "panelHint calendarAddAsWords");
+      modeWords.setAttribute("aria-live", "polite");
+      const modeBox = BudgetUI.element("div", "calendarAddAsBox");
+      modeBox.append(BudgetUI.field("Add It As", modePick.el), modeWords);
+
       const kept = Calendars.normalizePay(existing ? existing.pay : {});
       const draft = {
         calendar: null,
@@ -388,12 +470,22 @@ function openCalendarPanel(id, origin) {
       });
       source.el.hidden = fractals.length === 0;
       link.el.hidden = Number(source.value()) !== 0;
+      // (A fractal picked shows its color and name, and its name is the calendar's until another is typed)
+      const fractalNote = BudgetUI.noTranslate(BudgetUI.element("p", "panelHint calendarFractalNote"));
+      const showFractalNote = () => {
+        const picked = fractals.find(fractal => fractal.id === Number(source.value()));
+        fractalNote.hidden = !picked;
+        fractalNote.replaceChildren(...(picked ? [fractalSwatch(picked.color), `${picked.name}: its entries are its shifts. It's on your calendar already, so it's added as paychecks.`] : []));
+      };
       source.input.addEventListener("change", () => {
         const picked = Number(source.value());
         link.el.hidden = picked !== 0;
         if (picked !== 0) link.input.value = `prismal:fractal:${picked}`;
         else if (Calendars.fractalOf(link.input.value)) link.input.value = "";
-        showPrimary();
+        const fractal = fractals.find(found => found.id === picked);
+        if (fractal && (!name.value() || fractals.some(other => other.name === name.value()))) name.input.value = fractal.name.slice(0, MAX_SHEET_NAME);
+        showFractalNote();
+        showMode();
       });
       const openedNote = BudgetUI.element("p", "panelHint sheetOpened");
       openedNote.setAttribute("role", "status");
@@ -403,10 +495,15 @@ function openCalendarPanel(id, origin) {
       ]);
       const primary = buttons.querySelector("button[type=submit]");
 
-      // ---- The form (shown once the calendar opens) ----
+      // ---- The form (shown once the calendar opens): its name, and its color on the calendar (for "both" and "calendar"),
+      // then the paychecks' part (not for "calendar") ----
+      const basics = BudgetUI.element("div", "sheetForm calendarBasics");
+      basics.hidden = !existing;
       const section = BudgetUI.element("div", "sheetForm calendarForm");
       section.hidden = !existing;
       const name = BudgetUI.textField({ label: "Name", value: existing ? existing.name : "", placeholder: "Work, Second job...", maxLength: MAX_SHEET_NAME });
+      const color = window.Fractals.colorField(linkedHere ? linkedHere.color : window.Fractals.nextColor());
+      basics.append(name.el, color.el);
 
       // The paychecks: title, refraction type, Equity account (for Hidden and Transfer), and Placeholder
       const fields = existing?.fields || {};
@@ -425,7 +522,10 @@ function openCalendarPanel(id, origin) {
         hint: "Every paycheck it adds is a placeholder: a stand-in, since a paycheck worked out ahead is an estimate. They count like any entry and show in yellow, and each is deleted once its day passes."
       });
       placeholder.input.addEventListener("change", schedulePreview);
-      const entryPart = calendarFieldset("Its Paychecks", [title.el, typeField, accountField, placeholder.el]);
+      // Gain (your own pay, the usual) or Cost (someone you pay by the shifts on this calendar)
+      const direction = BudgetUI.segmented([{ key: "gain", label: "Gain: I'm paid" }, { key: "cost", label: "Cost: I pay someone" }], fields.direction?.value === "cost" ? "cost" : "gain", schedulePreview);
+      const directionField = BudgetUI.field("Who Is Paid", direction.el, { hint: "Gain for your own paychecks: each one adds to your budget on its payday. Cost when this calendar is someone you pay by their shifts (like a sitter or an employee): each paycheck is a cost on its payday, at what it comes to after the deductions and taxes under Pay (leave those blank for someone paid all of it)." });
+      const entryPart = calendarFieldset("Its Paychecks", [directionField, title.el, typeField, accountField, placeholder.el]);
 
       // The pay, version by version
       const payPart = BudgetUI.element("fieldset", "calculatorSection calendarPart calendarPay");
@@ -511,8 +611,10 @@ function openCalendarPanel(id, origin) {
       const preview = BudgetUI.element("div", "sheetPreview");
       preview.setAttribute("aria-live", "polite");
 
-      section.append(name.el, entryPart, payPart, rulesPart, timePart, eventsPart, preview);
-      form.append(source.el, link.el, openedNote, section, buttons);
+      section.append(entryPart, payPart, rulesPart, timePart, eventsPart, preview);
+      form.append(modeBox, source.el, fractalNote, link.el, openedNote, basics, section, buttons);
+      showFractalNote();
+      showMode();
       [title.input].forEach(input => input.addEventListener("input", schedulePreview));
       showAccountRow();
       drawVersions();
@@ -530,7 +632,27 @@ function openCalendarPanel(id, origin) {
       // Open Calendar until it's open (and again when the link changes), then Save
       function showPrimary() {
         const opened = !!draft.calendar && link.value() === draft.openedLink;
-        primary.textContent = !opened ? "Open Calendar" : (existing ? "Save" : "Save Calendar");
+        primary.textContent = !opened ? "Open Calendar" : existing ? "Save" : mode === "calendar" ? "Add To Calendar" : "Save Calendar";
+      }
+
+      // The three buttons' words, and what shows for the one picked (an own Calendar Fractal is paychecks only)
+      function showMode() {
+        const own = Number(source.value()) !== 0;
+        if (own && mode !== "budget") {
+          mode = "budget";
+          modePick.set("budget");
+        }
+        modeBox.hidden = own;
+        modeWords.textContent = {
+          budget: "Its shifts become paychecks on your budget's calendar, worked out with your pay below. Its events don't show on your calendar.",
+          both: "Its shifts become paychecks, and its events show on your calendar too, in their own color (a linked Calendar Fractal, which can't be changed here).",
+          calendar: "Its events show on your calendar in their own color (a linked Calendar Fractal, which can't be changed here), and nothing is added to your budget."
+        }[mode];
+        const opened = !!draft.calendar || !!existing;
+        basics.hidden = !opened;
+        section.hidden = !opened || mode === "calendar";
+        color.el.hidden = mode === "budget";
+        showPrimary();
       }
 
       // Equity account shows for Hidden and Transfer
@@ -1062,7 +1184,8 @@ function openCalendarPanel(id, origin) {
         return {
           title: { value: title.value() },
           type: { value: type.value() },
-          account: { value: accountField.hidden ? "" : account.value }
+          account: { value: accountField.hidden ? "" : account.value },
+          ...(direction.value() === "cost" ? { direction: { value: "cost" } } : {})
         };
       }
 
@@ -1092,7 +1215,7 @@ function openCalendarPanel(id, origin) {
           for (const [dateText, special, amount, entryTitle] of upcoming.slice(0, CALENDAR_PREVIEW_LINES)) {
             const detail = read.details.find(found => formatToMMDDYYYY(found.check.payDate) === dateText);
             const hours = detail ? ` (${hoursWords(detail.hours)})` : "";
-            const line = BudgetUI.element("li", amount > 0 ? "positive" : "");
+            const line = BudgetUI.element("li", amount > 0 ? "positive" : amount < 0 ? "negative" : "");
             line.append(BudgetUI.element("span", "sheetPreviewDate", showDay(createSafeMidnight(dateText, true))), ` ➕${baseSprite(special)} ${formatMoney(amount)} ${entryTitle}${hours}`);
             list.append(line);
           }
@@ -1126,20 +1249,32 @@ function openCalendarPanel(id, origin) {
         const count = calendar.events.length;
         openedNote.textContent = `Opened${calendar.name ? ` "${calendar.name}"` : ""}: ${count.toLocaleString()} ${count === 1 ? "event" : "events"} (repeating ones count once here).`;
         BudgetUI.noTranslate(openedNote);
-        showPrimary();
-        if (section.hidden) {
-          section.hidden = false;
-          section.classList.add("isOpening");
-          setTimeout(() => section.classList.remove("isOpening"), 600);
+        const wasHidden = basics.hidden;
+        showMode();
+        if (wasHidden) {
+          for (const part of [basics, section]) {
+            part.classList.add("isOpening");
+            setTimeout(() => part.classList.remove("isOpening"), 600);
+          }
           name.input.focus({ preventScroll: true });
         }
         updatePreview();
       }
 
-      // Save Calendar: check the form, work it out with it, and save the connection
+      // Save Calendar: check the form, work it out with it, and save the connection (and, for "both", the linked Calendar
+      // Fractal that shows it, or for "budget", take one off). "calendar" saves only a linked fractal, with the link.
       function save() {
         panel.setError("");
         if (!name.value()) return panel.setError("Give the calendar a name.");
+        const linkedFields = { name: name.value().slice(0, MAX_LINKED_NAME), color: color.value() };
+        if (mode === "calendar") {
+          BudgetUI.submit(panel, () => saveLinkedFractal({ ...linkedFields, link: draft.openedLink })).then(result => {
+            if (!result.ok) return;
+            window.Fractals.readLinked({ force: true });
+            BudgetUI.showToast(`${linkedFields.name} is on your calendar: its events show in its color.`);
+          });
+          return;
+        }
         if (hasTitleArrow(title.value())) return panel.setError(TITLE_ARROW);
         const wrong = form.querySelector(".isWrong");
         if (wrong) {
@@ -1166,11 +1301,21 @@ function openCalendarPanel(id, origin) {
           { kind: "calendar", name: name.value(), link: draft.openedLink, fields: currentFields(), placeholder: placeholder.value(), pay },
           { entries: read.entries, problems: read.problems, paychecks: read.paychecks, checked: read.checked },
           existing ? existing.id : null
-        )).then(result => {
+        )).then(async result => {
           if (!result.ok) return;
           Calendars.remember(result.sheetId, draft.calendar, read);
           const { landing } = sheetLanding(read.entries);
           BudgetUI.showToast(existing ? `${name.value()} is saved.` : `${name.value()} is connected: ${landing} ${landing === 1 ? "paycheck" : "paychecks"} from today on.`);
+          // On the calendar too, or not anymore
+          const sheetId = result.sheetId || existing?.id;
+          if (mode === "both" && sheetId) {
+            const linked = await saveLinkedFractal({ ...linkedFields, connection: sheetId }, linkedHere ? linkedHere.id : null);
+            if (!linked.ok) BudgetUI.showToast(linked.message || "Its paychecks are saved, but it couldn't be put on your calendar. Please try again.", true);
+            else window.Fractals.readLinked({ force: true });
+          } else if (mode === "budget" && linkedHere) {
+            const unlinked = await deleteLinkedFractal(linkedHere.id);
+            if (!unlinked.ok) BudgetUI.showToast(unlinked.message || "Its events couldn't be taken off your calendar. Please try again.", true);
+          }
         });
       }
     }
@@ -1221,16 +1366,20 @@ function ordinal(day) {
   return `${day}${ending}`;
 }
 
-// "80 regular, 16 overtime hours"
+// A paycheck's hours in words: the hours worked (regular, overtime, double time, and premium together), then each kind,
+// and paid time off ("38.5 hours worked: 36 regular, 2.5 overtime; 8 paid off")
 function hoursWords(hours) {
-  const parts = [];
   const show = (amount) => String(Math.round(amount * 100) / 100);
-  if (hours.regular) parts.push(`${show(hours.regular)} regular`);
-  if (hours.overtime) parts.push(`${show(hours.overtime)} overtime`);
-  if (hours.double) parts.push(`${show(hours.double)} double time`);
-  if (hours.premium) parts.push(`${show(hours.premium)} premium`);
+  const worked = (hours.regular || 0) + (hours.overtime || 0) + (hours.double || 0) + (hours.premium || 0);
+  const kinds = [];
+  if (hours.regular) kinds.push(`${show(hours.regular)} regular`);
+  if (hours.overtime) kinds.push(`${show(hours.overtime)} overtime`);
+  if (hours.double) kinds.push(`${show(hours.double)} double time`);
+  if (hours.premium) kinds.push(`${show(hours.premium)} premium`);
+  const parts = [];
+  if (worked > 0) parts.push(`${show(worked)} ${worked === 1 ? "hour" : "hours"} worked${kinds.length > 1 ? `: ${kinds.join(", ")}` : ""}`);
   if (hours.paidOff) parts.push(`${show(hours.paidOff)} paid off`);
-  return parts.length > 0 ? `${parts.join(", ")} hours` : "no hours";
+  return parts.length > 0 ? parts.join("; ") : "no hours";
 }
 
 // The link's "?": where each calendar app keeps a calendar's subscription link
@@ -1296,12 +1445,22 @@ function openPaychecks(id, origin) {
           box.append(BudgetUI.element("span", "infoLabel", label), BudgetUI.noTranslate(BudgetUI.element("span", "paycheckAmount", amount)));
           return box;
         };
+        // (The next paycheck is a button: its breakdown, with a list to see the calendar's others)
+        let nextCard = card(next ? `Next Paycheck: ${showDay(createSafeMidnight(next.date))}` : "Next Paycheck", next ? formatMoney(next.takeHome) : "--");
+        if (next) {
+          const open = BudgetUI.element("button", "infoCard paycheckResult paycheckNextButton");
+          open.type = "button";
+          open.append(...nextCard.childNodes, BudgetUI.element("span", "paycheckNextMore", "See how it adds up ›"));
+          open.setAttribute("aria-label", `Next paycheck, ${showDate(createSafeMidnight(next.date))}, ${formatMoney(next.takeHome)}: see how it adds up`);
+          open.addEventListener("click", () => openPaycheck(found.id, next.date, open));
+          nextCard = open;
+        }
         totals.append(
           card("Take Home This Year", formatMoney(sum(p => p.takeHome)), true),
           card("Gross This Year", formatMoney(sum(p => p.gross))),
           card("Taxes This Year", formatMoney(sum(p => p.fica + p.federal + p.state))),
-          card("Hours This Year", String(Math.round(sum(p => p.hours.regular + p.hours.overtime + p.hours.double + p.hours.premium + p.hours.paidOff) * 100) / 100)),
-          card(next ? `Next Paycheck: ${showDay(createSafeMidnight(next.date))}` : "Next Paycheck", next ? formatMoney(next.takeHome) : "--")
+          card("Hours Worked This Year", String(Math.round(sum(p => p.hours.regular + p.hours.overtime + p.hours.double + p.hours.premium) * 100) / 100)),
+          nextCard
         );
         content.append(totals);
         if (next) {
@@ -1426,67 +1585,86 @@ function scheduleGrid(connection, result, weekOffset, move) {
   return box;
 }
 
-// One paycheck: how it adds up, and its shifts (from the last read on this page)
+// One paycheck: how it adds up, and its shifts (from the last read on this page), with a list of the calendar's other
+// paychecks over it, to see one of them instead
 function openPaycheck(id, date, origin) {
   const connection = sheetConnectionById(id);
-  const paycheck = (connection?.paychecks || []).map(Calendars.readPaycheck).filter(Boolean).find(found => found.date === date);
-  if (!paycheck) return;
+  const paychecks = (connection?.paychecks || []).map(Calendars.readPaycheck).filter(Boolean);
+  if (!paychecks.some(found => found.date === date)) return;
   BudgetUI.openPanel({
     origin,
     size: "large",
     stacked: true,
-    title: `Paycheck: ${showDate(createSafeMidnight(paycheck.date))}`,
+    title: `${connection.name}: A Paycheck`,
     build(form, panel) {
-      form.append(BudgetUI.noTranslate(BudgetUI.element("p", "calendarNext", `Pays ${showDate(createSafeMidnight(paycheck.from))} to ${showDate(createSafeMidnight(paycheck.to))}: ${hoursWords(paycheck.hours)}, at a base pay of ${formatMoney(paycheck.base)} an hour.`)));
-      const lines = [
-        ["Regular Pay", paycheck.regular], ["Overtime Pay", paycheck.overtime], ["Premium Pay", paycheck.premium], ["Paid Time Off", paycheck.paidOff],
-        ["Bonuses", paycheck.bonuses], ["Per-shift Extras", paycheck.extras], ["Taxable Allowances", paycheck.allowances],
-        ["Gross", paycheck.gross, true],
-        ["Pre-tax Medical", -paycheck.medical], ["Pre-tax Retirement", -paycheck.retirement],
-        ["FICA", -paycheck.fica], ["Federal", -paycheck.federal], ["State", -paycheck.state],
-        ["Post-tax Deductions", -paycheck.post], ["Reimbursements (Tax-free)", paycheck.reimbursed],
-        ["Take Home", paycheck.takeHome, true]
-      ];
-      const breakdown = BudgetUI.element("dl", "breakdownList");
-      for (const [label, amount, isTotal] of lines) {
-        if (!isTotal && Math.round(amount * 100) === 0) continue;
-        const row = BudgetUI.element("div", `breakdownRow${isTotal ? " total" : ""}`);
-        const value = BudgetUI.noTranslate(BudgetUI.element("dd", amount < 0 ? "negative" : "", formatMoney(amount)));
-        row.append(BudgetUI.element("dt", "", label), value);
-        breakdown.append(row);
+      // The calendar's paychecks, newest first: picking another shows its breakdown instead
+      const pick = BudgetUI.element("select", "selectInput paycheckPick");
+      const todayKey = formatToYMD(today);
+      for (const each of [...paychecks].reverse()) {
+        pick.append(new Option(`${showDate(createSafeMidnight(each.date))}: ${formatMoney(each.takeHome)}, ${each.date >= todayKey ? "upcoming" : "paid"}`, each.date));
       }
-      form.append(breakdown, BudgetUI.element("p", "panelHint", TAX_NOTE));
+      pick.value = date;
+      pick.translate = false;
+      const body = BudgetUI.element("div", "paycheckBody");
+      pick.addEventListener("change", () => draw(pick.value));
+      form.append(BudgetUI.field("Paycheck", pick), body, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+      draw(date);
 
-      // Its shifts, piece by piece
-      const worked = Calendars.lastWorkedOut.get(id);
-      const detail = worked?.result.details.find(found => formatToYMD(found.check.payDate) === paycheck.date);
-      const shiftsBox = BudgetUI.element("section", "calendarPaycheckShifts");
-      shiftsBox.append(BudgetUI.element("h4", "", "Its Shifts"));
-      if (!detail) {
-        shiftsBox.append(BudgetUI.element("p", "panelHint", "Its shifts show once the calendar is read on this page."));
-      } else {
-        const list = BudgetUI.element("ul", "calendarShiftList");
-        const timeWords = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        for (const piece of detail.pieces) {
-          const kinds = piece.kind === "premium" ? ["Premium"] : piece.kind === "paidOff" ? ["Paid time off"]
-            : [...new Set(piece.segments.map(segment => ({ regular: "Regular", overtime: "Overtime", double: "Double time" })[segment.kind]))];
-          const straight = piece.segments.reduce((total, segment) => total + (segment.straight || 0), 0);
-          const rate = piece.hours > 0 && piece.kind === "worked" ? straight / piece.hours : piece.kind === "premium" ? piece.version.basePay * piece.version.premiumMultiplier : piece.dayRate;
-          const part = piece.parts > 1 ? ` (${piece.part} of ${piece.parts})` : "";
-          const item = BudgetUI.element("li");
-          item.append(
-            BudgetUI.noTranslate(BudgetUI.element("strong", "", `${showDay(piece.day)} ${timeWords(piece.start)} to ${timeWords(piece.end)}${part}`)),
-            BudgetUI.noTranslate(BudgetUI.element("span", "", ` ${piece.shift.title}`)),
-            BudgetUI.element("span", "calendarShiftKind", ` ${Math.round(piece.hours * 100) / 100} hours, ${kinds.join(" + ")}, at ${formatMoney(rate)} an hour${piece.rule ? ` (${piece.rule.contains})` : ""}${timedWords(piece)}${piece.shift.breakHours > 0 && piece.part === 1 ? `, less a ${Math.round(piece.shift.breakHours * 60)}-minute break` : ""}${piece.extraShift ? `, plus ${formatMoney(piece.extraShift)} for the shift` : ""}`)
-          );
-          list.append(item);
+      function draw(day) {
+        const paycheck = paychecks.find(found => found.date === day);
+        if (!paycheck) return;
+        body.replaceChildren();
+        body.append(BudgetUI.noTranslate(BudgetUI.element("p", "calendarNext", `Pays ${showDate(createSafeMidnight(paycheck.from))} to ${showDate(createSafeMidnight(paycheck.to))}: ${hoursWords(paycheck.hours)}, at a base pay of ${formatMoney(paycheck.base)} an hour.`)));
+        const lines = [
+          ["Regular Pay", paycheck.regular], ["Overtime Pay", paycheck.overtime], ["Premium Pay", paycheck.premium], ["Paid Time Off", paycheck.paidOff],
+          ["Bonuses", paycheck.bonuses], ["Per-shift Extras", paycheck.extras], ["Taxable Allowances", paycheck.allowances],
+          ["Gross", paycheck.gross, true],
+          ["Pre-tax Medical", -paycheck.medical], ["Pre-tax Retirement", -paycheck.retirement],
+          ["FICA", -paycheck.fica], ["Federal", -paycheck.federal], ["State", -paycheck.state],
+          ["Post-tax Deductions", -paycheck.post], ["Reimbursements (Tax-free)", paycheck.reimbursed],
+          ["Take Home", paycheck.takeHome, true]
+        ];
+        const breakdown = BudgetUI.element("dl", "breakdownList");
+        for (const [label, amount, isTotal] of lines) {
+          if (!isTotal && Math.round(amount * 100) === 0) continue;
+          const row = BudgetUI.element("div", `breakdownRow${isTotal ? " total" : ""}`);
+          const value = BudgetUI.noTranslate(BudgetUI.element("dd", amount < 0 ? "negative" : "", formatMoney(amount)));
+          row.append(BudgetUI.element("dt", "", label), value);
+          breakdown.append(row);
         }
-        for (const bonus of detail.bonuses) {
-          list.append(BudgetUI.noTranslate(BudgetUI.element("li", "", `${showDay(bonus.date)} ${bonus.title}: ${formatMoney(bonus.amount)} bonus`)));
+        body.append(breakdown, BudgetUI.element("p", "panelHint", TAX_NOTE));
+
+        // Its shifts, piece by piece
+        const worked = Calendars.lastWorkedOut.get(id);
+        const detail = worked?.result.details.find(found => formatToYMD(found.check.payDate) === paycheck.date);
+        const shiftsBox = BudgetUI.element("section", "calendarPaycheckShifts");
+        shiftsBox.append(BudgetUI.element("h4", "", "Its Shifts"));
+        if (!detail) {
+          shiftsBox.append(BudgetUI.element("p", "panelHint", "Its shifts show once the calendar is read on this page."));
+        } else {
+          const list = BudgetUI.element("ul", "calendarShiftList");
+          const timeWords = (ms) => showClockTime(new Date(ms));
+          for (const piece of detail.pieces) {
+            const kinds = piece.kind === "premium" ? ["Premium"] : piece.kind === "paidOff" ? ["Paid time off"]
+              : [...new Set(piece.segments.map(segment => ({ regular: "Regular", overtime: "Overtime", double: "Double time" })[segment.kind]))];
+            const straight = piece.segments.reduce((total, segment) => total + (segment.straight || 0), 0);
+            const rate = piece.hours > 0 && piece.kind === "worked" ? straight / piece.hours : piece.kind === "premium" ? piece.version.basePay * piece.version.premiumMultiplier : piece.dayRate;
+            const part = piece.parts > 1 ? ` (${piece.part} of ${piece.parts})` : "";
+            const item = BudgetUI.element("li");
+            item.append(
+              BudgetUI.noTranslate(BudgetUI.element("strong", "", `${showDay(piece.day)} ${timeWords(piece.start)} to ${timeWords(piece.end)}${part}`)),
+              BudgetUI.noTranslate(BudgetUI.element("span", "", ` ${piece.shift.title}`)),
+              BudgetUI.element("span", "calendarShiftKind", ` ${Math.round(piece.hours * 100) / 100} hours, ${kinds.join(" + ")}, at ${formatMoney(rate)} an hour${piece.rule ? ` (${piece.rule.contains})` : ""}${timedWords(piece)}${piece.shift.breakHours > 0 && piece.part === 1 ? `, less a ${Math.round(piece.shift.breakHours * 60)}-minute break` : ""}${piece.extraShift ? `, plus ${formatMoney(piece.extraShift)} for the shift` : ""}`)
+            );
+            list.append(item);
+          }
+          for (const bonus of detail.bonuses) {
+            list.append(BudgetUI.noTranslate(BudgetUI.element("li", "", `${showDay(bonus.date)} ${bonus.title}: ${formatMoney(bonus.amount)} bonus`)));
+          }
+          shiftsBox.append(list);
         }
-        shiftsBox.append(list);
+        body.append(shiftsBox);
       }
-      form.append(shiftsBox, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
     }
   });
 }

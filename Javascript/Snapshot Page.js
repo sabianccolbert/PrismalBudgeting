@@ -320,9 +320,11 @@
     },
     "home.lowest": {
       title: () => "Lowest In Bank After Today",
-      render(body) {
-        const lowest = shared.lowest();
-        numberBody(body, formatMoney(lowest.amount), `On ${showWeekdayDate(lowest.date)}`, { amount: lowest.amount });
+      // (Its own until, picked in Edit, kept as its ref: or as far as this device's Lowest looks)
+      render(body, ref) {
+        const ahead = snapshotUntil(ref);
+        const lowest = ahead ? lowestThrough(lookAheadEnd(ahead)) : shared.lowest();
+        numberBody(body, formatMoney(lowest.amount), `On ${showWeekdayDate(lowest.date)}${ahead ? `, looking ${lookAheadWords(ahead)} past the calendar` : ""}`, { amount: lowest.amount });
       }
     },
     "home.lastDay": {
@@ -571,6 +573,31 @@
   const built = new Map();
 
   // One card: its title (in Edit, with ≡ to drag it and × to take it off) and what it shows
+  // A Lowest card's own until, as its ref keeps it ("6months"): { count, unit } past the calendar, or null for as far as
+  // this device's Lowest looks
+  const SNAPSHOT_UNTILS = [{ count: 2, unit: "weeks" }, { count: 1, unit: "months" }, { count: 2, unit: "months" }, { count: 3, unit: "months" }, { count: 6, unit: "months" }, { count: 12, unit: "months" }];
+  function snapshotUntil(ref) {
+    const found = /^(\d{1,3})(days|weeks|months)$/.exec(String(ref ?? ""));
+    return found ? normalizeLookAhead({ count: Number(found[1]), unit: found[2] }) : null;
+  }
+
+  // In Edit, a Lowest card's Until: as this device's Lowest, or a set time past the calendar, saved with the card
+  function untilPicker(card, list, title) {
+    const pick = el("select", "selectInput snapshotUntil");
+    const choices = [["", `As this device's Lowest (${lookAheadWords()})`], ...SNAPSHOT_UNTILS.map(ahead => [`${ahead.count}${ahead.unit}`, `${lookAheadWords(ahead)} past the calendar`])];
+    const own = snapshotUntil(card.ref);
+    if (own && !choices.some(([value]) => value === card.ref)) choices.push([card.ref, `${lookAheadWords(own)} past the calendar`]);
+    for (const [value, label] of choices) pick.append(new Option(label, value));
+    pick.value = own ? card.ref : "";
+    pick.addEventListener("change", () => {
+      const ahead = snapshotUntil(pick.value);
+      save(list.map(other => (other.id === card.id ? { ...other, ref: pick.value } : other)), `${title}: ${ahead ? `${lookAheadWords(ahead)} past the calendar` : "as this device's Lowest"}`);
+    });
+    const field = BudgetUI.field("Until", pick);
+    field.classList.add("snapshotUntilField");
+    return field;
+  }
+
   function cardEl(card, index, list) {
     const type = TYPES[card.type];
     const key = `${card.type}|${card.ref}`;
@@ -614,7 +641,9 @@
       head.prepend(handle);
       head.append(remove);
     }
-    section.replaceChildren(head, body);
+    // (A Lowest card's own until, in Edit: how far past the calendar it looks, or as far as this device's Lowest does)
+    const untilField = editing && card.type === "home.lowest" ? untilPicker(card, list, title) : null;
+    section.replaceChildren(head, ...(untilField ? [untilField] : []), body);
     try {
       if (!type) throw new Gone();
       if (!type.keeps) body.replaceChildren();
@@ -719,7 +748,8 @@
   // + opens a window of the site's parts; tapping one opens a window of what's in it (over the first), and a part with more
   // inside (like Bob's Goals: all of them, or one) opens another. Tapping a card adds it where the + was.
 
-  // What can be added: [{ label, about, items: [{ label, type, ref, items (more inside, instead of a type), note }] }]
+  // What can be added: [{ label, about, items: [{ label, type, ref, items (more inside, instead of a type), note }] }]. The
+  // Spectrum Graph comes first, added straight from the list (a part with a type instead of items).
   function sections() {
     const goals = accountsData?.goals || [];
     const gems = calculatorStore("gems");
@@ -729,6 +759,7 @@
     const bobDef = (id) => CARDS.find(def => def.id === id);
     const card = (label, type, ref = "") => ({ label, type, ref });
     return [
+      { label: "Spectrum Graph", about: "Bob's one graph to compare anything: In Bank, accounts, tracker rows, and more", type: "graph.spectrum" },
       { label: "Main Budget", about: "Home's numbers: In Bank, the lowest it gets, and what's coming", items: [
         card("In Bank today", "home.inBank"), card("Lowest in bank after today", "home.lowest"), card("In Bank at the last day ahead", "home.lastDay"),
         card("Today's entries", "home.today"), card("Upcoming", "home.upcoming"), card("Bob says (his card on Home)", "home.bob")
@@ -747,10 +778,10 @@
       { label: "Crystals", about: "The Paycheck Calculator's crystals: each one's take-home pay", items: crystals.map(crystal => card(`💎 ${presetName(crystal, describeCrystal)}`, "crystal", crystal.id)), empty: "No crystals yet: save one in the Paycheck Calculator (Menu)." },
       { label: "Calendar", about: "Your calendar's entries", items: [card("Today", "calendar.today"), card("The next 7 days", "calendar.week")] },
       { label: "Graphs", about: "Every graph on the site", items: [
-        card("In Bank over time", "graph.inBank"), card("Equity over time", "graph.equity"), card("Goals over time", "graph.goals"),
+        card("Spectrum Graph", "graph.spectrum"), card("In Bank over time", "graph.inBank"), card("Equity over time", "graph.equity"), card("Goals over time", "graph.goals"),
         card("Spent each week", "graph.spent"), card("Spent after each payday", "graph.paydays"), card("Recurring entries each month", "graph.recurring"),
         card("Each wavelength, week by week", "graph.wavelengths"), card("Catchup entries, added up", "graph.catchups"), card("Purchases, added up", "graph.purchases"),
-        card("Big bills, added up", "graph.bills"), card("Spectrum Graph", "graph.spectrum"),
+        card("Big bills, added up", "graph.bills"),
         { label: "Tracker rows", items: rows.map(title => card(title, "graph.tracker", title)), empty: "No tracker rows yet." },
         { label: "Gems", items: gems.map(gem => card(`💠 ${presetName(gem, describeDebt)}`, "graph.gem", gem.id)), empty: "No gems yet." }
       ] }
@@ -770,8 +801,12 @@
           const item = el("li");
           const button = el("button", "snapshotChoice");
           button.type = "button";
-          button.append(el("span", "snapshotChoiceName", section.label), el("span", "snapshotChoiceAbout", section.about), el("span", "snapshotChoiceMore", "›"));
-          button.addEventListener("click", () => openItems(button, section, at));
+          button.append(el("span", "snapshotChoiceName", section.label), el("span", "snapshotChoiceAbout", section.about));
+          if (section.type) button.addEventListener("click", () => add(section, at));
+          else {
+            button.append(el("span", "snapshotChoiceMore", "›"));
+            button.addEventListener("click", () => openItems(button, section, at));
+          }
           item.append(button);
           list.append(item);
         }

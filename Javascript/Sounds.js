@@ -33,7 +33,7 @@
   const AMBIENT_BED_MAX_S = 3.2;
   const AMBIENT_BED_SHARE = 0.3;
   const AMBIENT_BED_LOWPASS = 3800; // Hz: the bed's twinkles sound farther off
-  const MUSIC_PAGES = ["home", "recurring", "accounts", "bob", "menu", "spreadsheets", "calculator", "logs", "settings", "snapshot"];
+  const MUSIC_PAGES = ["home", "recurring", "accounts", "bob", "menu", "spreadsheets", "calculator", "logs", "business", "settings", "snapshot"];
 
   // This device's choices (Settings)
   const EFFECTS_KEY = "prismal_sound_effects"; // "off" when turned off
@@ -264,7 +264,7 @@
       if (href.startsWith("#") || href.startsWith("mailto:") || link.target === "_blank") return "twinkle";
       return null;
     }
-    const button = target.closest("button, [role='button'], .lineEntry, .upcomingButton");
+    const button = target.closest("button, [role='button'], .lineEntry");
     if (button) {
       const words = (button.getAttribute("aria-label") || button.textContent || "").trim();
       if (button.classList.contains("danger") || button.classList.contains("panelClose") || OFF_WORDS.test(words)) return "shatter";

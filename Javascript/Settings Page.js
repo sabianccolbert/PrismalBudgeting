@@ -70,6 +70,7 @@ const PUSH_BLOCKED_TEXT = "Notifications are blocked for this site. Allow them i
 let budgetList = null;
 
 wireDateFormat(); // This device's choices, so they work before (and without) the server
+wireTimeFormat();
 wireThemes();
 wireSounds();
 wireMotion();
@@ -361,6 +362,45 @@ function renderDateFormatNote() {
   const sample = sampleDate();
   document.getElementById("dateFormatNote").textContent =
     `October 5, ${sample.getFullYear()} shows as ${showDate(sample)}, and dates you type are read the same way (${DATE_FORMATS.ymd.pattern} always works too).`;
+}
+
+// Times of day, 12-hour or 24-hour (kept on this device, like the date format): the calendar's times, a zoomed day's
+// hours, and the times the site writes out. The boxes times are typed in are the browser's own, so they follow the
+// device's setting.
+function wireTimeFormat() {
+  const select = document.getElementById("timeFormat");
+  if (!select) return;
+  let picked = "";
+  try { picked = localStorage.getItem(TIME_FORMAT_KEY) || ""; } catch (e) {}
+  select.append(
+    new Option(`This device's own (${deviceTwelveHour() ? "1:00 PM" : "13:00"})`, ""),
+    new Option("12-hour (1:00 PM)", "12"),
+    new Option("24-hour (13:00)", "24")
+  );
+  select.value = picked === "12" || picked === "24" ? picked : "";
+  renderTimeFormatNote();
+  select.addEventListener("change", () => {
+    try {
+      if (select.value) localStorage.setItem(TIME_FORMAT_KEY, select.value);
+      else localStorage.removeItem(TIME_FORMAT_KEY);
+    } catch (e) {
+      BudgetUI.showToast("This browser isn't keeping site data, so the time format can't be saved.", true);
+    }
+    renderTimeFormatNote();
+    BudgetUI.showToast(`Times show like ${showClockTime(sampleTime())} now.`);
+  });
+}
+
+// The example time: 1:30 in the afternoon
+function sampleTime() {
+  const time = new Date();
+  time.setHours(13, 30, 0, 0);
+  return time;
+}
+
+function renderTimeFormatNote() {
+  document.getElementById("timeFormatNote").textContent =
+    `Half past one in the afternoon shows as ${showClockTime(sampleTime())} on the calendar. The boxes you type times in are your browser's own, so they follow your device's setting.`;
 }
 
 //#endregion

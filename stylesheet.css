@@ -520,8 +520,10 @@ header {
   box-sizing: border-box;
 }
 
-/* The page's own header, as wide as its content */
+/* The page's own header, as wide as its content. When the page's name (never broken inside a word) and the buttons
+   don't fit side by side, like large text on a small phone, the buttons go under it, at the right. */
 #transitionContainer > header {
+  flex-wrap: wrap;
   gap: clamp(8px, 2vw, 24px);
   width: var(--PAGE_WIDTH);
   margin: 0 auto clamp(10px, 2.2vmin, 22px);
@@ -531,9 +533,14 @@ header {
 /* Left side: the logo and the page's name */
 header .brand {
   display: flex;
+  flex: 1 1 0;
   align-items: center;
   gap: clamp(8px, 2vw, 18px);
-  min-width: 0;
+  min-width: min-content;
+}
+
+#transitionContainer > header > :last-child {
+  margin-left: auto;
 }
 
 /* The logo never gets narrower than it is tall (the header's row would shrink its width on a skinny screen, but not
@@ -836,6 +843,39 @@ html.tabSlide #transitionContainer:not(.ready) > main > :not(.pageTop),
 html.tabSlide #transitionContainer:not(.ready) .pageTop > :not(.pageTabs),
 html.tabSlide #transitionContainer:not(.ready) > footer {
   transform: translateY(100vh);
+}
+
+/* On the budget's four pages, the top card (the one beside the tabs) slides in first and the cards under it follow a
+   moment later (--CARD_FOLLOW). Boot.js gives html .cardsFollow there, unless the device asks for less motion, and
+   Layout.js takes it off once the last card is in. By a tab, the cards only start later. Any other way, the whole page
+   slides as one, and the cards under the top one start a little farther back, the way it comes from, and catch up. */
+:root {
+  --CARD_FOLLOW: 0.14s;
+}
+
+html.cardsFollow #transitionContainer:not(.slide-out):not(.tab-slide-out) > main > :not(.pageTop),
+html.cardsFollow #transitionContainer:not(.slide-out):not(.tab-slide-out) > footer {
+  transition: transform var(--SLIDE_DURATION) ease-in-out var(--CARD_FOLLOW);
+}
+
+html.cardsFollow:not(.tabSlide) #transitionContainer:not(.ready) > main > :not(.pageTop),
+html.cardsFollow:not(.tabSlide) #transitionContainer:not(.ready) > footer {
+  transform: translateY(30vh);
+}
+
+html.cardsFollow.fromRight #transitionContainer:not(.ready) > main > :not(.pageTop),
+html.cardsFollow.fromRight #transitionContainer:not(.ready) > footer {
+  transform: translateX(30vw);
+}
+
+html.cardsFollow.fromLeft #transitionContainer:not(.ready) > main > :not(.pageTop),
+html.cardsFollow.fromLeft #transitionContainer:not(.ready) > footer {
+  transform: translateX(-30vw);
+}
+
+html.cardsFollow.fromTop #transitionContainer:not(.ready) > main > :not(.pageTop),
+html.cardsFollow.fromTop #transitionContainer:not(.ready) > footer {
+  transform: translateY(-30vh);
 }
 
 /* No javascript fallback: nothing works without it, so the page only asks for it (the front page, which is

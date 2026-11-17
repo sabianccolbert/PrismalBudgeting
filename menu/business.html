@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=04b16ec2af">
+    <link rel="stylesheet" href="/themes.css?v=33f6b67192">
+    <title>Prismal Planning - Business</title>
+    <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal Business" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Planning - Business">
+    <meta property="og:description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalplanning.org/Favicon/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://prismalplanning.org">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <div class="brandText stacked">
+            <h1>Business</h1>
+            <h2 translate="no">Prismal Planning</h2>
+          </div>
+        </div>
+        <nav class="navButtons" aria-label="Pages">
+          <a id="menuBack" class="navButton" href="/menu/">
+            <img class="navIcon" src="/Resources/Icons/BackNav.webp?v=5fc649006a" alt="">
+            <span>Back</span>
+          </a>
+          <a class="navButton" href="/">
+            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
+            <span>Home</span>
+          </a>
+          <a id="logoutButton" class="navButton logoutButton" href="logout">
+            <img class="navIcon" src="/Resources/Icons/Logout.webp?v=38a63f5bfb" alt="">
+            <span>Logout</span>
+          </a>
+        </nav>
+      </header>
+      <main>
+        <!-- Business Mode's page (Budget Pages.js renderBusinessPage): the year's figures, each category's entries, the titles
+             in each category, and the owners -->
+        <div id="pageToolbar" class="tableToolbar"></div>
+        <div id="panelSlot"></div>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+        <div id="dataView"></div>
+
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Business Help</h3>
+          <p>The Business page is for a budget its owner turned Business Mode on for (Budgets, Calendars &amp; Spreadsheets, in the Menu, under Budgets). Only that budget has it; your other budgets stay as they are.</p>
+
+          <h4>Categories</h4>
+          <ul>
+            <li>Each title can be in one of the business's categories: <strong>Revenue</strong>, <strong>Expenses</strong>, <strong>Asset Purchases</strong>, <strong>Assets</strong>, or one of its <strong>owners</strong> (what they put in and took out).</li>
+            <li>Pick one under <strong>Business</strong> in any entry's window, New Entry, or a recurring entry's window, or under Titles here. Like a wavelength, it's the title's: every entry with that title shares it.</li>
+            <li>An entry counts once its day has passed (days before today), from History and the calendar, each year on its own. Every type counts: Regular, Hidden, and Transfer.</li>
+          </ul>
+
+          <h4>What It Shows</h4>
+          <ul>
+            <li><strong>Revenue</strong> and <strong>Expenses</strong> add up their titles' entries (a refund in Expenses takes away from them), and <strong>Profit</strong> is the two together.</li>
+            <li><strong>Asset Purchases</strong> and <strong>Assets</strong> add up theirs, and each owner shows what they put in (gains), took out (costs), and the two together.</li>
+            <li>Each category's entries are listed under it, newest first: tap its name to open or close the list.</li>
+            <li>Pick another year at the top to see that one.</li>
+          </ul>
+
+          <h4>Owners</h4>
+          <p>Add the business's owners by name under Owners, then put the titles of what each puts in or takes out (like their contributions and draws) in their category. Taking an owner out takes their titles out of every category.</p>
+          <p>These are estimates from your entries, not tax or legal advice.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

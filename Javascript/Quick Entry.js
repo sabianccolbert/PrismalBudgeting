@@ -50,9 +50,8 @@ if (quickKey && quickParams.has("setup")) {
 // Home (and Back) go on when this browser is signed in, and straight to the login page when it isn't: not to the front
 // page, and not to a signed-in page that would sign out the moment it opens (a sign-in left idle too long, see
 // signedInNow in Layout.js). Worked out as they're tapped, since this page can stay open for days.
-// Opened from the home screen as an app (RUNNING_AS_APP, Layout.js), Home opens the site in the phone's browser instead,
-// and the app stays on Quick Budget: the browser keeps its own sign-in, so it goes to its login page, which goes on to
-// Home when the browser is signed in.
+// In a home screen icon's app too, so the app stays where it was left (Layout.js): on a phone whose apps keep their own
+// storage, that's a sign-in of the app's own.
 const quickHomeLink = document.querySelector('.navButtons a[href="/"]:not(#quickBack)');
 const quickBackLink = document.getElementById("quickBack");
 // (The login page keeps this page's theme on the way: Themes.lookQuery in Boot.js)
@@ -60,14 +59,9 @@ const quickLogin = () => {
   const look = window.Themes ? Themes.lookQuery() : "";
   return look ? `/login.html?${look}` : "/login.html";
 };
-if (quickHomeLink && RUNNING_AS_APP) {
-  quickHomeLink.target = "_blank";
-  quickHomeLink.rel = "noopener";
-  quickHomeLink.setAttribute("href", quickLogin());
-}
-if (quickHomeLink && !RUNNING_AS_APP && !signedInNow()) quickHomeLink.setAttribute("href", quickLogin());
+if (quickHomeLink && !signedInNow()) quickHomeLink.setAttribute("href", quickLogin());
 quickHomeLink?.addEventListener("click", () => {
-  if (!RUNNING_AS_APP) quickHomeLink.setAttribute("href", signedInNow() ? "/" : quickLogin());
+  quickHomeLink.setAttribute("href", signedInNow() ? "/" : quickLogin());
 });
 quickBackLink?.addEventListener("click", () => {
   if (!signedInNow()) quickBackLink.setAttribute("href", quickLogin());
@@ -734,6 +728,17 @@ function quickToday() {
   return formatToYMD(createSafeMidnight(new Date()));
 }
 
+// Lowest's last day as this device looks (its own look ahead: deviceLookAhead in Process Budget.js), "YYYY-MM-DD", for
+// the lowest the API works out; null when this device hasn't picked one (then it counts every day the budget keeps). The
+// calendar's last day is the Saturday of the fifth week from this one, like the budget's.
+function quickLowestUntil() {
+  const ahead = deviceLookAhead();
+  if (!ahead) return null;
+  const now = createSafeMidnight(new Date());
+  const lastDay = addDays(now, CALENDAR_DAYS - 1 - now.getDay());
+  return formatToYMD(ahead.unit === "months" ? addMonths(lastDay, ahead.count) : addDays(lastDay, ahead.count * (ahead.unit === "weeks" ? 7 : 1)));
+}
+
 // "Adding to sam's budget. 2 entries are waiting to show up there the next time you open it." With more than one budget,
 // it names the one the icon adds to: "Adding to sam's budget: Vacation."
 function accountLine(waiting) {
@@ -747,11 +752,13 @@ function accountLine(waiting) {
 // status 0 = the server couldn't be reached. An icon whose budget was deleted (or isn't shared with its account anymore)
 // has stopped like any other (401).
 async function quickApi(endpoint, payload) {
+  // (Every request with today's date gets the balances back: their lowest, through this device's look ahead)
+  const until = payload && payload.today ? quickLowestUntil() : null;
   try {
     const res = await fetch(`${window.API_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(until ? { ...payload, until } : payload)
     });
     let data = null;
     try { data = await res.json(); } catch (e) {}

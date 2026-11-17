@@ -56,7 +56,7 @@ const Calendars = (() => {
     if (!response.ok) {
       let message = "";
       try { message = (await response.json()).error || ""; } catch (e) {}
-      if (fractal && response.status === 404) throw new CalendarReadError("That Calendar Fractal can only be read by the account it belongs to (or it was deleted).", true);
+      if (fractal && response.status === 404) throw new CalendarReadError("That Calendar Fractal can only be read by its own account, or by the people in its budget (or it was deleted).", true);
       const lasting = response.status === 400 || response.status === 403 || response.status === 413;
       throw new CalendarReadError(message || "Couldn't read that calendar just now. Please try again.", lasting);
     }
@@ -1488,7 +1488,9 @@ const Calendars = (() => {
     if (account === undefined) problems.push(`The Equity account "${typedAccount}" isn't one of yours anymore. Pick another, or add it on the Equity page.`);
     if (account && type === "❗️") problems.push(`Its paychecks go to ${account}, but they're Regular. Make them Hidden or Transfer, so they can change the account.`);
     const ownTitle = capitalize(splitAccount(typed(fields.title) || (account ? "" : DEFAULT_TITLE)).title.replace(/\s*[←→]\s*/g, " ").trim()).slice(0, MAX_TITLE);
-    return { type, title: withAccount(ownTitle, account || ""), problems };
+    // (A Cost is someone this calendar's shifts are paid to: each paycheck is a cost on its payday. A Gain, the usual, is
+    // the account's own pay.)
+    return { type, title: withAccount(ownTitle, account || ""), problems, cost: fields.direction?.value === "cost" };
   }
 
   // Everything a calendar (parseCalendar's) comes to with a connection's settings: { entries ([[MM/DD/YYYY, type, amount,
@@ -1511,7 +1513,7 @@ const Calendars = (() => {
     const readTo = checksAhead.length > 0 && checksAhead[checksAhead.length - 1].to > scheduleEnd ? checksAhead[checksAhead.length - 1].to : scheduleEnd;
     const { events, unfollowed } = eventsBetween(calendar, readFrom, addDays(readTo, 1));
     const worked = payFor(events, pay, versions, ahead, readTo);
-    const { type, title, problems } = entryParts(connection);
+    const { type, title, problems, cost } = entryParts(connection);
     const blocked = problems.length > 0;
     problems.push(...calendar.problems);
     if (unfollowed.length > 0) problems.push(`${unfollowed.slice(0, 3).map(name => `"${name}"`).join(", ")}${unfollowed.length > 3 ? ` and ${unfollowed.length - 3} more` : ""} repeat${unfollowed.length === 1 ? "s" : ""} in a way that can't be followed here (like by week number), so only the first time counts. Make each one its own event, or a simpler repeat.`);
@@ -1571,7 +1573,7 @@ const Calendars = (() => {
     const entryFrom = addDays(today, -KEEP_DAYS_BEFORE);
     const entries = blocked ? [] : details
       .filter(detail => detail.check.payDate >= entryFrom && detail.taxes.takeHome > 0)
-      .map(detail => [formatToMMDDYYYY(detail.check.payDate), type, detail.taxes.takeHome, title]);
+      .map(detail => [formatToMMDDYYYY(detail.check.payDate), type, cost ? -detail.taxes.takeHome : detail.taxes.takeHome, title]);
     const shiftCount = worked.shifts.filter(shift => shift.pieces && shift.pieces.some(piece => piece.check)).length;
     return {
       entries,

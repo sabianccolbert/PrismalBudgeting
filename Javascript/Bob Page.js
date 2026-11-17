@@ -8,9 +8,9 @@
 //     card is for (its help, see CARDS). A new card needs one too.
 //   - The Spectrum Graph and Data always run. Every other card has an on/off switch, starts off, and works nothing out while
 //     it's off. Which are on is kept with the budget (Bob's page in Process Budget.js), so every device shows the same.
-//   - A card that's on (but Wavelength Planning) has a Warnings switch beside its own: with it on, the card's highlight,
-//     when it needs a look, shows on Bob's card on Home (bobWarnings), which moves over the calendar until it's okayed.
-//     A new card that can need a look gets one too (BOB_WARNING_CARDS in Process Budget.js).
+//   - A card that's on has a Warnings switch beside its own: with it on, the card's highlight, when it needs a look, shows
+//     on Bob's card on Home (bobWarnings), with a link back to the card, and moves his card over the calendar until it's
+//     okayed on that device. A new card gets one too (BOB_WARNING_CARDS in Process Budget.js).
 //   - Anything that shows from a tap (a table, a list) opens in a floating window (openWindow), not in the page.
 //
 // The page, top to bottom: Bob's highlights; Bob's Cards, a row for each card with a switch (Goals; Wavelength Planning, a
@@ -68,7 +68,7 @@ const CARDS = [
   {
     id: "purposes",
     title: "Wavelength Planning",
-    help: "Once it's on, every entry form asks which wavelength a title's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Add Or Change Wavelengths makes them). The spectrum adds up what each cost between the days picked, long wavelengths at the left to short at the right; tap a stretch to see its titles.",
+    help: "Once it's on, every entry form asks which wavelength an entry's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Add Or Change Wavelengths makes them), and Undefined, which is always there. It's that entry's alone, unless Per Title is on: then every entry with its title is on it (except one given a wavelength of its own). The spectrum adds up what each cost between the days picked, long wavelengths at the left to short at the right; tap a stretch to see its titles. A wavelength can have a goal, like $300 per 2 weeks, or 20% (of what your Regular gains come to) per month, and Bob warns you once one is 85% used: a way to hold back spending you want less of, like fast food or gambling.",
     setup: setupPurposesCard,
     render: renderPurposesCard
   },
@@ -107,6 +107,13 @@ const CARDS = [
     title: "Refunds",
     help: `When Lowest in bank after today goes below $0, Bob looks for purchases from the last ${REFUND_DAYS} days (or still to come before that day) that a refund, or skipping one, would cover it with.`,
     render: renderRefundCard
+  },
+  {
+    id: "business",
+    title: "Business",
+    help: "For a budget with Business Mode on: this year's revenue, expenses, and profit so far (the days before today), and this month's profit next to last month's. The Business page (in the Menu) has every category, its entries, and the owners.",
+    shown: () => businessOn(),
+    render: renderBusinessCard
   }
 ];
 
@@ -131,6 +138,7 @@ if (window.PAGE === "bob") {
     showLinkedCard();
     openLinkedWindow();
     openLinkedGoal();
+    openLinkedBobCard();
   });
 }
 
@@ -162,6 +170,24 @@ function takeLinkedDay() {
   try { localStorage.setItem(ACCOUNTS_DAY_KEY, formatToMMDDYYYY(day)); } catch (e) {}
 }
 
+// A link to one of Bob's cards (a warning's See it on Home: /menu/bob.html?card=ID) opens its window once the page has slid
+// in. The ?card comes off the address, so going back or reloading doesn't open it again.
+function openLinkedBobCard() {
+  const id = new URLSearchParams(location.search).get("card");
+  if (!id) return;
+  try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) {}
+  const card = pageCards.find(item => item.def.id === id);
+  const row = cardRows.get(id)?.row;
+  if (!card || !row) return;
+  const started = Date.now();
+  const open = () => {
+    if (document.documentElement.style.overflowY === "hidden" && Date.now() - started < 3000) return requestAnimationFrame(open);
+    row.scrollIntoView({ block: "center" });
+    requestAnimationFrame(() => openCardWindow(card, row));
+  };
+  open();
+}
+
 // A link that says open=equity opens Equity's window, from In Bank And Equity
 function openLinkedWindow() {
   if (new URLSearchParams(location.search).get("open") === "equity") openEquityWindow(document.getElementById("balancesCard") || document.body);
@@ -183,6 +209,10 @@ function showLinkedCard() {
 }
 
 document.addEventListener("budget:updated", () => {
+  if (workspaceLoaded && pageCards.length > 0) renderPage();
+});
+// (What Lowest counts changed, here or on Home)
+document.addEventListener("shownaccount:changed", () => {
   if (workspaceLoaded && pageCards.length > 0) renderPage();
 });
 
@@ -210,7 +240,7 @@ function buildPage() {
   highlightList = BudgetUI.element("ul", "bobHighlights");
   top.querySelector(".bobTopText").append(head, help, highlightList);
   top.hidden = false;
-  pageCards = CARDS.filter(def => BOB_CARDS.has(def.id)).map(buildCard);
+  pageCards = CARDS.filter(def => BOB_CARDS.has(def.id) && (!def.shown || def.shown())).map(buildCard);
   const spectrumDef = CARDS.find(def => def.id === "spectrum");
   const spectrumFold = makeFold("spectrum", spectrumDef.title, spectrumDef.help);
   spectrumCard = { def: spectrumDef, el: spectrumFold.el, toggle: null, state: null, warning: null, body: BudgetUI.element("div"), results: BudgetUI.element("div", "sectionResults"), highlight: null };
@@ -350,7 +380,7 @@ function renderDataGroups(shared) {
     fold.summary.classList.toggle("negative", summary.amount < 0);
     const list = BudgetUI.element("ul", "bobData");
     list.append(...rows);
-    fold.body.replaceChildren(list);
+    fold.body.replaceChildren(...(group.id === "balances" ? [shownAccountPicker()] : []), list);
   }
 }
 
@@ -361,6 +391,8 @@ function buildCard(def) {
   const { head, help, title } = cardHead(def.title, def.help, def.id);
   el.setAttribute("aria-labelledby", title.id);
   const card = { def, el, toggle: null, state: null, warning: null, body: BudgetUI.element("div", "sectionBody"), results: BudgetUI.element("div", "sectionResults"), highlight: null };
+  // Its switches, together at the card's top right
+  const switches = BudgetUI.element("div", "sectionSwitches");
   // Its Warnings switch, shown while the card is on
   if (BOB_WARNING_CARDS.includes(def.id)) {
     const label = BudgetUI.element("label", "sectionSwitch warningSwitch");
@@ -371,7 +403,7 @@ function buildCard(def) {
     toggle.title = "Warnings: when this card needs a look, Bob says so on Home, over the calendar";
     toggle.addEventListener("change", () => switchWarning(card, toggle.checked));
     label.append(BudgetUI.element("span", "sectionState", "Warnings"), toggle);
-    head.append(label);
+    switches.append(label);
     card.warning = toggle;
   }
   if (BOB_CARDS.has(def.id)) {
@@ -383,8 +415,12 @@ function buildCard(def) {
     toggle.addEventListener("change", () => switchCard(card, toggle.checked));
     card.state = BudgetUI.element("span", "sectionState", "Off");
     label.append(card.state, toggle);
-    head.append(label);
+    switches.append(label);
     card.toggle = toggle;
+  }
+  if (switches.childElementCount) {
+    head.classList.add("hasSwitches");
+    head.append(switches);
   }
   const controls = def.setup ? def.setup(card) : null;
   card.body.append(...[controls, card.results].filter(Boolean));
@@ -489,7 +525,7 @@ async function switchWarning(card, on) {
 // Bob's warnings for Home: what each card that's on with its Warnings on says when it needs a look (its highlight, when
 // it warns), worked out the way this page does it, without drawing the page. [{ title, text }]
 function bobWarnings() {
-  const defs = CARDS.filter(def => BOB_WARNING_CARDS.includes(def.id) && bobWarningOn(def.id));
+  const defs = CARDS.filter(def => BOB_WARNING_CARDS.includes(def.id) && bobWarningOn(def.id) && (!def.shown || def.shown()));
   if (defs.length === 0) return [];
   const shared = sharedFigures();
   const found = [];
@@ -498,7 +534,7 @@ function bobWarnings() {
     try {
       if (def.setup) def.setup(card);
       const highlight = def.render(card, shared);
-      if (highlight && highlight.warn) found.push({ title: def.title, text: highlight.text });
+      if (highlight && highlight.warn) found.push({ id: def.id, title: def.title, text: highlight.text });
     } catch (error) {
       console.error(`Bob's ${def.title} card couldn't be worked out:`, error);
     }
@@ -589,7 +625,8 @@ function dataGroups(shared) {
   const trackedCosts = tracked.get(trackerRowIndex("costs"))?.total ?? 0;
   const trackedGains = tracked.get(trackerRowIndex("gains"))?.total ?? 0;
 
-  const lowestNote = `The lowest after today: ${formatMoney(lowest.amount)}, on ${showDay(lowest.date)}`;
+  const shownName = shownAccountName();
+  const lowestNote = `The lowest ${shownName ? `${shownName} gets ` : ""}after today: ${formatMoney(lowest.amount)}, on ${showDay(lowest.date)}`;
   const usually = payday.average === null ? ` (what usually goes out between paydays needs ${HISTORY_MONTHS} months of History)` : `. Usually ${formatMoney(-payday.average)} goes out in the ${payday.span} days from one, besides recurring bills`;
   const purchaseParts = [
     `${purchases.length} Regular ${purchases.length === 1 ? "cost" : "costs"} in the last ${REFUND_DAYS} days`,
@@ -634,6 +671,22 @@ function dataGroups(shared) {
   const interestNote = ahead.hasInterest && ahead.total.interest !== 0 ? `, with ${formatMoney(ahead.total.interest)} in interest by then` : "";
   const highlight = { text: `In Bank is ${formatMoney(inBank)} today, and the lowest it gets is ${formatMoney(lowest.amount)} on ${showDay(lowest.date)}. On ${showDate(day)}, In Bank will be ${formatMoney(ahead.rows[0].then)} and the Total ${formatMoney(ahead.total.then)}${interestNote}.`, warn: lowest.amount < 0 || ahead.rows[0].then < 0 };
   return { groups, highlight };
+}
+
+// In Bank And Equity's list of what In Bank shows (the same choice as Home's): Default, or one of the Equity accounts. Lowest
+// follows it, here and on Home.
+function shownAccountPicker() {
+  const names = accountRows().map(account => account.name);
+  const select = BudgetUI.selectField({
+    label: "What Lowest counts",
+    options: [{ value: "", label: "In Bank (Default)" }, ...names.map(name => ({ value: name, label: name }))],
+    value: shownAccountName(),
+    hint: "Default is your budget's own account. Pick an Equity account, like another debit card, to see its lowest instead (Home's calendar and Lowest card follow it too)."
+  });
+  BudgetUI.noTranslate(select.input);
+  select.input.addEventListener("change", () => setShownAccount(select.value()));
+  select.el.hidden = names.length === 0;
+  return select.el;
 }
 
 // Data as one card (the Snapshot page's): every group's rows, in order
@@ -685,8 +738,11 @@ function inBankToday() {
   return (spot && readInBank(calendarData[spot.r][spot.c])) ?? 0;
 }
 
-// The lowest In Bank from today through Lowest's last day (Lowest in bank after today), and its day
+// The lowest In Bank from today through Lowest's last day (Lowest in bank after today), and its day. With an Equity account
+// picked for In Bank (on Home, or over In Bank And Equity here: SHOWN ACCOUNT in Process Budget.js), that account's.
 function lowestAhead() {
+  const shown = shownLowest();
+  if (shown) return shown;
   let lowest = null;
   const consider = (date, amount) => {
     if (amount !== null && (!lowest || amount < lowest.amount)) lowest = { amount, date };
@@ -2026,19 +2082,20 @@ const wavelengthsGraph = () => LineGraph.create({
 
 // What each wavelength cost each week from first through until: a line for each wavelength, in their order ({ id, name, points })
 function wavelengthWeekLines(first, until) {
-  const weeks = []; // For each week: titleKey -> { total, purpose }
+  const weeks = []; // For each week: titleKey and wavelength -> { total, purpose }
   eachEntryBetween(first, until, (date, text) => {
     const line = readLine(text);
     if (line.blank || line.system || !line.title || line.amount === 0) return;
     const key = titleKey(line.title);
     if (!key) return;
+    const purpose = entryWavelength(date, line.title, line.sprite);
     const week = Math.floor(getDayDifference(date, first) / 7);
     weeks[week] = weeks[week] || new Map();
-    const known = weeks[week].get(key) || { total: 0, purpose: purposeOf(line.title) };
+    const known = weeks[week].get(`${key}|${purpose}`) || { total: 0, purpose };
     known.total += line.amount;
-    weeks[week].set(key, known);
+    weeks[week].set(`${key}|${purpose}`, known);
   });
-  return wavelengthList().map(wave => ({
+  return [...wavelengthList(), { id: "none", name: "Undefined" }].map(wave => ({
     id: wave.id,
     name: wave.name,
     points: weeklyPoints(weeks.flatMap((titles, week) => (titles ? [{ date: addDays(first, week * 7), amount: [...titles.values()].reduce((sum, item) => (item.purpose === wave.id && item.total < 0 ? sum + item.total : sum), 0) }] : [])), first, until)
@@ -2627,6 +2684,8 @@ function openGoalPanel(origin, index = null, link = {}) {
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: removeIt }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Goal", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
+      // A goal that's saved has Make A Gem: an Accrual Calculator gem from what the window says now
+      if (existing) buttons.splice(buttons.length - 1, 0, { label: "Make A Gem", onClick: (event) => gemFromGoal(event.currentTarget) });
       form.append(...(existing ? [] : [intro]), title.el, ...(gemPick ? [gemPick.el, follows] : []), targetField, amount.el, date.el, plan.el, BudgetUI.buttonRow(buttons));
 
       form.addEventListener("submit", (event) => {
@@ -2654,6 +2713,45 @@ function openGoalPanel(origin, index = null, link = {}) {
       function removeIt() {
         if (!window.confirm(`Delete the goal ${goalName(existing)}?`)) return;
         BudgetUI.submit(panel, () => deleteGoal(index));
+      }
+
+      // A gem from the goal as the window has it: what it's for (In Bank or its Equity account, or the Total's balance today,
+      // typed in), its amount (a goal of $0.00 for money owed pays it off; anything else is a Goal amount to reach), and How
+      // You'll Get There's amount each time and how often, when it's every month, 2 weeks, or week (the calculator's own)
+      async function gemFromGoal(button) {
+        panel.setError("");
+        if (gemPick?.input.value) return panel.setError("This goal follows a gem already: change that one in the Accrual Calculator.");
+        const { percent, error } = BudgetUI.readPercentField(amount);
+        if (error) return panel.setError(error);
+        const [kind, ...name] = target.value().split(":");
+        const goal = { kind, account: name.join(":") };
+        const goalAmount = percent !== null ? Math.round((goalBalance(goal) ?? 0) * percent) / 100 : amount.value() ?? 0;
+        if (Number.isNaN(goalAmount)) return panel.setError("Enter the amount, like 2000.00.");
+        const values = {};
+        const holds = goalBalance(goal) ?? 0;
+        const owed = holds < 0 && goalAmount === 0;
+        values.kind = owed ? "owed" : "saved";
+        if (kind === "inBank") values.inBank = 1;
+        else if (kind === "account") values.account = goal.account;
+        else if (owed) values.owed = Math.abs(holds);
+        else values.balance = Math.max(0, holds);
+        if (!owed && goalAmount > 0) values.target = goalAmount;
+        const steps = plan.value();
+        const often = steps?.frequency ? parseFrequency(steps.frequency) : null;
+        const frequency = !often || often.count !== 1 && !(often.unit === "weeks" && often.count === 2) ? null
+          : often.unit === "months" ? "monthly" : often.unit === "weeks" ? (often.count === 2 ? "biweekly" : "weekly") : null;
+        if (steps?.each && frequency) {
+          values.payment = steps.each;
+          values.frequency = frequency;
+        }
+        const gemName = (title.value() || goalTarget({ kind, account: goal.account }) || "Goal").slice(0, 40);
+        button.disabled = true;
+        const result = await saveCalculatorPresets("gems", [...calculatorStore("gems"), { name: gemName, values }]);
+        button.disabled = false;
+        if (!result.ok) return panel.setError(result.message || "Couldn't make the gem. Please try again.");
+        BudgetUI.warnIfUnsaved(result);
+        panel.close();
+        BudgetUI.showToast(`Made the gem ${gemName}: it's in the Accrual Calculator (Menu). To have this goal follow it, open the goal and pick it under Gem.`);
       }
     }
   });
@@ -2887,25 +2985,106 @@ function setupPurposesCard(card) {
   return controls;
 }
 
-// The spectrum (or a note while nothing in these days is on a wavelength) and what isn't on one yet, and the highlight:
-// each wavelength's share
+const WAVE_GOAL_WARN = 0.85; // How much of a wavelength's goal is used when it needs a look
+
+// The spectrum (or a note while nothing in these days was spent), what's Undefined yet, each goal and how much of it is
+// used, and the highlight: each wavelength's share, or a heads-up for any goal at least WAVE_GOAL_WARN used
 function renderPurposesCard(card) {
   const totals = purposeTotals(purposeRange.from, purposeRange.to);
   const sum = totals.slices.reduce((all, slice) => all + slice.total, 0);
   const parts = [];
   if (sum > 0) parts.push(wavelengthSpectrum(totals, sum));
-  else parts.push(BudgetUI.element("p", "panelHint", "Nothing on a wavelength in these days yet. Pick one at the bottom of an entry's form (tap an entry on a zoomed day, or add a new one), or give titles one below."));
+  else parts.push(BudgetUI.element("p", "panelHint", "Nothing spent in these days yet. Pick a wavelength at the bottom of an entry's form (tap an entry on a zoomed day, or add a new one), or give titles one below."));
   if (totals.none > 0) {
-    const unsorted = BudgetUI.element("button", "budgetButton purposeUnsorted", `${formatMoney(totals.none)} isn't on a wavelength yet ›`);
+    const unsorted = BudgetUI.element("button", "budgetButton purposeUnsorted", `${formatMoney(totals.none)} is Undefined ›`);
     unsorted.type = "button";
     unsorted.addEventListener("click", () => openUnsortedWindow(unsorted));
     parts.push(unsorted);
   }
+  const goals = waveGoalStatus();
+  if (goals.length > 0) parts.push(waveGoalList(goals));
   card.results.replaceChildren(...parts);
+  const near = goals.filter(goal => goal.share >= WAVE_GOAL_WARN);
+  if (near.length > 0) {
+    // (A % goal with no Regular gains in its days comes to $0.00, so anything spent is past it)
+    const words = near.map(goal => (Number.isFinite(goal.share)
+      ? `${goal.name} has used ${Math.round(goal.share * 100)}% of its goal (${formatMoney(goal.used)} of ${formatMoney(goal.limit)} ${goalWindowWords(goal.goal)})`
+      : `${goal.name} is past its goal (${formatMoney(goal.used)} ${goalWindowWords(goal.goal)}, with no Regular gains then, so its ${goal.goal.percent}% of them is $0.00)`));
+    return { text: `Heads up: ${words.join("; ")}.`, warn: true };
+  }
   const days = `from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}`;
-  if (sum === 0) return { text: `Nothing on a wavelength ${days} yet.`, warn: false };
+  if (sum === 0) return { text: `Nothing spent ${days} yet.`, warn: false };
   const shares = totals.slices.filter(slice => slice.total > 0).map(slice => `${slice.name} ${sharePercent(slice.total, sum)}%`);
   return { text: `${shares.join(", ")} ${days}.`, warn: false };
+}
+
+// The days a goal counts: the last `count` days, weeks, or months, through today
+function goalWindowStart(goal) {
+  if (goal.unit === "months") return addDays(addMonths(today, -goal.count), 1);
+  return addDays(today, -(goal.count * (goal.unit === "weeks" ? 7 : 1) - 1));
+}
+
+// "in the last 2 weeks", "today", "in the last month"
+function goalWindowWords(goal) {
+  if (goal.count === 1 && goal.unit === "days") return "today";
+  const unit = goal.count === 1 ? goal.unit.slice(0, -1) : `${goal.count} ${goal.unit}`;
+  return `in the last ${unit}`;
+}
+
+// "$300.00 per 2 weeks", "20% of gains per month"
+function goalWords(goal) {
+  const per = goal.count === 1 ? goal.unit.slice(0, -1) : `${goal.count} ${goal.unit}`;
+  return `${goal.percent !== undefined ? `${goal.percent}% of gains` : formatMoney(goal.amount)} per ${per}`;
+}
+
+// Each wavelength with a goal (Undefined's too), and how much of it is used: [{ id, name, goal, used (what its entries cost
+// in the goal's days), limit (its amount, or its percent of what Regular gains came to in those days), share (used over
+// limit) }], in the wavelengths' order
+function waveGoalStatus() {
+  const goals = waveGoals();
+  const waves = [...wavelengthList(), { id: "none", name: "Undefined" }];
+  const status = [];
+  for (const wave of waves) {
+    const goal = goals[wave.id];
+    if (!goal) continue;
+    const from = goalWindowStart(goal);
+    const totals = purposeTotals(from, today);
+    const used = wave.id === "none" ? totals.none : totals.slices.find(slice => slice.key === wave.id)?.total ?? 0;
+    let limit = goal.amount;
+    if (goal.percent !== undefined) {
+      let gains = 0;
+      eachEntryBetween(from, today, (date, text) => {
+        const line = readLine(text);
+        if (!line.blank && !line.system && line.amount > 0 && getSpecialType(line.sprite) === "❗️") gains += line.amount;
+      });
+      limit = Math.round(gains * goal.percent) / 100;
+    }
+    const share = limit > 0 ? used / limit : used > 0 ? Infinity : 0;
+    status.push({ id: wave.id, name: wave.name, goal, used, limit, share });
+  }
+  return status;
+}
+
+// Each goal, with a bar for how much of it is used (orange once it's WAVE_GOAL_WARN used, red past it)
+function waveGoalList(goals) {
+  const box = BudgetUI.element("div", "waveGoals");
+  box.append(BudgetUI.element("p", "waveGoalsTitle", "Goals"));
+  const list = BudgetUI.element("ul", "goalList waveGoalList");
+  for (const goal of goals) {
+    const item = BudgetUI.element("li", `goalItem${goal.share > 1 ? " isDanger" : goal.share >= WAVE_GOAL_WARN ? " isWarning" : ""}`);
+    const percent = Number.isFinite(goal.share) ? Math.round(goal.share * 100) : 100;
+    const top = BudgetUI.element("span", "goalTop");
+    top.append(BudgetUI.noTranslate(BudgetUI.element("span", "goalName", goal.name)), BudgetUI.element("span", "goalAmount", `${percent}% used`));
+    const bar = BudgetUI.element("span", "goalBar");
+    const fill = BudgetUI.element("span", "goalFill");
+    fill.style.width = `${Math.min(100, percent)}%`;
+    bar.append(fill);
+    const status = BudgetUI.element("span", "goalStatus", `${formatMoney(goal.used)} of ${formatMoney(goal.limit)} ${goalWindowWords(goal.goal)} (${goalWords(goal.goal)})`);
+    item.append(top, bar, status);
+    list.append(item);
+  }
+  box.append(list);
+  return box;
 }
 
 // A part's share of the whole, as a whole number of percent
@@ -2913,25 +3092,30 @@ function sharePercent(part, whole) {
   return whole > 0 ? Math.round(part / whole * 100) : 0;
 }
 
-// What each wavelength's titles cost from `from` through `to`: { slices: [{ key (its id), name, color, total, titles:
-// [{ title, total, count }] biggest first }] (in the wavelengths' order), none (what titles on no wavelength cost),
-// unsorted: [{ title, total, count }] }. A title counts by what its entries come to together (a refund takes off what
-// it cost), when that's a cost.
+const UNDEFINED_COLOR = "hsl(230, 12%, 62%)"; // Undefined's color, on the spectrum and in the Wavelengths window
+
+// What each wavelength's entries cost from `from` through `to`: { slices: [{ key (its id; "none" for Undefined), name,
+// color, total, titles: [{ title, total, count }] biggest first }] (in the wavelengths' order, then Undefined), none (what
+// Undefined's came to), unsorted (Undefined's titles): [{ title, total, count }] }. Each entry is on its own wavelength
+// (see entryWavelength in Process Budget.js), and a title's entries on one wavelength count by what they come to together
+// (a refund takes off what it cost), when that's a cost.
 function purposeTotals(from, to) {
-  const byTitle = new Map(); // titleKey -> { title, total, count }
+  const byTitle = new Map(); // titleKey and wavelength -> { title, total, count, purpose }
   eachEntryBetween(from, to, (date, text) => {
     const line = readLine(text);
     if (line.blank || line.system || !line.title || line.amount === 0) return;
     const key = titleKey(line.title);
     if (!key) return;
+    const purpose = entryWavelength(date, line.title, line.sprite);
     const { title, account } = splitAccount(line.title);
-    const known = byTitle.get(key) || { title: capitalize(title || account), total: 0, count: 0, purpose: purposeOf(line.title) };
+    const known = byTitle.get(`${key}|${purpose}`) || { title: capitalize(title || account), total: 0, count: 0, purpose };
     known.total += line.amount;
     known.count++;
-    byTitle.set(key, known);
+    byTitle.set(`${key}|${purpose}`, known);
   });
   const waves = wavelengthList();
   const slices = waves.map((wave, index) => ({ key: wave.id, name: wave.name, color: wavelengthColor(index, waves.length), total: 0, titles: [] }));
+  const undefinedSlice = { key: "none", name: "Undefined", color: UNDEFINED_COLOR, total: 0, titles: [] };
   const unsorted = [];
   for (const item of byTitle.values()) {
     if (item.total >= -0.005) continue;
@@ -2942,8 +3126,11 @@ function purposeTotals(from, to) {
       slice.titles.push(entry);
     } else {
       unsorted.push(entry);
+      undefinedSlice.total += entry.total;
+      undefinedSlice.titles.push(entry);
     }
   }
+  slices.push(undefinedSlice);
   for (const slice of slices) {
     slice.total = Math.round(slice.total * 100) / 100;
     slice.titles.sort((a, b) => b.total - a.total);
@@ -3207,7 +3394,7 @@ function openUnsortedWindow(origin) {
   openWindow({
     origin,
     size: "large",
-    title: "Not On A Wavelength Yet",
+    title: "Undefined",
     build(form, panel) {
       const summary = BudgetUI.element("p", "panelText");
       const list = BudgetUI.element("ul", "purposeTitles");
@@ -3222,8 +3409,8 @@ function openUnsortedWindow(origin) {
       const draw = () => {
         const totals = purposeTotals(purposeRange.from, purposeRange.to);
         summary.textContent = totals.unsorted.length > 0
-          ? `What these titles cost from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}. Tap a wavelength under a title to put it on that one (every entry with that title gets it), then go on to the next.`
-          : "Every title in these days is on a wavelength.";
+          ? `What these titles' Undefined entries cost from ${showDate(purposeRange.from)} to ${showDate(purposeRange.to)}. Tap a wavelength under a title to put the title on it (Per Title: every entry with that title, except one with a wavelength of its own), then go on to the next.`
+          : "Every entry in these days is on a wavelength.";
         list.replaceChildren(...totals.unsorted.map(title => {
           const item = BudgetUI.element("li", "purposeTitle hasChoices");
           const words = BudgetUI.element("span", "purposeTitleText");
@@ -3258,16 +3445,67 @@ function openUnsortedWindow(origin) {
   });
 }
 
+// A wavelength's goal boxes: how much (an amount, or a percent with %: of what Regular gains come to), per how many days,
+// weeks, or months. { el, value() (a goal, null for none, or undefined when it can't be read) }
+function waveGoalFields(goal, name) {
+  const box = BudgetUI.element("div", "waveGoalRow");
+  const amount = BudgetUI.element("input", "textInput waveGoalAmount");
+  amount.type = "text";
+  amount.inputMode = "decimal";
+  amount.placeholder = "Goal: $ or %";
+  amount.value = goal ? (goal.percent !== undefined ? `${goal.percent}%` : goal.amount.toFixed(2)) : "";
+  amount.setAttribute("aria-label", `${name}'s goal: an amount, or a percent of gains (like 20%)`);
+  const count = BudgetUI.element("input", "frequencyCount waveGoalCount");
+  count.type = "text";
+  count.inputMode = "numeric";
+  count.maxLength = 3;
+  count.value = String(goal ? goal.count : 1);
+  count.setAttribute("aria-label", `${name}'s goal: per how many`);
+  const unit = BudgetUI.element("select", "selectInput waveGoalUnit");
+  unit.append(new Option("Days", "days"), new Option("Weeks", "weeks"), new Option("Months", "months"));
+  unit.value = goal ? goal.unit : "months";
+  unit.setAttribute("aria-label", `${name}'s goal: days, weeks, or months`);
+  box.append(amount, BudgetUI.element("span", "waveGoalPer", "per"), count, unit);
+  return {
+    el: box,
+    value() {
+      const text = amount.value.trim();
+      if (!text) return null;
+      const number = readMoneyInput(text.replace(/%/g, ""));
+      const per = Number(count.value.trim());
+      if (!Number.isFinite(number) || number <= 0 || !Number.isInteger(per) || per < 1 || per > 366) return undefined;
+      return text.includes("%") ? (number <= 100 ? { percent: number, count: per, unit: unit.value } : undefined) : { amount: number, count: per, unit: unit.value };
+    }
+  };
+}
+
+// The Wavelengths window's Goals line, with a ? saying what a goal can do: hold spending down on something, like fast food
+// or gambling
+function goalsTip() {
+  const field = BudgetUI.field("Goals", BudgetUI.element("p", "panelHint", "A goal keeps a wavelength's spending in check."));
+  const help = BudgetUI.element("div", "");
+  help.append(
+    BudgetUI.element("p", "", "A wavelength with a goal can hold back spending you want less of, like fast food or gambling."),
+    BudgetUI.element("p", "", "Add a wavelength for it (like Fast Food), put those entries on it (or their titles, with Per Title), and give it a goal, like 40 per 1 week, or 5% of your Regular gains per 1 month."),
+    BudgetUI.element("p", "", `Wavelength Planning shows how much of the goal is used, and with its Warnings on, Bob says so on Home once it's ${Math.round(WAVE_GOAL_WARN * 100)}% used.`)
+  );
+  BudgetUI.addFieldHelp(field, "What a wavelength's goal can do", help);
+  return field;
+}
+
 // Wavelengths: each one's name, in order from the longest wavelength (red) to the shortest (violet), each moved up or
-// down, or taken out, and new ones added (1 to MAX_WAVELENGTHS). Saved together (saveWavelengths in Process Budget.js);
-// taking out one that titles are on asks first, since they won't have one after.
+// down, or taken out, and new ones added (1 to MAX_WAVELENGTHS), each with its goal; then Undefined, always last, which
+// can't be renamed or taken out but can have a goal. Saved together (saveWavelengths in Process Budget.js); taking out one
+// that titles are on asks first, since they won't have one after.
 function openWavelengthsWindow(origin) {
   openWindow({
     origin,
     size: "large",
     title: "Wavelengths",
     build(form, panel) {
-      const rows = wavelengthList().map(wave => ({ id: wave.id, name: wave.name }));
+      const goals = waveGoals();
+      const rows = wavelengthList().map(wave => ({ id: wave.id, name: wave.name, goal: goals[wave.id] || null }));
+      const undefinedGoal = waveGoalFields(goals.none || null, "Undefined");
       const onIt = (id) => Object.values(accountsData?.bob?.purposes || {}).filter(purpose => purpose === id).length;
       const list = BudgetUI.element("ol", "wavelengthEditor");
       const add = BudgetUI.element("button", "budgetButton primary wavelengthAdd", "Add A Wavelength");
@@ -3305,9 +3543,20 @@ function openWavelengthsWindow(origin) {
             rows.splice(at, 1);
             draw();
           });
-          item.append(swatch, BudgetUI.noTranslate(input), move(-1, "↑", "Move up"), move(1, "↓", "Move down"), remove);
+          // (Its goal, kept as it's typed while the rows move)
+          const goal = waveGoalFields(row.goal, row.name || `Wavelength ${at + 1}`);
+          row.read = goal.value;
+          goal.el.addEventListener("input", () => { row.goal = goal.value() || null; });
+          goal.el.addEventListener("change", () => { row.goal = goal.value() || null; });
+          item.append(swatch, BudgetUI.noTranslate(input), move(-1, "↑", "Move up"), move(1, "↓", "Move down"), remove, goal.el);
           return item;
         }));
+        // Undefined, always last
+        const fixed = BudgetUI.element("li", "wavelengthRow isUndefined");
+        const swatch = BudgetUI.element("span", "purposeSwatch");
+        swatch.style.background = UNDEFINED_COLOR;
+        fixed.append(swatch, BudgetUI.element("span", "wavelengthFixedName", "Undefined"), BudgetUI.element("span", "panelHint wavelengthFixedNote", "Every entry not on another wavelength. It's always here."), undefinedGoal.el);
+        list.append(fixed);
         add.disabled = rows.length >= MAX_WAVELENGTHS;
         if (focusAt >= 0) list.querySelectorAll("input")[focusAt]?.focus();
       };
@@ -3316,7 +3565,8 @@ function openWavelengthsWindow(origin) {
         draw(rows.length - 1);
       });
       form.append(
-        BudgetUI.element("p", "panelText", `These are yours to change. Tap Add A Wavelength to make your own, type over a name to rename it, use the arrows to put them in order (the first is the longest wavelength, red, and the last the shortest, violet), or × to take one out. You can have from 1 to ${MAX_WAVELENGTHS}, and every entry form's buttons follow them.`),
+        BudgetUI.element("p", "panelText", `These are yours to change. Tap Add A Wavelength to make your own, type over a name to rename it, use the arrows to put them in order (the first is the longest wavelength, red, and the last the shortest, violet), or × to take one out. You can have from 1 to ${MAX_WAVELENGTHS}, plus Undefined, and every entry form's buttons follow them. Each can have a goal: an amount (like 300) or a percent of what your Regular gains come to (like 20%), per a number of days, weeks, or months. Bob warns you once one is ${Math.round(WAVE_GOAL_WARN * 100)}% used.`),
+        goalsTip(),
         add,
         list,
         BudgetUI.buttonRow([
@@ -3326,7 +3576,10 @@ function openWavelengthsWindow(origin) {
       );
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        BudgetUI.submit(panel, () => saveWavelengths(rows.map(row => ({ id: row.id, name: row.name }))));
+        const read = rows.map(row => (row.read ? row.read() : row.goal));
+        const noneGoal = undefinedGoal.value();
+        if (read.includes(undefined) || noneGoal === undefined) return panel.setError("A goal needs an amount (or a percent up to 100%, like 20%), and how many days, weeks, or months (1 to 366).");
+        BudgetUI.submit(panel, () => saveWavelengths(rows.map((row, at) => ({ id: row.id, name: row.name, goal: read[at] })), noneGoal));
       });
       draw();
     }
@@ -3373,6 +3626,21 @@ function renderPaydayCard(card, shared) {
     text = `No paycheck lands in the next ${PAYDAY_LOOK} days. Bob counts a Regular gain from a recurring entry or a connected spreadsheet as a paycheck.`;
   }
   showTip(card, text, { label: "See paydays", open: (origin) => openPaydaysWindow(origin, shared.spending(), payday) });
+  return { text, warn };
+}
+
+// Business (Business Mode): this year's revenue, expenses, and profit so far, and this month's profit next to last month's,
+// with a heads-up when the year's profit is below $0
+function renderBusinessCard(card) {
+  const year = businessFigures(new Date(today.getFullYear(), 0, 1), today);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const month = businessFigures(monthStart, today);
+  const lastMonth = businessFigures(addMonths(monthStart, -1), addDays(monthStart, -1));
+  const warn = year.profit < 0;
+  const text = `So far this year: ${formatMoney(year.revenue)} in revenue, ${formatMoney(year.expenses)} in expenses, ${warn ? "a loss of" : "and"} ${formatMoney(warn ? -year.profit : year.profit)}${warn ? "" : " in profit"}. This month's profit so far is ${formatMoney(month.profit)}, and last month's was ${formatMoney(lastMonth.profit)}.`;
+  const more = BudgetUI.element("a", "budgetButton tipMore", "Go To Business ›");
+  more.href = "/menu/business.html";
+  card.results.replaceChildren(BudgetUI.element("p", "bobTip", text), more);
   return { text, warn };
 }
 

@@ -24,9 +24,10 @@ async function showBudgets() {
   if (location.hash === "#budgets") document.getElementById("budgets").scrollIntoView();
 }
 
-// The Calendar Fractals card, once the calendar is in
+// The Calendar Fractals card, once the calendar is in, and the budget too (Holidays, linked fractals, and their order are
+// kept with the budget: drawn before it's in, the card would leave them out)
 async function showFractals() {
-  await window.Fractals.load();
+  await Promise.all([window.Fractals.load(), window.workspaceReady]);
   window.Fractals.renderManager(document.getElementById("fractalManager"));
   document.getElementById("newFractalButton").addEventListener("click", (event) => window.Fractals.openFractal(event.currentTarget, null));
   document.getElementById("fractals").hidden = false;

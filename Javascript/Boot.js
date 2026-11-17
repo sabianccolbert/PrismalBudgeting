@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.16.2026.A";
+  const SITE_VERSION = "11.17.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,33 +26,34 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "7eb207aa4b",
-    "/Javascript/Budget Pages.js": "f2569ca55f",
+    "/Javascript/Bob Page.js": "edb63d906a",
+    "/Javascript/Budget Pages.js": "0aedf43f05",
     "/Javascript/Budget Search.js": "7fd273fe6b",
-    "/Javascript/Budget UI.js": "b6bf5a3ec5",
-    "/Javascript/Budgets.js": "48b18d72a5",
-    "/Javascript/Calendar Page.js": "00e330d00b",
-    "/Javascript/Calendars Page.js": "ff5890f7c3",
-    "/Javascript/Calendars.js": "8531637a8e",
-    "/Javascript/Dates.js": "331a3e1cb1",
+    "/Javascript/Budget UI.js": "deed9a9312",
+    "/Javascript/Budgets.js": "6535bf5dc1",
+    "/Javascript/Calendar Page.js": "a3f7533ce5",
+    "/Javascript/Calendars Page.js": "8d5d96f09e",
+    "/Javascript/Calendars.js": "db5ad9f022",
+    "/Javascript/Dates.js": "328ef77813",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "21d5aa1b66",
+    "/Javascript/Fractals.js": "09e3e78840",
+    "/Javascript/Holidays.js": "b6e37a8816",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "fe4ae883c4",
+    "/Javascript/Layout.js": "1be2ad1eaa",
     "/Javascript/Line Graph.js": "3a2585001d",
     "/Javascript/Login.js": "5869bb48e7",
-    "/Javascript/Notifications.js": "08aab68469",
+    "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "99c4600273",
-    "/Javascript/Quick Calendar.js": "26d1f9f6a8",
-    "/Javascript/Quick Entry.js": "1cdf60bd5c",
+    "/Javascript/Process Budget.js": "b373499218",
+    "/Javascript/Quick Calendar.js": "815345e6f4",
+    "/Javascript/Quick Entry.js": "3b2714f488",
     "/Javascript/Quick Icon.js": "944d097f5a",
     "/Javascript/Session.js": "2ba7a04b3e",
-    "/Javascript/Settings Page.js": "c21c43059b",
-    "/Javascript/Snapshot Page.js": "0d50568752",
-    "/Javascript/Sounds.js": "dc92737a93",
-    "/Javascript/Spreadsheets Page.js": "cc69112cb2",
-    "/Javascript/Spreadsheets.js": "fd11909f30",
+    "/Javascript/Settings Page.js": "ac368525ea",
+    "/Javascript/Snapshot Page.js": "8cc96465ad",
+    "/Javascript/Sounds.js": "21207f2cfd",
+    "/Javascript/Spreadsheets Page.js": "5e1b61db41",
+    "/Javascript/Spreadsheets.js": "008d184ec1",
     "/Javascript/Sprites.js": "c6c86160d9",
     "/Javascript/Starfield Setup.js": "e86b316303",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
@@ -78,7 +79,7 @@
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",
     "/Resources/Star.webp": "f2d3021d0b",
-    "/themes.css": "ae228a8c81"
+    "/themes.css": "33f6b67192"
   };
   // </stamp:files>
 
@@ -116,6 +117,7 @@
     if (p === "/menu/calculator") return "calculator";
     if (p === "/menu/payments") return "payments";
     if (p === "/menu/logs") return "logs";
+    if (p === "/menu/business") return "business";
     if (p === "/menu/bob") return "bob";
 
     return "generic";
@@ -676,6 +678,8 @@
   try { navigationType = performance.getEntriesByType("navigation")[0].type; } catch (e) {}
   const slideClass = slide && slide.page === PAGE && navigationType === "navigate" && Math.abs(Date.now() - slide.at) < 30000 && SLIDE_CLASSES[slide.way];
   if (slideClass && (slideClass !== "tabSlide" || (TAB_PAGES.includes(PAGE) && !FRONT_PAGE))) document.documentElement.classList.add(slideClass);
+  // On the budget's four pages, the top card slides in first and the cards under it follow (stylesheet.css section 10)
+  if (TAB_PAGES.includes(PAGE) && !FRONT_PAGE && !window.lessMotion()) document.documentElement.classList.add("cardsFollow");
 
   /* ===============================
    *  6) Append page scripts at END
@@ -695,7 +699,7 @@
 
   // Quick Budget and Quick Calendar borrow the budget helpers and forms without loading a budget (see Quick Entry.js
   // and Quick Calendar.js)
-  const BUDGET_PAGES = ["home", "recurring", "accounts", "spreadsheets", "calculator", "payments", "logs", "bob", "settings", "snapshot", "quick", "quickcal"];
+  const BUDGET_PAGES = ["home", "recurring", "accounts", "spreadsheets", "calculator", "payments", "logs", "business", "bob", "settings", "snapshot", "quick", "quickcal"];
 
   // The script that draws each budget page (the menu data pages share Budget Pages.js)
   const PAGE_SCRIPTS = {
@@ -757,13 +761,15 @@
       if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Calendars.js");
       // Search (Home's): before the page script, which opens it
       if (page === "home") scripts.push("/Javascript/Budget Search.js");
+      // The Holidays fractal's days, where linked fractals show (before Fractals.js, which shows them)
+      if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Holidays.js");
       // The calendar (Calendar Fractals and their entries): Home shows it, the Budgets, Calendars & Spreadsheets page
       // manages it, Settings has its links, the Quick Calendar page is it, and Snapshot can show its entries
       if (page === "home" || page === "spreadsheets" || page === "settings" || page === "quickcal" || page === "snapshot") scripts.push("/Javascript/Fractals.js");
       // Home screen icons' looks: the Customize window when Home or Snapshot makes one, and on each icon's own page
       if (page === "home" || page === "quick" || page === "quickcal" || page === "snapshot") scripts.push("/Javascript/Quick Icon.js");
       // The line graphs (Bob's page, the Accrual Calculator, and Snapshot)
-      if (page === "bob" || page === "payments" || page === "snapshot") scripts.push("/Javascript/Line Graph.js");
+      if (page === "bob" || page === "payments" || page === "calculator" || page === "snapshot") scripts.push("/Javascript/Line Graph.js");
       // Push notifications on this device: Settings turns them on and off, and Home asks once after a sign-in
       if (page === "home" || page === "settings") scripts.push("/Javascript/Notifications.js");
       // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings), and his page borrows the menu data

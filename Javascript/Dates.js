@@ -140,6 +140,34 @@ function datePattern() {
   return DATE_FORMATS[dateFormat()].pattern;
 }
 
+// Times of day: 12-hour (1:00 PM) or 24-hour (13:00), as picked in Settings on this device, or the device's own
+const TIME_FORMAT_KEY = "prismal_time_format"; // This device's pick ("12" or "24"); none = its own
+
+let deviceTwelve = null; // (Worked out once a page: every time on the calendar asks)
+
+// Does the device itself show times as 1:00 PM (not 13:00)?
+function deviceTwelveHour() {
+  if (deviceTwelve === null) {
+    try { deviceTwelve = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12 !== false; } catch (e) { deviceTwelve = true; }
+  }
+  return deviceTwelve;
+}
+
+// Are times shown as 1:00 PM here (the pick, or the device's own)?
+function twelveHourClock() {
+  let picked = null;
+  try { picked = localStorage.getItem(TIME_FORMAT_KEY); } catch (e) {}
+  return picked === "12" ? true : picked === "24" ? false : deviceTwelveHour();
+}
+
+// A moment's time of day as people read it: "1:05 PM" or "13:05"
+function showClockTime(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+  const hour = date.getHours();
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return twelveHourClock() ? `${((hour + 11) % 12) + 1}:${minute} ${hour < 12 ? "AM" : "PM"}` : `${String(hour).padStart(2, "0")}:${minute}`;
+}
+
 // A day as people read it: "10/05/2026", "05/10/2026", or "2026-10-05"
 function showDate(date) {
   if (!(date instanceof Date) || isNaN(date.getTime())) return "";

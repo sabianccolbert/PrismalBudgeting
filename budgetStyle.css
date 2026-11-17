@@ -451,6 +451,13 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   box-sizing: border-box;
 }
 
+/* A phone's zoomed day: its date is on the buttons' line, as tall as they are and as far from the day's top, so its middle
+   is theirs (the day's lines start 4px * --zoomText down: the date comes up the rest of the way) */
+.elastic-table td.is-fullZoom.is-editing:not(.cellViewOwnRow) .cell-content > .lineDate {
+  margin-top: calc(var(--DAY_BUTTON_INSET) - 4px * var(--zoomText, 1));
+  line-height: var(--DAY_BUTTON_SPOT);
+}
+
 /*========================================*
  *  MENU DATA PAGES (Recurring, History, Tracker, ...)
  *========================================*
@@ -923,6 +930,84 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   background: rgba(90, 40, 0, 0.5);
 }
 
+/* A change another device made since the Change Logs were last looked at here (Budget Pages.js logRow): a glow down its
+   left edge, and "New" over its time */
+.logsTable tr.unseenRow td {
+  background: rgba(var(--GLOW_RGB), 0.16);
+}
+
+.logsTable tr.unseenRow td:first-child {
+  box-shadow: inset 4px 0 0 var(--GLOW_EDGE);
+}
+
+.logsTable .logNew {
+  display: inline-block;
+  padding: 0 0.4em;
+  font-size: 0.8em;
+  font-weight: bold;
+  color: var(--TEXT_BRIGHT);
+  background: rgba(var(--GLOW_RGB), 0.45);
+  border-radius: 6px;
+}
+
+/* A change's window (Budget Pages.js openLogWindow): its details, then each place it changed, with what was taken off and
+   put on, and a button to go there */
+.logFacts {
+  margin: 0 0 0.8em;
+  padding: 0;
+  list-style: none;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.logChange {
+  margin: 0 0 0.8em;
+  padding: 0.6em 0.8em;
+  background: rgba(var(--INSET_RGB), 0.35);
+  border: 1px solid var(--PANEL_LINE);
+  border-radius: 10px;
+}
+
+.logChangeTitle {
+  margin: 0 0 0.35em;
+  font-size: 1em;
+  font-weight: bold;
+}
+
+.logChangeLines {
+  margin: 0 0 0.5em;
+  padding: 0;
+  list-style: none;
+}
+
+.logLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5em;
+  padding: 0.15em 0;
+  overflow-wrap: anywhere;
+}
+
+.logLineMark {
+  flex-shrink: 0;
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+.logLine.isAdded .logLineText {
+  color: var(--POSITIVE_TEXT);
+}
+
+.logLine.isRemoved .logLineText {
+  color: var(--TEXT_DIM);
+  text-decoration: line-through;
+}
+
+.logGo {
+  display: inline-block;
+  text-decoration: none;
+}
+
 /*========================================*
  *  ENTRY LINES (calendar, history, panels)
  *========================================*/
@@ -972,12 +1057,11 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 }
 
 .lineEntry.isZero,
-.upcomingEntry.isZero,
 .accountEntryLine.isZero {
   color: var(--ZERO_TEXT);
 }
 
-/* An entry with a note is underlined wherever it shows: on a day, in Upcoming, Search, an account's entries, Quick
+/* An entry with a note is underlined wherever it shows: on a day, Search, an account's entries, Quick
    Entry's waiting entries, and a recurring entry's title when it has a note of its own (the note is in its options).
    The line stays close under the text: lines that cut off with "..." would cut off one further down. */
 .hasNote {
@@ -2384,13 +2468,13 @@ button.dropdownBox:focus-visible {
  *  HOME: LOWEST IN BANK, BOB, AND UPCOMING
  *========================================*/
 
-/* Lowest across the top; Bob and Upcoming side by side under it (one column on phones) */
+/* Lowest across the top, and Bob under it */
 .infoRow {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    "lowest lowest"
-    "bob upcoming";
+    "lowest"
+    "bob";
   gap: clamp(8px, 1.6vw, 18px);
   width: var(--PAGE_WIDTH);
   margin: 0 auto clamp(10px, 2.2vmin, 22px);
@@ -2529,10 +2613,6 @@ button.dropdownBox:focus-visible {
   box-shadow: var(--GLOW_SHADOW);
 }
 
-.upcomingCard {
-  grid-area: upcoming;
-}
-
 /* Bob's picture, in a circle (it shows his name if it can't load), on Home and at the top of his page */
 .bobImage {
   flex-shrink: 0;
@@ -2611,11 +2691,9 @@ button.dropdownBox:focus-visible {
   margin: 0.4em 0 0;
 }
 
-/* With his card over the calendar, Upcoming takes its place's room too */
+/* With his card over the calendar, Lowest is the row */
 .infoRow.bobAway {
-  grid-template-areas:
-    "lowest lowest"
-    "upcoming upcoming";
+  grid-template-areas: "lowest";
 }
 
 /* Goals, on Bob's page (Bob Page.js renderGoalsCard): each one a button that opens it, with a thin bar for how
@@ -2716,44 +2794,6 @@ button.dropdownBox:focus-visible {
   color: #ff9a1a;
 }
 
-.upcomingList {
-  max-height: 9.5em;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-
-.upcomingItem {
-  border-bottom: 1px solid var(--PANEL_LINE);
-}
-
-/* Each upcoming entry is a button that opens its options (Calendar Page.js renderInfoRow) */
-.upcomingItem .upcomingButton {
-  display: flex;
-  gap: 0.6em;
-  width: 100%;
-  margin: 0;
-  padding: 0.25em 0.3em;
-  font: inherit;
-  text-align: left;
-  color: inherit;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  box-shadow: none;
-  cursor: pointer;
-}
-
-.upcomingItem .upcomingButton:hover,
-.upcomingItem .upcomingButton:focus-visible {
-  transform: none;
-  text-shadow: none;
-  outline: none;
-  background: rgba(var(--TINT_RGB), 0.08);
-  box-shadow: none;
-}
-
 /* New Entry: an entry with that title and type already on the day, and whether to add to it or set it */
 .matchBox {
   display: flex;
@@ -2764,15 +2804,6 @@ button.dropdownBox:focus-visible {
 
 .matchNote .lineEntry {
   display: inline;
-}
-
-.upcomingDate {
-  flex-shrink: 0;
-  color: var(--TEXT_DIM);
-}
-
-.upcomingEmpty {
-  opacity: 0.7;
 }
 
 /*========================================*
@@ -2938,21 +2969,6 @@ button.dropdownBox:focus-visible {
   font-size: 1em;
 }
 
-@media (max-width: 700px) {
-  .infoRow {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "lowest"
-      "bob"
-      "upcoming";
-  }
-
-  .infoRow.bobAway {
-    grid-template-areas:
-      "lowest"
-      "upcoming";
-  }
-}
 
 /* Steps for each kind of phone (Layout.js wireDeviceGuide): a list picks the kind, and only its part shows. Without
    JavaScript, every part shows under its own name. */
@@ -3290,10 +3306,22 @@ html.watchView .quickBalanceAmount {
   -webkit-user-select: none;
 }
 
-.prismEditRow.dragging {
+.prismEditRow.dragging,
+.fractalManagerList .budgetItem.dragging {
   border-color: var(--PICK_EDGE);
   box-shadow: 0 0 12px rgba(var(--PICK_RGB), 0.55);
   opacity: 0.85;
+}
+
+/* Calendar Fractals' ≡ (Fractals.js renderManager), at each fractal's left */
+.fractalHandle {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.fractalHandle:focus-visible {
+  outline: 2px solid var(--GLOW_EDGE);
+  border-radius: 6px;
 }
 
 /* New Prism: the form glows, so it's clear it's making a prism, not adding an entry */
@@ -3393,6 +3421,25 @@ html.lessMotion .budgetPanel.prismFlash {
   min-width: 2.6em;
   justify-content: center;
   font-weight: bold;
+}
+
+/* What In Bank shows (Calendar Page.js fillShownAccountPickers): a small list beside Calendar Fractals, and one on the
+   Lowest card, once the budget has an Equity account */
+.calendarShows .shownAccountPick {
+  width: auto;
+  max-width: 12em;
+  min-width: 0;
+  padding: 0.35em 0.6em;
+  font-size: 0.9em;
+}
+
+.lowestAccount {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  margin: 0.15em 0 0.35em;
+  padding: 0.25em 0.5em;
+  font-size: 0.8em;
 }
 
 /* Calendar Fractals: a glass button with a ▾, like the budget picker in the page's header */
@@ -3639,7 +3686,7 @@ button.listDayAdd:focus-visible {
   display: none;
 }
 
-.elastic-table td.is-editing:not(.eventsAsList) .cell-content > .lineEvent {
+.elastic-table td.is-editing:not(.eventsAsList) .cell-content > :is(.lineEvent, .nowLine) {
   display: none;
 }
 
@@ -3673,10 +3720,12 @@ button.listDayAdd:focus-visible {
   zoom: 0.5;
 }
 
+/* The times use the day's left margin for their hours, so the blocks get the room (-4px: the day's padding, .cell-content) */
 .dayTimes {
   align-self: stretch;
   box-sizing: border-box;
   margin-top: 0.2em;
+  margin-left: -4px;
   text-shadow: none;
 }
 
@@ -3685,8 +3734,8 @@ button.listDayAdd:focus-visible {
   margin-bottom: 0.15em;
 }
 
-/* The times: the hours down the left and the blocks beside them. More blocks side by side than fit scroll sideways in
-   here; it's as tall as its hours, so the page scrolls, never the day. */
+/* The times: the hours down the left and the blocks beside them. It's as tall as its hours, so the page scrolls, never
+   the day. */
 .dayTimesScroll {
   overflow-x: auto;
   overflow-y: hidden;
@@ -3706,14 +3755,14 @@ button.listDayAdd:focus-visible {
   left: 0;
   z-index: 3;
   flex: 0 0 auto;
-  width: 3.6em;
+  width: 2.8em;
   background: var(--DAY_SOLID);
 }
 
 /* (Each label sits at its hour in the day's own text size, the same as the blocks, with smaller words inside it) */
 .dayHour {
   position: absolute;
-  right: 0.45em;
+  right: 0.3em;
   line-height: 1;
   white-space: nowrap;
   color: var(--TEXT_DIM);
@@ -3721,7 +3770,7 @@ button.listDayAdd:focus-visible {
 }
 
 .dayHour span {
-  font-size: 0.72em;
+  font-size: 0.66em;
 }
 
 /* A faint line at each hour */
@@ -3766,8 +3815,60 @@ button.listDayAdd:focus-visible {
   opacity: 0.85;
 }
 
-/* A block covered by one to its right that starts within the hour after it (Fractals.js layOut): only its left edge
-   shows, so its title runs down that edge, sideways, as far as the block goes ("..." when it's longer) */
+/* A block over another in its lane (past three across, Fractals.js layOut): a stronger edge, so where it starts shows */
+.timeBlock.isOver {
+  box-shadow: 0 0 0 1px rgba(var(--SHADE_RGB), 0.8), -2px 0 6px rgba(var(--SHADE_RGB), 0.6);
+}
+
+/* The time now, on today (Fractals.js nowLine): a line across the blocks with the time at its left, and among a list's
+   lines, a line with the time before it */
+.nowLine {
+  position: relative;
+  box-sizing: border-box;
+  height: 0;
+  border-top: 2px solid var(--NOW_LINE, #ff4d6d);
+  pointer-events: none;
+}
+
+.dayBlocks > .nowLine {
+  position: absolute;
+  left: -0.35em;
+  right: 0;
+  z-index: 6;
+}
+
+.dayBlocks > .nowLine::before {
+  content: "";
+  position: absolute;
+  top: -0.3em;
+  left: 0;
+  width: 0.5em;
+  height: 0.5em;
+  margin-top: -1px;
+  border-radius: 50%;
+  background: var(--NOW_LINE, #ff4d6d);
+}
+
+.nowTime {
+  position: absolute;
+  top: -0.6em;
+  right: 0.2em;
+  padding: 0 0.3em;
+  font-size: 0.62em;
+  line-height: 1.2;
+  font-weight: bold;
+  color: #fff;
+  background: #d1193e; /* (A deeper red than the line, so its small white time is easy to read) */
+  border-radius: 0.4em;
+  text-shadow: none;
+}
+
+/* Among lines (a zoomed day's List, and List Mode), it takes a little room of its own */
+.cell-content > .nowLine,
+.listDay .nowLine {
+  align-self: stretch;
+  margin: 0.55em 0 0.4em;
+}
 /* Travel time: dimmer, above the block, with a dashed edge, and over any block under it (taps go through to that one) */
 .timeTravel {
   z-index: 2;
@@ -3782,6 +3883,16 @@ button.listDayAdd:focus-visible {
   align-self: flex-start;
   width: calc(var(--dayW, 100%) - 8px * var(--zoomText, 1));
   max-width: none;
+}
+
+.elastic-table td.is-editing.is-fullZoom .cell-content > .dayTimes {
+  margin-left: calc(-4px * var(--zoomText, 1));
+  width: calc(var(--dayW, 100%) - 4px * var(--zoomText, 1));
+}
+
+.elastic-table td.is-editing.is-fullZoom .cell-content > .nowLine {
+  align-self: flex-start;
+  width: calc(var(--dayW, 100%) - 8px * var(--zoomText, 1));
 }
 
 .elastic-table td.is-editing.is-fullZoom .cell-content > .dayTimes {
@@ -3801,17 +3912,6 @@ button.listDayAdd:focus-visible {
   padding: 0.45em 0.6em;
   font-size: 1em;
   cursor: pointer;
-}
-
-/* New Calendar Fractal's From another calendar: which calendar (or its link), with room between each part */
-.linkFields {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7em;
-}
-
-.linkFields > .panelHint {
-  margin: 0;
 }
 
 .fractalItem .fractalLinkedNote {
@@ -4347,6 +4447,46 @@ a.budgetButton:hover {
   overflow-wrap: anywhere;
 }
 
+/* Calendar Fractals' hours (Fractals.js renderManager): the two days side by side over the list (one over the other when
+   they don't fit), and each fractal's hours under its name */
+.fractalHoursRange {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1em;
+}
+
+.fractalHoursRange .panelField {
+  flex: 1 1 11em;
+  min-width: 0;
+}
+
+.fractalHoursNote {
+  margin-top: 0.2em;
+}
+
+.fractalHoursFigure {
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A calendar's window: what it's added as (Calendars Page.js), and a picked Calendar Fractal's color and name */
+.calendarAddAsBox {
+  margin-bottom: 0.6em;
+}
+
+.calendarAddAsWords {
+  margin-top: 0.3em;
+}
+
+.calendarFractalNote {
+  overflow-wrap: anywhere;
+}
+
+.sheetFrom {
+  font-weight: normal;
+  color: var(--TEXT_DIM);
+}
+
 .budgetItem .budgetShare,
 .budgetInvitationButtons .budgetButton {
   flex: 0 0 auto;
@@ -4818,7 +4958,7 @@ html.lessMotion .sheetForm.isOpening {
   color: var(--NEGATIVE_TEXT);
 }
 
-/* Connected calendars (Calendars Page.js): like spreadsheets, with Paychecks And Shifts and what the last read found
+/* Automated Calendars & Paychecks (Calendars Page.js): like spreadsheets, with Paychecks And Shifts and what the last read found
    under each one */
 .calendarsVerify {
   margin: 0.6em 0 0;
@@ -5002,6 +5142,14 @@ html.lessMotion .sheetForm.isOpening {
   min-width: 0;
 }
 
+/* A Calendar Fractal's Per Budget switch (Fractals.js perBudgetSwitch): in its window, and under its name on the card */
+.perBudgetSwitch {
+  margin: 0.35em 0 0.2em;
+}
+.fractalManagerList .perBudgetSwitch .checkboxField {
+  font-size: 0.9em;
+}
+
 /* A switch with a ? beside it (Budget UI.js addSwitchHelp) */
 .switchWithHelp {
   display: flex;
@@ -5095,6 +5243,35 @@ html.lessMotion .sheetForm.isOpening {
 
 .calendarTotals .paycheckAmount {
   font-size: 1.35em;
+}
+
+/* The next paycheck is a button that opens how it adds up (Calendars Page.js openPaychecks) */
+.paycheckNextButton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.paycheckNextButton:hover,
+.paycheckNextButton:focus-visible {
+  outline: none;
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+}
+
+.paycheckNextMore {
+  margin-top: 0.3em;
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+}
+
+/* A paycheck's window: the list of the calendar's paychecks over its breakdown */
+.paycheckPick {
+  width: 100%;
 }
 
 .calendarTotals .takeHome .paycheckAmount {
@@ -5466,6 +5643,21 @@ footer.hasHelp > hr {
   margin: 0;
 }
 
+/* The Paycheck Calculator's In Bank graph (Budget Pages.js paycheckGraphCard): the search box over the list of paychecks */
+.paycheckGraph {
+  text-align: left;
+}
+
+.paycheckListBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.paycheckListBox .paycheckList {
+  width: 100%;
+}
+
 .breakdownRow {
   display: flex;
   justify-content: space-between;
@@ -5723,6 +5915,33 @@ html.lessMotion .calculatorForm.prismFlash {
   margin-left: 0;
 }
 
+/* A card's switches stay together at its top right: the title wraps beside them, and when the two don't fit side by
+   side, the On/Off one goes under Warnings (still at the right) */
+.sectionHead.hasSwitches {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.sectionHead.hasSwitches .sectionTitle {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sectionSwitches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4em 0.8em;
+  margin-left: auto;
+  padding-left: 0.6em;
+}
+
+.sectionSwitches .sectionSwitch {
+  margin: 0;
+  padding-left: 0;
+}
+
 .sectionHelp {
   margin: 0.6em 0 0;
   padding: 0.55em 0.8em;
@@ -5954,6 +6173,73 @@ html.lessMotion .foldChevron {
   transition: none;
 }
 
+/* The Business page (Budget Pages.js renderBusinessPage): the year and its figures, a card for each category that opens its
+   entries, the titles, and the owners */
+.businessTop,
+.businessParts,
+.businessTitles,
+.businessOwners {
+  text-align: left;
+}
+
+.businessFigures {
+  width: 100%;
+  margin: 0.4em 0 0;
+}
+
+.businessPart .foldSummary {
+  flex-shrink: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.businessToggle[aria-expanded="true"] .foldChevron {
+  transform: rotate(90deg);
+}
+
+.businessEntries {
+  margin-top: 0.6em;
+}
+
+.businessTitleList .budgetItem {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.businessTitleList select {
+  margin-left: auto;
+  max-width: 100%;
+}
+
+.businessAddTitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1em;
+}
+
+.businessAddTitle .panelField {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+.businessOwnerRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.businessOwnerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.businessOwnerRow .textInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* Accounts: the table, with the day's box at the top of its third column; the Total row stands out, and the Interest
    column only shows when an account has interest */
 .bobAccountsBox {
@@ -6158,8 +6444,71 @@ html.lessMotion .foldChevron {
 
 .wavelengthRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5em;
+}
+
+/* Each wavelength's goal, under its name (Bob Page.js waveGoalFields): an amount or a percent, per a number of days, weeks,
+   or months; and Undefined, always last, with no name to change */
+.waveGoalRow {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+  padding-left: 1.5em;
+}
+
+.waveGoalRow .waveGoalAmount {
+  flex: 1 1 7em;
+  min-width: 0;
+  max-width: 10em;
+}
+
+.waveGoalRow .waveGoalUnit {
+  width: auto;
+}
+
+.waveGoalPer {
+  color: var(--TEXT_DIM);
+}
+
+.wavelengthFixedName {
+  font-weight: bold;
+}
+
+.wavelengthFixedNote {
+  flex: 1 1 10em;
+  margin: 0;
+}
+
+/* Wavelength Planning's goals (Bob Page.js waveGoalList): orange from 85% used, red past all of it */
+.waveGoals {
+  margin-top: 0.8em;
+}
+
+.waveGoalsTitle {
+  margin: 0 0 0.3em;
+  font-weight: bold;
+}
+
+.goalItem.isWarning .goalStatus {
+  color: #ffb347;
+}
+
+.goalItem.isWarning .goalFill {
+  background: #ffb347;
+}
+
+/* An entry form's Per Title switch, under its wavelengths */
+.purposeField .switchWithHelp {
+  margin-top: 0.4em;
+}
+
+/* A warning on Bob's card on Home goes to its card on his page */
+.bobWarningLink {
+  white-space: nowrap;
 }
 
 .wavelengthRow .purposeSwatch {
@@ -7189,6 +7538,16 @@ html.snapshotKey .navButtons {
   overflow-wrap: anywhere;
 }
 
+/* In Edit, a Lowest card's Until (Snapshot Page.js untilPicker), under its title */
+.snapshotUntilField {
+  margin: 0 0 0.6em;
+}
+
+.snapshotUntilField .snapshotUntil {
+  width: 100%;
+  min-width: 0;
+}
+
 /* The ≡ to hold and drag (or focus, and use the arrow keys): the page doesn't scroll while it's held */
 .snapshotHandle {
   display: inline-flex;
@@ -7406,7 +7765,6 @@ button.snapshotChoice:focus-visible {
 .isPlaceholder .positive,
 .isPlaceholder .negative,
 .lineEntry.isPlaceholder,
-.upcomingEntry.isPlaceholder,
 .accountEntryLine.isPlaceholder,
 .dataTable td.isPlaceholder,
 .dataTable td.amountCell.isPlaceholder,

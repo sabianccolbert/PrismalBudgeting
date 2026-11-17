@@ -144,7 +144,27 @@ window.Budgets = (() => {
     if (shown && opened && shown.id === opened.id) opened.name = shown.name;
     if (shown && (opened || tabBudget)) writeTab(shown.id, shown.name);
     showPicker();
+    showBusinessLink();
     document.dispatchEvent(new CustomEvent("budgets:changed"));
+  }
+
+  // The Menu's Business link shows for a budget with Business Mode on (the one this tab has open)
+  function showBusinessLink() {
+    const link = document.getElementById("businessLink");
+    if (!link || !listed) return;
+    link.hidden = !listed.budgets.find(budget => budget.id === id())?.business;
+  }
+
+  // Business Mode on or off for one of the account's own budgets. A page with it open loads again, so its Business page
+  // and Bob's card follow.
+  async function turnBusiness(budget, on, target) {
+    target.disabled = true;
+    const result = await call("/api/budgets/business", { budget: budget.id, on });
+    if (target.isConnected) target.disabled = false;
+    if (!result.ok || !result.data) return toast(problem(result, "That didn't work. Please try again."), true);
+    took(result.data);
+    toast(on ? `Business Mode is on for ${budget.name}: its Business page is in the Menu, and Bob has a Business card.` : `Business Mode is off for ${budget.name}.`);
+    if (budget.id === id()) setTimeout(reopenPage, 900);
   }
 
   // What went wrong with a request, in words
@@ -368,7 +388,7 @@ window.Budgets = (() => {
       title: `Share ${budget.name}`,
       build(form, panel) {
         panel.panel.classList.add("budgetsPanel");
-        form.append(el("p", "panelText", "Type the username or email of their Prismal Planning account. Once they join, they can open this budget and see and change anything in it, like you can, its connected spreadsheets and calendars too. Only you can share it, rename it, or delete it."));
+        form.append(el("p", "panelText", `Type the username or email of their Prismal Planning account. Once they join, they can open this budget and see and change anything in it, like you can, its connected spreadsheets and calendars too. Only you can share it, rename it, or delete it.${budget.first ? "" : " Give It To Them (beside someone who joined) makes them its owner instead, and you stay in it."}`));
         const to = BudgetUI.textField({ label: "Username or email", placeholder: "Their username or email" });
         to.input.maxLength = 254;
         to.input.autocomplete = "off";
@@ -414,7 +434,24 @@ window.Budgets = (() => {
     const name = el("span", "budgetName", person.name);
     name.translate = false;
     about.append(name, el("span", "budgetDetail", person.joined ? "Joined" : "Invited, hasn't joined yet"));
-    item.append(about, button(person.joined ? "Stop Sharing" : "Cancel Invite", "danger budgetShare", async (event) => {
+    item.append(about);
+    // Someone who joined can be given the budget (never the account's first, which is always its own)
+    if (person.joined && !budget.first) {
+      item.append(button("Give It To Them", "budgetShare", async (event) => {
+        if (!window.confirm(`Give ${budget.name} to ${person.name}? They'll own it: only they can share it, rename it, or delete it. You stay in it, like anyone it's shared with, and can leave it any time. Only they can give it back.`)) return;
+        const target = event.currentTarget;
+        target.disabled = true;
+        const result = await call("/api/budgets/transfer", { budget: budget.id, person: person.id });
+        if (target.isConnected) target.disabled = false;
+        if (!result.ok || !result.data || result.data.error) return panel.setError(problem(result, result.data?.error || "That didn't work. Please try again."));
+        took(result.data);
+        panel.close();
+        toast(`${budget.name} is ${person.name}'s now. You're still in it.`);
+        // (The page that has it open reloads, so it shows what an owner can't do anymore)
+        if (budget.id === id()) reopenPage();
+      }, `Give ${budget.name} to ${person.name}`));
+    }
+    item.append(button(person.joined ? "Stop Sharing" : "Cancel Invite", "danger budgetShare", async (event) => {
       const what = person.joined ? `Stop sharing ${budget.name} with ${person.name}? They won't be able to open it anymore. What they added stays in it.` : `Take back the invitation to ${person.name}?`;
       if (!window.confirm(what)) return;
       const target = event.currentTarget;
@@ -529,7 +566,7 @@ window.Budgets = (() => {
         const about = el("div", "budgetOpen");
         const name = el("span", "budgetName", budget.name);
         name.translate = false;
-        const words = [budget.id === id() ? "Open now" : "", budget.first ? "Your first budget" : "", sharedWords(budget)].filter(Boolean).join(" · ");
+        const words = [budget.id === id() ? "Open now" : "", budget.first ? "Your first budget" : "", budget.business ? "Business Mode" : "", sharedWords(budget)].filter(Boolean).join(" · ");
         about.append(name);
         if (words) about.append(el("span", "budgetDetail", words));
         const buttons = el("div", "budgetInvitationButtons");
@@ -537,6 +574,11 @@ window.Budgets = (() => {
         if (budget.owned) {
           buttons.append(button("Share", "", (event) => openShare(budget, event.currentTarget), `Share ${budget.name}`));
           buttons.append(button("Rename", "", (event) => openRename(budget, event.currentTarget), `Rename ${budget.name}`));
+          const businessWords = budget.business ? "Business Mode: On" : "Business Mode: Off";
+          const business = button(businessWords, budget.business ? "primary" : "", (event) => turnBusiness(budget, !budget.business, event.currentTarget), `${businessWords} for ${budget.name}`);
+          business.setAttribute("aria-pressed", String(!!budget.business));
+          business.title = "Business Mode: a Business page (revenue, expenses, assets, and owners) and a Business card on Bob's page, for this budget alone";
+          buttons.append(business);
           if (!budget.first) buttons.append(button("Delete", "danger", (event) => deleteOrLeave(budget, event.currentTarget), `Delete ${budget.name}`));
         } else {
           buttons.append(button("Leave", "danger", (event) => deleteOrLeave(budget, event.currentTarget), `Leave ${budget.name}`));

@@ -1,5 +1,5 @@
 // Calendar Page: the home page. "Lowest in bank after today", Bob's message (his card opens his page, and shows his
-// warnings over the calendar, see BOB'S WARNINGS), Upcoming, the calendar's day cells, and the new-entry / entry-options
+// warnings over the calendar, see BOB'S WARNINGS), the calendar's day cells, and the new-entry / entry-options
 // panels. The calendar shows any five weeks, from a year before the budget began to five years from today (THE CALENDAR'S
 // HEADER moves it), with the budget's entries, the calendar's (Fractals.js), or both.
 // Zooming a day is handled in Process Budget.js (LAYOUT FUNCTIONS); tapping an entry inside a
@@ -25,6 +25,8 @@ window.workspaceReady.then((loaded) => {
   wireUndoButtons();
   wireQuickWaiting();
   wireBobWarnings();
+  wireShownAccount();
+  openLinkedDay();
   // (New Entry starts as a budget entry; its two long buttons switch to a calendar entry)
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget, { kind: "budget" }));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
@@ -339,6 +341,23 @@ const dayAt = (index) => (showsOwnWeeks() ? gridDates[Math.floor(index / 7)][ind
 // The last day showing
 const lastDayShown = () => dayAt(CALENDAR_DAYS - 1);
 
+// A link to a day (a Change Logs change's Go To: /?day=YYYY-MM-DD) moves the calendar there and zooms in on that day once
+// the page has slid in. The ?day comes off the address, so going back or reloading doesn't open it again.
+function openLinkedDay() {
+  const text = new URLSearchParams(location.search).get("day");
+  if (!text) return;
+  try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) {}
+  const day = createSafeMidnight(text, true);
+  if (isNaN(day.getTime())) return;
+  moveCalendar(day);
+  const started = Date.now();
+  const zoom = () => {
+    if (document.documentElement.style.overflowY === "hidden" && Date.now() - started < 3000) return requestAnimationFrame(zoom);
+    zoomBudgetDay(day);
+  };
+  zoom();
+}
+
 // Move the calendar so a day is in its first week (kept inside the calendar's range). A zoomed day closes first.
 function moveCalendar(date) {
   const range = calendarRange();
@@ -401,7 +420,7 @@ function renderCalendar() {
     const isLastDay = r === CALENDAR_ROWS - 1 && c === 6;
 
     const fragment = document.createDocumentFragment();
-    String(calendarData[r][c] ?? "").split("\n").forEach((line, l) => {
+    String(shownDayText(calendarData[r][c] ?? "", date)).split("\n").forEach((line, l) => {
       if (isLastDay && afterCalendarLine(line)) return; // In the Lowest card instead
       // The first line is the day, shown in this device's date format
       if (l === 0 || line.trim()) fragment.appendChild(BudgetUI.renderEntryLine(l === 0 ? showDay(date) : line, l, date));
@@ -416,8 +435,8 @@ function renderCalendar() {
     td.classList.toggle("isPast", date < today);
     // (The days after the calendar going below $0 turn the Lowest card red instead, see renderAfterCalendar. A day
     // isn't red while the calendar shows only its own entries: the day's In Bank is hidden then.)
-    td.classList.toggle("isNegative", (readInBank(calendarData[r][c]) ?? 0) < 0 && mode !== "calendar");
-    labelDay(td, date, calendarData[r][c]);
+    td.classList.toggle("isNegative", dayBelowZero(calendarData[r][c], date) && mode !== "calendar");
+    labelDay(td, date, shownDayText(calendarData[r][c], date));
     window.Fractals.renderDay(td, date);
   });
   renderCalendarNav();
@@ -549,11 +568,11 @@ function renderOtherEdits() {
   const link = document.getElementById("otherEdits");
   if (!link) return;
   const count = otherDevicesEdits();
-  link.textContent = count > 99 ? "99+" : String(count);
+  const shown = count > 99 ? "99+" : String(count);
+  link.textContent = shown;
   link.classList.toggle("hasEdits", count > 0);
-  const words = count === 0
-    ? "No edits from other devices since you last looked at the Change Logs"
-    : `${count} ${count === 1 ? "edit" : "edits"} from other devices since you last looked at the Change Logs`;
+  // (Its name starts with the number it shows, for voice control)
+  const words = `${shown} ${count === 1 ? "edit" : "edits"} from other devices since you last looked at the Change Logs`;
   link.title = words;
   link.setAttribute("aria-label", `${words}. Opens the Change Logs.`);
 }
@@ -636,7 +655,7 @@ function renderCalendarList() {
     section.dataset.date = formatToMMDDYYYY(date);
     section.classList.toggle("isToday", date.getTime() === today.getTime());
     section.classList.toggle("isPast", date < today);
-    section.classList.toggle("isNegative", (readInBank(day.text) ?? 0) < 0 && mode !== "calendar");
+    section.classList.toggle("isNegative", dayBelowZero(day.text, date) && mode !== "calendar");
     if (date.getTime() === today.getTime()) todayEl = section;
 
     const head = BudgetUI.element("div", "listDayHead");
@@ -650,7 +669,7 @@ function renderCalendarList() {
     section.append(head);
 
     let shown = 0;
-    String(day.text).split("\n").forEach((line, l) => {
+    String(shownDayText(day.text, date)).split("\n").forEach((line, l) => {
       if (l === 0 || !line.trim() || isAfterCalendarLine(line)) return;
       const el = BudgetUI.renderEntryLine(line, l, date);
       if (el.classList.contains("lineEntry") || (el.classList.contains("lineInBank") && day.kind === "calendar")) {
@@ -790,45 +809,26 @@ document.addEventListener("entry:opened", (event) => {
 //#endregion
 
 // =====================================================================
-// #region INFO ROW (lowest in bank, Bob, upcoming)
+// #region INFO ROW (lowest in bank, Bob)
 // =====================================================================
 
 function renderInfoRow() {
   const lowest = document.getElementById("lowestAmount");
+  // (With an Equity account picked for In Bank, its lowest: see SHOWN ACCOUNT in Process Budget.js)
+  const shownLow = shownLowest();
+  const lowestAmount = shownLow ? shownLow.amount : lowestInBank;
   if (lowest) {
-    lowest.textContent = formatMoney(lowestInBank);
-    lowest.classList.toggle("negative", lowestInBank < 0);
+    lowest.textContent = formatMoney(lowestAmount);
+    lowest.classList.toggle("negative", lowestAmount < 0);
   }
+  const label = document.getElementById("lowestLabel");
+  if (label) label.textContent = shownLow ? `Lowest in ${shownAccountName()} after today` : "Lowest in bank after today";
+  fillShownAccountPickers();
   renderAfterCalendar();
 
   const bob = document.getElementById("bobMessage");
   if (bob) bob.textContent = bobMessage;
   queueBobWarnings();
-
-  const list = document.getElementById("upcomingList");
-  if (!list) return;
-  list.replaceChildren();
-  // (Past the five weeks the calendar starts on)
-  const later = upcomingEntries.filter(entry => entry.date > gridEndDate);
-  if (later.length === 0) {
-    list.appendChild(BudgetUI.element("li", "upcomingEmpty", "Nothing scheduled past this calendar."));
-    return;
-  }
-  // Each one opens its options when tapped, like an entry on a zoomed day (change it, move it, or delete it)
-  for (const upcoming of later) {
-    const item = BudgetUI.noTranslate(BudgetUI.element("li", "upcomingItem"));
-    const button = BudgetUI.element("button", "upcomingButton");
-    button.type = "button";
-    const line = `${upcoming.sprite} ${formatMoney(upcoming.amount)} ${upcoming.title}`;
-    button.appendChild(BudgetUI.element("span", "upcomingDate", showDate(upcoming.date)));
-    const entry = BudgetUI.element("span", `upcomingEntry ${BudgetUI.amountClass(upcoming.amount)}`, shownLine(line));
-    if (isPlaceholder(upcoming.sprite)) entry.classList.add("isPlaceholder");
-    if (lineHasNote(upcoming.date, line)) entry.classList.add("hasNote");
-    button.appendChild(entry);
-    button.addEventListener("click", () => BudgetUI.openEntryOptions(button, line, upcoming.date));
-    item.appendChild(button);
-    list.appendChild(item);
-  }
 }
 
 // The Lowest card's look past the calendar, from the budget's last day's two lines (see afterCalendarLine): the day In
@@ -847,7 +847,14 @@ function renderAfterCalendar() {
     const after = afterCalendarLine(line);
     if (after) found[after.kind] = after;
   }
-  const belowZero = lowestInBank < 0 || [found.lowest, found.last].some(after => after && after.amount < 0);
+  // (An Equity account picked for In Bank: its own lowest after the calendar, and its balance on the last day)
+  const shownAfter = shownLowest(afterCalendarStart, lastDay);
+  if (shownAfter) {
+    found.lowest = { kind: "lowest", amount: shownAfter.amount, date: formatToMMDD(shownAfter.date), day: shownAfter.date };
+    found.last = { kind: "last", amount: shownBalanceOn(lastDay) };
+  }
+  const shownLow = shownLowest();
+  const belowZero = (shownLow ? shownLow.amount : lowestInBank) < 0 || [found.lowest, found.last].some(after => after && after.amount < 0);
   box.closest(".lowestCard")?.classList.toggle("isNegative", belowZero);
   box.hidden = !found.lowest && !found.last;
   const show = (id, after) => {
@@ -857,7 +864,7 @@ function renderAfterCalendar() {
   };
   // (Its day from the worked-out days, since a look ahead of months can reach the same day of next year: the first one
   // with its date and amount, the way the lowest is picked)
-  const lowDay = found.lowest
+  const lowDay = found.lowest?.day ? [found.lowest.day] : found.lowest
     ? predictedInBank.find(([day, amount]) => formatToMMDD(day) === found.lowest.date && Math.abs(amount - found.lowest.amount) < 0.005)
     : null;
   document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${lowDay ? showDay(lowDay[0]) : showStoredDate(found.lowest.date)}` : "Lowest is on --";
@@ -865,8 +872,32 @@ function renderAfterCalendar() {
   show("afterLastAmount", found.last);
 }
 
+// What In Bank shows (SHOWN ACCOUNT in Process Budget.js): Default, or one of the Equity accounts, picked over the calendar
+// or on the Lowest card (one choice, so the two always match). They show once the budget has an Equity account.
+function fillShownAccountPickers() {
+  const names = accountRows().map(account => account.name);
+  const picked = shownAccountName();
+  for (const select of document.querySelectorAll(".shownAccountPick")) {
+    const prefix = select.id === "lowestAccount" ? "Shows" : "In Bank";
+    select.replaceChildren(new Option(`${prefix}: Default`, ""), ...names.map(name => new Option(`${prefix}: ${name}`, name)));
+    select.value = picked;
+    select.hidden = names.length === 0;
+    BudgetUI.noTranslate(select);
+  }
+}
+
+// Either list picks for this budget on this device, and Home draws again with it (so does a pick on Bob's page)
+function wireShownAccount() {
+  for (const select of document.querySelectorAll(".shownAccountPick")) {
+    select.addEventListener("change", () => setShownAccount(select.value));
+  }
+  document.addEventListener("shownaccount:changed", () => {
+    if (workspaceLoaded) renderHome();
+  });
+}
+
 // Look Ahead (on the Lowest card): how far past the calendar Lowest counts, in days, weeks, or months (2 months to
-// start). It's kept with the budget, so Quick Budget and reminders count the same days.
+// start). It's this device's own (each device can look its own way), and Quick Budget on this device follows it.
 function openLookAheadPanel(origin) {
   BudgetUI.openPanel({
     origin,
@@ -885,7 +916,7 @@ function openLookAheadPanel(origin) {
       unit.setAttribute("aria-label", "Days, weeks, or months");
       const row = BudgetUI.element("div", "frequencyRow");
       row.append(count, unit);
-      const field = BudgetUI.field("Past the calendar", row, { hint: "Lowest counts In Bank from today through this far past the calendar's five weeks: 2 months to start, about three months from today. Up to 12 months, 52 weeks, or 366 days." });
+      const field = BudgetUI.field("Past the calendar", row, { hint: "Lowest counts In Bank from today through this far past the calendar's five weeks: 2 months to start, about three months from today. Up to 12 months, 52 weeks, or 366 days. It's this device's own, and Quick Budget here follows it." });
       form.append(field, BudgetUI.buttonRow([
         { label: "Save", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }
@@ -911,20 +942,22 @@ function openLookAheadPanel(origin) {
 // =====================================================================
 // What Bob's cards say when they need a look (bobWarnings in Bob Page.js, for each card that's on with its Warnings on)
 // shows on his card, which moves over the calendar while there's one. Okay puts them away (and the card back under the
-// calendar) until tomorrow, on every device (okayBobWarnings). They're worked out a moment after the page draws, so the
+// calendar) for the rest of the day, on this device (okayBobWarnings), and a warning that says something new shows again.
+// Each one has a link to its card on Bob's page. They're worked out a moment after the page draws, so the
 // calendar never waits on them.
 
 let bobWarningsQueued = 0;
+let shownWarnings = []; // The warnings showing, for Okay
 
 // Okay on his card
 function wireBobWarnings() {
   document.getElementById("bobOkay")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    const result = await okayBobWarnings();
+    const result = okayBobWarnings(shownWarnings.map(bobWarningMark));
     button.disabled = false;
     if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
-    else BudgetUI.warnIfUnsaved(result);
+    else renderBobWarnings();
   });
 }
 
@@ -946,19 +979,26 @@ function renderBobWarnings() {
   const above = document.getElementById("bobAbove");
   const row = document.querySelector(".infoRow");
   if (!card || !box || !above || !row || !workspaceLoaded) return;
-  const warnings = typeof bobWarnings === "function" && !bobWarningsOkayed() ? bobWarnings() : [];
+  // (Each one okayed today stays away; one that says something new shows again)
+  const warnings = typeof bobWarnings === "function" ? bobWarnings().filter(warning => !bobWarningOkayed(warning)) : [];
+  shownWarnings = warnings;
   const list = document.getElementById("bobWarningList");
   list.replaceChildren(...warnings.map(warning => {
     const item = BudgetUI.element("li", "bobHighlight isWarning");
-    item.append(BudgetUI.element("strong", "", `${warning.title}: `), warning.text);
+    item.append(BudgetUI.element("strong", "", `${warning.title}: `), warning.text, " ");
+    // (Its card on Bob's page, opened in its window)
+    const link = BudgetUI.element("a", "bobWarningLink", "See it ›");
+    link.href = `/menu/bob.html?card=${encodeURIComponent(warning.id)}`;
+    link.setAttribute("aria-label", `See ${warning.title} on Bob's page`);
+    item.append(link);
     return item;
   }));
   box.hidden = warnings.length === 0;
   card.classList.toggle("isWarning", warnings.length > 0);
   row.classList.toggle("bobAway", warnings.length > 0);
-  // Over the calendar while there's one, and back in its place (before Upcoming) after
+  // Over the calendar while there's one, and back in its place (last in the row) after
   if (warnings.length > 0 && card.parentElement !== above) above.appendChild(card);
-  if (warnings.length === 0 && card.parentElement !== row) row.insertBefore(card, row.querySelector(".upcomingCard"));
+  if (warnings.length === 0 && card.parentElement !== row) row.appendChild(card);
 }
 
 //#endregion
