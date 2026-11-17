@@ -1063,35 +1063,80 @@ const BudgetUI = (() => {
     return { until };
   }
 
-  // Wavelength: what an entry's money is for (its purpose, one of the budget's wavelengths: see WAVELENGTH PLANNING in
-  // Process Budget.js), at the bottom of every form that makes or changes an entry once Bob's Wavelength Planning card
-  // is on (shown), with a button for each wavelength and None. It's kept for the entry's title, so it starts on the
-  // title's (lookup: purposeOf) and follows the title as it's typed (follow), until one is tapped. With no budget to
-  // look in (the Quick Budget page: lookup null, and wavelengths from the API), nothing's picked to start, which leaves
-  // the title's as it is. value(): a wavelength's id or "none"; undefined when it isn't shown or nothing's picked.
-  function purposeField({ shown = false, title = "", lookup = purposeOf, wavelengths = null } = {}) {
+  // Wavelength: what an entry's money is for (its purpose, one of the budget's wavelengths, or Undefined: see WAVELENGTH
+  // PLANNING in Process Budget.js), at the bottom of every form that makes or changes an entry once Bob's Wavelength
+  // Planning card is on (shown), with a button for each wavelength and Undefined. It's the entry's own, unless its Per
+  // Title switch is on (perTitle): then it's its title's, for every entry with that title (except one with a wavelength of
+  // its own). own: the entry's own ("" for none: it goes by its title's, lookup). It starts on the entry's, and while
+  // nothing's tapped, follows the title as it's typed (follow): its title's, with Per Title on when the title has one.
+  // With no budget to look in (the Quick Budget page: lookup null, and wavelengths from the API), nothing's picked to
+  // start, and it's always the entry's own (no switch). value(): a wavelength's id or "none"; undefined when it isn't
+  // shown or nothing's picked. perTitle(): the switch.
+  function purposeField({ shown = false, title = "", lookup = purposeOf, wavelengths = null, own = "" } = {}) {
     let touched = false;
-    const choices = [{ key: "none", label: "None" }, ...(wavelengths || wavelengthList()).map(wave => ({ key: wave.id, label: wave.name }))];
-    const picker = segmented(choices, lookup ? lookup(title) : "", () => { touched = true; });
+    const choices = [...(wavelengths || wavelengthList()).map(wave => ({ key: wave.id, label: wave.name })), { key: "none", label: "Undefined" }];
+    const titleWave = (text) => (lookup ? lookup(text) : "");
+    const picker = segmented(choices, own || titleWave(title), () => { touched = true; });
     picker.el.classList.add("purposeChoices");
     noTranslate(picker.el); // (Their own names)
     const hint = lookup
-      ? "Every entry with this title shares it. Bob's Wavelength Planning card adds up what each one costs, and its Add Or Change Wavelengths button makes your own."
-      : "Every entry with this title shares it. Left unpicked, the title keeps the one it has.";
+      ? "Bob's Wavelength Planning card adds up what each one costs, and its Add Or Change Wavelengths button makes your own."
+      : "It's this entry's own.";
     const el = field("Wavelength", picker.el, { hint });
     el.classList.add("purposeField");
     el.hidden = !shown;
+    const perTitle = checkboxField({ label: "Per Title", checked: !!lookup && !own && titleWave(title) !== "none" && titleWave(title) !== "" });
+    perTitle.input.addEventListener("change", () => { touched = true; });
+    if (lookup) {
+      el.append(perTitle.el);
+      const help = element("div", "");
+      help.append(
+        element("p", "", "Off (to start), the wavelength is this entry's alone."),
+        element("p", "", "On, it's its title's: every entry with this title is on it, the ones already there and the ones to come, so you only pick it once (like Rent, always on Needs)."),
+        element("p", "", "An entry given a wavelength of its own (with Per Title off) stays on its own, even when its title is on another one.")
+      );
+      addSwitchHelp(perTitle.el, "What Per Title does", help);
+    }
     return {
       el,
       follow(newTitle) {
-        if (!touched && lookup) picker.set(lookup(newTitle));
+        if (touched || !lookup) return;
+        const wave = titleWave(newTitle);
+        picker.set(wave);
+        perTitle.input.checked = wave !== "none" && wave !== "";
       },
       has: (purpose) => choices.some(choice => choice.key === purpose),
       set(purpose) {
         touched = true;
         picker.set(purpose);
       },
-      value: () => (el.hidden || !picker.value() ? undefined : picker.value())
+      value: () => (el.hidden || !picker.value() ? undefined : picker.value()),
+      perTitle: () => !!lookup && perTitle.input.checked
+    };
+  }
+
+  // Business: a title's business category (see Business Mode in Process Budget.js), in every form that makes or changes an
+  // entry while Business Mode is on for the budget: None, Revenue, Expenses, Asset Purchases, Assets, or one of its owners.
+  // Like a wavelength, it's the title's, so it starts on the title's and follows the title as it's typed, until one is
+  // picked. value(): a category or "none"; undefined while it isn't shown.
+  function businessField({ title = "" } = {}) {
+    const shown = typeof businessOn === "function" && businessOn();
+    let touched = false;
+    const select = element("select", "selectInput businessPick");
+    noTranslate(select); // (Owners' names)
+    if (shown) {
+      select.append(new Option("None", "none"), ...businessCategories().map(category => new Option(category.name, category.id)));
+      select.value = businessOf(title);
+    }
+    select.addEventListener("change", () => { touched = true; });
+    const el = field("Business", select, { hint: "What it is for the business. Every entry with this title shares it, and the Business page (in the Menu) adds them up." });
+    el.hidden = !shown;
+    return {
+      el,
+      follow(newTitle) {
+        if (shown && !touched) select.value = businessOf(newTitle);
+      },
+      value: () => (shown ? select.value : undefined)
     };
   }
 
@@ -1356,6 +1401,7 @@ const BudgetUI = (() => {
     const placeholder = placeholderField();
     const reminder = reminderField();
     const purpose = purposeField({ shown: purposes, lookup: purposeLookup, wavelengths });
+    const business = businessField();
     const note = noteField({ maxLength: noteMax });
     // (The placeholder and reminder follow the day picked: one from today on can be a placeholder, and one after today
     // can have a reminder)
@@ -1368,16 +1414,19 @@ const BudgetUI = (() => {
     dateInput.input.addEventListener("change", showPlaceholder);
     showPlaceholder();
     // The purpose shown is the title's (one with no title of its own goes by its account's name)
-    const followTitle = () => purpose.follow(withAccount(title.value(), account.value(), account.from()));
+    const followTitle = () => {
+      purpose.follow(withAccount(title.value(), account.value(), account.from()));
+      business.follow(withAccount(title.value(), account.value(), account.from()));
+    };
     title.input.addEventListener("input", followTitle);
     account.el.addEventListener("pick", followTitle);
     return {
-      els: [title.el, refraction.el, account.el, amount.el, dateInput.el, placeholder.el, reminder.el, purpose.el],
+      els: [title.el, refraction.el, account.el, amount.el, dateInput.el, placeholder.el, reminder.el, purpose.el, business.el],
       dateEl: dateInput.el,
       purposeEl: purpose.el,
       noteEl: note.el,
       inputs: { title: title.input, amount: amount.input },
-      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), from: account.from(), date: dateInput.value(), placeholder: placeholder.value(), until: placeholder.until(), reminder: reminder.value(), purpose: purpose.value(), note: note.value() }),
+      values: () => ({ title: title.value(), amount: amount.value(), percent: amount.isPercent() ? amount.percent() : null, sprite: refraction.value(), account: account.value(), from: account.from(), date: dateInput.value(), placeholder: placeholder.value(), until: placeholder.until(), reminder: reminder.value(), purpose: purpose.value(), purposePerTitle: purpose.perTitle(), business: business.value(), note: note.value() }),
       setAccounts: account.setAccounts,
       fill({ title: newTitle = "", amount: newAmount = null, percent = null, sprite = "", account: newAccount = "", from: newFrom = "", placeholder: newPlaceholder = false, until: newUntil = null, reminder: newReminder, purpose: newPurpose, note: newNote } = {}) {
         if (newTitle) title.input.value = newTitle;
@@ -1398,7 +1447,7 @@ const BudgetUI = (() => {
       },
       read() {
         if (hasTitleArrow(title.value())) return { error: TITLE_ARROW };
-        const entry = { title: withAccount(title.value(), account.value(), account.from()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value(), purpose: purpose.value(), note: note.value() };
+        const entry = { title: withAccount(title.value(), account.value(), account.from()), amount: amount.value() ?? 0, date: dateInput.value(), sprite: refraction.value(), purpose: purpose.value(), purposePerTitle: purpose.perTitle(), business: business.value(), note: note.value() };
         if (!entry.title) return { error: "Give the entry a title." };
         if (account.from() && cleanString(account.from()) === cleanString(account.value())) return { error: SAME_ACCOUNT };
         const { percent, error } = readPercentField(amount);
@@ -1426,12 +1475,45 @@ const BudgetUI = (() => {
     };
   }
 
-  // An entry's options (an entry tapped on a zoomed day on Home or History, in Upcoming, an account's Entries, or Search's
+  // An entry's Copy (a budget entry's window, or a calendar entry's): a small window over it asks for the day to copy it to,
+  // then copy(date) makes the copy ({ ok, message }), and both windows close. hint: what the copy is, in words.
+  function openCopyTo(origin, { hint, copy }) {
+    openPanel({
+      origin,
+      size: "small",
+      stacked: true,
+      title: "Copy To Another Day",
+      build(form, panel) {
+        const day = dateField({ label: "Copy to" });
+        form.append(element("p", "panelHint", hint), day.el, buttonRow([
+          { label: "Copy", kind: "primary", type: "submit" },
+          { label: "Cancel", onClick: () => panel.close() }
+        ]));
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          panel.setError("");
+          const picked = day.value();
+          if (picked === null) return panel.setError("Pick the day to copy it to.");
+          if (picked === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+          panel.setBusy(true);
+          const result = await copy(picked);
+          panel.setBusy(false);
+          if (!result.ok) return panel.setError(result.message || "Couldn't copy it. Please try again.");
+          closeAllPanels();
+          warnIfUnsaved(result);
+          showToast(`Copied to ${showDay(picked)}.`);
+        });
+      }
+    });
+  }
+
+  // An entry's options (an entry tapped on a zoomed day on Home or History, an account's Entries, or Search's
   // results): line is the entry as its day stores it ("❗️ -$4.50 Coffee") on date. Its title (see renameEntry in Process
   // Budget.js: any entry before today, and from today on one that doesn't land by itself from a recurring entry or a
   // connected spreadsheet), its refraction type and Equity account, Set to or Add to it, Move to another day, whether it's a
   // placeholder (for a day from today on), its reminder (for a day after today), its title's Wavelength (once Bob's card
-  // for it is on), Delete, and its note (under the buttons). Changing its type or account takes it off as it is and puts it on as the new one,
+  // for it is on), Delete, Copy (to another day, as it is), and its note (under the buttons). Changing its type or account
+  // takes it off as it is and puts it on as the new one,
   // adding into an entry already on that day with the same title and type (changeEntryKind). One that lands
   // by itself on a day after the calendar (Search's, which isn't in the budget yet) goes into Upcoming for that day once
   // it's changed, the way a changed day on the calendar does. inHistory: a day in History, where the same changes keep
@@ -1526,17 +1608,27 @@ const BudgetUI = (() => {
         moveTo.input.addEventListener("change", showPlaceholder);
         showPlaceholder();
         // Its Wavelength (once Bob's card for it is on): its title's, following a new title as it's typed
-        const purpose = purposeField({ shown: bobCardOn("purposes"), title });
+        // (Its own wavelength, or the recurring entry's own on a day it landed on)
+        const ownPurpose = noteText("purposes", entryNoteKey(date, title, refraction)) ||
+          (entryMark(parts[0]) === "✔️" ? noteText("recurringPurposes", recurringNoteKey(title, parts[0])) : "");
+        const purpose = purposeField({ shown: bobCardOn("purposes"), title, own: ownPurpose });
+        const startPurpose = entryWavelength(date, title, parts[0]);
+        const business = businessField({ title });
         const newTitleNow = () => withAccount(titleBox ? titleBox.value() : ownTitle, accountPicker.value(), accountPicker.from());
-        titleBox?.input.addEventListener("input", () => purpose.follow(newTitleNow()));
-        accountPicker.el.addEventListener("pick", () => purpose.follow(newTitleNow()));
+        const followTitle = () => {
+          purpose.follow(newTitleNow());
+          business.follow(newTitleNow());
+        };
+        titleBox?.input.addEventListener("input", followTitle);
+        accountPicker.el.addEventListener("pick", followTitle);
         // Its note, under the buttons (it goes wherever the entry goes)
         const currentNote = entryNote(date, title, refraction);
         const note = noteField({ note: currentNote });
 
-        form.append(display, ...[accountNote, historyNote, titleBox?.el, titleNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, reminder.el, purpose.el, buttonRow([
+        form.append(display, ...[accountNote, historyNote, titleBox?.el, titleNote].filter(Boolean), type.el, accountPicker.el, field("Change the amount", modeToggle.el), amount.el, moveTo.el, placeholder.el, reminder.el, purpose.el, business.el, buttonRow([
           { label: "Save", kind: "primary", type: "submit" },
           { label: "Delete", kind: "danger", onClick: deleteEntry },
+          { label: "Copy", onClick: (event) => copyEntry(event.currentTarget) },
           { label: "Cancel", onClick: () => panel.close() }
         ]), note.el);
 
@@ -1563,6 +1655,8 @@ const BudgetUI = (() => {
             if ((until ? until.getTime() : null) !== (startUntil ? startUntil.getTime() : null)) newUntil = until;
           }
           const newPurpose = purpose.value();
+          const newPerTitle = purpose.perTitle();
+          const newBusiness = business.value();
           // (Left out when it didn't change, so the entry keeps its own wherever it goes)
           const newNote = note.value() !== currentNote ? note.value() : undefined;
           // (Hidden for a day that isn't after today: one it had goes, see followEntryNote)
@@ -1581,12 +1675,12 @@ const BudgetUI = (() => {
             const newTitle = withAccount(newOwn, newAccount, newFrom);
             // "→ Savings" has no title of its own, so it can't leave its account without one
             if (!newTitle) return panel.setError(titleBox ? "Give the entry a title, or keep its Equity account." : "This entry has no title of its own, so it needs an Equity account. To take it off, tap Delete.");
-            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, ...(newUntil !== undefined ? { until: newUntil } : {}), purpose: newPurpose, note: newNote, reminder: newReminder };
+            const kind = { title, sprite: refraction, date, newTitle, newSprite, amount: total, percent: newPercent, placeholder: newPlaceholder, ...(newUntil !== undefined ? { until: newUntil } : {}), purpose: newPurpose, purposePerTitle: newPerTitle, business: newBusiness, note: newNote, reminder: newReminder };
             if (move && move.getTime() !== date.getTime()) kind.moveDate = move;
             return send(kind, () => changeKind(kind));
           }
 
-          const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder, purpose: newPurpose, note: newNote, reminder: newReminder };
+          const change = { title, sprite: refraction, date, action: "set", amount: "", placeholder: newPlaceholder, purpose: newPurpose, purposePerTitle: newPerTitle, business: newBusiness, note: newNote, reminder: newReminder };
           // (A % entry set to dollars becomes a plain amount, even the same one)
           const amountChanged = mode === "set"
             ? (newPercent !== null ? newPercent !== currentPercent : newAmount !== currentAmount || (currentPercent !== null && amount.percentShown()))
@@ -1606,9 +1700,10 @@ const BudgetUI = (() => {
           }
           if (!renamed && !amountChanged && !change.moveDate && !placeholderChanged) {
             // Only its title's purpose, its note, or its reminder changed, or nothing did
-            const purposeChanged = newPurpose !== undefined && newPurpose !== purposeOf(title);
-            if (purposeChanged || newNote !== undefined || newReminder !== undefined) {
-              return submit(panel, () => saveEntryExtras(date, title, refraction, { purpose: purposeChanged ? newPurpose : undefined, note: newNote, reminder: newReminder }));
+            const purposeChanged = newPurpose !== undefined && (newPurpose !== startPurpose || newPerTitle !== (!ownPurpose && purposeOf(title) !== "none"));
+            const businessChanged = newBusiness !== undefined && newBusiness !== businessOf(title);
+            if (purposeChanged || businessChanged || newNote !== undefined || newReminder !== undefined) {
+              return submit(panel, () => saveEntryExtras(date, title, refraction, { purpose: purposeChanged ? newPurpose : undefined, purposePerTitle: newPerTitle, business: businessChanged ? newBusiness : undefined, note: newNote, reminder: newReminder }));
             }
             return panel.close();
           }
@@ -1626,6 +1721,24 @@ const BudgetUI = (() => {
         function deleteEntry() {
           if (!window.confirm(`Delete ${title} on ${showDay(date)}?`)) return;
           submit(panel, () => changeEntry({ title, sprite: refraction, date, action: "delete" }));
+        }
+
+        // Copy: the entry as it's saved (its title, type, Equity account, amount or %, placeholder, and note) goes on
+        // another day too, adding into an entry with its title and type there. A % one copied to a day before today is
+        // what it comes to, and a placeholder copied there is an ordinary entry (see PLACEHOLDERS in Process Budget.js).
+        function copyEntry(button) {
+          openCopyTo(button, {
+            hint: `A copy of ${shownLine(line)} goes on the day you pick, with its note, adding into an entry with the same title and type already there. It's a copy: changing one later doesn't change the other.`,
+            copy: (target) => addCalendarEntry({
+              title,
+              sprite: refraction,
+              amount: currentAmount,
+              ...(currentPercent !== null && target >= today ? { percent: currentPercent } : {}),
+              date: target,
+              placeholder: wasPlaceholder && target >= today,
+              note: entryNote(date, title, refraction) || undefined
+            })
+          });
         }
       }
     });
@@ -1744,7 +1857,7 @@ const BudgetUI = (() => {
             const amount = typeof entry.percent === "number" ? { amount: "", percent: entry.percent } : { amount: String(entry.amount) };
             // (A note goes after the one the entry has, like adding to it does)
             const note = entry.note.trim() ? joinNotes(entryNote(entry.date, entry.title, sprite), entry.note) : undefined;
-            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, ...(entry.until ? { until: entry.until } : {}), purpose: entry.purpose, note, ...(entry.reminder !== undefined ? { reminder: entry.reminder } : {}) }));
+            return submit(panel, () => changeCalendarEntry({ title: entry.title, sprite, date: entry.date, action: "set", ...amount, placeholder: entry.placeholder, ...(entry.until ? { until: entry.until } : {}), purpose: entry.purpose, purposePerTitle: entry.purposePerTitle, business: entry.business, note, ...(entry.reminder !== undefined ? { reminder: entry.reminder } : {}) }));
           }
           submit(panel, () => addCalendarEntry(entry));
         });
@@ -1999,6 +2112,8 @@ const BudgetUI = (() => {
   //#endregion
 
   return {
+    openCopyTo,
+    businessField,
     REFRACTION_TYPES,
     RECURRING_SPRITES,
     isSystemLine,

@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
+    <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ca59e3f5eb">
+    <link rel="stylesheet" href="/budgetStyle.css?v=04dcfaf0d4">
     <link rel="stylesheet" href="/themes.css?v=ae228a8c81">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -156,6 +156,11 @@
                 <select id="dateFormat" class="dateFormatSelect"></select>
               </label>
               <p id="dateFormatNote" class="panelHint"></p>
+              <label class="settingsField">
+                <span class="fieldLabel">Time format (on this device)</span>
+                <select id="timeFormat" class="dateFormatSelect"></select>
+              </label>
+              <p id="timeFormatNote" class="panelHint"></p>
             </section>
 
             <!-- This device's sounds (Sounds.js, Settings Page.js) -->
@@ -360,6 +365,40 @@
               <h3 id="updatesHeading">Updates</h3>
               <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
               <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
+                <section class="updatesRelease" aria-labelledby="updateComingNext">
+                  <h4 id="updateComingNext">Coming Next</h4>
+                  <p class="updatesKind">Bigger changes</p>
+                  <ul>
+                    <li>Calendar Fractals can belong to a budget (Per Budget, on to start for a new one): everyone the budget is shared with sees them and can add to them, and they show only while that budget is open. With it off, a fractal is yours alone, in every budget.</li>
+                    <li>A Holidays calendar fractal shows the year's holidays on every budget's calendar. Its color and place in the order can change; its days can't.</li>
+                    <li>Wavelengths are each entry's own now (Per Title puts a title on one instead), Undefined is always there, and each wavelength can have a goal, an amount or a percent per a number of days, weeks, or months. Bob warns on Home once one is 85% used.</li>
+                    <li>Each of Bob's warnings on Home has See it, which opens its card. Okay puts them away on that device only, so everyone sharing the budget sees each one once, and a warning that says something new shows again.</li>
+                    <li>Business Mode, for any one of your budgets (Budgets, Calendars &amp; Spreadsheets): a Business page with its revenue, expenses, profit, asset purchases, and what each owner put in and took out, year by year, a Business choice in every entry form, and a Business card on Bob's page.</li>
+                    <li>In Bank can show one of your Equity accounts, like another debit card: its days below $0 turn red, and Lowest, on Home and Bob's page, follows it.</li>
+                    <li>Tap a change in the Change Logs to see what it changed, with a button to go to it (a day opens zoomed in on Home). Changes made on your other devices are highlighted until you've seen them, and an entry's change says what it was and is now.</li>
+                    <li>Automated Calendars &amp; Paychecks (it was Connected Calendars): three buttons pick whether a calendar becomes paychecks, shows on your calendar, or both, and a calendar can be someone you pay (a cost) instead of your own pay.</li>
+                    <li>Another Prismal Planning account's Calendar Fractal link can be added, for paychecks or your calendar.</li>
+                    <li>The Paycheck Calculator has a graph of In Bank with the paycheck on a payday you pick, in place of one already in your budget (picked from a list you can search).</li>
+                    <li>Budget and calendar entries have Copy, to put the same entry on another day.</li>
+                    <li>A budget you own can be given to someone it's shared with (Give It To Them), and you stay in it.</li>
+                  </ul>
+                  <p class="updatesKind">Smaller changes</p>
+                  <ul>
+                    <li>A line across today's zoomed day (and among its list) shows the time now.</li>
+                    <li>A zoomed day's entries go side by side up to three across, then over one another, and its hours take less room.</li>
+                    <li>Times can show as 12-hour or 24-hour (Settings, Language And Dates).</li>
+                    <li>Calendar Fractals can be put in any order, and show their hours between two days you pick.</li>
+                    <li>A calendar's paychecks show the hours worked, and Next Paycheck opens how it adds up, with a list of its other paychecks.</li>
+                    <li>A goal has Make A Gem, which makes an Accrual Calculator gem from it.</li>
+                    <li>Quick Budget's prisms are each budget's own.</li>
+                    <li>A section's heading moves its whole section when you drag it (Recurring Entries and the tracker).</li>
+                    <li>The Spectrum Graph is first in Snapshot's Add A Card.</li>
+                    <li>Home's Upcoming card is gone: the calendar shows any day ahead.</li>
+                    <li>On the budget's four pages, the top card slides in first and the cards under it follow.</li>
+                    <li>Bob's cards' switches sit at their top right, and the header fits large text on small phones.</li>
+                    <li>The Privacy Policy covers what's new here.</li>
+                  </ul>
+                </section>
                 <section class="updatesRelease" aria-labelledby="update20261116">
                   <h4 id="update20261116">11.16.2026.A</h4>
                   <p class="updatesKind">Bigger changes</p>

@@ -112,7 +112,6 @@ const affirmationPresets = ["I am capable of quiet focus.", "My mind is filled w
 
 // Home Page (computed every time the budget refreshes, so they're never stored)
 let lowestInBank = 0;     // "Lowest in bank after today"
-let upcomingEntries = []; // Future Dates entries past the calendar: [{ date, sprite, amount, title }]
 let bobMessage = "";      // Bob's message
 
 // Others
@@ -885,7 +884,8 @@ function addCalendarEntry(entry) {
       ...(entry.until !== undefined ? { until: entry.until } : {}),
       adding: true
     });
-    noteEntryPurpose(entry.title, entry.purpose);
+    applyEntryPurpose(entry.date || today, entry.title, landed.entryType, entry.purpose, entry.purposePerTitle);
+    noteEntryBusiness(entry.title, entry.business);
     addEntryNote(entry.date || today, entry.title, landed.entryType, entry.note);
     addEntryReminder(entry.date || today, entry.title, landed.entryType, entry.reminder ?? null);
     return {};
@@ -900,13 +900,40 @@ function changeCalendarEntry(change) {
   return runBudgetAction("", () => keepEntryDetails(entryChange(change), change), { label: describeEntryChange(change), dates: [change.date, change.moveDate].filter(Boolean) });
 }
 
+// What an entry change did, in words for its Change Logs row: what it was and is now (only what changed), or that it was
+// deleted, added into another, or not found. was: { amount, sprite } as it was on its day, or null for a new one; landed:
+// what went on the day in the end ({ amount, sprite, percent, placeholder, into }), or null.
+function entryOutcome({ action, notFound, landed, was }) {
+  if (notFound) return "Not Found";
+  const amountWords = (amount, percent) => (percent !== null && percent !== undefined ? `${showPercent(percent)} (${formatMoney(amount)})` : formatMoney(amount));
+  if (action === "delete" || !landed) return was ? `Deleted (it was ${formatMoney(was.amount)})` : "Deleted";
+  if (!was) return `Amount: ${amountWords(landed.amount, landed.percent)}${landed.into ? ", added into the one already on that day" : ""}`;
+  const parts = [];
+  const before = percentOf(was.sprite);
+  if (Math.round(was.amount * 100) !== Math.round(landed.amount * 100) || before !== landed.percent) parts.push(`Amount: was ${amountWords(was.amount, before)}, now ${amountWords(landed.amount, landed.percent)}`);
+  if (getSpecialType(was.sprite) !== getSpecialType(landed.sprite)) parts.push(`Type: was ${getSpecialType(was.sprite)}, now ${getSpecialType(landed.sprite)}`);
+  if (isPlaceholder(was.sprite) !== !!landed.placeholder) parts.push(landed.placeholder ? "Now a placeholder" : "No longer a placeholder");
+  if (landed.into) parts.push("Added into the one already on that day");
+  if (parts.length === 0) parts.push(`Amount: ${amountWords(landed.amount, landed.percent)}`);
+  return parts.join(", ");
+}
+
 // After a change to an entry: its title's purpose as the form says (change.purpose; see WAVELENGTH PLANNING), on the
 // title it has now, and its note and reminder, which go where it went (see followEntryNote). Nothing, when it couldn't
 // be found.
 function keepEntryDetails(result, change) {
   if (notFound) return result;
   const deleted = String(change.action || "").toLowerCase() === "delete";
-  if (change.purpose !== undefined && !deleted) noteEntryPurpose(changedTitle(change), change.purpose);
+  // (Its wavelength: on its title with Per Title, or on it alone, see applyEntryPurpose; followEntryNote keeps it with it)
+  if (change.purpose !== undefined && !deleted && (change.purpose === "none" || wavelengthList().some(wave => wave.id === change.purpose))) {
+    if (change.purposePerTitle) {
+      noteEntryPurpose(changedTitle(change), change.purpose);
+      change.entryPurpose = "";
+    } else {
+      change.entryPurpose = change.purpose === purposeOf(changedTitle(change)) ? "" : change.purpose;
+    }
+  }
+  if (change.business !== undefined && !deleted) noteEntryBusiness(changedTitle(change), change.business);
   followEntryNote(change, deleted);
   return result;
 }
@@ -1274,7 +1301,16 @@ function saveRecurringEntry(fields, index = null) {
   return runBudgetAction("", () => {
     const before = index === null ? null : [...(recurringData[index] || [])];
     const result = index === null ? recurring(fields) : editRecurringRow(index, fields);
-    noteEntryPurpose(fields.title, fields.purpose);
+    // (Its wavelength: on its title with Per Title, or on it alone, kept like its note)
+    if (fields.purpose !== undefined && (fields.purpose === "none" || wavelengthList().some(wave => wave.id === fields.purpose))) {
+      if (fields.purposePerTitle) {
+        noteEntryPurpose(fields.title, fields.purpose);
+        fields.entryPurpose = "";
+      } else {
+        fields.entryPurpose = fields.purpose === purposeOf(fields.title) ? "" : fields.purpose;
+      }
+    }
+    noteEntryBusiness(fields.title, fields.business);
     followRecurringNote(before, fields);
     return result;
   });
@@ -1513,7 +1549,7 @@ function quickEntry(quick) {
     adding: true
   });
   formEntryRow[5] = "⚡ Quick Budget"; // Where "Move To" goes (quick entries never move)
-  noteEntryPurpose(entry.title, entry.purpose, true); // (Picked on the Quick Budget page, or left out to stay as it is)
+  applyEntryPurpose(date, entry.title, landed.entryType, entry.purpose, false); // (Picked on the Quick Budget page: this entry's)
   addEntryNote(date, entry.title, landed.entryType, entry.note, true);
   addEntryReminder(date, entry.title, landed.entryType, typeof entry.remind === "number" ? entry.remind : null, true);
   return { quickEntry: { id: quick.id, table } };
@@ -1752,23 +1788,29 @@ function markLogsSeen() {
 
 // How many rows other devices made since this browser last looked (0 the first time it opens this budget)
 function otherDevicesEdits() {
+  return unseenLogMarks().size;
+}
+
+// The rows other devices made since this browser last looked, by their marks (logMark): Home counts them, and the Change
+// Logs page highlights them
+function unseenLogMarks() {
+  const unseen = new Set();
   const slot = logsSeenSlot();
-  if (!slot || !logsData) return 0;
+  if (!slot || !logsData) return unseen;
   const entry = logsSeenBook()[slot];
   if (!entry) {
     markLogsSeen();
-    return 0;
+    return unseen;
   }
   const mine = new Set(Array.isArray(entry.mine) ? entry.mine : []);
-  let count = 0;
   for (let i = 1; i < logsData.length; i++) {
     const row = logsData[i];
     if (!isLogRow(row)) continue;
     const mark = logMark(row);
     if (mark === entry.seen) break;
-    if (!mine.has(mark) && String(row[2]).trim() !== DAILY_UPDATE_ACTION) count++;
+    if (!mine.has(mark) && String(row[2]).trim() !== DAILY_UPDATE_ACTION) unseen.add(mark);
   }
-  return count;
+  return unseen;
 }
 
 /* ---------- The budget flow ---------- */
@@ -1861,7 +1903,7 @@ function unique(entry) {
   let dateObj = createSafeMidnight(entry.date || today);
   formEntryRow[4] = "On: " + showDate(dateObj);
   let dateMove = createSafeMidnight(entry.moveDate || dateObj);
-  formEntryRow[5] = entry.moveDate ? "Move To: " + showDate(dateMove) : "Move To: None";
+  formEntryRow[5] = ""; // (Where it moved, only when it did: see step 8)
   // A day before History starts (or one missing from it) has no cell to hold an entry, so nothing can be added
   // or moved there
   if (action !== "delete" && dateMove < gridStartDate && !historyHasDay(dateMove)) {
@@ -1980,6 +2022,7 @@ function unique(entry) {
     }
   }
   // 6. Handle Target Date Merging
+  let landed = null; // What went on the day in the end, for its Change Logs row: { amount, sprite, percent, into }
   if (action !== "delete") {
     if (!(notFound && dateMove.getTime() !== dateObj.getTime())) {
       let moveAmt = finalAmt;
@@ -2005,6 +2048,7 @@ function unique(entry) {
           mergeValid = true;
         }
         if (mergeValid && targetIncomingSpecial === destSpecial) {
+          landed = { into: true };
           moveAmt += destAmt;
           moveSprite = targetIncomingSpecial + (destMark || (isOriginalVirginRecurring ? virginMark : "") || entryMark(moveSprite));
           // (Two entries become one there: a placeholder only if both were, keeping the last day of the one there, and a
@@ -2025,7 +2069,8 @@ function unique(entry) {
       if (finalPercent !== null || percentOf(moveSprite) !== null) moveSprite = percentSprite(moveSprite, finalPercent);
       // 7. Inject combined result back into target date
       injectOrDefer("set", dateMove, moveAmt, title, moveSprite, {}, placeholder);
-      if (writtenPlaceholder(placeholder, dateMove)) formEntryRow[3] += " (Placeholder)";
+      landed = { into: !!landed?.into, amount: moveAmt, sprite: moveSprite, percent: finalPercent, placeholder: writtenPlaceholder(placeholder, dateMove) };
+      if (landed.placeholder) formEntryRow[3] += " (Placeholder)";
       let gridStartMs = gridStartDate.getTime();
       if ((isExisting || moveIsExisting || !notFound) && (dateObj.getTime() < gridStartMs || dateMove.getTime() < gridStartMs)) {
         historyEdited = true;
@@ -2040,8 +2085,9 @@ function unique(entry) {
   if (isExisting && !source) formEntryType = "❗️ Change Unique";
   if (isOriginalVirginRecurring || (isExisting && hasOriginalCheckmark)) formEntryType = `❗️${virginMark || "✔️"} Make Unique`;
   formEntryRow[2] = formEntryType;
-  let formEntrySuffix = notFound ? "Not Found" : action === "delete" ? "Success" : percent !== null ? `${showPercent(percent)} (${formatMoney(Math.abs(amt))})` : formatMoney(rawAmtString);
-  formEntryRow[6] = capitalize(rawAction) + ": " + formEntrySuffix;
+  formEntryRow[6] = entryOutcome({ action, notFound, landed,
+    was: wasThere ? { amount: isExisting ? outData.oldAmt : source.amount, sprite: isExisting ? outData.oldSprite : source.sprite } : null });
+  if (landed && dateMove.getTime() !== dateObj.getTime()) formEntryRow[5] = "Moved To: " + showDate(dateMove);
   return { entryType: targetIncomingSpecial }; // The refraction type it landed as (Auto picks one), for its note
 }
 
@@ -3964,14 +4010,15 @@ const BOB_CARDS = new Map([
   ["bills", "Big Bills"],
   ["weekly", "Weekly Check"],
   ["catchup", "Catchup Entries"],
-  ["refund", "Refunds"]
+  ["refund", "Refunds"],
+  ["business", "Business"]
 ]);
 
-// The cards with a Warnings switch (Wavelength Planning never needs a look). With it on (and the card on), what the card
-// says when it needs a look shows on Bob's card on Home, which moves over the calendar until it's okayed (for the rest
-// of that day): accountsData.bob.warnings, the ids of the cards whose Warnings are on, and okayed, the day they were
-// okayed (MM/DD/YYYY), each left out without one.
-const BOB_WARNING_CARDS = [...BOB_CARDS.keys()].filter(id => id !== "purposes");
+// The cards with a Warnings switch (every one). With it on (and the card on), what the card says when it needs a look
+// shows on Bob's card on Home, which moves over the calendar until it's okayed on that device (for the rest of that day,
+// and only what it said then: see okayBobWarnings): accountsData.bob.warnings, the ids of the cards whose Warnings are
+// on, left out without one.
+const BOB_WARNING_CARDS = [...BOB_CARDS.keys()];
 
 // The Spectrum Graph's lines (Bob Page.js spectrumGraph): [{ kind, name, part }], each kind one of these (name: an account's
 // name, a tracker row's title, a figure's key, or a wavelength's id; part: a tracker row's alias, as compared, or ""), up to
@@ -3996,17 +4043,24 @@ function normalizeSpectrum(list) {
   return kept;
 }
 
-// The stored settings, checked: { cards, purposes, wavelengths (only when they aren't the defaults), warnings, okayed,
-// spectrum (each only when there's one) }, or null with nothing stored (and no goals)
+// The stored settings, checked: { cards, purposes, wavelengths (only when they aren't the defaults), warnings, spectrum,
+// waveGoals (each only when there's one) }, or null with nothing stored (and no goals). (An Okay kept here before it was
+// each device's own is left out.)
 function normalizeBob(stored, hasGoals) {
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return hasGoals ? { cards: ["goals"], purposes: {} } : null;
   const cards = Array.isArray(stored.cards) ? [...BOB_CARDS.keys()].filter(id => stored.cards.includes(id)) : [];
   const warnings = Array.isArray(stored.warnings) ? BOB_WARNING_CARDS.filter(id => stored.warnings.includes(id)) : [];
-  const okayed = typeof stored.okayed === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(stored.okayed) ? stored.okayed : "";
   const spectrum = normalizeSpectrum(stored.spectrum);
-  const extras = { ...(warnings.length > 0 ? { warnings } : {}), ...(okayed ? { okayed } : {}), ...(spectrum ? { spectrum } : {}) };
   const wavelengths = normalizeWavelengths(stored.wavelengths);
   const known = new Set((wavelengths || DEFAULT_WAVELENGTHS).map(wave => wave.id));
+  const goals = {};
+  if (stored.waveGoals && typeof stored.waveGoals === "object" && !Array.isArray(stored.waveGoals)) {
+    for (const [id, goal] of Object.entries(stored.waveGoals)) {
+      const kept = (id === "none" || known.has(id)) ? readWaveGoal(goal) : null;
+      if (kept) goals[id] = kept;
+    }
+  }
+  const extras = { ...(warnings.length > 0 ? { warnings } : {}), ...(spectrum ? { spectrum } : {}), ...(Object.keys(goals).length > 0 ? { waveGoals: goals } : {}) };
   const purposes = {};
   const kept = stored.purposes && typeof stored.purposes === "object" && !Array.isArray(stored.purposes) ? stored.purposes : {};
   for (const [key, purpose] of Object.entries(kept).slice(0, MAX_PURPOSES)) {
@@ -4057,18 +4111,50 @@ function turnBobWarning(id, on) {
   });
 }
 
-// Okay on Bob's card on Home: his warnings go, and his card goes back under the calendar, until tomorrow
-function okayBobWarnings() {
-  return runBudgetAction("💡 Bob's Warnings", () => {
-    bobSettings().okayed = formatToMMDDYYYY(today);
-    formEntryRow[3] = "Okayed until tomorrow";
-    return {};
-  });
+// Okay on Bob's card on Home: the warnings showing (marks: each one's bobWarningMark) are put away for the rest of the
+// day, on this device alone, so everyone who opens the budget (even people sharing one account) sees each one once on
+// their own. A warning that says something new (like a wavelength's goal at a higher percent after another purchase) isn't
+// one of them, so it shows again. Kept in this browser for each budget: BOB_OKAYED_KEY = { budget's number: { day
+// (MM/DD/YYYY), marks } }, only today's (Layout.js DEVICE_SETTINGS keeps it after signing out). { ok, message }
+const BOB_OKAYED_KEY = "prismal_bob_okayed";
+function okayBobWarnings(marks = []) {
+  const day = formatToMMDDYYYY(today);
+  const kept = Object.fromEntries(Object.entries(okayedOnDevice()).filter(([, item]) => item && item.day === day));
+  kept[okayedBudget()] = { day, marks: marks.filter(mark => typeof mark === "string").slice(0, 50) };
+  try {
+    localStorage.setItem(BOB_OKAYED_KEY, JSON.stringify(kept));
+  } catch (err) {
+    return { ok: false, message: "This browser couldn't keep that (its storage may be off or full)." };
+  }
+  return { ok: true };
 }
 
-// Were Bob's warnings okayed today?
-function bobWarningsOkayed() {
-  return accountsData?.bob?.okayed === formatToMMDDYYYY(today);
+// What this browser keeps of Okay, for every budget ({} for nothing)
+function okayedOnDevice() {
+  try {
+    const kept = JSON.parse(localStorage.getItem(BOB_OKAYED_KEY) || "{}");
+    return kept && typeof kept === "object" && !Array.isArray(kept) ? kept : {};
+  } catch (err) {
+    return {};
+  }
+}
+const okayedBudget = () => String(budgetInfo && Number.isSafeInteger(budgetInfo.id) ? budgetInfo.id : "first");
+
+// A warning's mark: a short hash of its card and what it says
+function bobWarningMark(warning) {
+  return shortHash(JSON.stringify([warning.id || warning.title, warning.text]));
+}
+
+// Was this warning okayed today, on this device?
+function bobWarningOkayed(warning) {
+  const okayed = normalizeOkayed(okayedOnDevice()[okayedBudget()]);
+  return !!okayed && okayed.day === formatToMMDDYYYY(today) && okayed.marks.includes(bobWarningMark(warning));
+}
+
+// A kept Okay, checked: { day, marks }, or null
+function normalizeOkayed(stored) {
+  if (!stored || typeof stored !== "object" || !/^\d{2}\/\d{2}\/\d{4}$/.test(String(stored.day ?? ""))) return null;
+  return { day: stored.day, marks: (Array.isArray(stored.marks) ? stored.marks : []).filter(mark => typeof mark === "string" && mark.length <= 20).slice(0, 50) };
 }
 
 /* ---------- The Snapshot page (snapshot.html, drawn by Snapshot Page.js) ---------- */
@@ -4184,6 +4270,43 @@ function noteEntryPurpose(title, purpose, skipWhenFull = false) {
   formEntryRow[3] = `${formEntryRow[3]} (${wavelengthName(purpose)})`.trim();
 }
 
+// Within a change: an entry's wavelength from its form (purpose: a wavelength's id, or "none" for Undefined; anything else
+// leaves it as it is). With Per Title, it's its title's (and the entry has none of its own); without, it's the entry's
+// alone, unless it's its title's anyway. Change Logs say so.
+function applyEntryPurpose(date, title, sprite, purpose, perTitle = false) {
+  if (purpose === undefined || purpose === null || (purpose !== "none" && !wavelengthList().some(wave => wave.id === purpose))) return;
+  if (perTitle) {
+    noteEntryPurpose(title, purpose);
+    if (notesData) putNote("purposes", entryNoteKey(date, title, sprite), "");
+    return;
+  }
+  if (!notesData) return;
+  const key = entryNoteKey(date, title, sprite);
+  const own = purpose === purposeOf(title) ? "" : purpose;
+  if (noteText("purposes", key) === own) return;
+  putNote("purposes", key, own);
+  if (own) formEntryRow[3] = `${formEntryRow[3]} (${wavelengthName(own)})`.trim();
+}
+
+// An entry's wavelength: its own (picked for it alone), its recurring entry's own (for the days a recurring entry lands
+// on), or its title's (Per Title), or "none" (Undefined). date: its day; sprite: its type and mark as it's stored.
+function entryWavelength(date, title, sprite) {
+  const known = (id) => (id === "none" || wavelengthList().some(wave => wave.id === id) ? id : "");
+  const own = known(noteText("purposes", entryNoteKey(date, title, sprite)));
+  if (own) return own;
+  if (entryMark(sprite) === "✔️") {
+    const recurring = known(noteText("recurringPurposes", recurringNoteKey(title, sprite)));
+    if (recurring) return recurring;
+  }
+  return purposeOf(title);
+}
+
+// A recurring entry's wavelength (its own, or its title's), for its form
+function recurringWavelength(title, sprite) {
+  const own = noteText("recurringPurposes", recurringNoteKey(title, sprite));
+  return own === "none" || wavelengthList().some(wave => wave.id === own) ? own : purposeOf(title);
+}
+
 // Only a title's purpose changed (an entry's options with nothing else changed)
 function saveEntryPurpose(title, purpose) {
   return runBudgetAction("🏷️ Entry Wavelength", () => {
@@ -4196,7 +4319,31 @@ function saveEntryPurpose(title, purpose) {
 // The wavelengths as Bob's card's window leaves them: [{ id (one that's there now, or null for a new one), name }], in
 // order. A new one gets an id no other one has; titles on one that was taken out have none after. Back to Needs, Wants,
 // and Future, they're left out of the budget again.
-function saveWavelengths(list) {
+// A wavelength's goal as it's kept: { amount (dollars) or percent (of what Regular gains came to in the same days), count,
+// unit ("days", "weeks", or "months") }: "$300.00 per 2 weeks", or "20% per 1 month". null for none (or one that can't be
+// read).
+const WAVE_GOAL_UNITS = ["days", "weeks", "months"];
+function readWaveGoal(goal) {
+  if (!goal || typeof goal !== "object") return null;
+  const count = Number(goal.count);
+  if (!Number.isInteger(count) || count < 1 || count > 366 || !WAVE_GOAL_UNITS.includes(goal.unit)) return null;
+  const amount = Number(goal.amount);
+  const percent = Number(goal.percent);
+  if (goal.percent !== null && goal.percent !== undefined && Number.isFinite(percent) && percent > 0 && percent <= 100) return { percent: Math.round(percent * 100) / 100, count, unit: goal.unit };
+  if (Number.isFinite(amount) && amount > 0 && amount <= MAX_AMOUNT) return { amount: Math.round(amount * 100) / 100, count, unit: goal.unit };
+  return null;
+}
+
+// Each wavelength's goal, by its id ("none" for Undefined): { id: goal }
+function waveGoals() {
+  return accountsData?.bob?.waveGoals || {};
+}
+
+// The wavelengths as Bob's card's window leaves them: [{ id (one that's there now, or null for a new one), name, goal
+// (see readWaveGoal; null or left out for none) }], in order, and undefinedGoal, Undefined's (left out: as it is). A new
+// one gets an id no other one has; titles and entries on one that was taken out have none after. Back to Needs, Wants,
+// and Future with no goals, they're left out of the budget again.
+function saveWavelengths(list, undefinedGoal = undefined) {
   return runBudgetAction("🌈 Wavelengths", () => {
     if (!Array.isArray(list) || list.length < 1 || list.length > MAX_WAVELENGTHS) throw new BudgetInputError(`Keep 1 to ${MAX_WAVELENGTHS} wavelengths.`);
     const current = wavelengthList();
@@ -4211,7 +4358,7 @@ function saveWavelengths(list) {
       names.add(name.toLowerCase());
       const id = current.some(wave => wave.id === item.id) && !kept.has(item.id) ? item.id : null;
       if (id) kept.add(id);
-      return { id, name };
+      return { id, name, goal: readWaveGoal(item?.goal) };
     });
     for (const wave of next) {
       if (wave.id) continue;
@@ -4223,12 +4370,204 @@ function saveWavelengths(list) {
     const bob = bobSettings();
     const gone = current.filter(wave => !kept.has(wave.id));
     for (const [title, id] of Object.entries(bob.purposes)) if (gone.some(wave => wave.id === id)) delete bob.purposes[title];
+    // (Entries' and recurring entries' own wavelengths that were taken out go too)
+    for (const part of ["purposes", "recurringPurposes"]) {
+      for (const [key, id] of Object.entries(notesData?.[part] || {})) if (gone.some(wave => wave.id === id)) delete notesData[part][key];
+    }
+    const goals = {};
+    for (const wave of next) {
+      if (wave.goal) goals[wave.id] = wave.goal;
+      delete wave.goal;
+    }
+    const noneGoal = undefinedGoal === undefined ? readWaveGoal(bob.waveGoals?.none) : readWaveGoal(undefinedGoal);
+    if (noneGoal) goals.none = noneGoal;
+    if (Object.keys(goals).length > 0) bob.waveGoals = goals;
+    else delete bob.waveGoals;
     if (JSON.stringify(next) === JSON.stringify(DEFAULT_WAVELENGTHS)) delete bob.wavelengths;
     else bob.wavelengths = next;
     formEntryRow[3] = next.map(wave => wave.name).join(", ");
     if (gone.length > 0) formEntryRow[4] = `Taken Out: ${gone.map(wave => wave.name).join(", ")}`;
     return {};
   });
+}
+
+/* ---------- Business Mode ---------- */
+// A budget its owner turns Business Mode on for (Budgets, Calendars & Spreadsheets: kept by the API with the budget, so the
+// Menu knows; budgetInfo.business) gets the Business page and Bob's Business card. Each title can be in one of the
+// business's categories: Revenue, Expenses, Assets, Asset Purchases, or one of its owners (what they put in and took
+// out), picked in every entry form (like a wavelength, it's the title's, so every entry with it shares it) or on the
+// Business page. Only days before today count (History, and the calendar's days that passed), each year on its own.
+// accountsData.business = { owners: [{ id, name }], titles: { <a title, see titleKey>: a category } }; a category is
+// "revenue", "expenses", "assets", "purchases", or "owner:<an owner's id>".
+const BUSINESS_CATEGORIES = [
+  { id: "revenue", name: "Revenue" },
+  { id: "expenses", name: "Expenses" },
+  { id: "purchases", name: "Asset Purchases" },
+  { id: "assets", name: "Assets" }
+];
+const MAX_OWNERS = 10;
+const MAX_OWNER_NAME = 40;
+const MAX_BUSINESS_TITLES = 2000;
+const OWNER_ID = /^[a-z0-9]{4,16}$/;
+
+// Is Business Mode on for the open budget?
+function businessOn() {
+  return !!budgetInfo?.business;
+}
+
+// The business's settings, made when they're first needed
+function businessSettings() {
+  if (!accountsData.business) accountsData.business = { owners: [], titles: {} };
+  return accountsData.business;
+}
+
+// Stored business settings, checked, or null for none
+function normalizeBusiness(stored) {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return null;
+  const ids = new Set();
+  const owners = (Array.isArray(stored.owners) ? stored.owners : []).map(owner => ({
+    id: String(owner?.id ?? ""),
+    name: String(owner?.name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_OWNER_NAME)
+  })).filter(owner => OWNER_ID.test(owner.id) && owner.name && !ids.has(owner.id) && ids.add(owner.id)).slice(0, MAX_OWNERS);
+  const titles = {};
+  if (stored.titles && typeof stored.titles === "object" && !Array.isArray(stored.titles)) {
+    for (const [key, category] of Object.entries(stored.titles).slice(0, MAX_BUSINESS_TITLES)) {
+      if (key && key !== "__proto__" && businessCategoryKnown(category, owners)) titles[key] = category;
+    }
+  }
+  return owners.length > 0 || Object.keys(titles).length > 0 ? { owners, titles } : null;
+}
+
+// Is this one of the business's categories (with these owners)?
+function businessCategoryKnown(category, owners = accountsData?.business?.owners || []) {
+  const text = String(category ?? "");
+  if (BUSINESS_CATEGORIES.some(item => item.id === text)) return true;
+  return text.startsWith("owner:") && owners.some(owner => `owner:${owner.id}` === text);
+}
+
+// Every category, in order: [{ id, name }] (each owner's named after them)
+function businessCategories() {
+  return [...BUSINESS_CATEGORIES, ...(accountsData?.business?.owners || []).map(owner => ({ id: `owner:${owner.id}`, name: owner.name }))];
+}
+
+// A category's name ("None" for none, or one that's gone)
+function businessCategoryName(category) {
+  return businessCategories().find(item => item.id === category)?.name ?? "None";
+}
+
+// A title's category, or "none"
+function businessOf(title) {
+  const key = titleKey(String(title ?? ""));
+  const titles = accountsData?.business?.titles;
+  if (!key || !titles || !Object.prototype.hasOwnProperty.call(titles, key)) return "none";
+  return businessCategoryKnown(titles[key]) ? titles[key] : "none";
+}
+
+// Within a change: a title gets this category ("none" takes it out of one; anything else, like a form without the
+// question, leaves it as it is). Change Logs say so.
+function noteEntryBusiness(title, category) {
+  if (category === undefined || category === null) return;
+  if (category !== "none" && !businessCategoryKnown(category)) return;
+  const key = titleKey(String(title ?? ""));
+  if (!key || businessOf(title) === category) return;
+  const business = businessSettings();
+  if (category === "none") {
+    delete business.titles[key];
+  } else {
+    if (!Object.prototype.hasOwnProperty.call(business.titles, key) && Object.keys(business.titles).length >= MAX_BUSINESS_TITLES) {
+      throw new BudgetInputError(`Up to ${MAX_BUSINESS_TITLES} titles can be in a business category. Take some you don't use anymore out first.`);
+    }
+    business.titles[key] = category;
+  }
+  formEntryRow[3] = `${formEntryRow[3]} (Business: ${businessCategoryName(category)})`.trim();
+}
+
+// The Business page: a title's category (or "none"), by itself
+function saveBusinessTitle(title, category) {
+  return runBudgetAction("💼 Business", () => {
+    const clean = String(title ?? "").replace(/\s+/g, " ").trim();
+    if (!titleKey(clean)) throw new BudgetInputError("Type the title.");
+    formEntryRow[3] = capitalize(clean);
+    noteEntryBusiness(clean, category);
+    return {};
+  });
+}
+
+// The Business page: the owners as its list leaves them ([{ id (one that's there now, or null for a new one), name }],
+// in order). Titles in an owner who was taken out are in no category after.
+function saveBusinessOwners(list) {
+  return runBudgetAction("💼 Business Owners", () => {
+    if (!Array.isArray(list) || list.length > MAX_OWNERS) throw new BudgetInputError(`A business can have up to ${MAX_OWNERS} owners here.`);
+    const business = businessSettings();
+    const names = new Set();
+    const owners = list.map(item => {
+      const name = String(item?.name ?? "").replace(/\s+/g, " ").trim();
+      if (!name) throw new BudgetInputError("Give every owner a name.");
+      if (name.length > MAX_OWNER_NAME) throw new BudgetInputError(`An owner's name can be up to ${MAX_OWNER_NAME} characters.`);
+      if (names.has(name.toLowerCase())) throw new BudgetInputError(`Two owners can't both be called ${name}.`);
+      if (BUSINESS_CATEGORIES.some(category => category.name.toLowerCase() === name.toLowerCase())) throw new BudgetInputError(`${name} is one of the business's categories already. Call the owner something else.`);
+      names.add(name.toLowerCase());
+      const id = business.owners.some(owner => owner.id === item.id) ? item.id : newPresetId();
+      return { id, name };
+    });
+    const gone = business.owners.filter(owner => !owners.some(kept => kept.id === owner.id));
+    for (const [key, category] of Object.entries(business.titles)) if (gone.some(owner => category === `owner:${owner.id}`)) delete business.titles[key];
+    business.owners = owners;
+    formEntryRow[3] = owners.map(owner => owner.name).join(", ") || "No owners";
+    if (gone.length > 0) formEntryRow[4] = `Taken Out: ${gone.map(owner => owner.name).join(", ")}`;
+    return {};
+  });
+}
+
+// Each day before today from one day through another (Dates; History's, then the calendar's): [{ date, text }]
+function pastBudgetDays(from, to) {
+  const last = addDays(today, -1) < to ? addDays(today, -1) : to;
+  const days = [];
+  for (let r = 1; r < historyData.length; r++) {
+    for (let c = 0; c < 7; c++) {
+      const text = String(historyData[r][c] ?? "");
+      const date = createSafeMidnight(text.split("\n")[0].trim(), true);
+      if (!isNaN(date.getTime()) && date >= from && date <= last) days.push({ date, text });
+    }
+  }
+  for (let r = 0; r < CALENDAR_ROWS; r++) {
+    for (let c = 0; c < 7; c++) {
+      const date = gridDates[r][c];
+      if (date >= from && date <= last && !days.some(day => day.date.getTime() === date.getTime())) days.push({ date, text: String(calendarData[r][c] ?? "") });
+    }
+  }
+  return days.sort((a, b) => a.date - b.date);
+}
+
+// What the business's categories came to from one day through another (days before today only): { totals: { <category>:
+// { gains, costs, net } }, entries: { <category>: [{ date, title, amount, sprite }] } (newest first), revenue, expenses (a
+// cost, so below $0), profit (the two together) }. Every entry with a title in a category counts, whatever its type.
+function businessFigures(from, to) {
+  const totals = {};
+  const entries = {};
+  for (const category of businessCategories()) {
+    totals[category.id] = { gains: 0, costs: 0, net: 0 };
+    entries[category.id] = [];
+  }
+  for (const day of pastBudgetDays(from, to)) {
+    for (const line of day.text.split("\n").slice(1)) {
+      const parts = getParts(line);
+      if (parts.length < 3 || systemEmojis.includes(parts[0])) continue;
+      const title = parts.slice(2).join(" ");
+      const category = businessOf(title);
+      if (category === "none" || !totals[category]) continue;
+      const amount = parseAmount(parts[1]);
+      const total = totals[category];
+      if (amount > 0) total.gains = Math.round((total.gains + amount) * 100) / 100;
+      else total.costs = Math.round((total.costs + amount) * 100) / 100;
+      total.net = Math.round((total.net + amount) * 100) / 100;
+      entries[category].push({ date: day.date, title, amount, sprite: parts[0] });
+    }
+  }
+  for (const list of Object.values(entries)) list.reverse();
+  const revenue = totals.revenue.net;
+  const expenses = totals.expenses.net;
+  return { totals, entries, revenue, expenses, profit: Math.round((revenue + expenses) * 100) / 100 };
 }
 
 /* ---------- Entry notes ---------- */
@@ -4240,23 +4579,26 @@ function saveWavelengths(list) {
 // note goes wherever its entry goes (another day, title, type, or account; into an entry already there, the two notes are
 // put together), and it goes when its entry does (deleted, or a placeholder whose day passed, see dropStrayNotes). Undo
 // and Redo put a day's notes back with its entries. Every entry form has its note at the bottom (BudgetUI.noteField).
-// An entry's reminder is kept here too, the same way (notesData.reminders, see ENTRY REMINDERS).
+// An entry's reminder is kept here too, the same way (notesData.reminders, see ENTRY REMINDERS), and so is an entry's own
+// wavelength (notesData.purposes, keyed like its note: a wavelength's id, or "none" for Undefined over its title's) and a
+// recurring entry's own (notesData.recurringPurposes, keyed like its note): see WAVELENGTH PLANNING.
 
 const NOTE_TYPES = { "❗️": "regular", "✖️": "hidden", "⭕️": "transfer" };
+const NOTE_PARTS = ["entries", "recurring", "reminders", "purposes", "recurringPurposes"];
 const MAX_NOTES_BYTES = 1800000;     // Every note together (a little under MAX_TABLE_BYTES)
 const MAX_UNDO_NOTE_CHARS = 100000;  // A change's notes kept for Undo in this tab (more than that, Undo leaves them be)
 const NOTES_FULL = "Your notes are full (about 1.8 MB of them together). Make some shorter, or delete some, first.";
 
 // No notes yet
 function emptyNotes() {
-  return { version: 1, entries: {}, recurring: {}, reminders: {} };
+  return { version: 1, entries: {}, recurring: {}, reminders: {}, purposes: {}, recurringPurposes: {} };
 }
 
 // The stored notes, checked (none stored is none)
 function normalizeApiNotes(stored) {
   const notes = emptyNotes();
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return notes;
-  for (const part of ["entries", "recurring", "reminders"]) {
+  for (const part of NOTE_PARTS) {
     const kept = stored[part] && typeof stored[part] === "object" && !Array.isArray(stored[part]) ? stored[part] : {};
     for (const [key, value] of Object.entries(kept)) {
       // (A "__proto__" key would replace the object's prototype instead of adding a note)
@@ -4264,6 +4606,9 @@ function normalizeApiNotes(stored) {
       if (part === "reminders") {
         const text = reminderText(Number(value));
         if (text && /^\d{4}-\d{2}-\d{2}\|/.test(key)) notes.reminders[key] = text;
+      } else if (part === "purposes" || part === "recurringPurposes") {
+        const known = typeof value === "string" && (value === "none" || WAVELENGTH_ID.test(value));
+        if (known && (part === "recurringPurposes" || /^\d{4}-\d{2}-\d{2}\|/.test(key))) notes[part][key] = value;
       } else if (typeof value === "string" && value.trim()) {
         notes[part][key] = value;
       }
@@ -4355,8 +4700,10 @@ function followEntryNote(change, deleted) {
   const from = entryNoteKey(change.date, change.title, change.sprite);
   const old = noteText("entries", from);
   const oldReminder = noteText("reminders", from);
+  const oldPurpose = noteText("purposes", from);
   if (deleted) {
     putNote("reminders", from, "");
+    putNote("purposes", from, "");
     return putNote("entries", from, "");
   }
   const toDate = change.moveDate || change.date;
@@ -4372,6 +4719,12 @@ function followEntryNote(change, deleted) {
   if (to !== from) putNote("reminders", from, "");
   putNote("reminders", to, createSafeMidnight(toDate) > today ? ownReminder || thereReminder : "");
   logReminderChange(oldReminder, noteText("reminders", to));
+  // Its own wavelength goes with it too (the form's, change.entryPurpose, takes its place: "" for its title's), or the one
+  // it went into keeps its own
+  const ownPurpose = change.entryPurpose !== undefined ? change.entryPurpose : oldPurpose;
+  const therePurpose = to === from ? "" : noteText("purposes", to);
+  if (to !== from) putNote("purposes", from, "");
+  putNote("purposes", to, ownPurpose || therePurpose);
 }
 
 // Within a change to a recurring entry: its own note, on its title, account, and type as they are now (before: its row
@@ -4386,6 +4739,10 @@ function followRecurringNote(before, fields) {
   putNote("recurring", to, joinNotes(to === from ? "" : noteText("recurring", to), own));
   if (!notesFit()) throw new BudgetInputError(NOTES_FULL);
   logNoteChange(old, own);
+  // Its own wavelength (the form's, fields.entryPurpose: "" for its title's)
+  const oldPurpose = noteText("recurringPurposes", from);
+  if (to !== from) putNote("recurringPurposes", from, "");
+  putNote("recurringPurposes", to, fields.entryPurpose !== undefined ? fields.entryPurpose : oldPurpose);
 }
 
 // Within a recurring entry's new title, Equity account, or type (after moveRecurringTemps): the notes on its days from
@@ -4405,15 +4762,15 @@ function moveDayNotes(oldTitle, oldSprite, newTitle, newSprite, from) {
     const date = createSafeMidnight(row[2], true);
     if (String(row[0] ?? "").trim() && !isNaN(date.getTime())) own.add(entryNoteKey(date, row[0], row[3]));
   }
-  // (Its days' reminders go with them, see ENTRY REMINDERS)
-  for (const part of ["entries", "reminders"]) {
+  // (Its days' reminders and own wavelengths go with them, see ENTRY REMINDERS)
+  for (const part of ["entries", "reminders", "purposes"]) {
     for (const key of Object.keys(notesData[part])) {
       if (key.slice(10) !== oldPart || key.slice(0, 10) < first || own.has(key)) continue;
       const day = key.slice(0, 10);
       const to = `${day}|${cleanString(newTitle)}|${NOTE_TYPES[getSpecialType(newSprite)]}`;
       const note = noteText(part, key);
       putNote(part, key, "");
-      putNote(part, to, part === "reminders" ? note : joinNotes(noteText(part, to), note));
+      putNote(part, to, part === "entries" ? joinNotes(noteText(part, to), note) : note);
     }
   }
 }
@@ -4428,17 +4785,18 @@ function renameAccountNotes(oldClean, newName) {
     const fromIt = !!account && !!from && from === oldClean;
     return toIt || fromIt ? cleanString(withAccount(own, toIt ? newName : account, fromIt ? newName : from)) : null;
   };
-  for (const part of ["entries", "recurring", "reminders"]) {
+  for (const part of NOTE_PARTS) {
     for (const key of Object.keys(notesData[part])) {
-      // (An entry's key starts with its day, YYYY-MM-DD|, and so does its reminder's; the type is after the last |)
-      const start = part === "recurring" ? 0 : 11;
+      // (An entry's key starts with its day, YYYY-MM-DD|, and so do its reminder's and its own wavelength's; the type is
+      // after the last |)
+      const start = part === "recurring" || part === "recurringPurposes" ? 0 : 11;
       const end = key.lastIndexOf("|");
       const title = renamed(key.slice(start, end));
       if (title === null) continue;
       const to = `${key.slice(0, start)}${title}${key.slice(end)}`;
       const note = noteText(part, key);
       putNote(part, key, "");
-      putNote(part, to, part === "reminders" ? note : joinNotes(noteText(part, to), note));
+      putNote(part, to, part === "entries" || part === "recurring" ? joinNotes(noteText(part, to), note) : note);
     }
   }
 }
@@ -4450,8 +4808,10 @@ function dropStrayNotes() {
   if (!notesData) return;
   const entryKeys = Object.keys(notesData.entries);
   const recurringKeys = Object.keys(notesData.recurring);
+  const purposeKeys = Object.keys(notesData.purposes);
+  const recurringPurposeKeys = Object.keys(notesData.recurringPurposes);
   const lastDay = formatToYMD(gridEndDate);
-  if (entryKeys.some(key => key.slice(0, 10) <= lastDay)) {
+  if ([...entryKeys, ...purposeKeys].some(key => key.slice(0, 10) <= lastDay)) {
     const there = new Set();
     const addDay = (date, cellText) => {
       for (const text of String(cellText ?? "").split("\n").slice(1)) {
@@ -4470,10 +4830,12 @@ function dropStrayNotes() {
       }
     }
     for (const key of entryKeys) if (key.slice(0, 10) <= lastDay && !there.has(key)) delete notesData.entries[key];
+    for (const key of purposeKeys) if (key.slice(0, 10) <= lastDay && !there.has(key)) delete notesData.purposes[key];
   }
-  if (recurringKeys.length > 0) {
+  if (recurringKeys.length + recurringPurposeKeys.length > 0) {
     const rows = new Set(recurringData.slice(2).filter(row => !["", "-"].includes(String(row[0] ?? "").trim())).map(row => recurringNoteKey(row[0], row[5])));
     for (const key of recurringKeys) if (!rows.has(key)) delete notesData.recurring[key];
+    for (const key of recurringPurposeKeys) if (!rows.has(key)) delete notesData.recurringPurposes[key];
   }
   // Reminders go once their entry's day has come, or when their entry is gone
   const reminderKeys = Object.keys(notesData.reminders);
@@ -4490,6 +4852,7 @@ function dayNotes(date) {
   const prefix = `${formatToYMD(date)}|`;
   for (const [key, text] of Object.entries(notesData?.entries || {})) if (key.startsWith(prefix)) notes[key] = text;
   for (const [key, text] of Object.entries(notesData?.reminders || {})) if (key.startsWith(prefix)) notes[`r:${key}`] = text;
+  for (const [key, text] of Object.entries(notesData?.purposes || {})) if (key.startsWith(prefix)) notes[`p:${key}`] = text;
   return notes;
 }
 
@@ -4516,6 +4879,7 @@ function notesChange(before = {}, after = {}) {
 function putStepNotes(notes) {
   for (const [key, text] of Object.entries(notes || {})) {
     if (key.startsWith("r:")) putNote("reminders", key.slice(2), text);
+    else if (key.startsWith("p:")) putNote("purposes", key.slice(2), text);
     else putNote("entries", key, text);
   }
 }
@@ -4523,16 +4887,17 @@ function putStepNotes(notes) {
 // Only a title's purpose, an entry's note, or its reminder changed (an entry's options, with nothing else changed):
 // extras { purpose, note, reminder (days before its day, or null for none) }, each left out to keep it as it is. A
 // note's or reminder's change can be undone.
-function saveEntryExtras(date, title, sprite, { purpose, note, reminder } = {}) {
+function saveEntryExtras(date, title, sprite, { purpose, purposePerTitle = false, business, note, reminder } = {}) {
   const day = createSafeMidnight(date);
   const name = capitalize(String(title || "").trim());
   const what = note !== undefined && reminder !== undefined ? "the note and reminder" : note !== undefined ? "the note" : "the reminder";
   const undo = note !== undefined || reminder !== undefined ? { label: `changed ${what} on ${name} on ${showDay(day)}`, dates: [day] } : null;
-  const action = note !== undefined ? "📝 Entry Note" : reminder !== undefined ? "🔔 Entry Reminder" : "🏷️ Entry Purpose";
+  const action = note !== undefined ? "📝 Entry Note" : reminder !== undefined ? "🔔 Entry Reminder" : purpose !== undefined ? "🏷️ Entry Purpose" : "💼 Business";
   return runBudgetAction(action, () => {
     formEntryRow[3] = name;
     formEntryRow[4] = "On: " + showDate(day);
-    if (purpose !== undefined) noteEntryPurpose(title, purpose);
+    if (purpose !== undefined) applyEntryPurpose(day, title, sprite, purpose, purposePerTitle);
+    noteEntryBusiness(title, business);
     if (note !== undefined) {
       const key = entryNoteKey(day, title, sprite);
       const before = noteText("entries", key);
@@ -5099,7 +5464,7 @@ const MAX_SHEET_NAME = 60;
 const MAX_KEPT_PAYCHECKS = 120;
 
 // The stored connected spreadsheets, checked and tidied: { version, list, linked (only when there are any, see LINKED
-// CALENDAR FRACTALS) }
+// CALENDAR FRACTALS), fractalOrder, holidays (the Holidays fractal's color, once it's changed) }
 function normalizeApiSheets(rawData) {
   let parsed = rawData;
   if (typeof parsed === "string") {
@@ -5107,7 +5472,59 @@ function normalizeApiSheets(rawData) {
   }
   const list = parsed && Array.isArray(parsed.list) ? parsed.list : [];
   const linked = parsed && Array.isArray(parsed.linked) ? normalizeLinkedFractals(parsed.linked) : [];
-  return { version: SHEETS_VERSION, list: list.filter(item => item && typeof item === "object" && typeof item.id === "string" && item.id).map(normalizeSheetConnection), ...(linked.length > 0 ? { linked } : {}) };
+  const fractalOrder = parsed ? normalizeFractalOrder(parsed.fractalOrder) : [];
+  const holidays = parsed ? normalizeHolidays(parsed.holidays) : null;
+  return {
+    version: SHEETS_VERSION,
+    list: list.filter(item => item && typeof item === "object" && typeof item.id === "string" && item.id).map(normalizeSheetConnection),
+    ...(linked.length > 0 ? { linked } : {}),
+    ...(fractalOrder.length > 0 ? { fractalOrder } : {}),
+    ...(holidays ? { holidays } : {})
+  };
+}
+
+/* ---------- The Calendar Fractals' order ---------- */
+// The order the Calendar Fractals show in (the manager on the Budgets, Calendars & Spreadsheets page moves them; Home's list
+// and the entry form follow it), kept with the budget beside the linked ones as sheetsData.fractalOrder: their ids as text,
+// the account's own and the budget's ("12"), linked ones ("linked:ab12"), and Holidays ("holidays"), top to bottom.
+// Fractals.js puts any not in it after the rest.
+const MAX_FRACTAL_ORDER = 60;
+const FRACTAL_ORDER_ID = /^(\d{1,15}|linked:[a-z0-9]{4,16}|holidays)$/;
+
+function normalizeFractalOrder(order) {
+  if (!Array.isArray(order)) return [];
+  return [...new Set(order.map(id => String(id ?? "")).filter(id => FRACTAL_ORDER_ID.test(id)))].slice(0, MAX_FRACTAL_ORDER);
+}
+
+// A new order (ids: top to bottom)
+function saveFractalOrder(ids) {
+  return runBudgetAction("🗓️ Fractal Order", () => {
+    const order = normalizeFractalOrder(ids);
+    if (order.length > 0) sheetsData.fractalOrder = order;
+    else delete sheetsData.fractalOrder;
+    formEntryRow[3] = "New order";
+    return {};
+  });
+}
+
+/* ---------- The Holidays fractal ---------- */
+// Holidays (Fractals.js, from Holidays.js) is on every budget's calendar; its color is the budget's, kept beside the
+// order as sheetsData.holidays: { color ("#rrggbb") }, logged as "🗓️ Holidays".
+
+function normalizeHolidays(kept) {
+  const color = kept && typeof kept === "object" ? String(kept.color ?? "").toLowerCase() : "";
+  return /^#[0-9a-f]{6}$/.test(color) ? { color } : null;
+}
+
+// Its color: fields { color }
+function saveHolidays(fields) {
+  return runBudgetAction("🗓️ Holidays", () => {
+    const holidays = normalizeHolidays(fields);
+    if (!holidays) throw new BudgetInputError("Pick a color for it.");
+    sheetsData.holidays = holidays;
+    formEntryRow[3] = "New color";
+    return {};
+  });
 }
 
 /* ---------- Linked Calendar Fractals ---------- */
@@ -5851,8 +6268,8 @@ function searchTargets(terms) {
 
 /* ---------- Rebuilding the calendar (the spreadsheet's worker functions) ---------- */
 
-// Move Future Dates entries onto the calendar once their day is on it, and build the
-// "Upcoming" list (everything still past the calendar, by date)
+// Move Future Dates entries onto the calendar once their day is on it, and keep the rest (Upcoming, everything still past
+// the calendar) in date order
 function upcomingEntriesMaintenance() {
   let latestDay = new Date(0);
   let futureRowsToDeleteIndexes = [];
@@ -5892,10 +6309,6 @@ function upcomingEntriesMaintenance() {
     futureData.sort((a, b) => dayOf(a) - dayOf(b));
     futureData.unshift(header);
   }
-  upcomingEntries = futureData.slice(1)
-    .filter(row => String(row[0]).trim() !== "")
-    .map(row => ({ date: createSafeMidnight(row[2], true), sprite: String(row[3]), amount: parseAmount(row[1]), title: String(row[0]).trim() }))
-    .filter(upcoming => !isNaN(upcoming.date.getTime()));
 }
 
 // Write recurring entries onto every calendar day from today on, respecting temps (a temp with
@@ -6188,6 +6601,87 @@ function normalizeLookAhead(value) {
   const count = Number(value.count);
   if (!Number.isInteger(count) || count < 1 || count > LOOK_AHEAD_MOST[value.unit]) return null;
   return { count, unit: value.unit };
+}
+
+/* ---------- What In Bank shows: Default, or an Equity account ---------- */
+// Home's calendar (each day's In Bank line, and whether the day is red), its Lowest card, and Bob's page can show one of
+// the Equity accounts, like another debit card, in In Bank's place. Default is In Bank itself. It's picked on this device
+// for each budget (SHOWN_ACCOUNT_KEY: { <the budget's id>: the account's name }), and one that's gone (or renamed) is
+// Default again. Its balance on each day, and its lowest from today through Lowest's last day, come from projectBudget,
+// worked out once per change while one is picked (shownProjection, forgotten with each change).
+const SHOWN_ACCOUNT_KEY = "prismal_shown_account";
+let shownProjection = null;
+document.addEventListener("budget:updated", () => { shownProjection = null; });
+
+// The Equity account In Bank shows, by name, or "" for Default
+function shownAccountName() {
+  let book = {};
+  try { book = JSON.parse(localStorage.getItem(SHOWN_ACCOUNT_KEY) || "{}") || {}; } catch (e) {}
+  const name = budgetInfo && typeof book[String(budgetInfo.id)] === "string" ? book[String(budgetInfo.id)] : "";
+  return name && accountRows().some(account => account.name === name) ? name : "";
+}
+
+// Pick what In Bank shows (an account's name, or "" for Default), and everything showing it draws again
+function setShownAccount(name) {
+  if (!budgetInfo) return;
+  let book = {};
+  try { book = JSON.parse(localStorage.getItem(SHOWN_ACCOUNT_KEY) || "{}") || {}; } catch (e) {}
+  if (name) book[String(budgetInfo.id)] = name;
+  else delete book[String(budgetInfo.id)];
+  try { localStorage.setItem(SHOWN_ACCOUNT_KEY, JSON.stringify(book)); } catch (e) {}
+  shownProjection = null;
+  document.dispatchEvent(new CustomEvent("shownaccount:changed"));
+}
+
+// The picked account's projection through Lowest's last day: { name, index, until, projected }, or null for Default
+function shownProjected() {
+  const name = shownAccountName();
+  if (!name) return null;
+  const until = lookAheadEnd();
+  if (!shownProjection || shownProjection.name !== name || shownProjection.until.getTime() !== until.getTime()) {
+    const summaries = accountSummaries();
+    const summary = summaries.find(item => item.name === name);
+    if (!summary) return null;
+    shownProjection = { name, index: summary.index, until, projected: projectBudget(until, summaries) };
+  }
+  return shownProjection;
+}
+
+// The picked account's balance at the end of a day, or null for Default
+function shownBalanceOn(date) {
+  const shown = shownProjected();
+  return shown ? shown.projected.accountOn(shown.index, date) : null;
+}
+
+// The picked account's lowest balance from one day through another (Lowest's last day to start), and its day: { amount,
+// date }, or null for Default
+function shownLowest(from = today, to = lookAheadEnd()) {
+  const shown = shownProjected();
+  if (!shown) return null;
+  let lowest = null;
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    const amount = shown.projected.accountOn(shown.index, day);
+    if (!lowest || amount < lowest.amount) lowest = { amount, date: day };
+  }
+  return lowest || { amount: shown.projected.accountOn(shown.index, from), date: from };
+}
+
+// A day's text as it's shown: with an account picked, its In Bank line is that account's balance ("✅ $310.00 Card 2"),
+// so a tap on it isn't In Bank's
+function shownDayText(text, date) {
+  const name = shownAccountName();
+  if (!name) return text;
+  const lines = String(text ?? "").split("\n");
+  if (!lines[1] || !/In Bank$/.test(lines[1].trim())) return text;
+  const balance = shownBalanceOn(date);
+  lines[1] = `${balance < 0 ? "⛔️" : "✅"} ${formatMoney(balance)} ${name}`;
+  return lines.join("\n");
+}
+
+// Is a day red: In Bank below $0, or the picked account's balance
+function dayBelowZero(text, date) {
+  const balance = shownBalanceOn(date);
+  return (balance ?? readInBank(text) ?? 0) < 0;
 }
 
 // Lowest's last day: the calendar's last day, plus the look ahead
@@ -7183,6 +7677,8 @@ function normalizeApiAccounts(rawData) {
   if (bob) accounts.bob = bob; // (Bob's page, see normalizeBob)
   const snapshot = isCurrent ? normalizeSnapshot(parsed.snapshot) : null;
   if (snapshot) accounts.snapshot = snapshot; // (The Snapshot page's cards, see normalizeSnapshot)
+  const business = isCurrent ? normalizeBusiness(parsed.business) : null;
+  if (business) accounts.business = business; // (Business Mode's owners and titles, see Business Mode)
   const ahead = isCurrent ? normalizeLookAhead(parsed.lookAhead) : null;
   if (ahead) accounts.lookAhead = ahead; // (Lowest's look ahead, see LOWEST'S LOOK AHEAD)
   // (What holds In Bank steady on days before the last Catchup, see IN BANK AND THE LAST CATCHUP)
@@ -8624,17 +9120,17 @@ function fillGuestDay(td, day) {
   td.dataset.kind = day.kind;
   const content = td.querySelector('.cell-content');
   const fragment = document.createDocumentFragment();
-  String(day.text).split('\n').forEach((line, l) => {
+  String(shownDayText(day.text, day.date)).split('\n').forEach((line, l) => {
     if (l > 0 && (!line.trim() || isAfterCalendarLine(line))) return;
     const words = l === 0 ? (day.kind === 'history' ? showDate(day.date) : showDay(day.date)) : line;
     fragment.appendChild(BudgetUI.renderEntryLine(words, l, day.date));
   });
   content.replaceChildren(fragment, zoomDayButtons());
   // (A day isn't red while the calendar shows only calendar entries: its In Bank is hidden then)
-  td.classList.toggle('isNegative', (readInBank(day.text) ?? 0) < 0 && !(window.Fractals && window.Fractals.view() === 'calendar'));
+  td.classList.toggle('isNegative', dayBelowZero(day.text, day.date) && !(window.Fractals && window.Fractals.view() === 'calendar'));
   td.classList.toggle('isToday', day.date.getTime() === today.getTime());
   td.classList.toggle('isPast', day.date < today);
-  labelDay(td, day.date, day.text);
+  labelDay(td, day.date, shownDayText(day.text, day.date));
   if (window.Fractals) window.Fractals.renderDay(td, day.date);
 }
 
@@ -9292,6 +9788,7 @@ const RECORD_VALUES = {
   goals: [() => accountsData.goals ?? null, (value) => { if (value) accountsData.goals = value; else delete accountsData.goals; }],
   bob: [() => accountsData.bob ?? null, (value) => { if (value) accountsData.bob = value; else delete accountsData.bob; }],
   snapshot: [() => accountsData.snapshot ?? null, (value) => { if (value) accountsData.snapshot = value; else delete accountsData.snapshot; }],
+  business: [() => accountsData.business ?? null, (value) => { if (value) accountsData.business = value; else delete accountsData.business; }],
   equity: [() => accountsData.equity ?? null, (value) => { accountsData.equity = value || {}; }],
   sheets: [() => sheetsData, (value) => { sheetsData = value; }],
   calculator: [() => calculatorData, (value) => { calculatorData = value; }]
@@ -9392,6 +9889,7 @@ function changeRecord(snapshot, changedTables, undid = null) {
     goals: () => accountsBefore.goals ?? null,
     bob: () => accountsBefore.bob ?? null,
     snapshot: () => accountsBefore.snapshot ?? null,
+    business: () => accountsBefore.business ?? null,
     equity: () => accountsBefore.equity ?? null,
     sheets: () => JSON.parse(snapshot.sheets),
     calculator: () => JSON.parse(snapshot.calculator)
@@ -9405,7 +9903,7 @@ function changeRecord(snapshot, changedTables, undid = null) {
   // Notes (and entries' reminders, kept with them)
   if (changed("notes")) {
     const notesBefore = JSON.parse(snapshot.notes);
-    for (const part of ["entries", "recurring", "reminders"]) {
+    for (const part of NOTE_PARTS) {
       const was = notesBefore?.[part] || {};
       const now = notesData?.[part] || {};
       for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {

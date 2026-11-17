@@ -719,7 +719,8 @@
   // + opens a window of the site's parts; tapping one opens a window of what's in it (over the first), and a part with more
   // inside (like Bob's Goals: all of them, or one) opens another. Tapping a card adds it where the + was.
 
-  // What can be added: [{ label, about, items: [{ label, type, ref, items (more inside, instead of a type), note }] }]
+  // What can be added: [{ label, about, items: [{ label, type, ref, items (more inside, instead of a type), note }] }]. The
+  // Spectrum Graph comes first, added straight from the list (a part with a type instead of items).
   function sections() {
     const goals = accountsData?.goals || [];
     const gems = calculatorStore("gems");
@@ -729,6 +730,7 @@
     const bobDef = (id) => CARDS.find(def => def.id === id);
     const card = (label, type, ref = "") => ({ label, type, ref });
     return [
+      { label: "Spectrum Graph", about: "Bob's one graph to compare anything: In Bank, accounts, tracker rows, and more", type: "graph.spectrum" },
       { label: "Main Budget", about: "Home's numbers: In Bank, the lowest it gets, and what's coming", items: [
         card("In Bank today", "home.inBank"), card("Lowest in bank after today", "home.lowest"), card("In Bank at the last day ahead", "home.lastDay"),
         card("Today's entries", "home.today"), card("Upcoming", "home.upcoming"), card("Bob says (his card on Home)", "home.bob")
@@ -747,10 +749,10 @@
       { label: "Crystals", about: "The Paycheck Calculator's crystals: each one's take-home pay", items: crystals.map(crystal => card(`💎 ${presetName(crystal, describeCrystal)}`, "crystal", crystal.id)), empty: "No crystals yet: save one in the Paycheck Calculator (Menu)." },
       { label: "Calendar", about: "Your calendar's entries", items: [card("Today", "calendar.today"), card("The next 7 days", "calendar.week")] },
       { label: "Graphs", about: "Every graph on the site", items: [
-        card("In Bank over time", "graph.inBank"), card("Equity over time", "graph.equity"), card("Goals over time", "graph.goals"),
+        card("Spectrum Graph", "graph.spectrum"), card("In Bank over time", "graph.inBank"), card("Equity over time", "graph.equity"), card("Goals over time", "graph.goals"),
         card("Spent each week", "graph.spent"), card("Spent after each payday", "graph.paydays"), card("Recurring entries each month", "graph.recurring"),
         card("Each wavelength, week by week", "graph.wavelengths"), card("Catchup entries, added up", "graph.catchups"), card("Purchases, added up", "graph.purchases"),
-        card("Big bills, added up", "graph.bills"), card("Spectrum Graph", "graph.spectrum"),
+        card("Big bills, added up", "graph.bills"),
         { label: "Tracker rows", items: rows.map(title => card(title, "graph.tracker", title)), empty: "No tracker rows yet." },
         { label: "Gems", items: gems.map(gem => card(`💠 ${presetName(gem, describeDebt)}`, "graph.gem", gem.id)), empty: "No gems yet." }
       ] }
@@ -770,8 +772,12 @@
           const item = el("li");
           const button = el("button", "snapshotChoice");
           button.type = "button";
-          button.append(el("span", "snapshotChoiceName", section.label), el("span", "snapshotChoiceAbout", section.about), el("span", "snapshotChoiceMore", "›"));
-          button.addEventListener("click", () => openItems(button, section, at));
+          button.append(el("span", "snapshotChoiceName", section.label), el("span", "snapshotChoiceAbout", section.about));
+          if (section.type) button.addEventListener("click", () => add(section, at));
+          else {
+            button.append(el("span", "snapshotChoiceMore", "›"));
+            button.addEventListener("click", () => openItems(button, section, at));
+          }
           item.append(button);
           list.append(item);
         }

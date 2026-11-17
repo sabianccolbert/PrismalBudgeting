@@ -406,7 +406,13 @@ function getSlideDurationSeconds(TAB_SLIDE = document.documentElement.classList.
   if (!TAB_SLIDE) return parseFloat(getComputedStyle(CONTAINER).transitionDuration) || 0;
   // (The parts only get their transition once they start sliding)
   if (prefersReducedMotion()) return 0;
-  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--SLIDE_DURATION")) || 0;
+  return (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--SLIDE_DURATION")) || 0) + cardFollowSeconds();
+}
+
+// How much later the cards under the top one start sliding in on the budget's four pages (html.cardsFollow, Boot.js)
+function cardFollowSeconds() {
+  if (!document.documentElement.classList.contains("cardsFollow")) return 0;
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--CARD_FOLLOW")) || 0;
 }
 
 // The first part of the page that slides between the budget's four pages (stylesheet.css section 10)
@@ -430,7 +436,7 @@ const SLIDE_OUT_CLASSES = { left: "toLeft", right: "toRight", up: "toTop" };
 // signing out slides right, as if the login page sat to the left of the budget (and to the right of the front page,
 // so Sign In there slides left too). Between the budget's four pages, only what's under their tabs slides. The page
 // that opens slides in the same way the last one slid out (Boot.js reads the note transitionTo leaves).
-const MENU_PAGES = ["menu", "spreadsheets", "calculator", "payments", "logs", "settings"];
+const MENU_PAGES = ["menu", "spreadsheets", "calculator", "payments", "logs", "business", "settings"];
 const SIDE_PAGES = ["quick", "quickcal", "privacy"];
 const BUDGET_TABS = ["home", "recurring", "accounts", "bob"];
 
@@ -612,7 +618,10 @@ window.addEventListener("scroll", () => {
 function settlePage() {
   if (PAGE_SETTLED) return;
   PAGE_SETTLED = true;
+  // (The cards under the top one may still be catching up: their slide ends a moment after the page's)
+  const FOLLOW_MS = cardFollowSeconds() * 1000;
   document.documentElement.classList.remove(...SLIDE_IN_CLASSES);
+  if (FOLLOW_MS) setTimeout(() => document.documentElement.classList.remove("cardsFollow"), FOLLOW_MS + 100);
   if (!location.hash || isReturningPage()) return;
   let SPOT = null;
   try { SPOT = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch {}
@@ -788,6 +797,7 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
   const MOVING = WAY === "tab" ? firstSlidingPart() : CONTAINER;
   // Leaving another way while this page is still sliding in by its tab: the whole page slides out after all
   if (WAY !== "tab") document.documentElement.classList.remove("tabSlide");
+  document.documentElement.classList.remove("cardsFollow");
   const DURATION_MS = getSlideDurationSeconds(WAY === "tab") * 1000;
   if (TO) leaveNote(TO, WAY);
 
@@ -1065,9 +1075,9 @@ document.addEventListener("click", (EVENT) => {
 // lists its calendar entries, and the Quick Calendar icons this device made or used (Fractals.js), whether Home's
 // calendar is in List Mode, and which Change Logs rows it has seen (Home's count of other devices' edits, see
 // markLogsSeen in Process Budget.js).
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
   "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off",
-  "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen"];
+  "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen", "prismal_bob_okayed"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));

@@ -17,7 +17,8 @@ const PAGE_RENDERERS = {
   logs: renderLogsPage,
   calculator: renderCalculatorPage,
   payments: renderPaymentsPage,
-  accounts: renderAccountsPage
+  accounts: renderAccountsPage,
+  business: renderBusinessPage
 };
 
 let editMode = false;          // Recurring's (or Bob's Tracker window's) edit mode
@@ -320,7 +321,9 @@ function accountsTotal(summaries, ahead) {
 // Process Budget.js), who made it]. In a shared budget, each row's details say who made it.
 function renderLogsPage(view) {
   renderSearchToolbar();
-  // (Looking at them here sets Home's count of other devices' edits back to 0: markLogsSeen in Process Budget.js)
+  // Rows other devices made since the Change Logs were last looked at here stay highlighted while the page is open.
+  // (Looking at them sets Home's count of other devices' edits back to 0: markLogsSeen in Process Budget.js)
+  for (const mark of unseenLogMarks()) logsUnseen.add(mark);
   markLogsSeen();
   view.replaceChildren();
   const rows = logsData.slice(1).filter(row => !isBlankRow(row));
@@ -342,20 +345,34 @@ function renderLogsPage(view) {
 
 const LOG_COLUMNS = ["Time", "Took", { label: "Action", className: "actionHead" }, "Details", { label: "Undo", className: "undoHead" }];
 
+const logsUnseen = new Set(); // Rows other devices made that hadn't been seen here when the page opened (their logMark)
+
+// A Change Logs row's details, one per line: what the change wrote, its status, and in a shared budget who made it. (An
+// older row's "Move To: None" said nothing, so it's left out.)
+function logDetails(row) {
+  const details = row.slice(3, 7).filter(detail => String(detail).trim() !== "" && String(detail).trim() !== "Move To: None");
+  if (row[7]) details.push("Status: " + row[7]);
+  if (row[9] && budgetIsShared()) details.push("By: " + row[9]);
+  return details;
+}
+
 // One Change Logs row (the page's table, and its Search results), with Undo at its right while its change can be taken
-// back ("Undone" once it was)
+// back ("Undone" once it was). Tapping it opens what it changed (openLogWindow). A row another device made since the
+// Change Logs were last looked at here is highlighted, with "New" by its time.
 function logRow(row) {
   const tr = document.createElement("tr");
   if (row[7] === "Error") tr.className = "errorRow";
   if (row[7] === "Not Found") tr.className = "notFoundRow";
-  tr.appendChild(noTranslate(cell(row[0], "timeCell")));
+  const time = noTranslate(cell(row[0], "timeCell"));
+  if (logsUnseen.has(logMark(row))) {
+    tr.classList.add("unseenRow");
+    time.prepend(BudgetUI.element("span", "logNew", "New"), document.createElement("br"));
+  }
+  tr.appendChild(time);
   tr.appendChild(noTranslate(cell(String(row[1]).replace(" Seconds", "s"), "timeCell")));
   tr.appendChild(clippedCell(row[2], "actionCell"));
-  const details = row.slice(3, 7).filter(detail => String(detail).trim() !== "");
-  if (row[7]) details.push("Status: " + row[7]);
-  if (row[9] && budgetIsShared()) details.push("By: " + row[9]);
   const detailsCell = cell("", "detailsCell");
-  detailsCell.appendChild(aliasBox(details.join("\n"), "detailsBox"));
+  detailsCell.appendChild(aliasBox(logDetails(row).join("\n"), "detailsBox"));
   tr.appendChild(noTranslate(detailsCell)); // Titles, amounts, and dates
   const undoCell = cell("", "undoCell");
   const record = logRecord(row);
@@ -363,13 +380,149 @@ function logRow(row) {
     const button = BudgetUI.element("button", "budgetButton logUndo", "Undo");
     button.type = "button";
     button.setAttribute("aria-label", `Undo ${String(row[2]).trim()} (${String(row[0]).trim()})`);
-    button.addEventListener("click", () => undoFromLogs(row, record, button));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      undoFromLogs(row, record, button);
+    });
     undoCell.appendChild(button);
   } else if (record) {
     undoCell.appendChild(BudgetUI.element("span", "logUndone", "Undone"));
   }
   tr.appendChild(undoCell);
+  tr.classList.add("clickable");
+  tr.setAttribute("aria-label", `${String(row[2]).trim()}, ${String(row[0]).trim()}: see what it changed`);
+  BudgetUI.makePressable(tr);
+  tr.addEventListener("click", () => openLogWindow(row, tr));
   return tr;
+}
+
+// Where each part of the budget a change can touch is: [words for its button, the page]
+const LOG_PLACES = {
+  recurring: ["Go To Recurring Entries", "/menu/recurring.html"],
+  tracker: ["Go To The Tracker", "/menu/bob.html#dataCard"],
+  accounts: ["Go To Equity", "/menu/accounts.html"],
+  equity: ["Go To Equity", "/menu/accounts.html"],
+  goals: ["Go To Goals", "/menu/bob.html#bobCardsCard"],
+  bob: ["Go To Bob's Page", "/menu/bob.html"],
+  snapshot: ["Go To Snapshot", "/snapshot.html"],
+  sheets: ["Go To Budgets, Calendars & Spreadsheets", "/menu/spreadsheets.html"],
+  calculator: ["Go To The Paycheck Calculator", "/menu/calculator.html"],
+  business: ["Go To Business", "/menu/business.html"]
+};
+const LOG_PART_NAMES = {
+  recurring: "Recurring Entries", tracker: "The Tracker", accounts: "Equity Accounts", goals: "Goals", bob: "Bob's cards and settings",
+  snapshot: "The Snapshot page", equity: "Equity's settings", sheets: "Connected spreadsheets and calendars", calculator: "The Paycheck Calculator",
+  business: "Business"
+};
+
+// A row from a table, in words, for what a change added or took off
+function logTableRow(table, row) {
+  if (String(row?.[0] ?? "").trim() === "-") return `Section: ${row[1] ?? ""}`;
+  if (table === "recurring") return `${shownLine(`${row[5] || "✔️"} ${row[1]} ${row[0]}`)}, ${formatFrequency(parseFrequency(row[3]))}`;
+  return String(row?.[0] ?? "");
+}
+
+// What a Change Logs row's change did, from its record (CHANGE LOG UNDO in Process Budget.js) or, for a row without one,
+// from its action and the day it names: [{ heading, lines: [{ text, kind: "added" | "removed" | "" }], go: [words, page] }]
+function logChanges(row, record) {
+  const parts = [];
+  if (record) {
+    for (const day of record.days || []) {
+      const date = createSafeMidnight(day.date, true);
+      if (isNaN(date.getTime())) continue;
+      const left = [...(day.after || [])];
+      const lines = [];
+      for (const line of day.before || []) {
+        const at = left.indexOf(line);
+        if (at !== -1) left.splice(at, 1);
+        else lines.push({ text: shownLine(line), kind: "removed" });
+      }
+      lines.push(...left.map(line => ({ text: shownLine(line), kind: "added" })));
+      parts.push({ heading: showDate(date), lines, go: [`Go To ${showDate(date)}`, `/?day=${formatToYMD(date)}`] });
+    }
+    for (const change of record.rows || []) {
+      const lines = [
+        ...(change.removed || []).map(({ row: was }) => ({ text: logTableRow(change.table, was), kind: "removed" })),
+        ...(change.added || []).map(({ row: now }) => ({ text: logTableRow(change.table, now), kind: "added" }))
+      ];
+      if (lines.length === 0) lines.push({ text: "Put in a new order", kind: "" });
+      parts.push({ heading: LOG_PART_NAMES[change.table] || change.table, lines, go: LOG_PLACES[change.table] || null });
+    }
+    for (const value of record.values || []) {
+      parts.push({ heading: LOG_PART_NAMES[value.part] || value.part, lines: [{ text: "Changed", kind: "" }], go: LOG_PLACES[value.part] || null });
+    }
+    if ((record.notes || []).length > 0) {
+      const count = record.notes.length;
+      parts.push({ heading: "Notes", lines: [{ text: `${count} note${count === 1 ? "" : "s"} added, changed, or taken off (the Change Logs never keep what a note says)`, kind: "" }], go: null });
+    }
+    return parts;
+  }
+  // No record (an older row, one too big to keep, or a kind of change that has none): where it was, from its words
+  const action = String(row[2] ?? "");
+  for (const detail of row.slice(3, 7)) {
+    const text = String(detail ?? "").match(/^(?:On|Moved To|Move To): (.+)$/)?.[1];
+    const date = text ? parseTypedDate(text) : null;
+    if (date && !isNaN(date.getTime())) parts.push({ heading: showDate(date), lines: [], go: [`Go To ${showDate(date)}`, `/?day=${formatToYMD(date)}`] });
+  }
+  const place = /Recurring/.test(action) ? "recurring" : /Tracker/.test(action) ? "tracker" : /🏦|Account/.test(action) ? "accounts"
+    : /🎯|Goal/.test(action) ? "goals" : /Calculator/.test(action) && !/Accrual|Debt/.test(action) ? "calculator" : /Snapshot/.test(action) ? "snapshot"
+    : /Spreadsheet|Calendar/.test(action) ? "sheets" : /Business/.test(action) ? "business" : null;
+  if (place && parts.length === 0) parts.push({ heading: LOG_PART_NAMES[place], lines: [], go: LOG_PLACES[place] });
+  return parts;
+}
+
+// A Change Logs row tapped: a window with its details and what it changed (each day's entries taken off and put on, rows
+// added to or taken off a table, the other parts it changed), each with a button to go there (a day opens zoomed in on
+// Home), and its Undo while it has one
+function openLogWindow(row, origin) {
+  const record = logRecord(row);
+  BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: String(row[2] ?? "").trim() || "A Change",
+    build(form, panel) {
+      form.addEventListener("submit", (event) => event.preventDefault());
+      const facts = noTranslate(BudgetUI.element("ul", "logFacts"));
+      const when = [String(row[0] ?? "").trim(), row[1] ? `took ${String(row[1]).replace(" Seconds", "s")}` : ""].filter(Boolean).join(", ");
+      for (const text of [when, ...logDetails(row)]) facts.append(BudgetUI.element("li", "", text));
+      form.append(facts);
+      const changes = logChanges(row, record);
+      if (changes.length === 0) {
+        form.append(BudgetUI.element("p", "panelHint", record
+          ? "Nothing in the budget changed."
+          : "This change didn't keep what it changed (older changes, very big ones, and Searches don't), so its details above are all there is."));
+      }
+      for (const part of changes) {
+        const box = BudgetUI.element("section", "logChange");
+        box.append(BudgetUI.element("h3", "logChangeTitle", part.heading));
+        if (part.lines.length > 0) {
+          const list = noTranslate(BudgetUI.element("ul", "logChangeLines"));
+          for (const line of part.lines) {
+            const item = BudgetUI.element("li", line.kind === "added" ? "logLine isAdded" : line.kind === "removed" ? "logLine isRemoved" : "logLine");
+            if (line.kind) item.append(BudgetUI.element("span", "logLineMark", line.kind === "added" ? "Put on:" : "Taken off:"));
+            item.append(BudgetUI.element("span", "logLineText", line.text));
+            list.append(item);
+          }
+          box.append(list);
+        }
+        if (part.go) {
+          const link = BudgetUI.element("a", "budgetButton logGo", part.go[0]);
+          link.href = part.go[1];
+          box.append(link);
+        }
+        form.append(box);
+      }
+      const buttons = [{ label: "Close", onClick: () => panel.close() }];
+      if (record && !record.undone) {
+        const undo = document.createElement("button");
+        buttons.unshift({ label: "Undo", onClick: () => {
+          panel.close();
+          undoFromLogs(row, record, undo);
+        } });
+      }
+      form.append(BudgetUI.buttonRow(buttons));
+    }
+  });
 }
 
 // A row's Undo was tapped: after asking, its change is taken back (and logged), or a note says why it can't be
@@ -410,10 +563,286 @@ function renderCalculatorPage(view) {
   const shown = BudgetUI.element("div", "wideColumn");
   const typed = BudgetUI.element("div", "wideColumn");
   shown.append(results, saved ? paycheckBreakdown(computePaycheck(inputs), inputs) : emptyMessage("Fill in your pay, then tap Calculate."));
+  if (saved) shown.append(paycheckGraphCard(saved.takeHome));
   const form = typing || calculatorForm(inputs);
   typed.append(crystalShelf(form), form);
   columns.append(shown, typed);
   view.append(columns);
+}
+
+// The Paycheck Calculator's In Bank graph: In Bank as it is, and with the take home pay landing on a payday picked, in
+// place of a paycheck already in the budget, picked from a list with a search box over it (its amount comes off on its own
+// day; None takes off $0.00). The list is the budget's gains that change In Bank (Regular entries above $0) from today
+// through PAYCHECK_LOOK_DAYS ahead, and picking one makes its day the payday. What's picked stays while the page is open.
+const PAYCHECK_LOOK_DAYS = 62;
+const PAYCHECK_GRAPH_DAYS = 62;
+let paycheckPick = { payday: null, entry: "" }; // entry: the picked paycheck's key (see paycheckGains), or "" for None
+
+// The budget's paychecks to pick from: [{ key, date, title, amount }], soonest first
+function paycheckGains() {
+  const gains = [];
+  for (let at = 0; at <= PAYCHECK_LOOK_DAYS; at++) {
+    const date = addDays(today, at);
+    const day = budgetDayAt(date);
+    if (!day) continue;
+    for (const line of String(day.text).split("\n").slice(1)) {
+      const parts = getParts(line);
+      if (parts.length < 3 || BudgetUI.isSystemLine(parts[0]) || getSpecialType(parts[0]) !== "❗️") continue;
+      const amount = parseAmount(parts[1]);
+      if (amount <= 0) continue;
+      gains.push({ key: `${formatToYMD(date)}|${line}`, date, title: parts.slice(2).join(" "), amount });
+    }
+  }
+  return gains;
+}
+
+function paycheckGraphCard(takeHome) {
+  const card = BudgetUI.element("section", "budgetCard paycheckGraph");
+  card.setAttribute("aria-label", "In Bank with this paycheck");
+  card.append(BudgetUI.element("h3", "", "In Bank With This Paycheck"));
+  card.append(BudgetUI.element("p", "panelHint", `See what ${formatMoney(takeHome)} on a payday does to In Bank. Pick the paycheck it would take the place of, if one's in your budget already, so it isn't counted twice.`));
+  const gains = paycheckGains();
+  const picked = () => gains.find(gain => gain.key === paycheckPick.entry) || null;
+  if (paycheckPick.entry && !picked()) paycheckPick.entry = "";
+
+  // In place of: a search box over the list (None first, always)
+  const search = BudgetUI.element("input", "textInput paycheckSearch");
+  search.type = "search";
+  search.placeholder = "Search your paychecks";
+  search.setAttribute("aria-label", "Search the paychecks in your budget");
+  const list = BudgetUI.element("select", "selectInput paycheckList");
+  list.translate = false;
+  const fillList = () => {
+    const words = cleanString(search.value);
+    const shownGains = gains.filter(gain => !words || cleanString(gain.title).includes(words) || showDate(gain.date).includes(search.value.trim()));
+    list.replaceChildren(new Option("None ($0.00)", ""), ...shownGains.map(gain => new Option(`${showDay(gain.date)}: ${gain.title}, ${formatMoney(gain.amount)}`, gain.key)));
+    list.value = shownGains.some(gain => gain.key === paycheckPick.entry) ? paycheckPick.entry : "";
+  };
+  search.addEventListener("input", fillList);
+  fillList();
+  const listBox = BudgetUI.element("div", "paycheckListBox");
+  listBox.append(search, list);
+  const instead = BudgetUI.field("In place of", listBox, { hint: gains.length ? `The gains in your budget from today through ${showDay(addDays(today, PAYCHECK_LOOK_DAYS))}. Its amount comes off on its day.` : "No gains in your budget in the next two months, so it's added on top of what's there." });
+
+  const payday = BudgetUI.dateField({ label: "Payday", date: paycheckPick.payday || picked()?.date || today, min: today, hint: "The day this paycheck would land." });
+  list.addEventListener("change", () => {
+    paycheckPick.entry = list.value;
+    const gain = picked();
+    if (gain) {
+      paycheckPick.payday = gain.date;
+      payday.input.value = showDate(gain.date);
+    }
+    graph.draw();
+  });
+  payday.input.addEventListener("change", () => {
+    const day = payday.value();
+    if (day instanceof Date) paycheckPick.payday = day < today ? today : day;
+    graph.draw();
+  });
+
+  // The two lines, from today on (a projection of the budget, worked out once for the stretch drawn)
+  let projected = null;
+  const graph = LineGraph.create({
+    label: "In Bank, as it is and with this paycheck",
+    level: 4,
+    start: today,
+    until: addDays(today, PAYCHECK_GRAPH_DAYS),
+    min: addDays(today, 7),
+    max: addMonths(today, 24),
+    dashAhead: false,
+    from: () => today,
+    series: (first, until) => {
+      if (!projected || projected.until.getTime() !== until.getTime()) projected = projectBudget(until);
+      const day = paycheckPick.payday || picked()?.date || today;
+      const gain = picked();
+      const asIs = [];
+      const withIt = [];
+      for (let date = first < today ? today : first; date <= until; date = addDays(date, 1)) {
+        const inBank = projected.inBankOn(date);
+        const change = (date >= day ? takeHome : 0) - (gain && date >= gain.date ? gain.amount : 0);
+        asIs.push({ date, value: inBank });
+        withIt.push({ date, value: Math.round((inBank + change) * 100) / 100 });
+      }
+      return [{ name: "As it is", points: asIs }, { name: "With this paycheck", points: withIt }];
+    },
+    emptyNote: "Nothing to draw yet."
+  });
+  card.append(instead, payday.el, graph.el);
+  return card;
+}
+
+// Business (Business Mode, see Business Mode in Process Budget.js): a year's Revenue, Expenses, Profit, Asset Purchases,
+// Assets, and each owner's money in and out, from the days before today, each a card that opens its entries (newest
+// first); then the titles in each category (each one's can change, and a title can be put in one); then the owners. With
+// Business Mode off for the budget, it says where its owner turns it on. The year picked stays while the page is open.
+let businessYear = null;
+const openBusinessParts = new Set(); // The categories whose entries are open
+
+function renderBusinessPage(view) {
+  view.replaceChildren();
+  if (!businessOn()) {
+    view.append(emptyMessage("Business Mode is off for this budget. Its owner can turn it on in Budgets, Calendars & Spreadsheets (in the Menu), under Budgets."));
+    return;
+  }
+  const thisYear = today.getFullYear();
+  const firstYear = Math.min(thisYear, (oldestHistoryDay() || today).getFullYear());
+  const year = businessYear && businessYear >= firstYear && businessYear <= thisYear ? businessYear : thisYear;
+  const yearPick = BudgetUI.selectField({ label: "Year", options: Array.from({ length: thisYear - firstYear + 1 }, (_, at) => ({ value: thisYear - at, label: String(thisYear - at) })), value: year });
+  yearPick.input.addEventListener("change", () => {
+    businessYear = Number(yearPick.value());
+    renderBusinessPage(view);
+  });
+  const figures = businessFigures(new Date(year, 0, 1), new Date(year, 11, 31));
+  const categories = businessCategories();
+  const top = BudgetUI.element("section", "budgetCard businessTop");
+  top.setAttribute("aria-label", `The business in ${year}`);
+  top.append(yearPick.el, BudgetUI.element("p", "panelHint", year === thisYear ? `So far this year: the days before today.` : `All of ${year}.`));
+
+  // The figures: Revenue, Expenses, Profit, then each other category
+  const figuresBox = BudgetUI.element("div", "paycheckResults businessFigures");
+  const figure = (label, amount, main = false) => {
+    const box = BudgetUI.element("div", `infoCard paycheckResult${main ? " takeHome" : ""}`);
+    const shown = BudgetUI.element("span", `paycheckAmount ${amount < 0 ? "negative" : amount > 0 ? "positive" : ""}`.trim(), formatMoney(amount));
+    box.append(BudgetUI.element("span", "infoLabel", label), noTranslate(shown));
+    return box;
+  };
+  figuresBox.append(figure("Profit", figures.profit, true), figure("Revenue", figures.revenue), figure("Expenses", figures.expenses));
+  top.append(figuresBox);
+  view.append(top);
+
+  // Each category's card: its total (an owner's: put in, taken out, and the two together), opening its entries
+  const list = BudgetUI.element("div", "businessParts");
+  for (const category of categories) {
+    const total = figures.totals[category.id];
+    const entries = figures.entries[category.id];
+    const owner = category.id.startsWith("owner:");
+    const card = BudgetUI.element("section", "budgetCard businessPart");
+    const toggle = BudgetUI.element("button", "foldToggle businessToggle");
+    toggle.type = "button";
+    const open = openBusinessParts.has(category.id);
+    toggle.setAttribute("aria-expanded", String(open));
+    const summary = owner
+      ? `Put in ${formatMoney(total.gains)}, took out ${formatMoney(total.costs)}: ${formatMoney(total.net)}`
+      : `${formatMoney(total.net)}, ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`;
+    toggle.append(BudgetUI.element("span", "foldTitle", owner ? `Owner: ${category.name}` : category.name), noTranslate(BudgetUI.element("span", "foldSummary", summary)), BudgetUI.element("span", "foldChevron", "›"));
+    const body = BudgetUI.element("div", "businessEntries");
+    body.hidden = !open;
+    if (entries.length === 0) {
+      body.append(BudgetUI.element("p", "panelHint", "Nothing yet this year. Put titles in this category below, or under Business in an entry's window."));
+    } else {
+      const table = createDataTable(["Day", "Title", "Amount"]);
+      for (const entry of entries) {
+        const tr = document.createElement("tr");
+        tr.append(cell(showDate(entry.date), "timeCell"), noTranslate(cell(`${baseSprite(entry.sprite)} ${entry.title}`)), noTranslate(cell(formatMoney(entry.amount), `amountCell ${BudgetUI.amountClass(entry.amount)}`)));
+        table.tBodies[0].append(tr);
+      }
+      body.append(wrapScroll(table));
+    }
+    toggle.addEventListener("click", () => {
+      body.hidden = !body.hidden;
+      toggle.setAttribute("aria-expanded", String(!body.hidden));
+      if (body.hidden) openBusinessParts.delete(category.id);
+      else openBusinessParts.add(category.id);
+    });
+    card.append(toggle, body);
+    list.append(card);
+  }
+  view.append(list);
+  view.append(businessTitlesCard(), businessOwnersCard());
+}
+
+// The titles in each category, each with a list to move it to another (or None), and a box to put a title in one
+function businessTitlesCard() {
+  const card = BudgetUI.element("section", "budgetCard businessTitles");
+  card.setAttribute("aria-labelledby", "businessTitlesHeading");
+  const heading = BudgetUI.element("h3", "", "Titles");
+  heading.id = "businessTitlesHeading";
+  card.append(heading, BudgetUI.element("p", "panelHint", "Each title's category. Every entry with the title counts in it, whatever its type."));
+  const options = [{ value: "none", label: "None" }, ...businessCategories().map(category => ({ value: category.id, label: category.name }))];
+  const titles = Object.entries(accountsData?.business?.titles || {}).sort((a, b) => a[0].localeCompare(b[0]));
+  if (titles.length === 0) card.append(BudgetUI.element("p", "panelHint", "No titles in a category yet."));
+  const listEl = BudgetUI.element("ul", "budgetList businessTitleList");
+  for (const [key, category] of titles) {
+    const item = BudgetUI.element("li", "budgetItem");
+    const name = noTranslate(BudgetUI.element("span", "budgetName", capitalize(key)));
+    const pick = BudgetUI.element("select", "selectInput");
+    pick.append(...options.map(option => new Option(option.label, option.value)));
+    pick.value = category;
+    pick.setAttribute("aria-label", `${capitalize(key)}: its category`);
+    noTranslate(pick);
+    pick.addEventListener("change", async () => {
+      pick.disabled = true;
+      const result = await saveBusinessTitle(key, pick.value);
+      if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+      else BudgetUI.warnIfUnsaved(result);
+    });
+    item.append(name, pick);
+    listEl.append(item);
+  }
+  card.append(listEl);
+  // Put a title in one
+  const title = BudgetUI.textField({ label: "A title", placeholder: "Sales, Supplies, Draw...", maxLength: MAX_TITLE });
+  const pick = BudgetUI.selectField({ label: "Its category", options: options.filter(option => option.value !== "none"), value: "revenue" });
+  noTranslate(pick.input);
+  const add = BudgetUI.buttonRow([{ label: "Put It In", kind: "primary", onClick: async (event) => {
+    if (!title.value()) return BudgetUI.showToast("Type the title.", true);
+    event.currentTarget.disabled = true;
+    const result = await saveBusinessTitle(title.value(), pick.value());
+    if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+    else BudgetUI.warnIfUnsaved(result);
+  } }]);
+  const row = BudgetUI.element("div", "businessAddTitle");
+  row.append(title.el, pick.el);
+  card.append(row, add);
+  return card;
+}
+
+// The business's owners: each one's name (it can change), × to take one out, Add An Owner, and Save Owners
+function businessOwnersCard() {
+  const card = BudgetUI.element("section", "budgetCard businessOwners");
+  card.setAttribute("aria-labelledby", "businessOwnersHeading");
+  const heading = BudgetUI.element("h3", "", "Owners");
+  heading.id = "businessOwnersHeading";
+  card.append(heading, BudgetUI.element("p", "panelHint", `Each owner is a category of their own: what they put in and took out. Up to ${MAX_OWNERS}.`));
+  const rows = BudgetUI.element("div", "businessOwnerRows");
+  const addRow = (owner) => {
+    const row = BudgetUI.element("div", "businessOwnerRow");
+    row.dataset.id = owner.id || "";
+    const box = BudgetUI.element("input", "textInput");
+    box.type = "text";
+    box.value = owner.name;
+    box.maxLength = MAX_OWNER_NAME;
+    box.placeholder = "Their name";
+    box.setAttribute("aria-label", "An owner's name");
+    noTranslate(box);
+    const remove = BudgetUI.element("button", "panelClose termRemove", "×");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `Take out ${owner.name || "this owner"}`);
+    remove.addEventListener("click", () => row.remove());
+    row.append(box, remove);
+    rows.append(row);
+    return box;
+  };
+  for (const owner of accountsData?.business?.owners || []) addRow(owner);
+  card.append(rows, BudgetUI.buttonRow([
+    { label: "Add An Owner", onClick: () => {
+      if (rows.childElementCount >= MAX_OWNERS) return BudgetUI.showToast(`A business can have up to ${MAX_OWNERS} owners here.`, true);
+      addRow({ id: "", name: "" }).focus();
+    } },
+    { label: "Save Owners", kind: "primary", onClick: async (event) => {
+      const list = [...rows.children].map(row => ({ id: row.dataset.id || null, name: row.querySelector("input").value })).filter(owner => owner.name.trim() || owner.id);
+      const leaving = (accountsData?.business?.owners || []).filter(owner => !list.some(kept => kept.id === owner.id));
+      if (leaving.length > 0 && !window.confirm(`Take out ${leaving.map(owner => owner.name).join(", ")}? Their titles leave every category.`)) return;
+      event.currentTarget.disabled = true;
+      const result = await saveBusinessOwners(list);
+      if (!result.ok) BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+      else {
+        BudgetUI.warnIfUnsaved(result);
+        BudgetUI.showToast("The owners are saved.");
+      }
+    } }
+  ]));
+  return card;
 }
 
 // How the take-home pay adds up ($0 lines are left out)
@@ -1874,7 +2303,28 @@ function selectCell(index, selectable = true) {
 const EDGE_ZONE = 0.25;  // Fraction of the screen height at each edge that scrolls
 const MAX_SCROLL = 22;   // Pixels per frame at the very edge
 
-// Start dragging a row by its ≡ bar; the new order saves when it's let go
+// A section's heading moves its whole section: the heading, the rows under it up to the next heading, and the + Section
+// rows between them (with the one just above the heading). Any other row moves by itself.
+function sectionBlock(row) {
+  if (!row.classList.contains("categoryRow")) return [row];
+  const block = [];
+  if (row.previousElementSibling?.classList.contains("sectionInsertRow")) block.push(row.previousElementSibling);
+  block.push(row);
+  for (let next = row.nextElementSibling; next && !next.classList.contains("categoryRow"); next = next.nextElementSibling) {
+    // (The + Section row just above the next heading stays with that heading, and the last one stays last)
+    if (next.classList.contains("sectionInsertRow") && (!next.nextElementSibling || next.nextElementSibling.classList.contains("categoryRow"))) break;
+    block.push(next);
+  }
+  return block;
+}
+
+// Where a section moved before HEADING lands: before the + Section row just above that heading
+function beforeSection(heading) {
+  const above = heading.previousElementSibling;
+  return above?.classList.contains("sectionInsertRow") ? above : heading;
+}
+
+// Start dragging a row by its ≡ bar (a section's heading brings its section along); the new order saves when it's let go
 function startRowDrag(event, bar, tableEl, tableName) {
   event.preventDefault();
   const row = bar.closest("tr");
@@ -1883,22 +2333,27 @@ function startRowDrag(event, bar, tableEl, tableName) {
   const pointerId = event.pointerId;
   let pointerY = event.clientY;
   let frame = null;
+  const block = sectionBlock(row);
+  const isSection = block.length > 1 || row.classList.contains("categoryRow");
 
   tableEl.classList.add("isDragging");
-  row.classList.add("dragRow");
+  block.forEach(part => part.classList.add("dragRow"));
 
-  // Put the dragged row before the first row whose middle is below the pointer
+  // Put the dragged row before the first row whose middle is below the pointer. A section goes only between sections:
+  // before the first other heading whose middle is below the pointer, or after the last row.
   const placeRow = () => {
-    const others = [...body.querySelectorAll("tr[data-index]")].filter(other => other !== row);
-    for (const other of others) {
+    const others = [...body.querySelectorAll("tr[data-index]")].filter(other => !block.includes(other));
+    const targets = isSection ? others.filter(other => other.classList.contains("categoryRow")) : others;
+    for (const other of targets) {
       const rect = other.getBoundingClientRect();
       if (pointerY < rect.top + rect.height / 2) {
-        if (row.nextElementSibling !== other) other.before(row);
+        const spot = isSection ? beforeSection(other) : other;
+        if (block[block.length - 1].nextElementSibling !== spot) spot.before(...block);
         return;
       }
     }
     const last = others[others.length - 1];
-    if (last && last.nextElementSibling !== row) last.after(row);
+    if (last && last.nextElementSibling !== block[0]) last.after(...block);
   };
 
   const autoScroll = () => {
@@ -1926,7 +2381,7 @@ function startRowDrag(event, bar, tableEl, tableName) {
     document.removeEventListener("pointerup", onEnd);
     document.removeEventListener("pointercancel", onEnd);
     tableEl.classList.remove("isDragging");
-    row.classList.remove("dragRow");
+    block.forEach(part => part.classList.remove("dragRow"));
 
     const order = rowOrder(body);
     if (order.join() !== startOrder.join()) saveRowOrder(tableName, order, Number(row.dataset.index));
@@ -1960,11 +2415,24 @@ async function moveRowWithKey(event, bar, tableEl, tableName) {
   event.preventDefault();
   const row = bar.closest("tr");
   const body = tableEl.tBodies[0];
-  const rows = [...body.querySelectorAll("tr[data-index]")];
-  const other = rows[rows.indexOf(row) + (event.key === "ArrowUp" ? -1 : 1)];
-  if (!other) return;
-  if (event.key === "ArrowUp") other.before(row);
-  else other.after(row);
+  const block = sectionBlock(row);
+  if (row.classList.contains("categoryRow")) {
+    // A section moves past the section above or below it
+    const headings = [...body.querySelectorAll("tr.categoryRow")];
+    const other = headings[headings.indexOf(row) + (event.key === "ArrowUp" ? -1 : 1)];
+    if (!other) return;
+    if (event.key === "ArrowUp") beforeSection(other).before(...block);
+    else {
+      const below = sectionBlock(other);
+      below[below.length - 1].after(...block);
+    }
+  } else {
+    const rows = [...body.querySelectorAll("tr[data-index]")];
+    const other = rows[rows.indexOf(row) + (event.key === "ArrowUp" ? -1 : 1)];
+    if (!other) return;
+    if (event.key === "ArrowUp") other.before(row);
+    else other.after(row);
+  }
   const landed = await saveRowOrder(tableName, rowOrder(body), Number(row.dataset.index));
   if (landed !== null) document.querySelector(`tr[data-index="${landed}"] .moveBar`)?.focus({ preventScroll: true });
 }
@@ -2025,8 +2493,12 @@ function openRecurringPanel(origin, index, fill = null) {
       end.input.addEventListener("change", showPlaceholder);
       showPlaceholder();
       // Its Wavelength (once Bob's card for it is on): its title's, following a new title as it's typed
-      const purpose = BudgetUI.purposeField({ shown: bobCardOn("purposes"), title: existing ? String(existing[0]) : "" });
-      const followTitle = () => purpose.follow(withAccount(title.value(), account.value(), account.from()));
+      const purpose = BudgetUI.purposeField({ shown: bobCardOn("purposes"), title: existing ? String(existing[0]) : "", own: existing ? noteText("recurringPurposes", recurringNoteKey(existing[0], existing[5])) : "" });
+      const business = BudgetUI.businessField({ title: existing ? String(existing[0]) : "" });
+      const followTitle = () => {
+        purpose.follow(withAccount(title.value(), account.value(), account.from()));
+        business.follow(withAccount(title.value(), account.value(), account.from()));
+      };
       title.input.addEventListener("input", followTitle);
       account.el.addEventListener("pick", followTitle);
       // Its own note, under the buttons (each day it lands on can have one of its own too)
@@ -2045,7 +2517,7 @@ function openRecurringPanel(origin, index, fill = null) {
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteEntry }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Entry", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, purpose.el, ...(days ? [days.el] : []), BudgetUI.buttonRow(buttons), note.el);
+      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, purpose.el, business.el, ...(days ? [days.el] : []), BudgetUI.buttonRow(buttons), note.el);
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -2070,6 +2542,8 @@ function openRecurringPanel(origin, index, fill = null) {
           if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return panel.setError(`Enter how many days behind or ahead of the current day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
         }
         fields.purpose = purpose.value();
+        fields.purposePerTitle = purpose.perTitle();
+        fields.business = business.value();
         if (note.value() !== currentNote) fields.note = note.value();
         BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
       });

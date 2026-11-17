@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=7963a71a63">
+    <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=ca59e3f5eb">
+    <link rel="stylesheet" href="/budgetStyle.css?v=04dcfaf0d4">
     <link rel="stylesheet" href="/themes.css?v=ae228a8c81">
     <title>Prismal Planning - Budgets, Calendars &amp; Spreadsheets</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -83,21 +83,23 @@
                  (Fractals.js renderManager) -->
             <section id="fractals" class="budgetCard settingsCard" aria-labelledby="fractalsHeading" hidden>
               <h3 id="fractalsHeading">Calendar Fractals</h3>
-              <p>Your calendars. Each one has a name and a color, and its entries show on Home's calendar in that color while it's checked in the Calendar Fractals list there. Add entries with New Entry on Home (Calendar Entry), or with a Quick Calendar icon. A linked one shows another calendar's entries (one connected below, or a calendar's link).</p>
+              <p>Your calendars and this budget's (Per Budget). Each one has a name and a color, and its entries show on Home's calendar in that color while it's checked in the Calendar Fractals list there. Add entries with New Entry on Home (Calendar Entry), or with a Quick Calendar icon. A calendar from somewhere else (another app, or another account's Calendar Fractal) is added under Automated Calendars &amp; Paychecks, and shows here as a linked one.</p>
               <div id="fractalManager"></div>
               <div class="panelButtons">
                 <button id="newFractalButton" type="button" class="budgetButton primary">New Calendar Fractal</button>
               </div>
-              <p class="panelHint">Deleting a fractal deletes its entries too (your last one can't be deleted). Each one's calendar link, for other calendar apps, is in its Edit window (Share), and in <a href="/settings.html#fractalLinksCard">Settings</a>. A fractal with your work shifts can be connected below, to turn them into paychecks.</p>
+              <p class="panelHint">Deleting a fractal deletes its entries too, for everyone it's shown to (the last one can't be deleted). Each one's calendar link, for other calendar apps and other Prismal Planning accounts, is in its Edit window (Share), and in <a href="/settings.html#fractalLinksCard">Settings</a>. A fractal with your work shifts can be added under Automated Calendars &amp; Paychecks, to turn them into paychecks.</p>
             </section>
 
           </div>
           <div class="wideColumn">
-            <!-- Connected calendars: each one's button (change it), On/Off, Delete, and its paychecks and shifts, with what's
-                 wrong under it (Calendars Page.js; reading them and working out their pay is Calendars.js) -->
+            <!-- Automated Calendars & Paychecks: calendars added as paychecks (each one's button to change it, On/Off, Delete,
+                 and its paychecks and shifts, with what's wrong under it), as a linked Calendar Fractal, or both, and the
+                 ones only on the calendar (Calendars Page.js; reading them and working out their pay is Calendars.js) -->
             <section id="calendarsView" class="budgetCard settingsCard" aria-labelledby="calendarsHeading" hidden>
-              <h3 id="calendarsHeading">Connected Calendars</h3>
-              <p>Keep your work shifts on a calendar (Apple, Google, Outlook, or a work scheduling app)? Connect it with your pay, and every paycheck its shifts come to lands on your calendar on its payday, behind a ➕, worked out like a paystub (overtime, night rates, deductions, and taxes), and following the calendar as shifts are added, moved, or deleted.</p>
+              <h3 id="calendarsHeading">Automated Calendars &amp; Paychecks</h3>
+              <p>Add a calendar from somewhere else (Apple, Google, Outlook, a work scheduling app, or another account's Calendar Fractal link), or one of your own Calendar Fractals. The three buttons at the top of its window pick what it becomes: <strong>$</strong> paychecks in your budget, <strong>$ and the calendar</strong> both, or <strong>the calendar</strong> alone, its events on your calendar in their own color.</p>
+              <p>As paychecks: fill in your pay, and every paycheck its shifts come to lands on your budget's calendar on its payday, behind a ➕, worked out like a paystub (overtime, night rates, deductions, and taxes), and following the calendar as shifts are added, moved, or deleted. Paying someone else by their shifts? Pick Cost, and each paycheck is a cost instead.</p>
               <!-- Like spreadsheets, connecting one needs a verified email (the note above has the button) -->
               <p id="calendarsVerify" class="panelHint calendarsVerify" role="status" hidden>Connecting a calendar needs a verified email too: see the note under Connected Spreadsheets, below.</p>
               <ul id="calendarList" class="sheetList"></ul>
@@ -137,7 +139,7 @@
           <p>Every budget you have, your own and the ones shared with you, with invitations to Join or Decline. <strong>Open</strong> switches to one, <strong>Share</strong> invites someone to one of yours (by their username or email; once they join, they can open it and change anything in it, and Stop Sharing takes it back), <strong>Rename</strong> and <strong>Delete</strong> are for your own (your first budget can't be deleted), and <strong>Leave</strong> is for one shared with you. Only a budget's owner can share it. The name above the buttons at the top of every page switches between them too.</p>
 
           <h4>Calendar Fractals</h4>
-          <p>Your calendars, each with a name and a color. Their entries show on Home's calendar in that color while they're checked in the Calendar Fractals list there. <strong>Default</strong> makes one the fractal new calendar entries start in (on every device and Quick Calendar icon). <strong>Edit</strong> changes one's name or color (or deletes it, with its entries; your last one can't be deleted), and its <strong>Share</strong> gives its link for other calendar apps (it's in Settings too). <strong>New Calendar Fractal</strong> makes another, or with <strong>From another calendar</strong>, links one: a calendar connected below, or a calendar's subscription link. A linked one's entries show on Home in its color but can't be changed here (or get alerts); its Edit has Read Again, Share, and Unlink. Deleting a connected calendar unlinks the fractals showing it. Add entries with New Entry on Home (its Calendar Entry button), or with a Quick Calendar icon.</p>
+          <p>Your calendars and this budget's, each with a name and a color. Their entries show on Home's calendar in that color while they're checked in the Calendar Fractals list there. <strong>Per Budget</strong> (each one's switch, with its ?): on, it's this budget's (it shows only while this budget is open, and everyone the budget is shared with sees it and can change it); off, it's yours alone, in every budget you open. A new one is the budget's to start. <strong>Default</strong> makes one the fractal new calendar entries start in (on every device and Quick Calendar icon). <strong>Edit</strong> changes one's name or color (or deletes it, with its entries; your last one can't be deleted), and its <strong>Share</strong> gives its link for other calendar apps and other Prismal Planning accounts (it's in Settings too). <strong>New Calendar Fractal</strong> makes another. A linked one (a calendar added under Automated Calendars &amp; Paychecks to show on your calendar) shows its entries on Home in its color but can't be changed here (or get alerts); its Edit has Read Again, Share, and Unlink. Deleting a calendar added for paychecks and the calendar unlinks the fractal showing it. <strong>Holidays</strong> is the year's holidays, all day: its Edit changes its color, and its days can't be changed. The ≡ at each one's left moves it in the order (drag it, or use the arrow keys). Add entries with New Entry on Home (its Calendar Entry button), or with a Quick Calendar icon.</p>
 
           <h4>Spreadsheets</h4>
           <p>Connect a spreadsheet you already keep, like a list of bills or paychecks, and its entries land on your calendar by themselves, from today on, like recurring entries. They start with a ➕: ➕❗️ Regular, ➕✖️ Hidden, or ➕⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
@@ -178,8 +180,11 @@
           <h4>Problems</h4>
           <p>When a cell can't be read (like a date that isn't a date, or an Equity account you don't have), the box under that spreadsheet says which cell and how to fix it. The other entries still land.</p>
 
-          <h4>Calendars</h4>
-          <p>The calendar can be one of your own Calendar Fractals (pick it under Calendar when you add one): then the shifts are the entries you add to it on Home. Only your account can read it, so in a budget you share, its paychecks are worked out on your devices.</p>
+          <h4>Automated Calendars &amp; Paychecks</h4>
+          <p>Tap Add Calendar. The three buttons at the top of its window pick what the calendar becomes: <strong>$</strong> paychecks in your budget (its shifts, worked out with your pay), <strong>$ with the calendar</strong> both, or <strong>the calendar</strong> alone (its events show on your calendar in a color you pick, as a linked Calendar Fractal, and nothing is added to your budget). A calendar already added for paychecks can be put on your calendar too, or taken off it, from its window; to keep only its events on your calendar, delete it and add it again with the calendar button.</p>
+          <p>Another Prismal Planning account can share one of its Calendar Fractals with you: its link (from that fractal's Share) works here like any calendar's link.</p>
+          <p>The calendar can be one of your own Calendar Fractals (pick it under Calendar when you add one): then the shifts are the entries you add to it on Home, its color and name show beside it, and since it's on your calendar already, it's added as paychecks only (the three buttons hide). Only your account can read it, so in a budget you share, its paychecks are worked out on your devices.</p>
+          <p><strong>Who Is Paid:</strong> Gain (the usual) is your own pay. Cost is for someone you pay by the shifts on the calendar, like a sitter or an employee: each paycheck is a cost on its payday, at what it comes to after the deductions and taxes under Pay (leave those blank for someone paid all of it).</p>
           <p>Connect the calendar your work shifts are on and fill in your pay, and each paycheck lands on your calendar on its payday, behind a ➕ (like ➕❗️ $950.00 Paycheck), at what it comes to after deductions and taxes.</p>
           <ol>
             <li>Verify your email first, like for a spreadsheet.</li>
