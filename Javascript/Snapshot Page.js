@@ -219,15 +219,16 @@
 
   // A Bob card (Bob Page.js CARDS), drawn the way his page draws it, with what it keeps (like its date boxes) over it. Like
   // on his page, it's made once (keep.card), and what it shows is drawn again with every change, so a day picked in it stays.
+  // A Wavelength Planning card's days are its own on each device (waveKey: by its id on this page, see WAVELENGTH DAYS).
   function bobCardType(id) {
     return {
       keeps: true,
       title: () => (CARDS.find(def => def.id === id) || {}).title || "Bob",
-      render(body, ref, keep) {
+      render(body, ref, keep, cardId) {
         const def = CARDS.find(item => item.id === id);
         if (!def) throw new Gone();
         if (!keep.card) {
-          const card = { def, el: body, toggle: null, state: null, warning: null, body, results: el("div", "sectionResults"), highlight: null };
+          const card = { def, el: body, toggle: null, state: null, warning: null, body, results: el("div", "sectionResults"), highlight: null, waveKey: `snapshot:${cardId}` };
           const controls = def.setup ? def.setup(card) : null;
           keep.card = card;
           body.replaceChildren(...[controls, card.results].filter(Boolean));
@@ -647,7 +648,7 @@
     try {
       if (!type) throw new Gone();
       if (!type.keeps) body.replaceChildren();
-      type.render(body, card.ref, entry.keep);
+      type.render(body, card.ref, entry.keep, card.id);
     } catch (error) {
       entry.keep = {}; // (Made again from the start next time)
       body.replaceChildren(el("p", "panelHint", error instanceof Gone

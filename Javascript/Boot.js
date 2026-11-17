@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.17.2026.A";
+  const SITE_VERSION = "11.17.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,7 +26,7 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "edb63d906a",
+    "/Javascript/Bob Page.js": "11f67a37f9",
     "/Javascript/Budget Pages.js": "0aedf43f05",
     "/Javascript/Budget Search.js": "7fd273fe6b",
     "/Javascript/Budget UI.js": "deed9a9312",
@@ -36,21 +36,21 @@
     "/Javascript/Calendars.js": "019006cf32",
     "/Javascript/Dates.js": "328ef77813",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "09e3e78840",
+    "/Javascript/Fractals.js": "c6eecdfb30",
     "/Javascript/Holidays.js": "eba1fab331",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "1be2ad1eaa",
+    "/Javascript/Layout.js": "3a9700ca43",
     "/Javascript/Line Graph.js": "3a2585001d",
     "/Javascript/Login.js": "5869bb48e7",
     "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "b373499218",
+    "/Javascript/Process Budget.js": "bfd1528250",
     "/Javascript/Quick Calendar.js": "815345e6f4",
     "/Javascript/Quick Entry.js": "3b2714f488",
     "/Javascript/Quick Icon.js": "944d097f5a",
     "/Javascript/Session.js": "2ba7a04b3e",
     "/Javascript/Settings Page.js": "1b03b54a57",
-    "/Javascript/Snapshot Page.js": "8cc96465ad",
+    "/Javascript/Snapshot Page.js": "0299a7c7d1",
     "/Javascript/Sounds.js": "21207f2cfd",
     "/Javascript/Spreadsheets Page.js": "5e1b61db41",
     "/Javascript/Spreadsheets.js": "008d184ec1",

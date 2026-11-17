@@ -5234,15 +5234,29 @@ function backupPlans(backup) {
       const mine = Object.entries(mineBob.purposes);
       const theirs = Object.entries(theirBob.purposes);
       const countPurposes = (choice) => mergeKeyed(keyed(mine, ([key]) => key), keyed(theirs, ([key]) => key), choice);
-      // (Which of his cards are on, the wavelengths, and the Spectrum Graph's lines go with the side that wins; a title on
-      // a wavelength that side doesn't have has none)
+      // (The rest of his page goes with the side that wins, checked the way a load checks it (normalizeBob): which of his
+      // cards are on and their Warnings, the wavelengths and their goals, and the Spectrum Graph's lines; a title on a
+      // wavelength that side doesn't have has none)
       plan("bob", "Bob's Page", "titles on a wavelength", mine.length, theirs.length, countPurposes(null).clashes, (choice) => {
         const winner = choice === "current" && accountsData.bob ? mineBob : theirBob;
-        const known = new Set((winner.wavelengths || DEFAULT_WAVELENGTHS).map(wave => wave.id));
-        const purposes = {};
-        for (const [key, purpose] of countPurposes(choice).items.slice(0, MAX_PURPOSES)) if (known.has(purpose)) purposes[key] = purpose;
-        const spectrum = normalizeSpectrum(winner.spectrum);
-        accountsData.bob = { cards: [...winner.cards], purposes, ...(winner.wavelengths ? { wavelengths: winner.wavelengths.map(wave => ({ ...wave })) } : {}), ...(spectrum ? { spectrum } : {}) };
+        accountsData.bob = normalizeBob({ ...winner, purposes: Object.fromEntries(countPurposes(choice).items) }, false);
+      });
+    }
+
+    // Business Mode's owners and each title's category (whether it's on is the budget's own, kept by the API): the titles
+    // merged like Bob's, and the owners with the side that wins (a title in an owner's category that side doesn't have
+    // has none)
+    const theirBusiness = backup.accounts.business;
+    if (theirBusiness) {
+      const mineBusiness = accountsData.business || { owners: [], titles: {} };
+      const mine = Object.entries(mineBusiness.titles);
+      const theirs = Object.entries(theirBusiness.titles);
+      const countTitles = (choice) => mergeKeyed(keyed(mine, ([key]) => key), keyed(theirs, ([key]) => key), choice);
+      plan("business", "Business", "titles in a category", mine.length, theirs.length, countTitles(null).clashes, (choice) => {
+        const winner = choice === "current" && accountsData.business ? mineBusiness : theirBusiness;
+        const business = normalizeBusiness({ owners: winner.owners, titles: Object.fromEntries(countTitles(choice).items) });
+        if (business) accountsData.business = business;
+        else delete accountsData.business;
       });
     }
 
@@ -5296,12 +5310,12 @@ function backupPlans(backup) {
     });
   }
 
-  if (backup.notes && ["entries", "recurring", "reminders"].some(part => Object.keys(backup.notes[part] || {}).length > 0)) {
-    const parts = ["entries", "recurring", "reminders"];
-    const list = (notes) => parts.flatMap(part => Object.entries(notes[part]).map(([key, text]) => [`${part}|${key}`, [part, key, text]]));
+  // (Every part of the notes: entries' and recurring entries' notes, reminders, and their own wavelengths, NOTE_PARTS)
+  if (backup.notes && NOTE_PARTS.some(part => Object.keys(backup.notes[part] || {}).length > 0)) {
+    const list = (notes) => NOTE_PARTS.flatMap(part => Object.entries(notes[part]).map(([key, text]) => [`${part}|${key}`, [part, key, text]]));
     const count = (choice) => mergeKeyed(list(notesData), list(backup.notes), choice, (a, b) => a[2] === b[2]);
-    const total = (notes) => parts.reduce((sum, part) => sum + Object.keys(notes[part]).length, 0);
-    plan("notes", "Notes", "notes", total(notesData), total(backup.notes), count(null).clashes, (choice) => {
+    const total = (notes) => NOTE_PARTS.reduce((sum, part) => sum + Object.keys(notes[part]).length, 0);
+    plan("notes", "Notes", "notes, reminders, and wavelengths", total(notesData), total(backup.notes), count(null).clashes, (choice) => {
       const notes = emptyNotes();
       for (const [part, key, text] of count(choice).items) notes[part][key] = text;
       notesData = notes;
@@ -8946,6 +8960,7 @@ function zoomDay(cell, animate = true) {
   if (!fullZoomQuery.matches) {
     placeCellView(cell);
     keepDoubledDayOnScreen(cell, place);
+    window.ScreenLayer?.fitPage();
   } else {
     cell.classList.add('is-fullZoom');
     fitZoomedDay(animate);
@@ -9001,6 +9016,8 @@ function unzoomCell(cell) {
   if (content) content.scrollTop = content.scrollLeft = 0;
   void cell.offsetWidth; // Apply that with no transition before turning transitions back on
   cell.style.removeProperty('transition');
+  cell.zoomReach = 0;
+  window.ScreenLayer?.fitPage(); // (Back to the page's own length, see zoomedDayBottom)
 }
 
 // When a day is on a table, its date as a number (Home's days by their spot, History's by their date), or null
@@ -9323,6 +9340,27 @@ function keepDoubledDayOnScreen(cell, place) {
   if (shift > 0) cell.style.transform = `translateX(${-shift}px) scale(${zoom})`;
 }
 
+// How far down the page the zoomed day reaches (page pixels; 0 with none), so the page is at least that long while it's
+// open (Layout.js fitPageToWindows): the page cuts off anything past its end, which a long day on a short page (like the
+// Quick Calendar page's) would otherwise run into. A phone's reaches as far as its content (zoomReach, from fitZoomedDay);
+// a computer's, doubled from its middle, as far as its lines go. One shrinking back still counts until it's back.
+function zoomedDayBottom() {
+  let bottom = 0;
+  for (const cell of document.querySelectorAll('.elastic-table td.is-editing')) {
+    const content = cell.querySelector('.cell-content');
+    if (!content) continue;
+    if (cell.classList.contains('is-fullZoom')) {
+      bottom = Math.max(bottom, cell.zoomReach || 0);
+      continue;
+    }
+    const box = cell.getBoundingClientRect();
+    const zoom = parseFloat(getComputedStyle(cell).getPropertyValue('--zoom')) || 1;
+    const middle = box.top + box.height / 2 + window.scrollY;
+    bottom = Math.max(bottom, middle + zoom * (content.offsetHeight - cell.offsetHeight / 2));
+  }
+  return bottom;
+}
+
 // Lay a phone's zoomed day out: how big (--zoom, and --zoomText for its text) and where. Every day of a table zooms the
 // same (they're all one size): ZOOM_WIDTH_SHARE of the screen's width (up to ZOOM_MAX_WIDTH), with its text
 // ZOOM_TEXT_SHARE of what that zoom would make it (ZOOM_TEXT_MIN to ZOOM_TEXT_MAX pixels). It's as tall as its lines, laid
@@ -9375,6 +9413,9 @@ function fitZoomedDay(animate = false) {
   for (const [name, pixels] of [['--dayX', left], ['--dayY', top], ['--dayW', width], ['--dayH', height], ['--viewW', viewWidth], ['--viewH', contentHeight]]) {
     cell.style.setProperty(name, `${pixels}px`);
   }
+  // (Its content's bottom on the page: the page grows to it, see zoomedDayBottom)
+  cell.zoomReach = zoomAnchor.y + contentHeight;
+  window.ScreenLayer?.fitPage();
   cell.style.transformOrigin = '0 0';
   // (From where the day is on the page to where the screen was)
   const moved = `translate(${zoomAnchor.x - (box.left + window.scrollX)}px, ${zoomAnchor.y - (box.top + window.scrollY)}px)`;
@@ -9395,7 +9436,10 @@ const refitZoomedDay = () => {
   refitFrame = requestAnimationFrame(() => {
     const moving = activeEditCell?.getAnimations?.().find(animation => animation.playState === 'running');
     if (moving) moving.finished.then(refitZoomedDay, () => {});
-    else fitZoomedDay(false);
+    else {
+      fitZoomedDay(false);
+      window.ScreenLayer?.fitPage(); // (A computer's doubled day may have grown or shrunk with its lines)
+    }
   });
 };
 // (A window that changes width, like a phone turned sideways, lays it out again for the screen it has now. Scrolling or

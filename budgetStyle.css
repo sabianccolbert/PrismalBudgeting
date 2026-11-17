@@ -3807,6 +3807,13 @@ button.listDayAdd:focus-visible {
   font-weight: bold;
 }
 
+/* A short block (under an hour, Fractals.js: a line for its title and no more) has no room above or below its title: a
+   half hour is just tall enough for the line's letters */
+.timeBlock[data-short] {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .timeBlockTime {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3818,6 +3825,41 @@ button.listDayAdd:focus-visible {
 /* A block over another in its lane (past three across, Fractals.js layOut): a stronger edge, so where it starts shows */
 .timeBlock.isOver {
   box-shadow: 0 0 0 1px rgba(var(--SHADE_RGB), 0.8), -2px 0 6px rgba(var(--SHADE_RGB), 0.6);
+}
+
+/* A title that doesn't fit shows more of itself (Fractals.js fitTitles): a short block reaches right, over the columns
+   beside it (over the blocks there, under the now-line), with a stronger edge; a tall, narrow one's title runs down it,
+   sideways; another tall one's title wraps onto the lines it has. Past that, "..." */
+.timeBlock.isReaching {
+  z-index: 5;
+  box-shadow: 0 0 0 1px rgba(var(--SHADE_RGB), 0.85), 0 2px 8px rgba(var(--SHADE_RGB), 0.6);
+}
+
+.timeBlock.isUpright {
+  padding: 0.25em 0.1em;
+}
+
+.timeBlock.isUpright .timeBlockTitle {
+  writing-mode: vertical-rl;
+  align-self: flex-start; /* (At the left edge: stretched, sideways words would start at the block's right) */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  font-size: 0.9em;
+}
+
+.timeBlock.isUpright .timeBlockTime {
+  display: none;
+}
+
+.timeBlock.isWrapped .timeBlockTitle {
+  display: -webkit-box;
+  flex: 0 0 auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--lines, 2);
+  line-clamp: var(--lines, 2);
 }
 
 /* The time now, on today (Fractals.js nowLine): a line across the blocks with the time at its left, and among a list's
@@ -6338,7 +6380,7 @@ html.lessMotion .foldChevron {
   margin: 0 0 0.8em;
 }
 
-.wavelengthControls .purposeDates {
+.wavelengthControls .purposeDays {
   flex: 1 1 26em;
   margin: 0;
 }
@@ -6354,11 +6396,54 @@ html.lessMotion .foldChevron {
   margin: 0;
 }
 
+/* A Wavelength Planning card's days (Bob Page.js purposeDaysControl): Days, then Past with a number and Days, Weeks, or
+   Months, Since Last Paycheck, or From And To with its two date boxes, and a line saying which days they come to */
+.purposeDays {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  min-width: 0;
+  margin: 0 0 0.8em;
+}
+
+.purposeDaysRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+}
+
+:is(.budgetCard, .budgetPanel) .purposeDaysRow .purposeDaysKind {
+  flex: 1 1 11em;
+  width: auto;
+  min-width: 0;
+}
+
+:is(.budgetCard, .budgetPanel) .purposeDaysRow .purposeDaysCount {
+  flex: 0 0 4.5em;
+  width: 4.5em;
+  text-align: center;
+}
+
+:is(.budgetCard, .budgetPanel) .purposeDaysRow .purposeDaysUnit {
+  flex: 0 1 8em;
+  width: auto;
+  min-width: 0;
+}
+
+.purposeDaysNote {
+  margin: 0;
+}
+
 .purposeDates {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6em 1em;
   margin: 0 0 0.8em;
+}
+
+.purposeDays .purposeDates {
+  margin: 0;
 }
 
 .purposeDate {

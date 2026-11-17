@@ -157,11 +157,14 @@ function pinScreenLayer() {
   if (PIN) coverScreen(SCREEN_LAYER, true);
 }
 
-/* GROUP: A window longer than the page */
+/* GROUP: A window or a zoomed day longer than the page */
 // A window that runs past the page's bottom (a long Help over a short page, or a tall list opened near the end of one)
 // makes the page longer, with a little room under it, so the page scrolls all the way to the window's bottom (a window
 // is part of the page while it's open). It's measured once it has zoomed open (while it grows out of its button, its box
 // is still small) and again whenever its size changes, and the page goes back to its own length once no window is open.
+// A zoomed day does the same (Process Budget.js zoomedDayBottom, which asks with ScreenLayer.fitPage): the page cuts off
+// whatever reaches past its end (#transitionContainer), so a long day near the end of a short page, like the Quick
+// Calendar page's, would otherwise stop there.
 const WINDOW_ROOM = 16; // Pixels of page under the lowest window
 let PAGE_FIT_FRAME = 0;
 const WINDOW_SIZES = typeof ResizeObserver === "function" ? new ResizeObserver(() => fitPageSoon()) : null;
@@ -191,6 +194,7 @@ function fitPageToWindows() {
       LOWEST = Math.max(LOWEST, WINDOW.getBoundingClientRect().bottom + window.scrollY);
     }
   }
+  if (typeof zoomedDayBottom === "function") LOWEST = Math.max(LOWEST, zoomedDayBottom());
   const HEIGHT = LOWEST ? `max(100vh, ${Math.ceil(LOWEST + WINDOW_ROOM)}px)` : "";
   if (document.body.style.minHeight !== HEIGHT) document.body.style.minHeight = HEIGHT;
 }
@@ -233,7 +237,9 @@ window.ScreenLayer = {
   // while zoomed, or a keyboard came up), so something placed by its box can be placed again
   onChange(LISTENER) {
     SCREEN_LISTENERS.add(LISTENER);
-  }
+  },
+  // The page measured again for how long it has to be (the next frame): a zoomed day opened, moved, or closed
+  fitPage: () => fitPageSoon()
 };
 
 /* GROUP: Floating windows (Help, panels, search boxes) */
@@ -1119,13 +1125,14 @@ document.addEventListener("click", (EVENT) => {
 // whether music and sound effects are off (Sounds.js), the kind of phone picked for the Steps for lists, the passkey
 // it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Budget icons it made or used
 // (their entries are added when the budget opens here, see holdQuickEntries), the day picked for Bob's Accounts
-// card (Bob Page.js), its theme and Custom theme and its Reduced Motion switches (Boot.js), so the next sign-in here
+// card and the days each Wavelength Planning card adds up (Bob Page.js), its theme and Custom theme and its Reduced Motion
+// switches (Boot.js), so the next sign-in here
 // looks the same, whether push notifications were turned off here on purpose (Notifications.js), and what Home's
 // calendar shows here: the budget, the calendar, or both, which Calendar Fractals are checked, whether a zoomed day
 // lists its calendar entries, and the Quick Calendar icons this device made or used (Fractals.js), whether Home's
 // calendar is in List Mode, and which Change Logs rows it has seen (Home's count of other devices' edits, see
 // markLogsSeen in Process Budget.js).
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_look_ahead", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_look_ahead", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day", "prismal_wave_days",
   "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off", "prismal_push_asked",
   "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen", "prismal_bob_okayed"];
 function clearSignedInData() {
