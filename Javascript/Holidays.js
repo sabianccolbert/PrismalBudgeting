@@ -3,7 +3,8 @@
 //   - The United States' federal holidays, each with the day it's observed when it falls on a weekend (a Saturday's is
 //     the Friday before, a Sunday's the Monday after), and some days widely kept that aren't days off.
 //   - Holidays.inYear(year): [{ day: "YYYY-MM-DD", title }] for one year, in order (an observed day can be in the year
-//     before, like a Saturday January 1st's). Holidays.between(from, to): the ones from one day through another.
+//     before, like a Saturday January 1st's). Holidays.between(from, to): the ones from one day through another (each
+//     "YYYY-MM-DD", both counted), in order.
 
 (() => {
   "use strict";
