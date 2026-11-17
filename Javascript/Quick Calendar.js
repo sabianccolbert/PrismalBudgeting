@@ -32,21 +32,16 @@
 
   // Home goes on when this browser is signed in, and straight to the login page when it isn't, keeping this page's theme
   // on the way (Themes.lookQuery in Boot.js), like Quick Budget's (Quick Entry.js). Worked out as it's tapped, since this
-  // page can stay open for days. Opened from the home screen as an app (RUNNING_AS_APP, Layout.js), Home opens the site
-  // in the phone's browser instead, and the app stays here: the browser keeps its own sign-in.
+  // page can stay open for days. In a home screen icon's app too, so the app stays where it was left (Layout.js): on a
+  // phone whose apps keep their own storage, that's a sign-in of the app's own.
   const homeLink = document.querySelector('.navButtons a[href="/"]');
   const loginLink = () => {
     const look = window.Themes ? Themes.lookQuery() : "";
     return look ? `/login.html?${look}` : "/login.html";
   };
-  if (homeLink && RUNNING_AS_APP) {
-    homeLink.target = "_blank";
-    homeLink.rel = "noopener";
-    homeLink.setAttribute("href", loginLink());
-  }
-  if (homeLink && !RUNNING_AS_APP && !signedInNow()) homeLink.setAttribute("href", loginLink());
+  if (homeLink && !signedInNow()) homeLink.setAttribute("href", loginLink());
   homeLink?.addEventListener("click", () => {
-    if (!RUNNING_AS_APP) homeLink.setAttribute("href", signedInNow() ? "/" : loginLink());
+    homeLink.setAttribute("href", signedInNow() ? "/" : loginLink());
   });
 
   // One request with the key: { ok, status, data }, where data is the calendar as Fractals.js takes it (the entries this

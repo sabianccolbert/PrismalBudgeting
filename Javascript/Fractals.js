@@ -1795,9 +1795,10 @@ window.Fractals = (() => {
   // #region THE FRACTALS, TO MANAGE (the Budgets, Calendars & Spreadsheets page) AND THEIR LINKS (Settings)
   // =====================================================================
 
+  const HOURS_MOST_DAYS = 366; // The most days the hours are added up over
+
   // Every fractal with its color, how many entries it has, its hours between the two days over the list (this week to
   // start), and Edit. container: the card's list; it's drawn again whenever the calendar changes.
-  const HOURS_MOST_DAYS = 366;
   function renderManager(container) {
     // The two days the hours are added up between (both included)
     const weekStart = addDays(today, -today.getDay());
@@ -1817,12 +1818,13 @@ window.Fractals = (() => {
       if (to > addDays(from, HOURS_MOST_DAYS - 1)) to = addDays(from, HOURS_MOST_DAYS - 1);
       return { from: formatToYMD(from), to: formatToYMD(to) };
     };
+    // (The two days' boxes stay where they are while the list is drawn again, so one being typed in keeps its focus)
     const draw = () => {
-      container.replaceChildren();
       if (!data) {
-        container.append(el("p", "panelHint", "Couldn't load your calendar. Please refresh to try again."));
+        container.replaceChildren(el("p", "panelHint", "Couldn't load your calendar. Please refresh to try again."));
         return;
       }
+      if (range.parentElement !== container) container.replaceChildren(range, rangeNote);
       const picked = days();
       const hours = picked ? hoursBetween(picked.from, picked.to) : new Map();
       rangeNote.textContent = picked
@@ -1833,7 +1835,6 @@ window.Fractals = (() => {
         figure.hidden = !picked;
         return figure;
       };
-      container.append(range, rangeNote);
       const list = el("ul", "budgetList budgetManager fractalManagerList");
       const ownItem = (fractal) => {
         const item = el("li", "budgetItem");
@@ -1924,10 +1925,14 @@ window.Fractals = (() => {
         list.append(item);
       });
       for (const invitation of data.invitations) list.append(invitationItem(invitation));
-      container.append(list);
+      const drawn = container.querySelector(":scope > .fractalManagerList");
+      if (drawn) drawn.replaceWith(list);
+      else container.append(list);
     };
     draw();
     document.addEventListener("fractals:changed", draw);
+    // (The order, Holidays' color, and linked fractals are the budget's: another device's change to them comes this way)
+    document.addEventListener("budget:updated", draw);
   }
 
   // The fractals (own, the budget's, linked, and Holidays, any of them) in the order kept with the budget

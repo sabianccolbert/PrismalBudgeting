@@ -1723,9 +1723,10 @@ const BudgetUI = (() => {
           submit(panel, () => changeEntry({ title, sprite: refraction, date, action: "delete" }));
         }
 
-        // Copy: the entry as it's saved (its title, type, Equity account, amount or %, placeholder, and note) goes on
-        // another day too, adding into an entry with its title and type there. A % one copied to a day before today is
-        // what it comes to, and a placeholder copied there is an ordinary entry (see PLACEHOLDERS in Process Budget.js).
+        // Copy: the entry as it's saved (its title, type, Equity account, amount or %, placeholder, note, and its own
+        // wavelength) goes on another day too, adding into an entry with its title and type there (which keeps its own
+        // wavelength, when it has one). A % one copied to a day before today is what it comes to, and a placeholder copied
+        // there is an ordinary entry (see PLACEHOLDERS in Process Budget.js).
         function copyEntry(button) {
           openCopyTo(button, {
             hint: `A copy of ${shownLine(line)} goes on the day you pick, with its note, adding into an entry with the same title and type already there. It's a copy: changing one later doesn't change the other.`,
@@ -1736,7 +1737,8 @@ const BudgetUI = (() => {
               ...(currentPercent !== null && target >= today ? { percent: currentPercent } : {}),
               date: target,
               placeholder: wasPlaceholder && target >= today,
-              note: entryNote(date, title, refraction) || undefined
+              note: entryNote(date, title, refraction) || undefined,
+              ...(ownPurpose && !noteText("purposes", entryNoteKey(target, title, refraction)) ? { purpose: ownPurpose } : {})
             })
           });
         }

@@ -328,21 +328,24 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-/* GROUP: A Quick Budget icon's app comes back to Quick Budget */
-// A Quick Budget icon on a phone's home screen opens as an app of its own (quick.html's meta tags). Its Home button can go
-// on to the budget (signing in first), but the icon is for Quick Budget: left on another page and opened again, the app
-// goes back to the Quick Budget page it opened on. That page is kept in the app's own session storage (QUICK_APP_KEY).
-// Leaving the app hides its page without leaving it by a link, so the time it was hidden is kept too (APP_LEFT_KEY, taken
-// off when a link or the app itself leaves the page, pagehide); back on the screen after APP_AWAY_MS or more (a passkey's
-// sheet over it is shorter), or opened again on that page, it goes back to Quick Budget. Only in an app opened from the
-// home screen (in a browser's tab, a page stays where it was left), and never from the login page, where a passkey's or a
-// password's sheet can come and go while signing in.
+/* GROUP: A home screen icon's app stays where it was left, then comes back to its icon's page */
+// A Quick Budget, Quick Calendar, or Snapshot icon on a phone's home screen opens as an app of its own (the page's meta
+// tags), on its icon's page (its key in the address, ICON_PAGE). Its buttons can go on to the budget (signing in first).
+// Left on another page, the app stays there while it's away less than APP_AWAY_MS (15 minutes, when an idle sign-in
+// ends), and after that goes back to its icon's page. The icon's page is kept in the app's session storage
+// (QUICK_APP_KEY); leaving the app hides its page without leaving it by a link, so the time it was hidden is kept too
+// (APP_LEFT_KEY, taken off when a link or the app itself leaves the page, pagehide). A phone that closed the app while
+// it was away opens it on its icon's page again: so where it was left, and when, are kept on the device too
+// (APP_PLACE_KEY: { home, page, at }, gone with signing out), and the icon's page goes back there inside the 15 minutes.
+// Only in an app opened from the home screen (in a browser's tab, a page stays where it was left), and never to or from
+// the login page, where a passkey's or a password's sheet can come and go while signing in.
 // Brought back from another page, Quick Budget's Back goes to it (QUICK_RETURN_KEY, see showQuickBack); opened fresh from
 // the icon, it has none.
 const QUICK_APP_KEY = "prismal_quick_app";
 const APP_LEFT_KEY = "prismal_app_left";
 const QUICK_RETURN_KEY = "prismal_quick_return";
-const APP_AWAY_MS = 3000;
+const APP_PLACE_KEY = "prismal_app_place";
+const APP_AWAY_MS = 15 * 60 * 1000; // (IDLE_SIGN_OUT_MS's 15 minutes: that's declared further down, after this runs)
 const RUNNING_AS_APP = window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const readSession = (KEY) => { try { return sessionStorage.getItem(KEY); } catch { return null; } };
 const writeSession = (KEY, VALUE) => {
@@ -351,13 +354,49 @@ const writeSession = (KEY, VALUE) => {
     else sessionStorage.setItem(KEY, VALUE);
   } catch {}
 };
+// This page's address as an icon's own page (Quick Budget's, Quick Calendar's, or a Snapshot icon's, with its key), or null
+const ICON_PAGE = (() => {
+  const KEY = new URLSearchParams(location.search).get("key");
+  const FILE = { quick: "quick.html", quickcal: "quickcal.html", snapshot: "snapshot.html" }[window.PAGE];
+  return KEY && FILE ? `/${FILE}?key=${encodeURIComponent(KEY)}` : null;
+})();
 
-// Back to the Quick Budget page the app opened on, when it's away from it (and has nothing unsaved)
+// Where the app was left (the page, and when), kept on the device for an app the phone closed meanwhile
+function keepAppPlace() {
+  const HOME = readSession(QUICK_APP_KEY);
+  if (!HOME || ICON_PAGE || window.PAGE === "login") return;
+  try { localStorage.setItem(APP_PLACE_KEY, JSON.stringify({ home: HOME, page: location.pathname + location.search + location.hash, at: Date.now() })); } catch {}
+}
+
+// Takes off the place kept for this icon's app. Where another icon's app shares this storage (a computer's app windows
+// do), that app's place stays while it's from the last APP_AWAY_MS.
+function dropAppPlace(home) {
+  try {
+    let PLACE = null;
+    try { PLACE = JSON.parse(localStorage.getItem(APP_PLACE_KEY)); } catch {}
+    if (PLACE?.home && PLACE.home !== home && Date.now() - Number(PLACE.at) < APP_AWAY_MS) return;
+    localStorage.removeItem(APP_PLACE_KEY);
+  } catch {}
+}
+
+// The page this icon's app was left on in the last APP_AWAY_MS (or null), taken off as it's read
+function takeAppPlace(home) {
+  let PLACE = null;
+  try { PLACE = JSON.parse(localStorage.getItem(APP_PLACE_KEY)); } catch {}
+  dropAppPlace(home);
+  if (PLACE?.home !== home || typeof PLACE.page !== "string" || !PLACE.page.startsWith("/") || PLACE.page.startsWith("//")) return null;
+  if (PLACE.page.startsWith("/login") || !(Date.now() - Number(PLACE.at) < APP_AWAY_MS)) return null;
+  return PLACE.page;
+}
+
+// Back to the icon's page the app opened on, once it's been away from another page for APP_AWAY_MS (and has nothing
+// unsaved)
 function backToQuickEntry() {
   const LEFT = Number(readSession(APP_LEFT_KEY));
   writeSession(APP_LEFT_KEY, null);
   const QUICK = readSession(QUICK_APP_KEY);
-  if (!QUICK || !LEFT || Date.now() - LEFT < APP_AWAY_MS || window.PAGE === "quick" || window.PAGE === "login" || hasChangesToSave()) return;
+  if (!QUICK || !LEFT || Date.now() - LEFT < APP_AWAY_MS || ICON_PAGE || window.PAGE === "login" || hasChangesToSave()) return;
+  dropAppPlace(QUICK);
   writeSession(QUICK_RETURN_KEY, location.pathname + location.search + location.hash);
   if (typeof window.transitionTo === "function") window.transitionTo(QUICK, true);
   else location.replace(QUICK);
@@ -375,17 +414,28 @@ function showQuickBack() {
 }
 
 if (RUNNING_AS_APP) {
-  if (window.PAGE === "quick") {
-    // (Its key is all it needs: quick.html?key=...)
-    const KEY = new URLSearchParams(location.search).get("key");
-    if (KEY) writeSession(QUICK_APP_KEY, `/quick.html?key=${encodeURIComponent(KEY)}`);
-    onDOMReady(showQuickBack);
+  if (ICON_PAGE) {
+    // (Its key is all it needs.) Opened fresh by the phone, inside the 15 minutes after it was left on another page: back
+    // to that page.
+    const FRESH = !readSession(QUICK_APP_KEY);
+    writeSession(QUICK_APP_KEY, ICON_PAGE);
+    const PLACE = FRESH ? takeAppPlace(ICON_PAGE) : null;
+    if (PLACE) location.replace(PLACE);
+    else {
+      dropAppPlace(ICON_PAGE);
+      onDOMReady(showQuickBack);
+    }
   } else if (readSession(QUICK_APP_KEY)) {
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") writeSession(APP_LEFT_KEY, String(Date.now()));
-      else backToQuickEntry();
+      if (document.visibilityState === "hidden") {
+        writeSession(APP_LEFT_KEY, String(Date.now()));
+        keepAppPlace();
+      } else backToQuickEntry();
     });
-    window.addEventListener("pagehide", () => writeSession(APP_LEFT_KEY, null));
+    window.addEventListener("pagehide", () => {
+      writeSession(APP_LEFT_KEY, null);
+      keepAppPlace();
+    });
     // (Opened again on this page: the phone had closed the page while the app was away)
     onDOMReady(backToQuickEntry);
   }
@@ -1075,8 +1125,8 @@ document.addEventListener("click", (EVENT) => {
 // lists its calendar entries, and the Quick Calendar icons this device made or used (Fractals.js), whether Home's
 // calendar is in List Mode, and which Change Logs rows it has seen (Home's count of other devices' edits, see
 // markLogsSeen in Process Budget.js).
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
-  "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off",
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_look_ahead", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day",
+  "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off", "prismal_push_asked",
   "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen", "prismal_bob_okayed"];
 function clearSignedInData() {
   try {

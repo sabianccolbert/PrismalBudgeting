@@ -6587,12 +6587,26 @@ function dayMath(lines) {
 let predictedInBank = [];
 
 // LOWEST'S LOOK AHEAD
-// Lowest counts In Bank from today through a number of days, weeks, or months past the calendar, two months to start:
-// accountsData.lookAhead { count, unit }, kept with the budget so every device, Quick Budget, and reminders agree.
+// Lowest counts In Bank from today through a number of days, weeks, or months past the calendar, two months to start.
+// Each device picks its own (DEVICE_LOOK_AHEAD_KEY: { count, unit }, kept through signing out), for Home's Lowest card,
+// Bob, Snapshot, Quick Budget on that device (it asks the API for the lowest through that day: Quick Entry.js), and the
+// reminders' plan it sends. A device that hasn't picked one goes by the budget's (accountsData.lookAhead, from before
+// each device had its own), or two months. The In Bank days kept for Quick Budget (inBankAhead) reach as far as the
+// device that saved the budget last looks.
+const DEVICE_LOOK_AHEAD_KEY = "prismal_look_ahead";
+let deviceAhead; // This device's pick, read once a page (undefined until then; null for none)
+
+// This device's own look ahead, or null
+function deviceLookAhead() {
+  if (deviceAhead === undefined) {
+    try { deviceAhead = normalizeLookAhead(JSON.parse(localStorage.getItem(DEVICE_LOOK_AHEAD_KEY) || "null")); } catch (e) { deviceAhead = null; }
+  }
+  return deviceAhead;
+}
 
 // How far past the calendar Lowest looks
 function lookAhead() {
-  return normalizeLookAhead(accountsData?.lookAhead) || { ...LOOK_AHEAD_DEFAULT };
+  return deviceLookAhead() || normalizeLookAhead(accountsData?.lookAhead) || { ...LOOK_AHEAD_DEFAULT };
 }
 
 // A stored look ahead, checked: { count, unit }, or null when it isn't one
@@ -6666,6 +6680,28 @@ function shownLowest(from = today, to = lookAheadEnd()) {
   return lowest || { amount: shown.projected.accountOn(shown.index, from), date: from };
 }
 
+// The lowest In Bank from today through a day (or, with an Equity account picked for In Bank, that account's), and its
+// day: { amount, date }. From the budget's projection through that day, so it can look further than this device's Lowest
+// (a Snapshot Lowest card with its own until); kept until the next change.
+const lowestThroughKept = new Map();
+document.addEventListener("budget:updated", () => lowestThroughKept.clear());
+function lowestThrough(until) {
+  const name = shownAccountName();
+  const key = `${until.getTime()}|${today.getTime()}|${name}`;
+  if (lowestThroughKept.has(key)) return lowestThroughKept.get(key);
+  const summaries = accountSummaries();
+  const projection = projectBudget(until, summaries);
+  const index = name ? summaries.find(summary => summary.name === name)?.index : undefined;
+  let lowest = null;
+  for (let day = today; day <= until; day = addDays(day, 1)) {
+    const amount = index !== undefined ? projection.accountOn(index, day) : projection.inBankOn(day);
+    if (!lowest || amount < lowest.amount) lowest = { amount, date: day };
+  }
+  const found = lowest || { amount: projection.inBankOn(today), date: today };
+  lowestThroughKept.set(key, found);
+  return found;
+}
+
 // A day's text as it's shown: with an account picked, its In Bank line is that account's balance ("✅ $310.00 Card 2"),
 // so a tap on it isn't In Bank's
 function shownDayText(text, date) {
@@ -6695,15 +6731,20 @@ function lookAheadWords(ahead = lookAhead()) {
   return `${ahead.count} ${ahead.count === 1 ? ahead.unit.slice(0, -1) : ahead.unit}`;
 }
 
-// Lowest's look ahead (from Home's Lowest card)
+// Lowest's look ahead (from Home's Lowest card), for this device: everything it counts is worked out again, and the In Bank
+// days kept for Quick Budget reach that far
 function setLookAhead(count, unit) {
   return runBudgetAction("📉 Lowest's Look Ahead", () => {
     const most = LOOK_AHEAD_MOST[unit];
     const ahead = normalizeLookAhead({ count: Number(count), unit });
     if (!ahead) throw new BudgetInputError(most ? `Pick 1 to ${most} ${unit}.` : "Pick days, weeks, or months.");
-    if (ahead.count === LOOK_AHEAD_DEFAULT.count && ahead.unit === LOOK_AHEAD_DEFAULT.unit) delete accountsData.lookAhead;
-    else accountsData.lookAhead = ahead;
-    formEntryRow[3] = `Past the calendar: ${lookAheadWords(ahead)}`;
+    try {
+      localStorage.setItem(DEVICE_LOOK_AHEAD_KEY, JSON.stringify(ahead));
+    } catch (e) {
+      throw new BudgetInputError("This browser couldn't keep that (its storage may be off or full).");
+    }
+    deviceAhead = ahead;
+    formEntryRow[3] = `This device, past the calendar: ${lookAheadWords(ahead)}`;
     return {};
   });
 }

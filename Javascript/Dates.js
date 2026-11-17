@@ -143,9 +143,14 @@ function datePattern() {
 // Times of day: 12-hour (1:00 PM) or 24-hour (13:00), as picked in Settings on this device, or the device's own
 const TIME_FORMAT_KEY = "prismal_time_format"; // This device's pick ("12" or "24"); none = its own
 
+let deviceTwelve = null; // (Worked out once a page: every time on the calendar asks)
+
 // Does the device itself show times as 1:00 PM (not 13:00)?
 function deviceTwelveHour() {
-  try { return new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12 !== false; } catch (e) { return true; }
+  if (deviceTwelve === null) {
+    try { deviceTwelve = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12 !== false; } catch (e) { deviceTwelve = true; }
+  }
+  return deviceTwelve;
 }
 
 // Are times shown as 1:00 PM here (the pick, or the device's own)?

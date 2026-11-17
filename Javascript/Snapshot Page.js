@@ -320,9 +320,11 @@
     },
     "home.lowest": {
       title: () => "Lowest In Bank After Today",
-      render(body) {
-        const lowest = shared.lowest();
-        numberBody(body, formatMoney(lowest.amount), `On ${showWeekdayDate(lowest.date)}`, { amount: lowest.amount });
+      // (Its own until, picked in Edit, kept as its ref: or as far as this device's Lowest looks)
+      render(body, ref) {
+        const ahead = snapshotUntil(ref);
+        const lowest = ahead ? lowestThrough(lookAheadEnd(ahead)) : shared.lowest();
+        numberBody(body, formatMoney(lowest.amount), `On ${showWeekdayDate(lowest.date)}${ahead ? `, looking ${lookAheadWords(ahead)} past the calendar` : ""}`, { amount: lowest.amount });
       }
     },
     "home.lastDay": {
@@ -571,6 +573,31 @@
   const built = new Map();
 
   // One card: its title (in Edit, with ≡ to drag it and × to take it off) and what it shows
+  // A Lowest card's own until, as its ref keeps it ("6months"): { count, unit } past the calendar, or null for as far as
+  // this device's Lowest looks
+  const SNAPSHOT_UNTILS = [{ count: 2, unit: "weeks" }, { count: 1, unit: "months" }, { count: 2, unit: "months" }, { count: 3, unit: "months" }, { count: 6, unit: "months" }, { count: 12, unit: "months" }];
+  function snapshotUntil(ref) {
+    const found = /^(\d{1,3})(days|weeks|months)$/.exec(String(ref ?? ""));
+    return found ? normalizeLookAhead({ count: Number(found[1]), unit: found[2] }) : null;
+  }
+
+  // In Edit, a Lowest card's Until: as this device's Lowest, or a set time past the calendar, saved with the card
+  function untilPicker(card, list, title) {
+    const pick = el("select", "selectInput snapshotUntil");
+    const choices = [["", `As this device's Lowest (${lookAheadWords()})`], ...SNAPSHOT_UNTILS.map(ahead => [`${ahead.count}${ahead.unit}`, `${lookAheadWords(ahead)} past the calendar`])];
+    const own = snapshotUntil(card.ref);
+    if (own && !choices.some(([value]) => value === card.ref)) choices.push([card.ref, `${lookAheadWords(own)} past the calendar`]);
+    for (const [value, label] of choices) pick.append(new Option(label, value));
+    pick.value = own ? card.ref : "";
+    pick.addEventListener("change", () => {
+      const ahead = snapshotUntil(pick.value);
+      save(list.map(other => (other.id === card.id ? { ...other, ref: pick.value } : other)), `${title}: ${ahead ? `${lookAheadWords(ahead)} past the calendar` : "as this device's Lowest"}`);
+    });
+    const field = BudgetUI.field("Until", pick);
+    field.classList.add("snapshotUntilField");
+    return field;
+  }
+
   function cardEl(card, index, list) {
     const type = TYPES[card.type];
     const key = `${card.type}|${card.ref}`;
@@ -614,7 +641,9 @@
       head.prepend(handle);
       head.append(remove);
     }
-    section.replaceChildren(head, body);
+    // (A Lowest card's own until, in Edit: how far past the calendar it looks, or as far as this device's Lowest does)
+    const untilField = editing && card.type === "home.lowest" ? untilPicker(card, list, title) : null;
+    section.replaceChildren(head, ...(untilField ? [untilField] : []), body);
     try {
       if (!type) throw new Gone();
       if (!type.keeps) body.replaceChildren();

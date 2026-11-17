@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.16.2026.A";
+  const SITE_VERSION = "11.17.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,34 +26,34 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "6863d987bf",
-    "/Javascript/Budget Pages.js": "bb5bdaf415",
+    "/Javascript/Bob Page.js": "edb63d906a",
+    "/Javascript/Budget Pages.js": "0aedf43f05",
     "/Javascript/Budget Search.js": "7fd273fe6b",
-    "/Javascript/Budget UI.js": "2020726c06",
-    "/Javascript/Budgets.js": "bf158c4ecc",
-    "/Javascript/Calendar Page.js": "6e8c911633",
-    "/Javascript/Calendars Page.js": "3041d3490b",
+    "/Javascript/Budget UI.js": "deed9a9312",
+    "/Javascript/Budgets.js": "6535bf5dc1",
+    "/Javascript/Calendar Page.js": "a3f7533ce5",
+    "/Javascript/Calendars Page.js": "8d5d96f09e",
     "/Javascript/Calendars.js": "db5ad9f022",
-    "/Javascript/Dates.js": "1bc1354d45",
+    "/Javascript/Dates.js": "328ef77813",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "75fceb57c9",
+    "/Javascript/Fractals.js": "09e3e78840",
     "/Javascript/Holidays.js": "b6e37a8816",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "9ec997a267",
+    "/Javascript/Layout.js": "1be2ad1eaa",
     "/Javascript/Line Graph.js": "3a2585001d",
     "/Javascript/Login.js": "5869bb48e7",
-    "/Javascript/Notifications.js": "08aab68469",
+    "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "7581ee2923",
-    "/Javascript/Quick Calendar.js": "26d1f9f6a8",
-    "/Javascript/Quick Entry.js": "1cdf60bd5c",
+    "/Javascript/Process Budget.js": "b373499218",
+    "/Javascript/Quick Calendar.js": "815345e6f4",
+    "/Javascript/Quick Entry.js": "3b2714f488",
     "/Javascript/Quick Icon.js": "944d097f5a",
     "/Javascript/Session.js": "2ba7a04b3e",
     "/Javascript/Settings Page.js": "ac368525ea",
-    "/Javascript/Snapshot Page.js": "5c189e637b",
-    "/Javascript/Sounds.js": "83fcb7755c",
-    "/Javascript/Spreadsheets Page.js": "cc69112cb2",
-    "/Javascript/Spreadsheets.js": "fd11909f30",
+    "/Javascript/Snapshot Page.js": "8cc96465ad",
+    "/Javascript/Sounds.js": "21207f2cfd",
+    "/Javascript/Spreadsheets Page.js": "5e1b61db41",
+    "/Javascript/Spreadsheets.js": "008d184ec1",
     "/Javascript/Sprites.js": "c6c86160d9",
     "/Javascript/Starfield Setup.js": "e86b316303",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
@@ -79,7 +79,7 @@
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",
     "/Resources/Star.webp": "f2d3021d0b",
-    "/themes.css": "ae228a8c81"
+    "/themes.css": "33f6b67192"
   };
   // </stamp:files>
 

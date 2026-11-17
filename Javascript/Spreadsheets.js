@@ -529,7 +529,8 @@ const Spreadsheets = (() => {
     if (cell.t === "n") return cell.v;
     if (cell.t !== "s") return NaN;
     // A minus sign, figure dash, en dash, or em dash (what spreadsheets and phones often type for a minus) is a minus
-    let text = String(cell.v).replace(/[\u2212\u2012\u2013\u2014]/g, "-").replace(/\s+/g, "").replace(/\p{Sc}/gu, "").replace(/^[A-Za-z]{3}(?=[-+(\d.,])|(?<=[\d.)])[A-Za-z]{3}$/g, "");
+    // (A currency code goes too, before the amount or after it: two steps, since Safari before 16.4 can't read a lookbehind)
+    let text = String(cell.v).replace(/[\u2212\u2012\u2013\u2014]/g, "-").replace(/\s+/g, "").replace(/\p{Sc}/gu, "").replace(/^[A-Za-z]{3}(?=[-+(\d.,])/, "").replace(/([\d.)])[A-Za-z]{3}$/, "$1");
     let negative = false;
     const parenthesized = /^\((.*)\)$/.exec(text);
     if (parenthesized) {

@@ -568,11 +568,11 @@ function renderOtherEdits() {
   const link = document.getElementById("otherEdits");
   if (!link) return;
   const count = otherDevicesEdits();
-  link.textContent = count > 99 ? "99+" : String(count);
+  const shown = count > 99 ? "99+" : String(count);
+  link.textContent = shown;
   link.classList.toggle("hasEdits", count > 0);
-  const words = count === 0
-    ? "No edits from other devices since you last looked at the Change Logs"
-    : `${count} ${count === 1 ? "edit" : "edits"} from other devices since you last looked at the Change Logs`;
+  // (Its name starts with the number it shows, for voice control)
+  const words = `${shown} ${count === 1 ? "edit" : "edits"} from other devices since you last looked at the Change Logs`;
   link.title = words;
   link.setAttribute("aria-label", `${words}. Opens the Change Logs.`);
 }
@@ -886,6 +886,7 @@ function fillShownAccountPickers() {
   }
 }
 
+// Either list picks for this budget on this device, and Home draws again with it (so does a pick on Bob's page)
 function wireShownAccount() {
   for (const select of document.querySelectorAll(".shownAccountPick")) {
     select.addEventListener("change", () => setShownAccount(select.value));
@@ -896,7 +897,7 @@ function wireShownAccount() {
 }
 
 // Look Ahead (on the Lowest card): how far past the calendar Lowest counts, in days, weeks, or months (2 months to
-// start). It's kept with the budget, so Quick Budget and reminders count the same days.
+// start). It's this device's own (each device can look its own way), and Quick Budget on this device follows it.
 function openLookAheadPanel(origin) {
   BudgetUI.openPanel({
     origin,
@@ -915,7 +916,7 @@ function openLookAheadPanel(origin) {
       unit.setAttribute("aria-label", "Days, weeks, or months");
       const row = BudgetUI.element("div", "frequencyRow");
       row.append(count, unit);
-      const field = BudgetUI.field("Past the calendar", row, { hint: "Lowest counts In Bank from today through this far past the calendar's five weeks: 2 months to start, about three months from today. Up to 12 months, 52 weeks, or 366 days." });
+      const field = BudgetUI.field("Past the calendar", row, { hint: "Lowest counts In Bank from today through this far past the calendar's five weeks: 2 months to start, about three months from today. Up to 12 months, 52 weeks, or 366 days. It's this device's own, and Quick Budget here follows it." });
       form.append(field, BudgetUI.buttonRow([
         { label: "Save", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }

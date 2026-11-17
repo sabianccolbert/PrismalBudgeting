@@ -451,6 +451,13 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   box-sizing: border-box;
 }
 
+/* A phone's zoomed day: its date is on the buttons' line, as tall as they are and as far from the day's top, so its middle
+   is theirs (the day's lines start 4px * --zoomText down: the date comes up the rest of the way) */
+.elastic-table td.is-fullZoom.is-editing:not(.cellViewOwnRow) .cell-content > .lineDate {
+  margin-top: calc(var(--DAY_BUTTON_INSET) - 4px * var(--zoomText, 1));
+  line-height: var(--DAY_BUTTON_SPOT);
+}
+
 /*========================================*
  *  MENU DATA PAGES (Recurring, History, Tracker, ...)
  *========================================*
@@ -3851,7 +3858,7 @@ button.listDayAdd:focus-visible {
   line-height: 1.2;
   font-weight: bold;
   color: #fff;
-  background: var(--NOW_LINE, #ff4d6d);
+  background: #d1193e; /* (A deeper red than the line, so its small white time is easy to read) */
   border-radius: 0.4em;
   text-shadow: none;
 }
@@ -3905,17 +3912,6 @@ button.listDayAdd:focus-visible {
   padding: 0.45em 0.6em;
   font-size: 1em;
   cursor: pointer;
-}
-
-/* New Calendar Fractal's From another calendar: which calendar (or its link), with room between each part */
-.linkFields {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7em;
-}
-
-.linkFields > .panelHint {
-  margin: 0;
 }
 
 .fractalItem .fractalLinkedNote {
@@ -4962,7 +4958,7 @@ html.lessMotion .sheetForm.isOpening {
   color: var(--NEGATIVE_TEXT);
 }
 
-/* Connected calendars (Calendars Page.js): like spreadsheets, with Paychecks And Shifts and what the last read found
+/* Automated Calendars & Paychecks (Calendars Page.js): like spreadsheets, with Paychecks And Shifts and what the last read found
    under each one */
 .calendarsVerify {
   margin: 0.6em 0 0;
@@ -7540,6 +7536,16 @@ html.snapshotKey .navButtons {
   margin: 0;
   font-size: 1.15em;
   overflow-wrap: anywhere;
+}
+
+/* In Edit, a Lowest card's Until (Snapshot Page.js untilPicker), under its title */
+.snapshotUntilField {
+  margin: 0 0 0.6em;
+}
+
+.snapshotUntilField .snapshotUntil {
+  width: 100%;
+  min-width: 0;
 }
 
 /* The ≡ to hold and drag (or focus, and use the arrow keys): the page doesn't scroll while it's held */

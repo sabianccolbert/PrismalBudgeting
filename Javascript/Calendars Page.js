@@ -1366,7 +1366,6 @@ function ordinal(day) {
   return `${day}${ending}`;
 }
 
-// "80 regular, 16 overtime hours"
 // A paycheck's hours in words: the hours worked (regular, overtime, double time, and premium together), then each kind,
 // and paid time off ("38.5 hours worked: 36 regular, 2.5 overtime; 8 paid off")
 function hoursWords(hours) {

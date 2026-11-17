@@ -4,8 +4,8 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=04dcfaf0d4">
-    <link rel="stylesheet" href="/themes.css?v=ae228a8c81">
+    <link rel="stylesheet" href="/budgetStyle.css?v=04b16ec2af">
+    <link rel="stylesheet" href="/themes.css?v=33f6b67192">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -104,7 +104,7 @@
 
                 <ul class="settingsList settingsNotes">
                   <li><strong>What they say:</strong> the title shows what it's about (like 🗓️🔔⛔️ Check Budget), and the rest says why. Only an entry's reminder names an entry (its title and day); the rest never show titles or amounts.</li>
-                  <li><strong>Notifications</strong> are turned on one device at a time, from that device (Home asks once after you sign in). On an iPhone or iPad, add Prismal Planning to your Home Screen first (Share, then Add to Home Screen) and turn them on there. Send Test sends one now.</li>
+                  <li><strong>Notifications</strong> are turned on one device at a time, from that device (after a sign-in, Home alerts each device about its reminders once). On an iPhone or iPad, add Prismal Planning to your Home Screen first (Share, then Add to Home Screen) and turn them on there. Send Test sends one now.</li>
                   <li><strong>The calendar link:</strong> Apple Calendar and Google Calendar open it with their buttons; in Outlook, use Add calendar, then Subscribe from web. Calendar apps check it on their own schedule (Google Calendar every several hours), so changes take a while there. Keep it private: anyone with it sees your reminder days. New Link replaces it.</li>
                   <li><strong>Which days:</strong> worked out from your budget as it was the last time it was opened or changed on any device, so opening it now and then keeps them right.</li>
                 </ul>
@@ -365,8 +365,8 @@
               <h3 id="updatesHeading">Updates</h3>
               <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
               <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
-                <section class="updatesRelease" aria-labelledby="updateComingNext">
-                  <h4 id="updateComingNext">Coming Next</h4>
+                <section class="updatesRelease" aria-labelledby="update20261117">
+                  <h4 id="update20261117">11.17.2026.A</h4>
                   <p class="updatesKind">Bigger changes</p>
                   <ul>
                     <li>Calendar Fractals can belong to a budget (Per Budget, on to start for a new one): everyone the budget is shared with sees them and can add to them, and they show only while that budget is open. With it off, a fractal is yours alone, in every budget.</li>
@@ -381,6 +381,8 @@
                     <li>The Paycheck Calculator has a graph of In Bank with the paycheck on a payday you pick, in place of one already in your budget (picked from a list you can search).</li>
                     <li>Budget and calendar entries have Copy, to put the same entry on another day.</li>
                     <li>A budget you own can be given to someone it's shared with (Give It To Them), and you stay in it.</li>
+                    <li>Lowest's Look Ahead is each device's own: Quick Budget on that device follows it, and each Lowest card on Snapshot can have its own Until (in Edit).</li>
+                    <li>A home screen icon's app (Quick Budget, Quick Calendar, or Snapshot) stays on the page you leave it on for 15 minutes, and its Home opens in the app.</li>
                   </ul>
                   <p class="updatesKind">Smaller changes</p>
                   <ul>
@@ -396,6 +398,9 @@
                     <li>Home's Upcoming card is gone: the calendar shows any day ahead.</li>
                     <li>On the budget's four pages, the top card slides in first and the cards under it follow.</li>
                     <li>Bob's cards' switches sit at their top right, and the header fits large text on small phones.</li>
+                    <li>Each device gets one alert about reminders after a sign-in, saying how to get them where it can't turn them on (like an iPhone in Safari).</li>
+                    <li>A phone's zoomed day has its date on the same line as its buttons.</li>
+                    <li>Wavelengths' Goals has a ? on holding back spending, like fast food or gambling.</li>
                     <li>The Privacy Policy covers what's new here.</li>
                   </ul>
                 </section>
@@ -480,7 +485,7 @@
           <ul>
             <li><strong>Your budgets</strong> are on their own page now: open the menu, then Budgets, Calendars &amp; Spreadsheets. The name above the buttons at the top of every page switches between them too.</li>
             <li><strong>Calendar Fractals' Links:</strong> a private link to your calendar's entries (every Calendar Fractal together, or one of them) that Apple Calendar, Google Calendar, Outlook, and spreadsheets can subscribe to. Make A Link shows it, with Copy, Share, and buttons that add it to Apple or Google Calendar (each fractal's Edit window on Home has it too, under Share); New Link makes a new one (the old one stops working), and Turn Off ends it. The other calendar shows your entries, and changes made there don't come back.</li>
-            <li><strong>Reminders</strong> is one card. First, how they reach you: <strong>Notifications On This Device</strong> (turned on one device at a time, from that device; right after you sign in, Home asks once, and Not Now stops it asking there), and the <strong>Calendar Link</strong> (a private link your calendar app subscribes to, where each reminder is a 30-minute event). Once either is on, <strong>What Gets A Reminder</strong> shows: a switch for each kind, 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start), then the reminder time, and with more than one budget, which one they're about. On a device with neither on, that part stays hidden there.</li>
+            <li><strong>Reminders</strong> is one card. First, how they reach you: <strong>Notifications On This Device</strong> (turned on one device at a time, from that device; right after a sign-in, each device gets one alert about them, and Not Now stops it there), and the <strong>Calendar Link</strong> (a private link your calendar app subscribes to, where each reminder is a 30-minute event). Once either is on, <strong>What Gets A Reminder</strong> shows: a switch for each kind, 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, and ❗️ days with a cost (off to start), then the reminder time, and with more than one budget, which one they're about. On a device with neither on, that part stays hidden there.</li>
           </ul>
 
           <h4>Your Account</h4>

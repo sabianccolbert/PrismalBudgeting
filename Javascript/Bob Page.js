@@ -68,7 +68,7 @@ const CARDS = [
   {
     id: "purposes",
     title: "Wavelength Planning",
-    help: "Once it's on, every entry form asks which wavelength an entry's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Add Or Change Wavelengths makes them), and Undefined, which is always there. It's that entry's alone, unless Per Title is on: then every entry with its title is on it (except one given a wavelength of its own). The spectrum adds up what each cost between the days picked, long wavelengths at the left to short at the right; tap a stretch to see its titles. A wavelength can have a goal, like $300 per 2 weeks, or 20% (of what your Regular gains come to) per month, and Bob warns you once one is 85% used.",
+    help: "Once it's on, every entry form asks which wavelength an entry's money is on: Needs, Wants, and Future to start, or up to 10 of your own (Add Or Change Wavelengths makes them), and Undefined, which is always there. It's that entry's alone, unless Per Title is on: then every entry with its title is on it (except one given a wavelength of its own). The spectrum adds up what each cost between the days picked, long wavelengths at the left to short at the right; tap a stretch to see its titles. A wavelength can have a goal, like $300 per 2 weeks, or 20% (of what your Regular gains come to) per month, and Bob warns you once one is 85% used: a way to hold back spending you want less of, like fast food or gambling.",
     setup: setupPurposesCard,
     render: renderPurposesCard
   },
@@ -2985,9 +2985,10 @@ function setupPurposesCard(card) {
   return controls;
 }
 
+const WAVE_GOAL_WARN = 0.85; // How much of a wavelength's goal is used when it needs a look
+
 // The spectrum (or a note while nothing in these days was spent), what's Undefined yet, each goal and how much of it is
 // used, and the highlight: each wavelength's share, or a heads-up for any goal at least WAVE_GOAL_WARN used
-const WAVE_GOAL_WARN = 0.85;
 function renderPurposesCard(card) {
   const totals = purposeTotals(purposeRange.from, purposeRange.to);
   const sum = totals.slices.reduce((all, slice) => all + slice.total, 0);
@@ -3091,12 +3092,13 @@ function sharePercent(part, whole) {
   return whole > 0 ? Math.round(part / whole * 100) : 0;
 }
 
+const UNDEFINED_COLOR = "hsl(230, 12%, 62%)"; // Undefined's color, on the spectrum and in the Wavelengths window
+
 // What each wavelength's entries cost from `from` through `to`: { slices: [{ key (its id; "none" for Undefined), name,
 // color, total, titles: [{ title, total, count }] biggest first }] (in the wavelengths' order, then Undefined), none (what
 // Undefined's came to), unsorted (Undefined's titles): [{ title, total, count }] }. Each entry is on its own wavelength
 // (see entryWavelength in Process Budget.js), and a title's entries on one wavelength count by what they come to together
 // (a refund takes off what it cost), when that's a cost.
-const UNDEFINED_COLOR = "hsl(230, 12%, 62%)";
 function purposeTotals(from, to) {
   const byTitle = new Map(); // titleKey and wavelength -> { title, total, count, purpose }
   eachEntryBetween(from, to, (date, text) => {
@@ -3477,6 +3479,20 @@ function waveGoalFields(goal, name) {
   };
 }
 
+// The Wavelengths window's Goals line, with a ? saying what a goal can do: hold spending down on something, like fast food
+// or gambling
+function goalsTip() {
+  const field = BudgetUI.field("Goals", BudgetUI.element("p", "panelHint", "A goal keeps a wavelength's spending in check."));
+  const help = BudgetUI.element("div", "");
+  help.append(
+    BudgetUI.element("p", "", "A wavelength with a goal can hold back spending you want less of, like fast food or gambling."),
+    BudgetUI.element("p", "", "Add a wavelength for it (like Fast Food), put those entries on it (or their titles, with Per Title), and give it a goal, like 40 per 1 week, or 5% of your Regular gains per 1 month."),
+    BudgetUI.element("p", "", `Wavelength Planning shows how much of the goal is used, and with its Warnings on, Bob says so on Home once it's ${Math.round(WAVE_GOAL_WARN * 100)}% used.`)
+  );
+  BudgetUI.addFieldHelp(field, "What a wavelength's goal can do", help);
+  return field;
+}
+
 // Wavelengths: each one's name, in order from the longest wavelength (red) to the shortest (violet), each moved up or
 // down, or taken out, and new ones added (1 to MAX_WAVELENGTHS), each with its goal; then Undefined, always last, which
 // can't be renamed or taken out but can have a goal. Saved together (saveWavelengths in Process Budget.js); taking out one
@@ -3550,6 +3566,7 @@ function openWavelengthsWindow(origin) {
       });
       form.append(
         BudgetUI.element("p", "panelText", `These are yours to change. Tap Add A Wavelength to make your own, type over a name to rename it, use the arrows to put them in order (the first is the longest wavelength, red, and the last the shortest, violet), or × to take one out. You can have from 1 to ${MAX_WAVELENGTHS}, plus Undefined, and every entry form's buttons follow them. Each can have a goal: an amount (like 300) or a percent of what your Regular gains come to (like 20%), per a number of days, weeks, or months. Bob warns you once one is ${Math.round(WAVE_GOAL_WARN * 100)}% used.`),
+        goalsTip(),
         add,
         list,
         BudgetUI.buttonRow([

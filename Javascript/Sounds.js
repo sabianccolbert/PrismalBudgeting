@@ -264,7 +264,7 @@
       if (href.startsWith("#") || href.startsWith("mailto:") || link.target === "_blank") return "twinkle";
       return null;
     }
-    const button = target.closest("button, [role='button'], .lineEntry, .upcomingButton");
+    const button = target.closest("button, [role='button'], .lineEntry");
     if (button) {
       const words = (button.getAttribute("aria-label") || button.textContent || "").trim();
       if (button.classList.contains("danger") || button.classList.contains("panelClose") || OFF_WORDS.test(words)) return "shatter";

@@ -399,7 +399,7 @@ function logRow(row) {
 // Where each part of the budget a change can touch is: [words for its button, the page]
 const LOG_PLACES = {
   recurring: ["Go To Recurring Entries", "/menu/recurring.html"],
-  tracker: ["Go To The Tracker", "/menu/bob.html#dataCard"],
+  tracker: ["Go To The Tracker", "/menu/bob.html#billsCard"],
   accounts: ["Go To Equity", "/menu/accounts.html"],
   equity: ["Go To Equity", "/menu/accounts.html"],
   goals: ["Go To Goals", "/menu/bob.html#bobCardsCard"],
@@ -596,6 +596,7 @@ function paycheckGains() {
   return gains;
 }
 
+// The graph's card (see above): In place of (a search box over the list), Payday, and the two lines
 function paycheckGraphCard(takeHome) {
   const card = BudgetUI.element("section", "budgetCard paycheckGraph");
   card.setAttribute("aria-label", "In Bank with this paycheck");
@@ -671,13 +672,13 @@ function paycheckGraphCard(takeHome) {
   return card;
 }
 
+let businessYear = null; // The Business page's year, while it's open
+const openBusinessParts = new Set(); // The categories whose entries are open
+
 // Business (Business Mode, see Business Mode in Process Budget.js): a year's Revenue, Expenses, Profit, Asset Purchases,
 // Assets, and each owner's money in and out, from the days before today, each a card that opens its entries (newest
 // first); then the titles in each category (each one's can change, and a title can be put in one); then the owners. With
 // Business Mode off for the budget, it says where its owner turns it on. The year picked stays while the page is open.
-let businessYear = null;
-const openBusinessParts = new Set(); // The categories whose entries are open
-
 function renderBusinessPage(view) {
   view.replaceChildren();
   if (!businessOn()) {
@@ -760,15 +761,24 @@ function businessTitlesCard() {
   card.append(heading, BudgetUI.element("p", "panelHint", "Each title's category. Every entry with the title counts in it, whatever its type."));
   const options = [{ value: "none", label: "None" }, ...businessCategories().map(category => ({ value: category.id, label: category.name }))];
   const titles = Object.entries(accountsData?.business?.titles || {}).sort((a, b) => a[0].localeCompare(b[0]));
+  // (Each shows the way its entries spell it: its category is kept by the title's key, without capitals or punctuation)
+  const typed = new Map();
+  if (titles.length > 0) {
+    eachEntryLine((text, line) => {
+      const key = titleKey(line.title);
+      if (key && !typed.has(key)) typed.set(key, splitAccount(line.title).title || splitAccount(line.title).account);
+    });
+  }
   if (titles.length === 0) card.append(BudgetUI.element("p", "panelHint", "No titles in a category yet."));
   const listEl = BudgetUI.element("ul", "budgetList businessTitleList");
   for (const [key, category] of titles) {
     const item = BudgetUI.element("li", "budgetItem");
-    const name = noTranslate(BudgetUI.element("span", "budgetName", capitalize(key)));
+    const shown = typed.get(key) || capitalize(key);
+    const name = noTranslate(BudgetUI.element("span", "budgetName", shown));
     const pick = BudgetUI.element("select", "selectInput");
     pick.append(...options.map(option => new Option(option.label, option.value)));
     pick.value = category;
-    pick.setAttribute("aria-label", `${capitalize(key)}: its category`);
+    pick.setAttribute("aria-label", `${shown}: its category`);
     noTranslate(pick);
     pick.addEventListener("change", async () => {
       pick.disabled = true;

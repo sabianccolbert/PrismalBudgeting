@@ -574,7 +574,8 @@ window.Budgets = (() => {
         if (budget.owned) {
           buttons.append(button("Share", "", (event) => openShare(budget, event.currentTarget), `Share ${budget.name}`));
           buttons.append(button("Rename", "", (event) => openRename(budget, event.currentTarget), `Rename ${budget.name}`));
-          const business = button(budget.business ? "Business Mode: On" : "Business Mode: Off", budget.business ? "primary" : "", (event) => turnBusiness(budget, !budget.business, event.currentTarget), `Business Mode for ${budget.name}`);
+          const businessWords = budget.business ? "Business Mode: On" : "Business Mode: Off";
+          const business = button(businessWords, budget.business ? "primary" : "", (event) => turnBusiness(budget, !budget.business, event.currentTarget), `${businessWords} for ${budget.name}`);
           business.setAttribute("aria-pressed", String(!!budget.business));
           business.title = "Business Mode: a Business page (revenue, expenses, assets, and owners) and a Business card on Bob's page, for this budget alone";
           buttons.append(business);
