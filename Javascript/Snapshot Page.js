@@ -60,7 +60,8 @@
       document.getElementById("snapshotHomeScreen").addEventListener("click", (event) => openHomeScreenSetup(event.currentTarget));
     }
     draw();
-    if (window.Fractals && !window.SNAPSHOT_KEY) window.Fractals.load().then(() => draw());
+    // (Once the calendar is in, its cards draw again: fractals:changed, below)
+    if (window.Fractals && !window.SNAPSHOT_KEY) window.Fractals.load();
   });
 
   // How to put the page on a home screen (with the login, or an icon's, just made)
@@ -161,8 +162,13 @@
   document.addEventListener("budget:updated", () => {
     if (workspaceLoaded) draw();
   });
+  // (Only the calendar's own cards show it, so only they're drawn again)
   document.addEventListener("fractals:changed", () => {
-    if (workspaceLoaded && cards().some(card => card.type.startsWith("calendar."))) draw();
+    if (!workspaceLoaded) return;
+    const list = cards();
+    list.forEach((card, index) => {
+      if (card.type.startsWith("calendar.") && built.has(card.id)) cardEl(card, index, list);
+    });
   });
   // (New From and To days in the Tracker window: Data's Tracker row and the tracker cards follow them)
   document.addEventListener("tracker:range", () => {

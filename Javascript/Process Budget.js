@@ -581,6 +581,8 @@ async function performDailyUpdate() {
 // newest), except for one on or before catchup (the last Catchup's day, or null: see IN BANK AND THE LAST CATCHUP), which
 // leaves In Bank as it is. Returns how many came off.
 function dropHistoryPlaceholders(catchup = null) {
+  // (A History with no placeholder in it, the usual one, has nothing to take off: its years aren't read day by day then)
+  if (!historyData.some((row, r) => r > 0 && row.some(cell => String(cell ?? "").includes(PLACEHOLDER_MARK)))) return 0;
   const days = []; // Every History day, oldest first
   for (let r = historyData.length - 1; r >= 1; r--) {
     for (let c = 0; c < 7; c++) {
@@ -592,6 +594,8 @@ function dropHistoryPlaceholders(catchup = null) {
   let dropped = 0;
   let shift = 0; // What the placeholders taken off so far had added to In Bank
   for (const { r, c, date } of days) {
+    // (A day with no placeholder, before any came off, stays as it is)
+    if (shift === 0 && !String(historyData[r][c]).includes(PLACEHOLDER_MARK)) continue;
     const lines = String(historyData[r][c]).split("\n");
     const kept = lines.filter((text, l) => {
       const line = readLine(text);
@@ -695,39 +699,39 @@ function getParsedRecurringRows() {
   return rows;
 }
 
-// Write due recurring entries into one cell, using the same rules as writeRecurring
+// Write due recurring entries into one cell, using the same rules as writeRecurring (the rows that land that day: see
+// rowsLandingOn)
 function writeRecurringToCell(cellText, cellDate, recurringRows) {
-  for (let row of recurringRows) {
-    if (!recurringRowHits(row.parsed, cellDate)) continue;
-
+  const landing = rowsLandingOn(recurringRows, cellDate);
+  if (landing.length === 0) return cellText;
+  // (Each line is read with readLine, which keeps what it read: the same lines are checked against each recurring entry,
+  // and on day after day)
+  const cellLines = cellText.split("\n");
+  for (let row of landing) {
     let amt = landingAmount({ amount: row.amt, percent: row.percent, sprite: row.sprite, title: row.title }, cellDate);
-    let cellLines = cellText.split("\n");
     let hasTemp = false;
     let hasUnique = false;
     for (let l = 0; l < cellLines.length; l++) {
-      let parts = getParts(cellLines[l]);
-      if (extractTitle(cellLines[l]) !== row.parsed.cleanTitle) continue;
+      const line = readLine(cellLines[l]);
+      if (line.clean !== row.parsed.cleanTitle) continue;
       // Only an entry with the same refraction type affects it (a title can have one of each type)
-      if (getSpecialType(parts[0]) !== row.parsed.special) continue;
+      if (getSpecialType(line.sprite) !== row.parsed.special) continue;
       // A temp (checkmark entry) blocks the recurring entry for this day (so does a spreadsheet's)
-      if (entryMark(parts[0])) {
+      if (entryMark(line.sprite)) {
         hasTemp = true;
         break;
       }
       // A unique with the same special type absorbs the recurring amount (a placeholder only if both are, and a plain
       // amount: what the two come to)
       hasUnique = true;
-      let newAmt = amt + parseAmount(parts[1]);
-      let newSprite = placeholderSprite(baseSprite(parts[0]) + "✔️", mergedPlaceholder(parts[0], row.sprite));
+      let newAmt = amt + line.amount;
+      let newSprite = placeholderSprite(baseSprite(line.sprite) + "✔️", mergedPlaceholder(line.sprite, row.sprite));
       cellLines[l] = newSprite + " " + formatMoney(newAmt) + " " + row.title;
-      cellText = cellLines.join("\n");
       break;
     }
-    if (!hasTemp && !hasUnique) {
-      cellText += `\n${row.sprite} ${formatMoney(amt)} ${row.title}`;
-    }
+    if (!hasTemp && !hasUnique) cellLines.push(`${row.sprite} ${formatMoney(amt)} ${row.title}`);
   }
-  return cellText;
+  return cellLines.join("\n");
 }
 
 // Read the In Bank amount from a cell's second line (null if the cell has none)
@@ -1848,6 +1852,7 @@ function refreshBudgetData() {
   recurringToDeleteIndexes = [];
 
   aheadDaysCache = null; // (The days after the calendar are worked out again when they're next looked at)
+  budgetDaysVersion++;
   normalizeFrequencies();
   upcomingEntriesMaintenance();
   writeRecurring();
@@ -1862,7 +1867,12 @@ function refreshBudgetData() {
   updateAccountBalances(); // (Before the tracker, whose Interest row counts the interest it works out)
   updateTrackerTab();
   dropStrayNotes();
+  budgetDaysVersion++;
 }
+
+// Goes up whenever the budget's days are worked out again (at the start and the end of refreshBudgetData, which every load
+// and change runs), so what's read from them can be kept until then (Bob Page.js budgetDays)
+let budgetDaysVersion = 0;
 
 /* ---------- Calendar entries (the old "Unique Entry" form) ---------- */
 
@@ -2804,8 +2814,13 @@ function accountChangesAhead() {
 // accountTitleMap(), passed in by loops so it's built once.
 function accountLineChanges(cellText, accounts = accountTitleMap()) {
   const changes = [];
-  const lines = String(cellText ?? "").split("\n");
+  const text = String(cellText ?? "");
+  // (Only an entry with an Equity account changes one, and its title has the account after the arrow: a day, or a line,
+  // without one has nothing to read. Years of History are read this way on every change.)
+  if (!text.includes(ACCOUNT_ARROW)) return changes;
+  const lines = text.split("\n");
   for (let l = 1; l < lines.length; l++) {
+    if (!lines[l].includes(ACCOUNT_ARROW)) continue;
     const line = readLine(lines[l]);
     if (!line.title || line.system) continue;
     const account = linkedAccount(line.sprite, line.title, accounts);
@@ -3189,11 +3204,18 @@ function interestStepper(interest) {
   const rate = interest.rate; // (% a year: a dollar earns rate cents a year)
   const months = INTEREST_COMPOUNDING[interest.compound];
   const from = interest.from || interest.since;
-  // The day it's added in a month (counted in months from the year 0)
+  // The day it's added in a month (counted in months from the year 0), worked out once a month (every day of a long look
+  // ahead asks, for each account)
+  const dayInMonth = new Map();
   const dayIn = (month) => {
-    const year = Math.floor(month / 12);
-    const last = new Date(year, month % 12 + 1, 0).getDate();
-    return new Date(year, month % 12, Math.min(interest.day, last));
+    let date = dayInMonth.get(month);
+    if (!date) {
+      const year = Math.floor(month / 12);
+      const last = new Date(year, month % 12 + 1, 0).getDate();
+      date = new Date(year, month % 12, Math.min(interest.day, last));
+      dayInMonth.set(month, date);
+    }
+    return date;
   };
   const fromMonth = from.getFullYear() * 12 + from.getMonth();
   const firstMonth = dayIn(fromMonth) > from ? fromMonth : fromMonth + 1;
@@ -4619,7 +4641,12 @@ function normalizeApiNotes(stored) {
 
 // The key of an entry's note on its day, and a recurring entry's own
 function entryNoteKey(date, title, sprite) {
-  return `${formatToYMD(createSafeMidnight(date))}|${cleanString(title)}|${NOTE_TYPES[getSpecialType(sprite)]}`;
+  return dayNoteKey(formatToYMD(createSafeMidnight(date)), title, sprite);
+}
+
+// The same, for a day already written as YYYY-MM-DD (many entries on one day share it)
+function dayNoteKey(day, title, sprite) {
+  return `${day}|${cleanString(title)}|${NOTE_TYPES[getSpecialType(sprite)]}`;
 }
 
 function recurringNoteKey(title, sprite) {
@@ -4812,11 +4839,15 @@ function dropStrayNotes() {
   const recurringPurposeKeys = Object.keys(notesData.recurringPurposes);
   const lastDay = formatToYMD(gridEndDate);
   if ([...entryKeys, ...purposeKeys].some(key => key.slice(0, 10) <= lastDay)) {
+    // (Only the days with a note or a wavelength of their own are read: only theirs can go)
+    const noteDays = new Set([...entryKeys, ...purposeKeys].map(key => key.slice(0, 10)).filter(day => day <= lastDay));
     const there = new Set();
     const addDay = (date, cellText) => {
+      const day = formatToYMD(createSafeMidnight(date));
+      if (!noteDays.has(day)) return;
       for (const text of String(cellText ?? "").split("\n").slice(1)) {
         const line = readLine(text);
-        if (!line.blank && !line.system && line.title) there.add(entryNoteKey(date, line.title, line.sprite));
+        if (!line.blank && !line.system && line.title) there.add(dayNoteKey(day, line.title, line.sprite));
       }
     };
     for (let r = 0; r < CALENDAR_ROWS; r++) {
@@ -4825,7 +4856,8 @@ function dropStrayNotes() {
     for (let r = 1; r < historyData.length; r++) {
       for (let c = 0; c < 7; c++) {
         const text = String(historyData[r][c] ?? "");
-        const date = createSafeMidnight(text.split("\n")[0].trim(), true);
+        const end = text.indexOf("\n");
+        const date = createSafeMidnight((end === -1 ? text : text.slice(0, end)).trim(), true);
         if (!isNaN(date.getTime())) addDay(date, text);
       }
     }
@@ -6814,9 +6846,9 @@ function getPredictionData(lastInBank) {
     // An Upcoming temp (like ❗️✔️ or ❗️➕) with its title and type that day replaces a recurring or spreadsheet entry
     const overridden = (clean, special) => dayFuture.some(future => future.title === clean && entryMark(future.sprite) && future.special === special);
     const testLanded = new Set();
-    for (let row of recurringRows) {
+    for (let row of rowsLandingOn(recurringRows, testDay)) {
       const key = row.parsed.cleanTitle + "|" + row.parsed.special;
-      if (String(row.sprite || "").includes("✖️") || testLanded.has(key) || !recurringRowHits(row.parsed, testDay)) continue;
+      if (String(row.sprite || "").includes("✖️") || testLanded.has(key)) continue;
       testLanded.add(key);
       if (!overridden(row.parsed.cleanTitle, row.parsed.special) && !isFromOther(row.sprite, row.title)) dayTotal += landingAmount({ amount: row.amt, percent: row.percent, sprite: row.sprite, title: row.title }, testDay);
     }
@@ -8480,6 +8512,59 @@ function countRecurringHits(row, first, last) {
     }
   }
   return hits;
+}
+
+// The days from first through last a parsed recurring row lands on, in order: the days recurringRowHits says yes to,
+// found the way countRecurringHits counts them (stepping from its start, or a month at a time), each checked by it
+function recurringHitDays(row, first, last) {
+  const from = row.startDate > first ? row.startDate : first;
+  const to = row.endDate && row.endDate < last ? row.endDate : last;
+  const days = [];
+  if (from > to) return days;
+  const { count, unit } = row.frequency;
+  if (unit === "days" || unit === "weeks") {
+    const step = unit === "weeks" ? 7 * count : count;
+    for (let date = addDays(row.startDate, Math.ceil(getDayDifference(from, row.startDate) / step) * step); date <= to; date = addDays(date, step)) {
+      if (recurringRowHits(row, date)) days.push(date);
+    }
+    return days;
+  }
+  const lastMonth = to.getFullYear() * 12 + to.getMonth();
+  for (let month = from.getFullYear() * 12 + from.getMonth(); month <= lastMonth; month++) {
+    const [year, monthIndex] = [Math.floor(month / 12), month % 12];
+    const monthDays = unit === "semimonthly" ? [1, 15] : [Math.min(row.startDate.getDate(), new Date(year, monthIndex + 1, 0).getDate())];
+    for (const day of monthDays) {
+      const date = new Date(year, monthIndex, day);
+      if (date >= from && date <= to && recurringRowHits(row, date)) days.push(date);
+    }
+  }
+  return days;
+}
+
+// Each list of parsed recurring rows' days, a year at a time (rowsLandingOn): list -> Map(year -> Map(a day's time -> rows))
+const rowsByDayOfList = new WeakMap();
+
+// The rows of a list of parsed recurring rows (getParsedRecurringRows, or a part of it) that land on date, in the list's
+// order: the same as trying each with recurringRowHits, but worked out a year at a time and kept with the list, so a
+// long look ahead (Lowest's, Equity's and Goals' ten years, Bob's figures) finds a day's rows without trying every row on
+// every day. The list mustn't change while it's in use (each caller makes its own): its days are kept in rowsByDayOfList.
+function rowsLandingOn(rows, date) {
+  let years = rowsByDayOfList.get(rows);
+  if (!years) rowsByDayOfList.set(rows, years = new Map());
+  const year = date.getFullYear();
+  let days = years.get(year);
+  if (!days) {
+    days = new Map();
+    for (const row of rows) {
+      for (const day of recurringHitDays(row.parsed, new Date(year, 0, 1), new Date(year, 11, 31))) {
+        const time = day.getTime();
+        if (days.has(time)) days.get(time).push(row);
+        else days.set(time, [row]);
+      }
+    }
+    years.set(year, days);
+  }
+  return days.get(new Date(year, date.getMonth(), date.getDate()).getTime()) || [];
 }
 
 // For fixing a cell by hand from the browser's console, like updateGridCell("calendar", 0, 3, "10/14\n❗️ -$5.00 Tea"):

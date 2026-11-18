@@ -754,22 +754,34 @@ function lowestAhead() {
   return lowest || { amount: 0, date: today };
 }
 
-// Each day in History and on the calendar from `from` through `to`: visit(date, its lines, the day's own line left off)
+// Each day in History and on the calendar from `from` through `to`: visit(date, its lines, the day's own line left off;
+// shared, so never changed)
 function eachDay(from, to, visit) {
+  for (const day of budgetDays()) if (day.date >= from && day.date <= to) visit(day.date, day.lines);
+}
+
+// Every day in History (newest week first, as it's kept) and then on the calendar, read once until the budget's days are
+// worked out again (Process Budget.js budgetDaysVersion): Bob's figures each walk them, and reading years of History over
+// again for each was most of his page's time. [{ date, lines }]
+let budgetDaysCache = null;
+function budgetDays() {
+  const fresh = budgetDaysCache && budgetDaysCache.version === budgetDaysVersion && budgetDaysCache.history === historyData && budgetDaysCache.calendar === calendarData && budgetDaysCache.grid === gridDates;
+  if (fresh) return budgetDaysCache.days;
+  const days = [];
   for (let r = 1; r < historyData.length; r++) {
     for (let c = 0; c < 7; c++) {
       const text = String(historyData[r][c] ?? "");
       if (!text.trim()) continue;
       const lines = text.split("\n");
       const date = createSafeMidnight(lines[0].trim(), true);
-      if (!isNaN(date.getTime()) && date >= from && date <= to) visit(date, lines.slice(1));
+      if (!isNaN(date.getTime())) days.push({ date, lines: lines.slice(1) });
     }
   }
   for (let r = 0; r < CALENDAR_ROWS; r++) {
-    for (let c = 0; c < 7; c++) {
-      if (gridDates[r][c] >= from && gridDates[r][c] <= to) visit(gridDates[r][c], String(calendarData[r][c] ?? "").split("\n").slice(1));
-    }
+    for (let c = 0; c < 7; c++) days.push({ date: gridDates[r][c], lines: String(calendarData[r][c] ?? "").split("\n").slice(1) });
   }
+  budgetDaysCache = { version: budgetDaysVersion, history: historyData, calendar: calendarData, grid: gridDates, days };
+  return days;
 }
 
 // Each day from 4 months ago through today, from History and the calendar: { spent, payday }, where spent is what went
