@@ -194,15 +194,16 @@ function markClipped(table) {
       box.removeAttribute("aria-expanded");
     }
   };
+  // (Every box measured first, then marked: a mark between two measures has the browser lay the whole table out again,
+  // once per box, which a thousand rows of Change Logs took many seconds to get through. Being clipped changes how a
+  // box looks, never its size.)
   requestAnimationFrame(() => {
-    for (const box of table.querySelectorAll(".aliasBox")) {
-      box.classList.toggle("isClipped", !box.classList.contains("isOpen") && box.scrollHeight > box.clientHeight + 1);
+    const boxes = [...table.querySelectorAll(".aliasBox"), ...table.querySelectorAll(".clipText")];
+    const clipped = boxes.map(box => !box.classList.contains("isOpen") && (box.classList.contains("aliasBox") ? box.scrollHeight > box.clientHeight + 1 : textCutShort(box)));
+    boxes.forEach((box, at) => {
+      box.classList.toggle("isClipped", clipped[at]);
       reachable(box);
-    }
-    for (const box of table.querySelectorAll(".clipText")) {
-      box.classList.toggle("isClipped", !box.classList.contains("isOpen") && textCutShort(box));
-      reachable(box);
-    }
+    });
   });
 }
 
@@ -336,14 +337,41 @@ function renderLogsPage(view) {
   // details scroll in a box about two lines tall (tap it to open it all the way), like the tracker's aliases
   const tableEl = createDataTable(LOG_COLUMNS);
   tableEl.classList.add("logsTable");
-  const fragment = document.createDocumentFragment();
-  for (let row of rows) fragment.appendChild(logRow(row));
-  tableEl.tBodies[0].appendChild(fragment);
-  view.appendChild(wrapScroll(tableEl));
-  markClipped(tableEl);
+  const body = tableEl.tBodies[0];
+  // The newest LOGS_AT_ONCE first, and older ones as the end of the page comes into view (or Show Older Changes is
+  // tapped): a full Change Logs drawn all at once held the page up for seconds on a phone. Every row another device made
+  // that hasn't been seen here shows from the start, however far down it is.
+  let lastUnseen = -1;
+  rows.forEach((row, at) => { if (logsUnseen.has(logMark(row))) lastUnseen = at; });
+  logsShown = Math.max(logsShown, lastUnseen + 1);
+  const moreRow = BudgetUI.buttonRow([{ label: "", onClick: () => { logsShown += LOGS_AT_ONCE; showMore(); } }]);
+  moreRow.classList.add("logsMore");
+  const more = moreRow.firstElementChild;
+  const showMore = () => {
+    const hadFocus = document.activeElement === more;
+    const fragment = document.createDocumentFragment();
+    for (const row of rows.slice(body.rows.length, logsShown)) fragment.appendChild(logRow(row));
+    body.appendChild(fragment);
+    const left = rows.length - body.rows.length;
+    moreRow.hidden = left <= 0;
+    more.textContent = `Show Older Changes (${left} more)`;
+    // (With the last rows in, the button goes, and the keyboard's place goes to the last row instead of the page's top)
+    if (hadFocus && moreRow.hidden) body.rows[body.rows.length - 1]?.focus();
+    markClipped(tableEl);
+  };
+  showMore();
+  view.append(wrapScroll(tableEl), moreRow);
+  logsWatch?.disconnect();
+  logsWatch = "IntersectionObserver" in window ? new IntersectionObserver((seen) => {
+    if (seen.some(entry => entry.isIntersecting) && !moreRow.hidden && more.isConnected) more.click();
+  }) : null;
+  logsWatch?.observe(more);
 }
 
 const LOG_COLUMNS = ["Time", "Took", { label: "Action", className: "actionHead" }, "Details", { label: "Undo", className: "undoHead" }];
+const LOGS_AT_ONCE = 100;
+let logsShown = LOGS_AT_ONCE; // (How many rows the page shows, kept when it's drawn again, like after an Undo)
+let logsWatch = null; // (What brings older rows in as Show Older Changes comes into view)
 
 const logsUnseen = new Set(); // Rows other devices made that hadn't been seen here when the page opened (their logMark)
 

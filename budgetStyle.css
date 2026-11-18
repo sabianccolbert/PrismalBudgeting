@@ -906,6 +906,12 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   margin-top: 0.8em;
 }
 
+/* Show Older Changes, under the Change Logs while older rows are still to come (Budget Pages.js renderLogsPage) */
+.logsMore {
+  justify-content: center;
+  margin: -2vmin 0 4vmin;
+}
+
 /* Each change's Undo, at the right ("Undone" once it was) */
 .logsTable .undoCell {
   white-space: nowrap;
