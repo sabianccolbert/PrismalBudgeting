@@ -21,6 +21,7 @@ let accountsData = null; // Equity: { version, list: [[...]], equity: {...} } (s
 let logsData = null;     // Change Logs (the spreadsheet's "Form Entries" tab), newest first
 let sheetsData = null;   // Connected spreadsheets: { version, list: [connection] } (see CONNECTED SPREADSHEETS)
 let notesData = null;    // Entries' notes: { version, entries, recurring } (see ENTRY NOTES)
+let kitchenData = null;  // Recipes, the Pantry, meals, and foods (see THE KITCHEN; Kitchen.js works with them)
 
 // Data Sizes
 // The calendar is always exactly five weeks, 5x7 (a budget saved with four is given its fifth week by the daily update,
@@ -79,6 +80,7 @@ let accountsEdited = false;
 let logsEdited = false;
 let sheetsEdited = false;
 let notesEdited = false;
+let kitchenEdited = false;
 
 // Dates Data
 // Days are calendar days in the device's time zone (stored as MM/DD/YYYY text, never as a moment in time),
@@ -360,6 +362,7 @@ function readLoadedTables(data) {
   logsData       = normalizeApiTable(parseDB(data.logs, "logs"), TABLE_SHAPES.logs);
   sheetsData     = normalizeApiSheets(parseDB(data.sheets, "sheets"));
   notesData      = normalizeApiNotes(parseDB(data.notes, "notes"));
+  kitchenData    = normalizeApiKitchen(parseDB(data.kitchen, "kitchen"));
   return storedAccounts;
 }
 
@@ -682,7 +685,7 @@ function groupFutureRowsByDate() {
   return byDate;
 }
 
-// Parse every Recurring tab row once for the whole catch-up
+// Parse every Recurring Entries row once for the whole catch-up
 function getParsedRecurringRows() {
   let rows = [];
   for (let i = 2; i < recurringData.length; i++) {
@@ -842,7 +845,10 @@ const NEW_TRACKER_ROWS = [["Unknown", ["Misc", "Catchup", "Other"]]];
 const ROW_TABLES = {
   recurring: { name: "Recurring", headerRows: 2, get: () => recurringData, set: (rows) => { recurringData = rows; }, categoryRow: (title) => ["-", title, "", "", "", "-"] },
   tracker:   { name: "Tracker",   headerRows: 1, get: () => trackerData,   set: (rows) => { trackerData = rows; },   categoryRow: (title) => ["-", title, "", "", "-"] },
-  accounts:  { name: "Accounts",  headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; } }
+  accounts:  { name: "Accounts",  headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; } },
+  // The Recipes page's Pantry (sections like Recurring's) and its list of foods (see THE KITCHEN)
+  pantry:    { name: "Pantry",    headerRows: 0, get: () => kitchenData.pantry, set: (rows) => { kitchenData.pantry = rows; }, categoryRow: (title) => ["-", title, null, "", ""] },
+  foods:     { name: "Foods",     headerRows: 0, get: () => kitchenData.foods, set: (rows) => { kitchenData.foods = rows; } }
 };
 
 // Every saved table: snapshots for rollback, change detection so only changed tables are saved, and whether
@@ -858,6 +864,7 @@ const BUDGET_TABLES = {
   accounts:   { get: () => accountsData,   set: (v) => { accountsData = v; },   markEdited: () => { accountsEdited = true; },   edited: () => accountsEdited,   saved: () => { accountsEdited = false; } },
   sheets:     { get: () => sheetsData,     set: (v) => { sheetsData = v; },     markEdited: () => { sheetsEdited = true; },     edited: () => sheetsEdited,     saved: () => { sheetsEdited = false; } },
   notes:      { get: () => notesData,      set: (v) => { notesData = v; },      markEdited: () => { notesEdited = true; },      edited: () => notesEdited,      saved: () => { notesEdited = false; } },
+  kitchen:    { get: () => kitchenData,    set: (v) => { kitchenData = v; },    markEdited: () => { kitchenEdited = true; },    edited: () => kitchenEdited,    saved: () => { kitchenEdited = false; } },
   logs:       { get: () => logsData,       set: (v) => { logsData = v; },       markEdited: () => { logsEdited = true; },       edited: () => logsEdited,       saved: () => { logsEdited = false; } }
 };
 
@@ -1327,22 +1334,30 @@ function saveTrackerEntry(fields, index = null) {
 
 // Edit mode: the new row order after a drag (row indexes, top to bottom)
 function moveBudgetRows(tableName, order, movedIndex) {
-  return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Order`, () => reorderTableRows(tableName, order, movedIndex));
+  return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Order`, () => reorderTableRows(tableName, order, movedIndex), kitchenUndo(tableName, "moved"));
 }
 
 // Edit mode: new section (category) separator before row atIndex
 function addCategoryRow(tableName, atIndex, title) {
-  return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Categories`, () => insertCategory(tableName, atIndex, title));
+  return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Categories`, () => insertCategory(tableName, atIndex, title), kitchenUndo(tableName, "added a section to"));
 }
 
 // Edit mode: rename a section heading
 function renameCategoryRow(tableName, index, title) {
-  return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Categories`, () => renameCategory(tableName, index, title));
+  return runBudgetAction(`🔧 ${ROW_TABLES[tableName].name} Categories`, () => renameCategory(tableName, index, title), kitchenUndo(tableName, "renamed a section in"));
 }
 
 // Delete rows (entries and/or sections). Recurring entries end yesterday instead, see deleteTableRows.
 function deleteBudgetRows(tableName, indexes) {
-  return runBudgetAction(`🔧 Delete ${ROW_TABLES[tableName].name} Rows`, () => deleteTableRows(tableName, indexes));
+  const count = new Set(indexes).size;
+  return runBudgetAction(`🔧 Delete ${ROW_TABLES[tableName].name} Rows`, () => deleteTableRows(tableName, indexes), kitchenUndo(tableName, `deleted ${count} ${count === 1 ? "row" : "rows"} from`));
+}
+
+// The Pantry's and the foods list's edit mode changes are Undo steps (Home's Undo and the Recipes page's take them back);
+// the other tables' aren't
+function kitchenUndo(tableName, what) {
+  const names = { pantry: "the Pantry", foods: "your foods" };
+  return names[tableName] ? { label: `${what} ${names[tableName]}`, dates: [] } : null;
 }
 
 // New account (index null, from edit mode) or change the tapped one (see accountEntry). Its balance today is worked out
@@ -1607,7 +1622,7 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
     // A change can finish once everything is worked out again (History's changes keep the accounts' balances)
     if (result.afterRefresh) result.afterRefresh();
     delete result.afterRefresh;
-    if (undo) result.newUndoStep = makeUndoStep(undo.label, undoBefore, !!undo.keepBalances);
+    if (undo) result.newUndoStep = makeUndoStep(undo.label, undoBefore, !!undo.keepBalances, snapshot.kitchen);
   } catch (err) {
     restoreTables(snapshot);
     // A remembered change that can't be undone (or redone) anymore is dropped, so older ones still can be
@@ -5051,7 +5066,7 @@ function remindedEntries() {
 const BACKUP_MAX_BYTES = 25 * 1024 * 1024; // The biggest file read (every part of a budget, with room to spare)
 const BACKUP_CHOICES = ["current", "uploaded", "remove"];
 // The tables a backup can fill, by the names its window gives them (Change Logs keep only their newest rows anyway)
-const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Equity", tracker: "Tracker", sheets: "Connected Spreadsheets And Calendars", calculator: "Paycheck Calculator", notes: "Notes" };
+const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Equity", tracker: "Tracker", sheets: "Connected Spreadsheets And Calendars", calculator: "Paycheck Calculator", notes: "Notes", kitchen: "Recipes, Pantry, And Meals" };
 
 // A Download My Data file's text, read and checked: { from: { username, downloaded (a Date, or null) }, budgets (the
 // names of the budgets the file has: its account's first budget, then its others), which (the one read), days: Map(day's
@@ -5086,7 +5101,8 @@ function readBackup(text, which = 0) {
     linked: has("connectedSpreadsheets") ? normalizeApiSheets(budget.connectedSpreadsheets).linked || [] : null,
     calculator: has("paycheckCalculator") ? normalizeApiTable(budget.paycheckCalculator, TABLE_SHAPES.calculator) : null,
     notes: has("notes") ? normalizeApiNotes(budget.notes) : null,
-    logs: has("changeLogs") ? normalizeApiTable(budget.changeLogs, TABLE_SHAPES.logs).slice(1) : null
+    logs: has("changeLogs") ? normalizeApiTable(budget.changeLogs, TABLE_SHAPES.logs).slice(1) : null,
+    kitchen: has("recipesAndPantry") ? normalizeApiKitchen(budget.recipesAndPantry) : null
   };
 }
 
@@ -5355,6 +5371,55 @@ function backupPlans(backup) {
     });
   }
 
+  // The kitchen (the Recipes page and the Meals fractal), a list at a time: recipes and meals by their ids, the Pantry's
+  // rows by food, unit, and expiration (a section by its title), and the foods by name. A meal of the backup's that follows
+  // a recipe the budget won't have keeps the recipe's title, foods, and notes as its own. Which days' meals already came
+  // out of the Pantry stays the budget's (or the backup's, when it's later), so none come out twice.
+  if (backup.kitchen) {
+    const theirs = backup.kitchen;
+    const pantryKey = (row) => (String(row[0]).trim() === "-" ? `-|${cleanString(row[1])}` : `${cleanString(row[0])}|${cleanString(row[2])}|${row[3]}`);
+    const lists = [
+      ["recipes", "Recipes", "recipes", (item) => item.id],
+      ["meals", "Meal Entries", "meal entries", (item) => item.id],
+      ["pantry", "Pantry", "foods in the Pantry", pantryKey],
+      ["foods", "Your Foods", "foods", (row) => cleanString(row[0])]
+    ];
+    // (Every recipe either side has, as it is now: a meal whose recipe the budget won't have takes what it showed)
+    const recipePool = new Map([...theirs.recipes, ...kitchenData.recipes].map(recipe => [recipe.id, recipe]));
+    const settle = () => {
+      const kept = new Set(kitchenData.recipes.map(recipe => recipe.id));
+      kitchenData.meals = kitchenData.meals.map((meal) => {
+        if (!meal.recipe || kept.has(meal.recipe)) return meal;
+        const recipe = recipePool.get(meal.recipe);
+        const rest = { ...meal };
+        delete rest.recipe;
+        return { ...rest, title: recipe?.title || "Meal", foods: JSON.parse(JSON.stringify(recipe?.foods || [])), notes: recipe?.notes || "" };
+      });
+      if (theirs.usedThrough > kitchenData.usedThrough) kitchenData.usedThrough = theirs.usedThrough;
+    };
+    // (A list can have a thing twice, like a food in the Pantry: each one's key counts which of its kind it is, so two
+    // alike stay two, and pair up with the other side's two)
+    const numbered = (list, keyOf) => {
+      const seen = new Map();
+      return list.map((item) => {
+        const key = keyOf(item);
+        seen.set(key, (seen.get(key) || 0) + 1);
+        return [`${key}#${seen.get(key)}`, item];
+      });
+    };
+    for (const [part, name, noun, keyOf] of lists) {
+      const mine = kitchenData[part];
+      if (theirs[part].length === 0) continue;
+      const count = (choice) => mergeKeyed(numbered(mine, keyOf), numbered(theirs[part], keyOf), choice);
+      const counted = (list) => (part === "pantry" ? list.filter(row => String(row[0]).trim() !== "-") : list).length;
+      plan(part, name, noun, counted(mine), counted(theirs[part]), count(null).clashes, (choice) => {
+        kitchenData[part] = JSON.parse(JSON.stringify(count(choice).items));
+        if (part === "meals" && choice !== "current") kitchenData.color = theirs.color;
+        settle();
+      });
+    }
+  }
+
   if (backup.logs && backup.logs.some(usedRow)) {
     const mine = logsData.slice(1).filter(usedRow);
     const theirs = backup.logs.filter(usedRow);
@@ -5535,7 +5600,7 @@ function normalizeApiSheets(rawData) {
 // the account's own and the budget's ("12"), linked ones ("linked:ab12"), and Holidays ("holidays"), top to bottom.
 // Fractals.js puts any not in it after the rest.
 const MAX_FRACTAL_ORDER = 60;
-const FRACTAL_ORDER_ID = /^(\d{1,15}|linked:[a-z0-9]{4,16}|holidays)$/;
+const FRACTAL_ORDER_ID = /^(\d{1,15}|linked:[a-z0-9]{4,16}|holidays|meals)$/;
 
 function normalizeFractalOrder(order) {
   if (!Array.isArray(order)) return [];
@@ -5571,6 +5636,175 @@ function saveHolidays(fields) {
     formEntryRow[3] = "New color";
     return {};
   });
+}
+
+/* ---------- The kitchen (the Recipes page, and the Meals fractal) ---------- */
+// The budget's recipes, Pantry, meals, and foods are its kitchen table (saved like the rest of the budget, so everyone it's
+// shared with sees them), worked with by Kitchen.js:
+//   pantry:  rows of [name, amount (a number, or null for none), unit, expires (MM/DD/YYYY or ""), shop ("1" while it's
+//            checked as on the shopping list, or "")]; a section is ["-", title, null, "", ""] (ROW_TABLES.pantry)
+//   foods:   rows of [name, unit (the last one used with it), other names ([...])] (ROW_TABLES.foods)
+//   recipes: [{ id, title, foods: [[name, amount, unit]], notes }]
+//   meals:   [{ id, start, repeat ({ count, unit }), until, skip ([...]), then either recipe (the recipe's id: it shows the
+//            recipe as it is now) or its own title, foods, and notes, and waiting (the Quick Calendar entry it came from) }]:
+//            the Meals fractal's entries, with days as YYYY-MM-DD like the calendar's (Fractals.js)
+//   color:   the Meals fractal's color; usedThrough: the last day (YYYY-MM-DD) whose meals came out of the Pantry
+const KITCHEN_VERSION = 1;
+const MAX_RECIPES = 500;
+const MAX_RECIPE_FOODS = 100;
+const MAX_PANTRY_ROWS = 1000;     // Foods in the Pantry (its sections aren't counted)
+const MAX_PANTRY_SECTIONS = 200;
+const MAX_FOOD_ROWS = 2000;
+const MAX_MEALS = 5000;
+const MAX_FOOD_NAME = 60;
+const MAX_FOOD_UNIT = 20;
+const MAX_FOOD_ALIASES = 20;
+const MAX_KITCHEN_NOTES = 20000;
+const MAX_FOOD_AMOUNT = 1000000;
+const MAX_MEAL_SKIPS = 500;
+const MEALS_COLOR = "#3fbf5f";
+const KITCHEN_ID = /^[a-z0-9]{6,16}$/;
+const KITCHEN_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+// No kitchen yet
+function emptyKitchen() {
+  return { version: KITCHEN_VERSION, pantry: [], foods: [], recipes: [], meals: [], color: MEALS_COLOR, usedThrough: "" };
+}
+
+// A new id for a recipe or a meal
+function newKitchenId() {
+  let id = "";
+  while (id.length < 10) id += Math.random().toString(36).slice(2);
+  return id.slice(0, 10);
+}
+
+// Words kept as typed (single spaces, trimmed, at most max characters); anything but words or a number is none
+const kitchenText = (value, max) => (typeof value === "string" || typeof value === "number" ? String(value).replace(/\s+/g, " ").trim().slice(0, max) : "");
+
+// An amount of food: a number from 0 up (to three decimal places), or null for none
+function kitchenAmount(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const number = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  if (!Number.isFinite(number) || number < 0) return null;
+  return Math.round(Math.min(number, MAX_FOOD_AMOUNT) * 1000) / 1000;
+}
+
+// A day kept as YYYY-MM-DD, or "" when it isn't one
+function kitchenDay(value) {
+  const text = String(value ?? "");
+  if (!KITCHEN_DAY.test(text)) return "";
+  const day = createSafeMidnight(text, true);
+  return isNaN(day.getTime()) || formatToYMD(day) !== text ? "" : text;
+}
+
+// A Pantry food's expiration as it's kept (MM/DD/YYYY), or "" for none (blank isn't today: createSafeMidnight would read
+// it that way)
+function kitchenExpires(value) {
+  const text = value instanceof Date ? formatToMMDDYYYY(value) : String(value ?? "").trim();
+  const parts = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!parts) return "";
+  // (A day that doesn't exist, like 02/30, is none: never the day it would roll over to)
+  const day = new Date(Number(parts[3]), Number(parts[1]) - 1, Number(parts[2]));
+  return day.getMonth() === Number(parts[1]) - 1 && day.getDate() === Number(parts[2]) ? formatToMMDDYYYY(day) : "";
+}
+
+// A recipe's or a meal's foods: [[name, amount, unit]], each with a name
+function normalizeKitchenFoods(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(Array.isArray)
+    .map(row => [kitchenText(row[0], MAX_FOOD_NAME), kitchenAmount(row[1]), kitchenText(row[2], MAX_FOOD_UNIT)])
+    .filter(row => row[0])
+    .slice(0, MAX_RECIPE_FOODS);
+}
+
+// A meal's repeat, kept like a calendar entry's: { count, unit }, or null
+function kitchenRepeat(repeat) {
+  if (!repeat || typeof repeat !== "object") return null;
+  const count = Number(repeat.count);
+  return Number.isInteger(count) && count >= 1 && count <= 999 && ["days", "weeks", "months"].includes(repeat.unit) ? { count, unit: repeat.unit } : null;
+}
+
+// The stored kitchen, checked (none stored is none)
+function normalizeApiKitchen(stored) {
+  const kitchen = emptyKitchen();
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return kitchen;
+
+  if (Array.isArray(stored.pantry)) {
+    kitchen.pantry = stored.pantry.filter(Array.isArray).map((row) => {
+      if (String(row[0] ?? "").trim() === "-") {
+        const title = kitchenText(row[1], MAX_TITLE);
+        return title ? ["-", title, null, "", ""] : null;
+      }
+      const name = kitchenText(row[0], MAX_FOOD_NAME);
+      if (!name) return null;
+      return [name, kitchenAmount(row[1]), kitchenText(row[2], MAX_FOOD_UNIT), kitchenExpires(row[3]), row[4] === "1" ? "1" : ""];
+    }).filter(Boolean);
+    // (Up to MAX_PANTRY_ROWS foods, and MAX_PANTRY_SECTIONS sections besides)
+    let foods = 0;
+    let sections = 0;
+    kitchen.pantry = kitchen.pantry.filter(row => (row[0] === "-" ? ++sections <= MAX_PANTRY_SECTIONS : ++foods <= MAX_PANTRY_ROWS));
+  }
+
+  if (Array.isArray(stored.foods)) {
+    const seen = new Set();
+    kitchen.foods = stored.foods.filter(Array.isArray).map((row) => {
+      const name = kitchenText(row[0], MAX_FOOD_NAME);
+      const key = cleanString(name);
+      if (!key || seen.has(key)) return null;
+      seen.add(key);
+      const aliases = (Array.isArray(row[2]) ? row[2] : []).map(alias => kitchenText(alias, MAX_FOOD_NAME)).filter(alias => cleanString(alias) && cleanString(alias) !== key);
+      return [name, kitchenText(row[1], MAX_FOOD_UNIT), [...new Map(aliases.map(alias => [cleanString(alias), alias])).values()].slice(0, MAX_FOOD_ALIASES)];
+    }).filter(Boolean).slice(0, MAX_FOOD_ROWS);
+  }
+
+  const ids = new Set();
+  const freshId = (id) => {
+    const text = String(id ?? "");
+    if (!KITCHEN_ID.test(text) || ids.has(text)) return null;
+    ids.add(text);
+    return text;
+  };
+  if (Array.isArray(stored.recipes)) {
+    kitchen.recipes = stored.recipes.filter(item => item && typeof item === "object").map((item) => {
+      const id = freshId(item.id);
+      const title = kitchenText(item.title, MAX_TITLE);
+      if (!id || !title) return null;
+      return { id, title, foods: normalizeKitchenFoods(item.foods), notes: typeof item.notes === "string" ? item.notes.slice(0, MAX_KITCHEN_NOTES) : "" };
+    }).filter(Boolean).slice(0, MAX_RECIPES);
+  }
+
+  if (Array.isArray(stored.meals)) {
+    const recipeIds = new Set(kitchen.recipes.map(recipe => recipe.id));
+    kitchen.meals = stored.meals.filter(item => item && typeof item === "object").map((item) => {
+      const id = freshId(item.id);
+      const start = kitchenDay(item.start);
+      if (!id || !start) return null;
+      const meal = { id, start };
+      const repeat = kitchenRepeat(item.repeat);
+      if (repeat) {
+        meal.repeat = repeat;
+        const until = kitchenDay(item.until);
+        if (until && until >= start) meal.until = until;
+        const skip = Array.isArray(item.skip) ? [...new Set(item.skip.map(kitchenDay).filter(Boolean))].sort().slice(-MAX_MEAL_SKIPS) : [];
+        if (skip.length > 0) meal.skip = skip;
+      }
+      // (One that follows a recipe that's gone keeps going by itself, as a meal of its own)
+      if (typeof item.recipe === "string" && recipeIds.has(item.recipe)) {
+        meal.recipe = item.recipe;
+      } else {
+        meal.title = kitchenText(item.title, MAX_TITLE) || "Meal";
+        meal.foods = normalizeKitchenFoods(item.foods);
+        meal.notes = typeof item.notes === "string" ? item.notes.slice(0, MAX_KITCHEN_NOTES) : "";
+      }
+      if (Number.isSafeInteger(item.waiting) && item.waiting > 0) meal.waiting = item.waiting;
+      return meal;
+    }).filter(Boolean).slice(0, MAX_MEALS);
+  }
+
+  const color = String(stored.color ?? "").toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(color)) kitchen.color = color;
+  kitchen.usedThrough = kitchenDay(stored.usedThrough);
+  return kitchen;
 }
 
 /* ---------- Linked Calendar Fractals ---------- */
@@ -6035,6 +6269,9 @@ function insertCategory(tableName, atIndex, title) {
   let table = ROW_TABLES[tableName];
   if (!table.categoryRow) throw new BudgetInputError("Sections can't be added here.");
   let rows = table.get();
+  if (tableName === "pantry" && rows.filter(row => String(row[0]).trim() === "-").length >= MAX_PANTRY_SECTIONS) {
+    throw new BudgetInputError(`The Pantry can have up to ${MAX_PANTRY_SECTIONS} sections.`);
+  }
   let cleanTitle = capitalize(String(title || "").replace(/\s+/g, " ").trim());
   if (!cleanTitle) throw new BudgetInputError("Give the section a title.");
   let at = Math.min(Math.max(Number.isInteger(atIndex) ? atIndex : rows.length, table.headerRows), rows.length);
@@ -6983,7 +7220,7 @@ function affirmationIndex(date) {
 
 // Tracker sums (last 28 / 90 / 365 days) from the calendar and History, the Transfers and Undefined rows'
 // titles (every transfer's, and the ones no other row tracks), the Interest row (the Equity accounts' interest, see
-// interestAdded, which isn't an entry), and the Recurring tab's monthly/yearly summary
+// interestAdded, which isn't an entry), and Recurring Entries' monthly/yearly summary
 function updateTrackerTab() {
   let yearly = 0;
   let monthly = 0;
@@ -7498,6 +7735,16 @@ function buildReminderPlan() {
     if (!days[key]) days[key] = { negative: false, uncommon: 0, cost: false };
     if (!days[key].entries) days[key].entries = [];
     if (days[key].entries.length < MAX_DAY_REMINDERS) days[key].entries.push({ title: entry.title, date: formatToYMD(entry.date), days: entry.days });
+  }
+
+  // The kitchen's (Kitchen.js): days the Pantry doesn't have enough for the meals (meals), and how many of its foods
+  // expire on a day (expired)
+  if (window.Kitchen) {
+    for (const [key, kitchen] of Object.entries(window.Kitchen.planDays(formatToYMD(today), formatToYMD(lastDay)))) {
+      if (!days[key]) days[key] = { negative: false, uncommon: 0, cost: false };
+      if (kitchen.meals) days[key].meals = true;
+      if (kitchen.expired) days[key].expired = kitchen.expired;
+    }
   }
   return { from: formatToYMD(today), to: formatToYMD(lastDay), days: days };
 }
@@ -8339,7 +8586,7 @@ function plainLine(line) {
   return baseSprite(sprite) === sprite ? text : text.replace(sprite, baseSprite(sprite));
 }
 
-// Returns the Recurring tab index of the entry with this title + special type that hits on date, or false
+// Returns the Recurring Entries index of the entry with this title + special type that hits on date, or false
 function recurringHits(title, date, targetSpecial) {
   const cleanTargetTitle = cleanString(title);
 
@@ -8358,7 +8605,7 @@ function recurringHits(title, date, targetSpecial) {
   return false;
 }
 
-// Parse a Recurring tab row into what the date checks need (null for separators/empty rows).
+// Parse a Recurring Entries row into what the date checks need (null for separators/empty rows).
 // A frequency that can't be read lands monthly. An End Date that's blank, "None" (in any capitals), or can't be
 // read means it never ends, the same as writeRecurring and releaseEndedTemps read it. goneUntil: for a placeholder
 // deleted some days before each day it lands on, the first day from today on it still lands on (a day closer than that
@@ -9271,6 +9518,8 @@ function fillGuestDay(td, day) {
   content.replaceChildren(fragment, zoomDayButtons());
   // (A day isn't red while the calendar shows only calendar entries: its In Bank is hidden then)
   td.classList.toggle('isNegative', dayBelowZero(day.text, day.date) && !(window.Fractals && window.Fractals.view() === 'calendar'));
+  // (Orange: a day whose meals the Pantry doesn't have enough for, see Kitchen.js dayGlows)
+  td.classList.toggle('isMealShort', !!window.Kitchen && window.Kitchen.dayGlows(day.date));
   td.classList.toggle('isToday', day.date.getTime() === today.getTime());
   td.classList.toggle('isPast', day.date < today);
   labelDay(td, day.date, shownDayText(day.text, day.date));
@@ -9701,7 +9950,8 @@ document.addEventListener('pointerout', (e) => {
 // Redo is the same the other way. Everything else (In Bank, recurring entries, the tracker, account
 // balances) is worked out again from there, like after any change; a change made in History keeps the accounts'
 // balances undone or redone too (keepAccountBalances). Kept for this tab in sessionStorage
-// (so going to another page and back keeps it), up to 25 steps, and forgotten on sign-out.
+// (so going to another page and back keeps it), up to 25 steps, and forgotten on sign-out. Changes to Calendar Fractals'
+// entries are steps in the same list ({ label, calendar }), taken through the API by Fractals.js (UNDO) instead of here.
 
 const MAX_UNDO_STEPS = 25;
 const OWN_ENTRY_SPRITES = ["❗️", "✖️", "⭕️"];
@@ -9764,11 +10014,15 @@ function stepThroughHistory(direction) {
   const history = readUndoHistory();
   const step = (direction === "undo" ? history.undo : history.redo).at(-1);
   if (!step) throw new BudgetInputError(direction === "undo" ? "There's nothing to undo." : "There's nothing to redo.");
+  if (step.calendar) throw new BudgetInputError("That's a change to your calendar: Undo on Home or the Recipes page takes it back.");
   const from = direction === "undo" ? "after" : "before";
   const to = direction === "undo" ? "before" : "after";
   const changed = step.days.find(day => JSON.stringify(dayEntries(createSafeMidnight(day.date))) !== JSON.stringify(day[from]));
-  if (changed || (step.equity && JSON.stringify(accountsData?.equity ?? null) !== step.equity[from])) {
-    const what = changed ? showDay(createSafeMidnight(changed.date)) : "your Equity accounts";
+  // (The kitchen's lists are kept as changes: Undo puts back what they had before, Redo what they had after)
+  const kitchen = (step.kitchen || []).map(change => (direction === "undo" ? change : invertRowsChange(change)));
+  const staleList = kitchen.find(rowsChangeStale);
+  if (changed || staleList || (step.equity && JSON.stringify(accountsData?.equity ?? null) !== step.equity[from])) {
+    const what = changed ? showDay(createSafeMidnight(changed.date)) : staleList ? ROWS_IN_WORDS[staleList.table] : "your Equity accounts";
     throw new StaleHistoryError(`That (${step.label}) can't be ${direction === "undo" ? "undone" : "redone"} anymore, because ${what} changed since.`, direction);
   }
   // (A change made in History keeps the accounts' balances, undone or redone too)
@@ -9778,8 +10032,9 @@ function stepThroughHistory(direction) {
     if (day.notes) putStepNotes(day.notes[to]);
   }
   if (step.equity) accountsData.equity = JSON.parse(step.equity[to]);
+  kitchen.forEach(applyRowsChange);
   formEntryRow[3] = step.label;
-  formEntryRow[4] = "Days: " + step.days.map(day => showStoredDate(day.date)).join(", ");
+  formEntryRow[4] = step.days.length > 0 ? "Days: " + step.days.map(day => showStoredDate(day.date)).join(", ") : "";
   return { historyStep: { direction, label: step.label }, ...(balances ? { afterRefresh: () => keepAccountBalances(balances) } : {}) };
 }
 
@@ -9792,12 +10047,13 @@ function rememberUndoStep(step) {
   writeUndoHistory(history);
 }
 
-// After an undo the step can be redone, and after a redo, undone again
-function moveHistoryStep(direction) {
+// After an undo the step can be redone, and after a redo, undone again (now: the step as it is after it, like a calendar
+// step whose entries were made again, with new ids)
+function moveHistoryStep(direction, now = null) {
   const history = readUndoHistory();
   const [from, to] = direction === "undo" ? [history.undo, history.redo] : [history.redo, history.undo];
   const step = from.pop();
-  if (step) to.push(step);
+  if (step) to.push(now || step);
   writeUndoHistory(history);
 }
 
@@ -9822,8 +10078,8 @@ function captureEntryDays(dates) {
 
 // A change's step: the days whose entries (or notes, see notesChange) it changed, before and after (null when there's
 // nothing to put back). keepBalances: it was made in History, so undoing or redoing it keeps the accounts' balances
-// (changeHistoryEntry).
-function makeUndoStep(label, before, keepBalances = false) {
+// (changeHistoryEntry). kitchenBefore: the kitchen as it was (its snapshot's text), for the lists the change changed.
+function makeUndoStep(label, before, keepBalances = false, kitchenBefore = null) {
   const after = captureEntryDays(before.days.map(day => createSafeMidnight(day.date)));
   const days = before.days
     .map((day, i) => {
@@ -9834,8 +10090,11 @@ function makeUndoStep(label, before, keepBalances = false) {
   // A day that isn't in the budget (before History starts) can't be put back
   if (days.some(day => day.before === null || day.after === null)) return null;
   const equity = before.equity !== after.equity ? { before: before.equity, after: after.equity } : null;
-  if (days.length === 0 && !equity) return null;
-  return keepBalances ? { label, days, equity, keepBalances } : { label, days, equity };
+  // (The kitchen's lists that changed, each as what it took off and put on: see rowsChange)
+  const was = kitchenBefore && kitchenData && JSON.stringify(kitchenData) !== kitchenBefore ? JSON.parse(kitchenBefore) : null;
+  const kitchen = was ? KITCHEN_LISTS.map(part => rowsChange(part, was[part] || [], kitchenData[part])).filter(Boolean) : [];
+  if (days.length === 0 && !equity && kitchen.length === 0) return null;
+  return { label, days, equity, ...(kitchen.length > 0 ? { kitchen } : {}), ...(keepBalances ? { keepBalances } : {}) };
 }
 
 // A day's own entry lines, in order, from the calendar, History, or Upcoming; null when the day isn't in
@@ -9951,7 +10210,20 @@ const RECORD_ROWS = {
     set: (rows) => { trackerData = rows; },
     key: (row) => JSON.stringify([row[0], String(row[0]).trim() === "-" ? row[1] : "", TRACKER_AUTO_ROWS.includes(cleanString(row[0])) ? "" : row[4], row[5] ?? ""])
   },
-  accounts: { headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; }, key: (row) => JSON.stringify(Array.from({ length: TABLE_SHAPES.accounts.cols }, (_, i) => (i === 1 ? "" : row[i] ?? ""))) }
+  accounts: { table: "accounts", pick: (stored) => stored.list, headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; }, key: (row) => JSON.stringify(Array.from({ length: TABLE_SHAPES.accounts.cols }, (_, i) => (i === 1 ? "" : row[i] ?? ""))) },
+  // The kitchen's lists, each like a table of its own (a recipe or a meal is one row): Home's Undo keeps them this way too.
+  // A row's key has an object's keys in order, so a recipe or a meal read back from a save (which writes them in its own
+  // order) is the same row.
+  ...Object.fromEntries(["pantry", "foods", "recipes", "meals"].map(part => [part, {
+    table: "kitchen", pick: (stored) => stored[part] || [], headerRows: 0, get: () => kitchenData[part], set: (rows) => { kitchenData[part] = rows; },
+    key: (row) => JSON.stringify(row, (name, value) => (value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]])) : value))
+  }]))
+};
+const KITCHEN_LISTS = ["pantry", "foods", "recipes", "meals"];
+// Each list in words, for a change that can't be taken back because it changed since
+const ROWS_IN_WORDS = {
+  recurring: "your Recurring Entries", tracker: "your tracker", accounts: "your Equity accounts",
+  pantry: "your Pantry", foods: "your list of foods", recipes: "your recipes", meals: "your meals"
 };
 // Other parts kept whole: [what, get(), set(value)]
 const RECORD_VALUES = {
@@ -9961,7 +10233,8 @@ const RECORD_VALUES = {
   business: [() => accountsData.business ?? null, (value) => { if (value) accountsData.business = value; else delete accountsData.business; }],
   equity: [() => accountsData.equity ?? null, (value) => { accountsData.equity = value || {}; }],
   sheets: [() => sheetsData, (value) => { sheetsData = value; }],
-  calculator: [() => calculatorData, (value) => { calculatorData = value; }]
+  calculator: [() => calculatorData, (value) => { calculatorData = value; }],
+  mealsColor: [() => kitchenData.color, (value) => { kitchenData.color = value || MEALS_COLOR; }]
 };
 
 // A day's entry lines as a change compares them: a % entry by its percent, not what it comes to (that's worked out again
@@ -10026,32 +10299,18 @@ function changeRecord(snapshot, changedTables, undid = null) {
     record.days.push({ date: formatToMMDDYYYY(date), before: was, after: now });
   }
 
-  // Row tables
-  const accountsBefore = changed("accounts") ? JSON.parse(snapshot.accounts) : accountsData;
+  // Row tables (and lists kept in a table: Equity's accounts, the kitchen's)
+  const parsed = new Map();
+  const tableBefore = (name) => {
+    if (!parsed.has(name)) parsed.set(name, JSON.parse(snapshot[name]));
+    return parsed.get(name);
+  };
+  const accountsBefore = changed("accounts") ? tableBefore("accounts") : accountsData;
   for (const [table, spec] of Object.entries(RECORD_ROWS)) {
-    if (!changed(table)) continue;
-    const beforeRows = table === "accounts" ? accountsBefore.list : JSON.parse(snapshot[table]);
-    const nowRows = spec.get();
-    const was = beforeRows.slice(spec.headerRows);
-    const now = nowRows.slice(spec.headerRows);
-    const wasKeys = was.map(spec.key);
-    const nowKeys = now.map(spec.key);
-    if (JSON.stringify(wasKeys) === JSON.stringify(nowKeys)) continue;
-    const left = (from, against) => {
-      const counts = new Map();
-      against.forEach(key => counts.set(key, (counts.get(key) || 0) + 1));
-      return from.flatMap((key, i) => {
-        if (counts.get(key)) {
-          counts.set(key, counts.get(key) - 1);
-          return [];
-        }
-        return [i];
-      });
-    };
-    const removed = left(wasKeys, nowKeys).map(i => ({ at: i, row: was[i] }));
-    const added = left(nowKeys, wasKeys).map(i => ({ at: i, row: now[i] }));
-    const order = removed.length === 0 && added.length === 0 ? { before: wasKeys, after: nowKeys } : null;
-    record.rows.push({ table, removed, added, order });
+    const source = spec.table || table;
+    if (!changed(source)) continue;
+    const change = rowsChange(table, spec.pick ? spec.pick(tableBefore(source)) : tableBefore(source), spec.get());
+    if (change) record.rows.push(change);
   }
 
   // Parts kept whole (each only looked at when its table changed)
@@ -10061,11 +10320,13 @@ function changeRecord(snapshot, changedTables, undid = null) {
     snapshot: () => accountsBefore.snapshot ?? null,
     business: () => accountsBefore.business ?? null,
     equity: () => accountsBefore.equity ?? null,
-    sheets: () => JSON.parse(snapshot.sheets),
-    calculator: () => JSON.parse(snapshot.calculator)
+    sheets: () => tableBefore("sheets"),
+    calculator: () => tableBefore("calculator"),
+    mealsColor: () => tableBefore("kitchen")?.color ?? null
   };
+  const valueTable = { sheets: "sheets", calculator: "calculator", mealsColor: "kitchen" };
   for (const [part, [get]] of Object.entries(RECORD_VALUES)) {
-    if (!changed(part === "sheets" || part === "calculator" ? part : "accounts")) continue;
+    if (!changed(valueTable[part] || "accounts")) continue;
     const was = JSON.stringify(valueBefore[part]());
     if (was !== JSON.stringify(get())) record.values.push({ part, before: JSON.parse(was), after: get() });
   }
@@ -10084,6 +10345,126 @@ function changeRecord(snapshot, changedTables, undid = null) {
   if (record.days.length + record.rows.length + record.values.length + record.notes.length === 0) return null;
   const text = JSON.stringify(record);
   return storedSize(text) <= MAX_LOG_UNDO_BYTES ? text : null;
+}
+
+// How a list in RECORD_ROWS changed, from its rows before to its rows now: { table, removed: [{ at, row }], added:
+// [{ at, row }], order: { before, after } (keys, when only the order changed) }, or null when it didn't. Change Logs'
+// records and Home's Undo steps (the kitchen's lists) both keep changes this way.
+function rowsChange(table, beforeRows, nowRows) {
+  const spec = RECORD_ROWS[table];
+  const was = beforeRows.slice(spec.headerRows);
+  const now = nowRows.slice(spec.headerRows);
+  const wasKeys = was.map(spec.key);
+  const nowKeys = now.map(spec.key);
+  if (JSON.stringify(wasKeys) === JSON.stringify(nowKeys)) return null;
+  // (The same rows, as many of each, in another order: kept as the order)
+  const counts = new Map();
+  wasKeys.forEach(key => counts.set(key, (counts.get(key) || 0) + 1));
+  nowKeys.forEach(key => counts.set(key, (counts.get(key) || 0) - 1));
+  if ([...counts.values()].every(count => count === 0)) return { table, removed: [], added: [], order: { before: wasKeys, after: nowKeys } };
+  // Otherwise, the rows the two have alike at their start and end stay, and so do the most rows in the part between that
+  // are alike in the same order; the rest were taken off (at their places before) or put on (at their places now), so two
+  // rows alike, like a food in the Pantry twice, are each taken back from their own place
+  let start = 0;
+  while (start < was.length && start < now.length && wasKeys[start] === nowKeys[start]) start++;
+  let wasEnd = was.length;
+  let nowEnd = now.length;
+  while (wasEnd > start && nowEnd > start && wasKeys[wasEnd - 1] === nowKeys[nowEnd - 1]) {
+    wasEnd--;
+    nowEnd--;
+  }
+  const stays = rowsAlike(wasKeys.slice(start, wasEnd), nowKeys.slice(start, nowEnd));
+  const removed = [];
+  const added = [];
+  for (let i = start; i < wasEnd; i++) if (!stays.was.has(i - start)) removed.push({ at: i, row: was[i] });
+  for (let j = start; j < nowEnd; j++) if (!stays.now.has(j - start)) added.push({ at: j, row: now[j] });
+  return { table, removed, added, order: null };
+}
+
+// The most rows two lists of keys have alike in the same order (their longest common run): { was, now } (Sets of each
+// list's places that are). A part too long to compare row by row (more than 250,000 pairs) is matched a key at a time.
+function rowsAlike(a, b) {
+  const was = new Set();
+  const now = new Set();
+  if (a.length * b.length > 250000) {
+    const places = new Map();
+    b.forEach((key, j) => places.set(key, [...(places.get(key) || []), j]));
+    a.forEach((key, i) => {
+      const free = places.get(key);
+      if (free && free.length > 0) {
+        was.add(i);
+        now.add(free.shift());
+      }
+    });
+    return { was, now };
+  }
+  const width = b.length + 1;
+  const longest = new Uint32Array((a.length + 1) * width);
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      longest[i * width + j] = a[i] === b[j] ? longest[(i + 1) * width + j + 1] + 1 : Math.max(longest[(i + 1) * width + j], longest[i * width + j + 1]);
+    }
+  }
+  for (let i = 0, j = 0; i < a.length && j < b.length;) {
+    if (a[i] === b[j]) {
+      was.add(i++);
+      now.add(j++);
+    } else if (longest[(i + 1) * width + j] >= longest[i * width + j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return { was, now };
+}
+
+// The same change the other way (what Redo puts back)
+function invertRowsChange(change) {
+  return { table: change.table, removed: change.added, added: change.removed, order: change.order ? { before: change.order.after, after: change.order.before } : null };
+}
+
+// Has its list changed since (so putting back what was there before would erase something)?
+function rowsChangeStale(change) {
+  const spec = RECORD_ROWS[change.table];
+  const keys = spec.get().slice(spec.headerRows).map(spec.key);
+  if (change.order && JSON.stringify(keys) !== JSON.stringify(change.order.after)) return true;
+  const counts = new Map();
+  keys.forEach(key => counts.set(key, (counts.get(key) || 0) + 1));
+  for (const { row } of change.added) {
+    const key = spec.key(row);
+    if (!counts.get(key)) return true;
+    counts.set(key, counts.get(key) - 1);
+  }
+  return false;
+}
+
+// Put back what its list had before the change
+function applyRowsChange(change) {
+  const spec = RECORD_ROWS[change.table];
+  const rows = spec.get();
+  const head = rows.slice(0, spec.headerRows);
+  let body = rows.slice(spec.headerRows);
+  if (change.order) {
+    const byKey = new Map();
+    body.forEach(row => {
+      const key = spec.key(row);
+      byKey.set(key, [...(byKey.get(key) || []), row]);
+    });
+    const ordered = change.order.before.map(key => byKey.get(key)?.shift()).filter(Boolean);
+    body = [...ordered, ...[...byKey.values()].flat()];
+  }
+  // (Each row the change put on comes off from where it went, or the nearest one like it there: two alike, like a food in
+  // the Pantry twice, each come off from their own place, the last first so the rest stay where they are)
+  for (const { at, row } of [...change.added].sort((a, b) => b.at - a.at)) {
+    const key = spec.key(row);
+    let found = -1;
+    body.forEach((item, i) => {
+      if (spec.key(item) === key && (found === -1 || Math.abs(i - at) < Math.abs(found - at))) found = i;
+    });
+    if (found !== -1) body.splice(found, 1);
+  }
+  for (const { at, row } of [...change.removed].sort((a, b) => a.at - b.at)) body.splice(Math.min(at, body.length), 0, JSON.parse(JSON.stringify(row)));
+  spec.set([...head, ...body]);
 }
 
 // Only the newest rows keep what their change did, up to MAX_LOG_UNDO_TOTAL together
@@ -10148,20 +10529,10 @@ function staleRecordPart(record) {
     const now = dayEntries(createSafeMidnight(day.date, true));
     if (now === null || comparableLines(now) !== comparableLines(day.after)) return showDay(createSafeMidnight(day.date, true));
   }
-  const names = { recurring: "your Recurring Entries", tracker: "your tracker", accounts: "your Equity accounts" };
   for (const change of record.rows) {
-    const spec = RECORD_ROWS[change.table];
-    const keys = spec.get().slice(spec.headerRows).map(spec.key);
-    if (change.order && JSON.stringify(keys) !== JSON.stringify(change.order.after)) return names[change.table];
-    const counts = new Map();
-    keys.forEach(key => counts.set(key, (counts.get(key) || 0) + 1));
-    for (const { row } of change.added) {
-      const key = spec.key(row);
-      if (!counts.get(key)) return names[change.table];
-      counts.set(key, counts.get(key) - 1);
-    }
+    if (rowsChangeStale(change)) return ROWS_IN_WORDS[change.table];
   }
-  const parts = { goals: "your Goals", bob: "Bob's page", snapshot: "your Snapshot page", equity: "your Equity accounts", sheets: "your connected spreadsheets and calendars", calculator: "the calculators" };
+  const parts = { goals: "your Goals", bob: "Bob's page", snapshot: "your Snapshot page", equity: "your Equity accounts", sheets: "your connected spreadsheets and calendars", calculator: "the calculators", mealsColor: "the Meals fractal's color" };
   for (const value of record.values) {
     if (JSON.stringify(RECORD_VALUES[value.part][0]()) !== JSON.stringify(value.after)) return parts[value.part];
   }
@@ -10174,27 +10545,7 @@ function staleRecordPart(record) {
 // Put back what was there before a record's change
 function applyRecord(record) {
   for (const day of record.days) setDayEntries(createSafeMidnight(day.date, true), day.before);
-  for (const change of record.rows) {
-    const spec = RECORD_ROWS[change.table];
-    const rows = spec.get();
-    const head = rows.slice(0, spec.headerRows);
-    let body = rows.slice(spec.headerRows);
-    if (change.order) {
-      const byKey = new Map();
-      body.forEach(row => {
-        const key = spec.key(row);
-        byKey.set(key, [...(byKey.get(key) || []), row]);
-      });
-      const ordered = change.order.before.map(key => byKey.get(key)?.shift()).filter(Boolean);
-      body = [...ordered, ...[...byKey.values()].flat()];
-    }
-    for (const { row } of change.added) {
-      const at = body.findIndex(item => spec.key(item) === spec.key(row));
-      if (at !== -1) body.splice(at, 1);
-    }
-    for (const { at, row } of [...change.removed].sort((a, b) => a.at - b.at)) body.splice(Math.min(at, body.length), 0, [...row]);
-    spec.set([...head, ...body]);
-  }
+  for (const change of record.rows) applyRowsChange(change);
   for (const value of record.values) RECORD_VALUES[value.part][1](value.before === null ? null : JSON.parse(JSON.stringify(value.before)));
   for (const note of record.notes) putNote(note.part, note.key, note.before);
 }

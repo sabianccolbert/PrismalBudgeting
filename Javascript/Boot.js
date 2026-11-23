@@ -27,29 +27,32 @@
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
     "/Javascript/Bob Page.js": "fa0c9c0113",
-    "/Javascript/Budget Pages.js": "725176e58c",
+    "/Javascript/Budget Pages.js": "f509c80dd3",
     "/Javascript/Budget Search.js": "7fd273fe6b",
-    "/Javascript/Budget UI.js": "deed9a9312",
+    "/Javascript/Budget UI.js": "08b71f5356",
     "/Javascript/Budgets.js": "6535bf5dc1",
-    "/Javascript/Calendar Page.js": "a3f7533ce5",
+    "/Javascript/Calendar Page.js": "be61cc781d",
     "/Javascript/Calendars Page.js": "8d5d96f09e",
     "/Javascript/Calendars.js": "019006cf32",
-    "/Javascript/Dates.js": "328ef77813",
+    "/Javascript/Dates.js": "55d7a8cca8",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "c6eecdfb30",
+    "/Javascript/Fractals.js": "b01e24a042",
     "/Javascript/Holidays.js": "eba1fab331",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Layout.js": "3a9700ca43",
+    "/Javascript/Kitchen UI.js": "cf839ed8fe",
+    "/Javascript/Kitchen.js": "4a563acbdf",
+    "/Javascript/Layout.js": "cd4c64fe9d",
     "/Javascript/Line Graph.js": "3a2585001d",
     "/Javascript/Login.js": "5869bb48e7",
     "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "0e427dfc83",
-    "/Javascript/Quick Calendar.js": "815345e6f4",
+    "/Javascript/Process Budget.js": "ea84859448",
+    "/Javascript/Quick Calendar.js": "b0e25e99bf",
     "/Javascript/Quick Entry.js": "3b2714f488",
     "/Javascript/Quick Icon.js": "944d097f5a",
+    "/Javascript/Recipes Page.js": "ddf190ecc9",
     "/Javascript/Session.js": "2ba7a04b3e",
-    "/Javascript/Settings Page.js": "1b03b54a57",
+    "/Javascript/Settings Page.js": "ede09202e5",
     "/Javascript/Snapshot Page.js": "ba04e91628",
     "/Javascript/Sounds.js": "21207f2cfd",
     "/Javascript/Spreadsheets Page.js": "5e1b61db41",
@@ -112,6 +115,7 @@
     // Menu pages (folder: /menu/)
     if (p === "/menu" || p === "/menu/index") return "menu";
     if (p === "/menu/recurring") return "recurring";
+    if (p === "/menu/recipes") return "recipes";
     if (p === "/menu/accounts") return "accounts";
     if (p === "/menu/spreadsheets") return "spreadsheets";
     if (p === "/menu/calculator") return "calculator";
@@ -668,7 +672,7 @@
   // in. Layout.js takes the class off once it's in. Anything else (Back, Forward, a reload, or a link from somewhere
   // else) slides it up into view.
   const SLIDE_CLASSES = { left: "fromRight", right: "fromLeft", down: "fromTop", tab: "tabSlide" };
-  const TAB_PAGES = ["home", "recurring", "accounts", "bob"];
+  const TAB_PAGES = ["home", "recipes", "accounts", "bob"];
   let slide = null;
   try {
     slide = JSON.parse(sessionStorage.getItem("prismal_slide") || "null");
@@ -699,7 +703,7 @@
 
   // Quick Budget and Quick Calendar borrow the budget helpers and forms without loading a budget (see Quick Entry.js
   // and Quick Calendar.js)
-  const BUDGET_PAGES = ["home", "recurring", "accounts", "spreadsheets", "calculator", "payments", "logs", "business", "bob", "settings", "snapshot", "quick", "quickcal"];
+  const BUDGET_PAGES = ["home", "recurring", "recipes", "accounts", "spreadsheets", "calculator", "payments", "logs", "business", "bob", "settings", "snapshot", "quick", "quickcal"];
 
   // The script that draws each budget page (the menu data pages share Budget Pages.js)
   const PAGE_SCRIPTS = {
@@ -709,7 +713,8 @@
     spreadsheets: "/Javascript/Spreadsheets Page.js",
     bob: "/Javascript/Bob Page.js",
     quick: "/Javascript/Quick Entry.js",
-    quickcal: "/Javascript/Quick Calendar.js"
+    quickcal: "/Javascript/Quick Calendar.js",
+    recipes: "/Javascript/Recipes Page.js"
   };
 
   // Add a script at the end of the page, at its fingerprinted address (they run in the order they're added)
@@ -755,6 +760,9 @@
       scripts.push("/Javascript/Dates.js"); // Days stored, shown, typed, and picked (Process Budget.js uses it)
       scripts.push("/Javascript/Process Budget.js");
       scripts.push("/Javascript/Budget UI.js");
+      // The budget's recipes, Pantry, and meals: every signed-in budget page (a meal's day uses the Pantry, and the
+      // reminders' plan counts them), and the Quick Calendar page, which shows the Meals fractal
+      if (!keyPage || page === "quickcal") scripts.push("/Javascript/Kitchen.js");
       // Connected spreadsheets' reading (Quick Budget and Quick Calendar never read them)
       if (!keyPage) scripts.push("/Javascript/Spreadsheets.js");
       // Connected calendars' reading and pay, on the pages that keep them up to date
@@ -764,8 +772,11 @@
       // The Holidays fractal's days, where linked fractals show (before Fractals.js, which shows them)
       if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Holidays.js");
       // The calendar (Calendar Fractals and their entries): Home shows it, the Budgets, Calendars & Spreadsheets page
-      // manages it, Settings has its links, the Quick Calendar page is it, and Snapshot can show its entries
-      if (page === "home" || page === "spreadsheets" || page === "settings" || page === "quickcal" || page === "snapshot") scripts.push("/Javascript/Fractals.js");
+      // manages it, Settings has its links, the Quick Calendar page is it, Snapshot can show its entries, Recurring
+      // lists its repeating ones, and the Recipes page's Undo takes back changes to them, like Home's
+      if (page === "home" || page === "spreadsheets" || page === "settings" || page === "quickcal" || page === "snapshot" || page === "recurring" || page === "recipes") scripts.push("/Javascript/Fractals.js");
+      // The kitchen's windows (a recipe, a meal, New Entry's Meal): where recipes and meals are added and changed
+      if (page === "home" || page === "recipes" || page === "recurring" || page === "quickcal") scripts.push("/Javascript/Kitchen UI.js");
       // Home screen icons' looks: the Customize window when Home or Snapshot makes one, and on each icon's own page
       if (page === "home" || page === "quick" || page === "quickcal" || page === "snapshot") scripts.push("/Javascript/Quick Icon.js");
       // The line graphs (Bob's page, the Accrual Calculator, and Snapshot)
@@ -773,9 +784,10 @@
       // Push notifications on this device: Settings turns them on and off, and Home asks once after a sign-in
       if (page === "home" || page === "settings") scripts.push("/Javascript/Notifications.js");
       // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings), and his page borrows the menu data
-      // pages' tables, New Row, and Edit for the tracker in his Data card. Snapshot draws its cards with both.
+      // pages' tables, New Row, and Edit for the tracker in his Data card (the Recipes page, for the Pantry and its foods).
+      // Snapshot draws its cards with both.
       if (page === "home" || page === "snapshot") scripts.push("/Javascript/Bob Page.js");
-      if (page === "bob" || page === "snapshot") scripts.push("/Javascript/Budget Pages.js");
+      if (page === "bob" || page === "snapshot" || page === "recipes") scripts.push("/Javascript/Budget Pages.js");
       scripts.push(PAGE_SCRIPTS[page] || "/Javascript/Budget Pages.js");
       // The Budgets, Calendars & Spreadsheets page's calendars
       if (page === "spreadsheets") scripts.push("/Javascript/Calendars Page.js");

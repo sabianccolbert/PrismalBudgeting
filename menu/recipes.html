@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" class="noJs">
+  <head>
+    <script src="/Javascript/Boot.js"></script>
+    <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
+    <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/budgetStyle.css?v=17933343a0">
+    <link rel="stylesheet" href="/themes.css?v=33f6b67192">
+    <title>Prismal Planning - Recipes</title>
+    <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
+    <meta charset="UTF-8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Prismal Recipes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Open Graph / Social Media Preview Cards -->
+    <meta property="og:title" content="Prismal Planning - Recipes">
+    <meta property="og:description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
+    <meta property="og:image" content="https://prismalplanning.org/Favicon/og-image.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://prismalplanning.org">
+    <!-- Modern Favicons -->
+    <link rel="icon" type="image/png" href="/Favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/Favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/Favicon/favicon.ico" />
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/Favicon/apple-touch-icon.png" />
+
+
+    <!-- Web App Manifest (Android Home Screen / PWA) -->
+    <link rel="manifest" href="/Favicon/site.webmanifest" />
+  </head>
+  <body>
+    <canvas id="constellations"></canvas>
+    <div id="transitionContainer">
+      <header>
+        <div class="brand">
+          <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
+          <div class="brandText">
+            <p class="logo" translate="no"><span class="logoStrong">Prismal</span> Planning</p>
+            <p class="tagline">Track • Plan • Learn</p>
+          </div>
+        </div>
+        <nav class="navButtons" aria-label="Snapshot, menu, and logout">
+          <a class="navButton" href="/snapshot.html">
+            <img class="navIcon" src="/Resources/Icons/Snapshot.svg?v=fe2019cd62" alt="">
+            <span>Snapshot</span>
+          </a>
+          <a class="navButton" href="/menu/">
+            <img class="navIcon" src="/Resources/Icons/Menu.webp?v=d60f1cd0ff" alt="">
+            <span>Menu</span>
+          </a>
+          <a id="logoutButton" class="navButton logoutButton" href="logout">
+            <img class="navIcon" src="/Resources/Icons/Logout.webp?v=38a63f5bfb" alt="">
+            <span>Logout</span>
+          </a>
+        </nav>
+      </header>
+      <main>
+        <!-- The budget's four pages, as tabs (the one showing glows), beside this page's title and its Undo and Redo (Home's:
+             the same steps, Budget UI.js) -->
+        <div class="pageTop">
+          <nav class="pageTabs" aria-label="Budget pages">
+            <a class="pageTab" href="/"><img class="tabIcon" src="/Resources/Icons/Home.webp?v=995586f434" alt=""><span>Home</span></a>
+            <a class="pageTab" href="/menu/recipes.html" aria-current="page"><img class="tabIcon" src="/Resources/Icons/Recipes.svg?v=5583bfc710" alt=""><span>Recipes</span></a>
+            <a class="pageTab" href="/menu/accounts.html"><img class="tabIcon" src="/Resources/Icons/Accounts.webp?v=ced77c103a" alt=""><span>Equity</span></a>
+            <a class="pageTab" href="/menu/bob.html"><img class="tabIcon tabPicture" src="/Resources/Bob.webp?v=63c7f6554d" alt=""><span>Bob</span></a>
+          </nav>
+          <div class="controlsCard pageControls">
+            <div class="cardHeader">
+              <span class="cardIcon"><img src="/Resources/Icons/Recipes.svg?v=5583bfc710" alt=""></span>
+              <div class="cardHeading">
+                <h1 id="pageTitle" class="cardTitle">Recipes</h1>
+                <p id="pageSubtitle" class="cardSubtitle">Your Pantry, your recipes, and the foods you use</p>
+              </div>
+            </div>
+            <div class="tableToolbar recipesUndo">
+              <button id="undoButton" class="budgetButton homeUndo" type="button" disabled aria-label="Undo"><span class="buttonIcon iconUndo" aria-hidden="true"></span>Undo</button>
+              <button id="redoButton" class="budgetButton homeRedo" type="button" disabled aria-label="Redo"><span class="buttonIcon iconRedo" aria-hidden="true"></span>Redo</button>
+            </div>
+          </div>
+        </div>
+        <div id="panelSlot"></div>
+        <p id="dataStatus" class="dataStatus">Loading...</p>
+
+        <!-- The page's three cards, each opened and closed by its heading (kept as it was left, on this device: Recipes
+             Page.js) -->
+        <div id="dataView" class="kitchenCards">
+          <section id="pantryCard" class="budgetCard pageCard kitchenCard" aria-labelledby="pantryHeading" hidden>
+            <h2 class="kitchenCardHead">
+              <button id="pantryToggle" class="kitchenToggle" type="button" aria-expanded="false" aria-controls="pantryBody">
+                <span id="pantryHeading" class="kitchenCardTitle">Pantry</span>
+                <span id="pantryCount" class="kitchenCount"></span>
+                <span class="kitchenArrow" aria-hidden="true">▾</span>
+              </button>
+            </h2>
+            <div id="pantryBody" class="kitchenBody" hidden>
+              <div id="pantryToolbar" class="tableToolbar"></div>
+              <div id="pantryView"></div>
+            </div>
+          </section>
+
+          <section id="recipesCard" class="budgetCard pageCard kitchenCard" aria-labelledby="recipesHeading" hidden>
+            <h2 class="kitchenCardHead">
+              <button id="recipesToggle" class="kitchenToggle" type="button" aria-expanded="false" aria-controls="recipesBody">
+                <span id="recipesHeading" class="kitchenCardTitle">Recipes</span>
+                <span id="recipesCount" class="kitchenCount"></span>
+                <span class="kitchenArrow" aria-hidden="true">▾</span>
+              </button>
+            </h2>
+            <div id="recipesBody" class="kitchenBody" hidden>
+              <div id="recipesToolbar" class="tableToolbar"></div>
+              <div id="recipesView"></div>
+            </div>
+          </section>
+
+          <section id="foodsCard" class="budgetCard pageCard kitchenCard" aria-labelledby="foodsHeading" hidden>
+            <h2 class="kitchenCardHead">
+              <button id="foodsToggle" class="kitchenToggle" type="button" aria-expanded="false" aria-controls="foodsBody">
+                <span id="foodsHeading" class="kitchenCardTitle">Your Foods</span>
+                <span id="foodsCount" class="kitchenCount"></span>
+                <span class="kitchenArrow" aria-hidden="true">▾</span>
+              </button>
+            </h2>
+            <div id="foodsBody" class="kitchenBody" hidden>
+              <p class="panelHint">Every food you use is kept here with the unit you used it with last. A food's box offers these names as you type, and fills in the unit.</p>
+              <div id="foodsToolbar" class="tableToolbar"></div>
+              <div id="foodsView"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="panelButtons kitchenSettingsLink">
+          <a class="budgetButton" href="/settings.html#recipesCard">Recipes Settings</a>
+        </div>
+
+        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
+          <h3 id="helpTitle">Recipes Help</h3>
+          <p>Recipes keeps your kitchen: the <strong>Pantry</strong> (the food you have), your <strong>Recipes</strong>, and <strong>Your Foods</strong>. Meals go on your calendar, in its <strong>Meals</strong> fractal. Everyone this budget is shared with sees them and can change them. Use any part by itself: only the Pantry, only recipes, or only meals on the calendar. Tap a card's title to open or close it.</p>
+
+          <h4>The Pantry</h4>
+          <ul>
+            <li>Each food has its name, an amount, a unit (like lbs, g, or cups), and an expiration day. Only the name has to be filled in. Tap + Food to add one, or tap one to change it or delete it.</li>
+            <li>A food can be in the Pantry more than once (two cartons of milk, say); they count together.</li>
+            <li>The expiration day only matters for its reminder (Settings' Recipes card). Nothing else goes by it.</li>
+            <li><strong>The checkbox</strong> at a food's left puts it on the shopping list: it glows red. It's kept with the budget, so everyone it's shared with sees the same list.</li>
+            <li><strong>Edit</strong> adds sections (+ Section, like Recurring Entries'), moves foods by their ≡ bar, and deletes the ones you check (Select All checks them all).</li>
+          </ul>
+
+          <h4>Recipes</h4>
+          <ul>
+            <li>The search box at the top of the list finds recipes by their title. Tap a recipe to open it: its title, its foods (each with its amount and unit), and its notes at the bottom. Only the title has to be filled in.</li>
+            <li>The <strong>+</strong> at a recipe's right puts it on your calendar as a meal entry, once or as a recurring meal entry.</li>
+          </ul>
+
+          <h4>Meal Entries</h4>
+          <ul>
+            <li>New Entry on Home (and on a Quick Calendar icon's page) has <strong>Meal</strong> beside Budget Entry and Calendar Entry. A meal has a title, its day, its foods, and a note, and it can repeat. Only the title has to be filled in.</li>
+            <li><strong>Fill In From A Recipe</strong> picks one (its list has a search box as its first line). Left as the recipe has it, the meal follows the recipe: change the recipe, and the meal shows the change. Change the meal's title, foods, or notes, and they're its own from then on.</li>
+            <li>Recurring meal entries are on the Recurring Entries page (in the Menu) too. Tap a meal on a zoomed day to change it: a repeating one asks whether that's for just that day or every time.</li>
+          </ul>
+
+          <h4>How The Pantry Counts</h4>
+          <ul>
+            <li>Foods go by name: capitals, a plural ("eggs" and "egg"), and a food's other names (in Your Foods) don't matter.</li>
+            <li>Units of weight (g, kg, oz, lbs) count together, and so do units of volume (tsp, tbsp, cups, ml, liters, quarts, gallons) and plain counts (blank, each, or a dozen). Any other unit only counts with the same unit, like cans with cans.</li>
+            <li>A meal's food without an amount only has to be in the Pantry. A Pantry food without an amount never runs out.</li>
+            <li>The meals from today on use the Pantry up in order, the soonest first (and the Pantry's foods from the top). So once something runs out, only the later days that need it come up short.</li>
+            <li>With Settings' switches on: days on Home whose meals the Pantry doesn't have enough for glow orange while Meals shows (a day that's also below $0 is red at the top and orange at the bottom), recipes the Pantry can't make now glow orange, and the Pantry's foods the meals on your calendar's five weeks run short of glow orange (one that's also on the shopping list is red on the left and orange on the right).</li>
+            <li><strong>Use Meals From The Pantry</strong> (Settings, on each device): on a meal's day, its foods come out of the Pantry (never below 0), each meal once, from the day it was turned on. It's in Change Logs, which can undo it.</li>
+          </ul>
+
+          <h4>Your Foods</h4>
+          <ul>
+            <li>Every food you use (in the Pantry, a recipe, or a meal) is kept here, with the unit you used it with last. A food's box offers these names as you type, and picking one fills in its unit.</li>
+            <li>Tap one to change its name or unit, or give it other names that count as the same food (like "chicken breast" for Chicken).</li>
+            <li><strong>Edit</strong> moves them by their ≡ bar and deletes the ones you check, with Select All at the top. Deleting one from the list never changes a recipe, a meal, or the Pantry.</li>
+          </ul>
+
+          <h4>Undo And Redo</h4>
+          <p>They're Home's: either page's Undo takes back the newest change from either one, whether it's a recipe, the Pantry, a meal, your foods, one of your budget's entries, or one of your calendar's.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

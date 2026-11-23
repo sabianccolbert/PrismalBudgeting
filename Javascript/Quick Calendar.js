@@ -4,6 +4,8 @@
 // the icon, where it joins the calendar by itself, or until someone adds it from Home's card on another device. Until
 // then it shows here with a dashed edge, and can be changed or deleted here. Entries already on the calendar only show.
 // The page borrows the day zooming from Process Budget.js (which loads no budget here) and the calendar from Fractals.js.
+// Its budget's meals show in the Meals fractal (Kitchen.js, from the icon's answer: never the Pantry), and New Entry's Meal
+// adds one that waits the same way, filled in from the budget's recipes if you like (Kitchen UI.js).
 
 (() => {
   "use strict";
@@ -12,6 +14,7 @@
   const key = params.get("key") || "";
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const WAITING = "waiting:"; // How a waiting entry's id starts here (the calendar's own ids never do)
+  const WAITING_MEAL = "waiting"; // How a waiting meal's id starts here (a meal's own id never does: Kitchen.js isWaiting)
   const CALENDAR_DAYS = 35; // Five weeks, like Home's calendar
   const status = document.getElementById("dataStatus");
   // The calendar goes from the Sunday a year before today through the Saturday five years after it
@@ -45,11 +48,14 @@
   });
 
   // One request with the key: { ok, status, data }, where data is the calendar as Fractals.js takes it (the entries this
-  // icon added that are still waiting shown with the rest, each marked waiting)
+  // icon added that are still waiting shown with the rest, each marked waiting). Its budget's meals go to Kitchen.js, with
+  // the meals this icon added that are still waiting.
   async function ask(route, body = {}) {
     const result = await window.Fractals.call(`/api/quickcal/${route}`, { key, ...body });
     if (!result.ok || !result.data || !Array.isArray(result.data.fractals)) return result;
     const answer = result.data;
+    const queued = Array.isArray(answer.meals) ? answer.meals : [];
+    window.Kitchen.useData(answer.kitchen, queued.map(item => ({ ...item.meal, id: `${WAITING_MEAL}${item.id}`, waiting: item.id })));
     const fallback = answer.fractals[0] ? answer.fractals[0].id : null;
     const waiting = answer.waiting.map(item => ({
       ...item.event,
@@ -77,6 +83,33 @@
       : Promise.resolve({ ok: false, status: 403, data: { error: "Sign in to Prismal Planning to delete an entry that's already on your calendar." } }))
   });
 
+  // Meals: one added here waits (the API's fractal_waiting) like a calendar entry, and can be changed or deleted here until
+  // it joins the budget; the budget's own only show. What's sent is checked the way the budget will check it.
+  window.KitchenUI.useStore({
+    locked: (meal) => !window.Kitchen.isWaiting(meal),
+    async save(fields, options, meal) {
+      let checked;
+      try {
+        checked = window.Kitchen.checkMeal(fields);
+      } catch (error) {
+        return { ok: false, message: error.message };
+      }
+      const shown = window.Kitchen.mealView(checked);
+      const sent = { title: shown.title, start: checked.start, repeat: checked.repeat || null, until: checked.until || null, foods: shown.foods, notes: shown.notes, recipe: checked.recipe || null };
+      const result = meal ? await ask("mealchange", { id: meal.waiting, meal: sent }) : await ask("meal", { meal: sent });
+      if (!result.ok || !result.data) return { ok: false, message: window.Fractals.problem(result, "Couldn't save it. Please try again.") };
+      if (Array.isArray(result.data.fractals)) window.Fractals.took(result.data);
+      if (result.data.error) return { ok: false, message: result.data.error };
+      return { ok: true, toast: `${meal ? "Saved" : "Added"} ${shown.title}. It joins your calendar the next time Prismal Planning opens.` };
+    },
+    async remove(meal) {
+      const result = await ask("unqueue", { id: meal.waiting });
+      if (!result.ok || !result.data) return { ok: false, message: window.Fractals.problem(result, "Couldn't delete it. Please try again.") };
+      if (Array.isArray(result.data.fractals)) window.Fractals.took(result.data);
+      return result.data.error ? { ok: false, message: result.data.error } : { ok: true };
+    }
+  });
+
   // Move the calendar so a day is in its first week (kept inside its range). A zoomed day closes first.
   function moveCalendar(date) {
     const anchor = date < range.first ? range.first : date > range.last ? range.last : createSafeMidnight(date);
@@ -101,7 +134,7 @@
     document.getElementById("calendarPrev").disabled = new Date(viewAnchor.getFullYear(), viewAnchor.getMonth(), 0) < range.first;
     document.getElementById("calendarNext").disabled = new Date(viewAnchor.getFullYear(), viewAnchor.getMonth() + 1, 1) > range.last;
     document.getElementById("calendarToday").classList.toggle("isCurrent", viewStart.getTime() === addDays(today, -today.getDay()).getTime());
-    const waiting = window.Fractals.data().events.filter(event => event.waiting).length;
+    const waiting = window.Fractals.data().events.filter(event => event.waiting).length + window.Kitchen.data().meals.filter(window.Kitchen.isWaiting).length;
     const note = document.getElementById("waitingNote");
     note.hidden = waiting === 0;
     note.textContent = `${waiting} ${waiting === 1 ? "entry is" : "entries are"} waiting to join your calendar (the ${waiting === 1 ? "one" : "ones"} with a dashed edge). ${waiting === 1 ? "It joins" : "They join"} the next time Prismal Planning opens on the device that made this icon. Tap one to change it or delete it.`;

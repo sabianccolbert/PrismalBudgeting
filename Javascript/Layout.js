@@ -492,9 +492,9 @@ const SLIDE_OUT_CLASSES = { left: "toLeft", right: "toRight", up: "toTop" };
 // signing out slides right, as if the login page sat to the left of the budget (and to the right of the front page,
 // so Sign In there slides left too). Between the budget's four pages, only what's under their tabs slides. The page
 // that opens slides in the same way the last one slid out (Boot.js reads the note transitionTo leaves).
-const MENU_PAGES = ["menu", "spreadsheets", "calculator", "payments", "logs", "business", "settings"];
+const MENU_PAGES = ["menu", "recurring", "spreadsheets", "calculator", "payments", "logs", "business", "settings"];
 const SIDE_PAGES = ["quick", "quickcal", "privacy"];
-const BUDGET_TABS = ["home", "recurring", "accounts", "bob"];
+const BUDGET_TABS = ["home", "recipes", "accounts", "bob"];
 
 // The way from page FROM to page TO: "left", "right", "up", "down", "tab", or null (anything else: the page slides
 // down and out, and the next one up into view)
@@ -1134,7 +1134,8 @@ document.addEventListener("click", (EVENT) => {
 // markLogsSeen in Process Budget.js).
 const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_look_ahead", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day", "prismal_wave_days",
   "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off", "prismal_push_asked",
-  "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen", "prismal_bob_okayed"];
+  "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen", "prismal_bob_okayed",
+  "prismal_kitchen"];
 function clearSignedInData() {
   try {
     Object.keys(localStorage).filter(KEY => !DEVICE_SETTINGS.includes(KEY)).forEach(KEY => localStorage.removeItem(KEY));

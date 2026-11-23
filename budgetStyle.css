@@ -7911,3 +7911,463 @@ button.snapshotChoice:focus-visible {
     width: var(--PAGE_WIDTH);
   }
 }
+
+/*========================================*
+ *  RECIPES, THE PANTRY, AND MEALS (Recipes Page.js, Kitchen UI.js, Kitchen.js)
+ *========================================*/
+
+/* The orange of what the Pantry is short of, the red of the shopping list, and both on one day (red at its top, orange
+   at its bottom); light cards' versions are at the end */
+:root {
+  --MEAL_DAY_FILL: linear-gradient(180deg, rgba(150, 70, 0, 0.72) 0%, rgba(150, 70, 0, 0) 50%);
+  --MEAL_DAY_SOLID: linear-gradient(180deg, rgb(106, 50, 4), rgb(46, 22, 2));
+  --MEAL_DAY_EDGE: rgba(255, 150, 40, 0.8);
+  --RED_ORANGE_DAY_FILL: linear-gradient(180deg, rgba(122, 14, 48, 0.78) 0%, rgba(150, 70, 0, 0.72) 100%);
+  --RED_ORANGE_DAY_SOLID: linear-gradient(180deg, rgb(112, 12, 44), rgb(106, 50, 4));
+  --SHOP_ROW_FILL: rgba(255, 60, 80, 0.22);
+  --SHOP_ROW_EDGE: rgba(255, 80, 100, 0.9);
+  --SHORT_ROW_FILL: rgba(255, 140, 30, 0.22);
+  --SHORT_ROW_EDGE: rgba(255, 150, 40, 0.9);
+  --SHORT_GLOW: rgba(255, 150, 40, 0.45);
+  --SHORT_TEXT: #ffb366;
+}
+
+/* A day the Pantry doesn't have enough for (Settings' switch on, while Meals shows) glows orange, and one that's also
+   below $0 is red at its top and orange at its bottom; solid while it's zoomed or magnified, like a red day */
+.elastic-table td.isMealShort:not(.is-fullZoom) .cell-content {
+  background: var(--MEAL_DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--MEAL_DAY_EDGE), 0 0 8px rgba(255, 150, 40, 0.3);
+}
+
+.elastic-table td.isToday.isMealShort:not(.is-fullZoom) .cell-content {
+  background: var(--GLOW_FILL), var(--MEAL_DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--MEAL_DAY_EDGE), 0 0 12px rgba(255, 150, 40, 0.6);
+}
+
+.elastic-table td.isNegative.isMealShort:not(.is-fullZoom) .cell-content {
+  background: var(--RED_ORANGE_DAY_FILL);
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 0 8px rgba(255, 90, 50, 0.35);
+}
+
+.elastic-table td.isMealShort:is(.is-editing, .is-magnified):not(.is-fullZoom) .cell-content {
+  background: var(--MEAL_DAY_SOLID);
+}
+
+.elastic-table td.isNegative.isMealShort:is(.is-editing, .is-magnified):not(.is-fullZoom) .cell-content {
+  background: var(--RED_ORANGE_DAY_SOLID);
+}
+
+.elastic-table td.is-editing.is-fullZoom.isMealShort .cell-content::before {
+  background: var(--MEAL_DAY_SOLID);
+  box-shadow: inset 0 0 0 1px var(--MEAL_DAY_EDGE), 0 2px 12px rgba(var(--SHADE_RGB), 0.7);
+}
+
+.elastic-table td.is-editing.is-fullZoom.isNegative.isMealShort .cell-content::before {
+  background: var(--RED_ORANGE_DAY_SOLID);
+  box-shadow: inset 0 0 0 1px var(--NEGATIVE_DAY_EDGE), 0 2px 12px rgba(var(--SHADE_RGB), 0.7);
+}
+
+/* (The dim weekday is too faint on the orange too) */
+.elastic-table td.isMealShort .lineWeekday {
+  color: var(--TEXT_BRIGHT);
+}
+
+.listDay.isMealShort .listDayHead {
+  box-shadow: inset 3px 0 0 var(--MEAL_DAY_EDGE);
+}
+
+.listDay.isNegative.isMealShort .listDayHead {
+  box-shadow: inset 3px 0 0 var(--NEGATIVE_DAY_EDGE), inset 6px 0 0 var(--MEAL_DAY_EDGE);
+}
+
+/* The Recipes page's cards: each heading is a button that opens and closes it, with how many it has and an arrow */
+.kitchenCardHead {
+  margin: 0;
+  font-size: 1.15em;
+}
+
+button.kitchenToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  width: 100%;
+  margin: 0;
+  padding: 0.4em 0.5em;
+  font: inherit;
+  font-weight: bold;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: none;
+  border: none;
+  border-radius: 10px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+button.kitchenToggle:hover,
+button.kitchenToggle:focus-visible {
+  transform: none;
+  background: rgba(var(--GLOW_RGB), 0.12);
+  box-shadow: none;
+}
+
+button.kitchenToggle:focus-visible {
+  outline: 2px solid var(--GLOW_EDGE);
+  outline-offset: -2px;
+}
+
+.kitchenCardTitle {
+  flex: 1 1 auto;
+}
+
+.kitchenCount {
+  font-size: 0.8em;
+  font-weight: normal;
+  color: var(--TEXT_DIM);
+}
+
+.kitchenArrow {
+  transition: transform 0.2s;
+}
+
+.kitchenCard.isOpen .kitchenArrow {
+  transform: rotate(180deg);
+}
+
+.kitchenBody {
+  margin-top: 0.6em;
+}
+
+.kitchenSettingsLink {
+  justify-content: center;
+  margin: 1em auto 0.5em;
+}
+
+.kitchenShortNote {
+  color: var(--SHORT_TEXT);
+  overflow-wrap: anywhere;
+}
+
+/* The Pantry, Your Foods, and Recurring's calendar and meal tables fit the screen like Recurring Entries': column titles
+   can take two lines, and the food's (or title's) column gets the room that's left, left-aligned, its text cut short with
+   "..." (tapping it shows it whole) */
+.dataTable.pantryTable,
+.dataTable.foodsTable,
+.dataTable.repeatsTable {
+  table-layout: auto;
+}
+
+.pantryTable th,
+.foodsTable th,
+.repeatsTable th {
+  white-space: normal;
+}
+
+.pantryTable .titleHead,
+.pantryTable td.titleCell,
+.foodsTable .titleHead,
+.foodsTable td.titleCell,
+.repeatsTable .titleHead,
+.repeatsTable td.titleCell {
+  width: 100%;
+  max-width: 0; /* It takes the room the other columns leave, and no more */
+  text-align: left;
+  white-space: normal;
+}
+
+.repeatsTable td.dateCell,
+.repeatsTable td.frequencyCell {
+  text-align: center;
+  white-space: normal;
+}
+
+.foodsTable td.aliasesCell {
+  min-width: 6em;
+  white-space: normal;
+}
+
+/* The Pantry: the shopping list's checkbox at each food's left; a food on the list is red, one the calendar's meals run
+   short of orange, and one that's both red on its left and orange on its right */
+.pantryTable .shopCell {
+  width: 2.2em;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.shopBox {
+  width: 1.25em;
+  height: 1.25em;
+  margin: 0;
+  accent-color: #e5484d;
+  cursor: pointer;
+}
+
+.pantryTable .kitchenAmountCell,
+.pantryTable .unitCell,
+.foodsTable .unitCell {
+  white-space: nowrap;
+}
+
+.dataTable.pantryTable tr.isShopping td {
+  background: var(--SHOP_ROW_FILL);
+}
+
+.dataTable.pantryTable tr.isShort td {
+  background: var(--SHORT_ROW_FILL);
+}
+
+.dataTable.pantryTable tr.isShopping.isShort td:nth-child(-n+2) {
+  background: var(--SHOP_ROW_FILL);
+}
+
+.dataTable.pantryTable tr.isShopping.isShort td:nth-child(3) {
+  background: linear-gradient(90deg, var(--SHOP_ROW_FILL), var(--SHORT_ROW_FILL));
+}
+
+.dataTable.pantryTable tr.isShopping td:first-child {
+  box-shadow: inset 3px 0 0 var(--SHOP_ROW_EDGE);
+}
+
+.dataTable.pantryTable tr.isShort:not(.isShopping) td:first-child {
+  box-shadow: inset 3px 0 0 var(--SHORT_ROW_EDGE);
+}
+
+.dataTable.pantryTable tr.isShort td:last-child {
+  box-shadow: inset -3px 0 0 var(--SHORT_ROW_EDGE);
+}
+
+.foodsTable .aliasesCell {
+  overflow-wrap: anywhere;
+  color: var(--TEXT_DIM);
+}
+
+/* The recipe list: a search box as its first line, then each recipe (a recipe the Pantry can't make now glows orange),
+   with its + on its right */
+.recipeSearch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+input.recipeSearchBox {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.5em 0.8em;
+  font-family: var(--FONT);
+  font-size: var(--UI_TEXT);
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: var(--BOX_FILL);
+  border: 1.5px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+@media (pointer: coarse) {
+  input.recipeSearchBox {
+    font-size: max(16px, var(--UI_TEXT));
+  }
+}
+
+.recipeList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  max-height: 60vh;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.recipePick .recipeList {
+  max-height: 40vh;
+}
+
+.recipeItem {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4em;
+  background: var(--BOX_FILL);
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+}
+
+.recipeItem.isShort {
+  border-color: var(--SHORT_ROW_EDGE);
+  box-shadow: inset 0 0 0 1px var(--SHORT_ROW_EDGE), 0 0 10px var(--SHORT_GLOW);
+}
+
+button.recipeOpen {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1em;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45em 0.6em;
+  font-size: 1em;
+  line-height: 1.25;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: none;
+  border: none;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+button.recipeOpen:hover,
+button.recipeOpen:focus-visible {
+  transform: none;
+  background: rgba(var(--GLOW_RGB), 0.12);
+  box-shadow: none;
+}
+
+button.recipeOpen:focus-visible {
+  outline: 2px solid var(--GLOW_EDGE);
+  outline-offset: -2px;
+}
+
+.recipeTitle {
+  max-width: 100%;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+
+.recipeDetail {
+  font-size: 0.82em;
+  color: var(--TEXT_DIM);
+}
+
+.recipeItem.isShort .recipeDetail {
+  color: var(--SHORT_TEXT);
+}
+
+.budgetButton.recipeAdd {
+  flex: 0 0 auto;
+  align-self: center;
+  min-width: 2.4em;
+  margin: 0.3em;
+  padding: 0.3em 0.6em;
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+/* A recipe's or a meal's foods: a row each (amount, unit, the food, and × to take it off), then + Food */
+.foodRowsBox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5em;
+  width: 100%;
+}
+
+.foodRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  width: 100%;
+}
+
+.foodRow {
+  display: grid;
+  grid-template-columns: 4.5em 5.5em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.budgetPanel .foodRow input[type="text"] {
+  padding: 0.45em 0.55em;
+}
+
+button.foodRemove {
+  width: 2em;
+  height: 2em;
+  margin: 0;
+  padding: 0;
+  font-size: 1em;
+  line-height: 1;
+  color: var(--TEXT_BRIGHT);
+  background: var(--BOX_FILL);
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+@media (max-width: 420px) {
+  .foodRow {
+    grid-template-columns: 3.6em 4.4em minmax(0, 1fr) auto;
+    gap: 0.3em;
+  }
+}
+
+/* A meal's Fill In From A Recipe: its button, the list under it while it's open, and what the meal follows */
+.recipePickControl {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5em;
+  width: 100%;
+}
+
+.recipePick {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5em;
+  background: var(--BOX_FILL);
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 12px;
+}
+
+.mealFollows {
+  margin: 0;
+}
+
+/* New Entry's three buttons (a budget entry, a calendar entry, or a meal) */
+.entryKind.threeKinds {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.entryKind.threeKinds .budgetButton {
+  padding: 0.6em 0.3em;
+  font-size: 0.95em;
+}
+
+/* The Recurring page's calendar and meal cards */
+.repeatsHeading {
+  margin: 0 0 0.3em;
+  font-size: 1.15em;
+}
+
+.repeatsTable .fractalCell {
+  white-space: nowrap;
+}
+
+.repeatsTable .fractalCell .fractalSwatch {
+  margin-right: 0.35em;
+  vertical-align: middle;
+}
+
+.repeatsTable tr.clickable:focus-visible td {
+  outline: 2px solid var(--GLOW_EDGE);
+  outline-offset: -2px;
+}
+
+/* Light cards (themes.css gives html lightCards): the same colors, light */
+html.lightCards {
+  --MEAL_DAY_FILL: linear-gradient(180deg, #ffedd5, #fff7ed);
+  --MEAL_DAY_SOLID: linear-gradient(180deg, #ffedd5, #fff7ed);
+  --MEAL_DAY_EDGE: rgba(234, 88, 12, 0.65);
+  --RED_ORANGE_DAY_FILL: linear-gradient(180deg, #fee2e2, #ffedd5);
+  --RED_ORANGE_DAY_SOLID: linear-gradient(180deg, #fee2e2, #ffedd5);
+  --SHOP_ROW_FILL: rgba(220, 38, 38, 0.12);
+  --SHOP_ROW_EDGE: rgba(220, 38, 38, 0.7);
+  --SHORT_ROW_FILL: rgba(234, 88, 12, 0.14);
+  --SHORT_ROW_EDGE: rgba(234, 88, 12, 0.75);
+  --SHORT_GLOW: rgba(234, 88, 12, 0.3);
+  --SHORT_TEXT: #9a3412;
+}

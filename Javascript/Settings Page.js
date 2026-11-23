@@ -117,6 +117,7 @@ window.workspaceReady.then(async (loaded) => {
 
   reminderSettings = reminders.data;
   document.getElementById("settingsView").hidden = false;
+  renderRecipesCard();
 
   wireReminderTime();
   renderReminderTime();
@@ -269,8 +270,12 @@ const REMINDER_KINDS = [
   { key: "entries", label: "🔔 Entry reminders", detail: "An entry you set a reminder on (Remind me, in New Entry or its options): that many days before it" },
   { key: "negative", label: "⛔️ In Bank below $0", detail: "A day In Bank goes below $0" },
   { key: "uncommon", label: "✔️ Uncommon recurring payments", detail: "An uncommon recurring payment (every 3 months or less often) in the calendar's five weeks" },
-  { key: "cost", label: "❗️ Days with a cost", detail: "A day you have a cost" }
+  { key: "cost", label: "❗️ Days with a cost", detail: "A day you have a cost" },
+  { key: "meals", label: "🍽️ Days the Pantry is short", detail: "A day whose meals the Pantry doesn't have enough for (Recipes)" },
+  { key: "expired", label: "🥫 Foods that expire", detail: "A day a food in the Pantry expires (Recipes)" }
 ];
+// The kitchen's two, which Settings' Recipes card shows too (the same switches: either one changes both)
+const KITCHEN_KINDS = ["meals", "expired"];
 function renderReminderCard() {
   showReminderChoices();
   const box = document.getElementById("reminderKinds");
@@ -279,14 +284,17 @@ function renderReminderCard() {
     return;
   }
   box.dataset.drawn = "1";
-  for (const kind of REMINDER_KINDS) {
-    const toggle = BudgetUI.checkboxField({ label: kind.label, checked: (reminderSettings.kinds || []).includes(kind.key) });
-    toggle.input.dataset.kind = kind.key;
-    toggle.input.addEventListener("change", saveReminderKinds);
-    const item = BudgetUI.element("div", "reminderKind");
-    item.append(toggle.el, BudgetUI.element("span", "panelHint", kind.detail));
-    box.append(item);
-  }
+  for (const kind of REMINDER_KINDS) box.append(reminderKindSwitch(kind));
+}
+
+// One kind's switch, with what it's about under it
+function reminderKindSwitch(kind) {
+  const toggle = BudgetUI.checkboxField({ label: kind.label, checked: (reminderSettings.kinds || []).includes(kind.key) });
+  toggle.input.dataset.kind = kind.key;
+  toggle.input.addEventListener("change", () => setReminderKind(kind.key, toggle.input.checked));
+  const item = BudgetUI.element("div", "reminderKind");
+  item.append(toggle.el, BudgetUI.element("span", "panelHint", kind.detail));
+  return item;
 }
 
 // The kinds, the time, and the budget show once reminders have somewhere to go on this device: push notifications on here,
@@ -295,13 +303,17 @@ function showReminderChoices() {
   const delivered = !!pushSubscription || !!reminderSettings?.calendarUrl;
   document.getElementById("reminderChoices").hidden = !delivered;
   document.getElementById("reminderOffNote").hidden = delivered;
+  renderRecipesCard();
 }
 
-// Save the switches as they are
-async function saveReminderKinds() {
-  const box = document.getElementById("reminderKinds");
-  const inputs = [...box.querySelectorAll("input")];
-  const kinds = inputs.filter(input => input.checked).map(input => input.dataset.kind);
+// Turn one kind of reminder on or off, from the Reminders card or the Recipes card (the account's: both cards show it as
+// it's saved, and go back when it couldn't save)
+async function setReminderKind(key, on) {
+  const picked = new Set(reminderSettings.kinds || []);
+  if (on) picked.add(key);
+  else picked.delete(key);
+  const kinds = REMINDER_KINDS.map(kind => kind.key).filter(kind => picked.has(kind));
+  const inputs = [...document.querySelectorAll("#reminderKinds input, #recipesReminders input")];
   inputs.forEach(input => { input.disabled = true; });
   const result = await budgetApi("/api/notify/kinds", { kinds });
   inputs.forEach(input => { input.disabled = false; });
@@ -312,6 +324,77 @@ async function saveReminderKinds() {
     BudgetUI.showToast(accountError(result, "Couldn't save which reminders you get. Please try again."), true);
   }
   renderReminderCard();
+}
+
+// Settings' Recipes card: this device's own switches (Kitchen.js settings, each off to start), and the account's two
+// kitchen reminders (the Reminders card's own switches for them, shown here too, once they're in)
+const RECIPE_SWITCHES = [
+  { key: "glowDays", label: "Glow days the Pantry is short", detail: "On Home, while the calendar shows Meals: a day whose meals the Pantry doesn't have enough for glows orange (red at its top and orange at its bottom when it's below $0 too)",
+    help: [
+      ["How it's worked out: ", "the meals from today on use the Pantry up in order, the soonest first, each food from the Pantry's foods from the top down. A day whose meals it doesn't have enough for glows, so once a food runs out, only the later days that need it do."],
+      ["Names: ", "capitals, a plural (\"eggs\" and \"egg\"), and a food's other names in Your Foods count as the same food."],
+      ["Units: ", "weights count together (g, kg, oz, lbs), and so do volumes (tsp, tbsp, cups, ml, liters, quarts, gallons) and counts (blank, each, a dozen). Any other unit only counts with the same unit."],
+      ["Without an amount: ", "a meal's food only has to be in the Pantry, and a Pantry food never runs out."]
+    ] },
+  { key: "glowRecipes", label: "Glow recipes the Pantry can't make", detail: "On the Recipes tab: a recipe the Pantry doesn't have enough for now glows orange",
+    help: [["Now: ", "a recipe glows when the Pantry, as it is now, doesn't have enough for all of its foods together. Its window says which ones."]] },
+  { key: "glowPantry", label: "Glow foods the meals run short of", detail: "In the Pantry: a food the meals on your calendar's five weeks need more of glows orange",
+    help: [
+      ["Which foods: ", "the ones the meals from today through the end of your calendar's five weeks need more of than the Pantry will have when they come."],
+      ["On the shopping list too: ", "red on its left and orange on its right."],
+      ["Not in the Pantry at all: ", "a note under the Pantry names the foods the meals need that it doesn't have."]
+    ] },
+  { key: "useMeals", label: "Use meals from the Pantry", detail: "On a meal's day, its foods come out of the Pantry, never below 0 (each meal once, from today's on). Change Logs can undo it.",
+    help: [
+      ["When: ", "the first time Prismal Planning opens on or after a meal's day, on a device with this on (starting with the day it's turned on)."],
+      ["How much: ", "each of the meal's foods, from the Pantry's foods from the top down, never below 0. A Pantry food without an amount stays as it is."],
+      ["Once: ", "the budget keeps the last day it reached, so another device with this on never takes the same meals out again."],
+      ["Taking it back: ", "Change Logs lists it, and its Undo puts the amounts back."]
+    ] }
+];
+
+// Settings' Recipes card: its switches (this device's own, drawn once and then kept matching the Kitchen's settings)
+// and its two reminders (the account's, the same switches as the Reminders card's)
+function renderRecipesCard() {
+  const switches = document.getElementById("recipesSwitches");
+  if (!switches || !window.Kitchen) return;
+  if (!switches.dataset.drawn) {
+    switches.dataset.drawn = "1";
+    for (const item of RECIPE_SWITCHES) {
+      const toggle = BudgetUI.checkboxField({ label: item.label, checked: Kitchen.settings()[item.key] });
+      toggle.input.dataset.setting = item.key;
+      toggle.input.addEventListener("change", () => {
+        Kitchen.setSetting(item.key, toggle.input.checked);
+        BudgetUI.showToast(`${item.label}: ${toggle.input.checked ? "on" : "off"}, on this device.`);
+      });
+      const row = BudgetUI.element("div", "reminderKind");
+      row.append(toggle.el, BudgetUI.element("span", "panelHint", item.detail));
+      switches.append(row);
+      // (Its ? goes beside it, once it's in the card)
+      BudgetUI.addSwitchHelp(toggle.el, `How "${item.label}" works`, BudgetUI.helpList(item.help));
+    }
+    document.addEventListener("kitchen:settings", renderRecipesCard);
+  } else {
+    for (const input of switches.querySelectorAll("input")) input.checked = Kitchen.settings()[input.dataset.setting];
+  }
+  const reminders = document.getElementById("recipesReminders");
+  const note = document.getElementById("recipesRemindersNote");
+  if (!reminderSettings) {
+    reminders.hidden = true;
+    note.textContent = "Its reminders show once your reminder settings load.";
+    return;
+  }
+  reminders.hidden = false;
+  if (!reminders.dataset.drawn) {
+    reminders.dataset.drawn = "1";
+    for (const key of KITCHEN_KINDS) reminders.append(reminderKindSwitch(REMINDER_KINDS.find(kind => kind.key === key)));
+  } else {
+    for (const input of reminders.querySelectorAll("input")) input.checked = (reminderSettings.kinds || []).includes(input.dataset.kind);
+  }
+  const delivered = !!pushSubscription || !!reminderSettings.calendarUrl;
+  note.textContent = delivered
+    ? "These are your account's, the same as the Reminders card's switches for them."
+    : "These are your account's, the same as the Reminders card's switches for them. They come once notifications are on for this device, or the calendar link is (the Reminders card).";
 }
 
 // "08:00" -> "8:00 AM"
@@ -1811,3 +1894,8 @@ function settingsLink(label, href, newTab) {
 }
 
 //#endregion
+
+// This device's Recipes switches show right away, like its other choices (down here, once what they use is declared),
+// and the Recipes tab's link to them goes to them
+renderRecipesCard();
+if (location.hash === "#recipesCard") document.getElementById("recipesCard")?.scrollIntoView();

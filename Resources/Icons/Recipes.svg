@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Recipes' icon: a pot with its lid and steam, light lines like the other tabs' icons -->
+  <g fill="none" stroke="#e8ebf6" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23 6c-3 4 3 6 0 10M32 4c-3 4 3 6 0 10M41 6c-3 4 3 6 0 10"/>
+    <path d="M28 22h8"/>
+    <path d="M11 27h42"/>
+    <path d="M14 33v13a8 8 0 0 0 8 8h20a8 8 0 0 0 8-8V33z"/>
+    <path d="M14 37H7M50 37h7"/>
+  </g>
+</svg>
