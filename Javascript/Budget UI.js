@@ -1787,8 +1787,8 @@ const BudgetUI = (() => {
   // and Equity account, so when one is already there (its own, or a recurring or connected spreadsheet's entry landing
   // there), the form says so and asks whether to add the new amount to it or set it to the new amount. Either way a
   // recurring or spreadsheet entry becomes a temp for that day (like ❗️✔️), the same as changing it on the calendar.
-  // On Home, two long buttons across its top switch between a budget entry (this form) and a calendar entry (Fractals.js
-  // openNewEvent). kind: which it opens as; left out, a calendar entry while the calendar shows only calendar entries, or
+  // On Home, long buttons across its top switch between a budget entry (this form), a calendar entry (Fractals.js
+  // openNewEvent), and a meal (Kitchen UI.js openNewMeal). kind: which it opens as; left out, a calendar entry while the calendar shows only calendar entries, or
   // for a day before the budget's History starts (where a budget entry can't go), and a budget entry otherwise.
   function openNewEntry(origin, { date = today, kind = "" } = {}) {
     // (The Quick Calendar page has no budget: a zoomed day's + there is always a calendar entry)
@@ -1806,6 +1806,7 @@ const BudgetUI = (() => {
           form.append(window.Fractals.kindSwitch("budget", (picked) => {
             const typed = fields.values();
             if (picked === "calendar") window.Fractals.openNewEvent(origin, { date: typed.date || date, title: typed.title || "" });
+            if (picked === "meal") window.KitchenUI.openNewMeal(origin, { date: typed.date || date, title: typed.title || "" });
           }));
         }
         let mode = "add";
@@ -2113,7 +2114,73 @@ const BudgetUI = (() => {
 
   //#endregion
 
+  // =====================================================================
+  // #region UNDO + REDO (Home's and the Recipes page's: the same steps, kept in Process Budget.js)
+  // =====================================================================
+  // A change on Home (calendar entries and quick entries) or on the Recipes page (recipes, the Pantry, meals, and foods)
+  // is one step: either page's Undo takes back the newest, whichever it was.
+
+  let historyBusy = false;
+
+  // Each button says what it would do ("Undo: added Coffee (-$4.50) on 10/05"), or is off with nothing to do
+  function renderUndoButtons() {
+    const info = undoInfo();
+    for (const [id, label, verb] of [["undoButton", info.undo, "Undo"], ["redoButton", info.redo, "Redo"]]) {
+      const button = document.getElementById(id);
+      if (!button) continue;
+      button.disabled = historyBusy || !label;
+      button.title = label ? `${verb}: ${label}` : `Nothing to ${verb.toLowerCase()}`;
+      button.setAttribute("aria-label", button.title);
+    }
+  }
+
+  // The Undo and Redo buttons, and their keyboard shortcuts
+  function wireUndoButtons() {
+    document.getElementById("undoButton")?.addEventListener("click", () => takeHistoryStep("undo"));
+    document.getElementById("redoButton")?.addEventListener("click", () => takeHistoryStep("redo"));
+    // Ctrl+Z (⌘Z on a Mac) undoes, and Ctrl+Shift+Z (⌘⇧Z) or Ctrl+Y redoes, except while typing in a box
+    // (where they undo the typing) or with a panel open
+    document.addEventListener("keydown", (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      const redo = (key === "z" && event.shiftKey) || (key === "y" && !event.shiftKey);
+      if (key !== "z" && !redo) return;
+      if (event.target.closest?.("input, textarea, select, [contenteditable]") || document.querySelector(".budgetPanel")) return;
+      event.preventDefault();
+      takeHistoryStep(redo ? "redo" : "undo");
+    });
+  }
+
+  // Undo or Redo one step, with a note saying what it did (or why it couldn't)
+  async function takeHistoryStep(direction) {
+    if (historyBusy || !undoInfo()[direction]) return;
+    historyBusy = true;
+    renderUndoButtons();
+    const history = readUndoHistory();
+    const step = (direction === "undo" ? history.undo : history.redo).at(-1);
+    const result = step && step.calendar ? await takeCalendarStep(step, direction) : await (direction === "undo" ? undoCalendarChange() : redoCalendarChange());
+    historyBusy = false;
+    renderUndoButtons();
+    if (!result.ok) return showToast(result.message || "That didn't work. Please try again.", true);
+    if (result.saved === false) return warnIfUnsaved(result);
+    showToast(`${direction === "undo" ? "Undone" : "Redone"}: ${result.historyStep.label}.`);
+  }
+
+  // A step of changes to Calendar Fractals' entries: taken through the API (Fractals.js takeStep), then moved to the other
+  // list, or let go when it can't be taken anymore
+  async function takeCalendarStep(step, direction) {
+    if (!window.Fractals) return { ok: false, message: "That's a change to your calendar: Undo on Home takes it back." };
+    const result = await window.Fractals.takeStep(step, direction);
+    if (result.ok) moveHistoryStep(direction, result.step);
+    else if (result.stale) dropHistoryStep(direction);
+    return { ...result, historyStep: { direction, label: step.label } };
+  }
+
+  //#endregion
+
   return {
+    renderUndoButtons,
+    wireUndoButtons,
     openCopyTo,
     businessField,
     REFRACTION_TYPES,

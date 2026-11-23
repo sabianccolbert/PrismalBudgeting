@@ -7,7 +7,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=1ff5ae9452">
+    <link rel="stylesheet" href="/budgetStyle.css?v=17933343a0">
     <link rel="stylesheet" href="/themes.css?v=33f6b67192">
     <title>Prismal Planning - Quick Calendar</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
@@ -82,10 +82,10 @@
           <p class="panelHint">Then tap the new icon whenever you want to see your calendar or add to it. No login needed.</p>
         </section>
 
-        <!-- New Calendar Entry, and how many entries this icon added that are still waiting to join the calendar (Quick
+        <!-- New Entry (a calendar entry or a meal), and how many entries this icon added that are still waiting to join the calendar (Quick
              Calendar.js) -->
         <div id="quickCalendarControls" class="controlsCard quickCalendarControls" hidden>
-          <button id="addEventButton" class="budgetButton primary" type="button">New Calendar Entry</button>
+          <button id="addEventButton" class="budgetButton primary" type="button">New Entry</button>
           <p id="waitingNote" class="panelHint" role="status" hidden></p>
         </div>
         <div id="panelSlot"></div>
@@ -166,13 +166,13 @@
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Quick Calendar Help</h3>
-          <p>This page shows your calendar with no login, and adds entries to it. It never shows your budget.</p>
+          <p>This page shows your calendar with no login, and adds entries and meals to it. It never shows your budget's money or its Pantry.</p>
           <ul>
             <li><strong>Calendar Fractals</strong> (above the calendar) lists your calendars: check the ones to show.</li>
             <li><strong>Today</strong>, the month's ‹ and ›, and the month and year lists move the calendar, which shows five weeks. Days that passed are duller.</li>
             <li><strong>Tap a day</strong> to zoom in on it: its entries show beside the hours, or as a list with its List switch on. Swipe it left or right for the next day or the day before.</li>
-            <li><strong>New Calendar Entry</strong> (or a zoomed day's +) adds an entry: its title, Calendar Fractal, when it starts and ends (or All day), travel time, where it is, whether it repeats, alerts (before or after it starts, each one an alarm if you like), and a note.</li>
-            <li><strong>Waiting entries</strong> (with a dashed edge) are the ones this icon added that haven't joined your calendar yet. They join the next time Prismal Planning opens on the device that made this icon (on any other device, they wait on Home to be added). Until then, tap one here to change it or delete it.</li>
+            <li><strong>New Entry</strong> (or a zoomed day's +) adds an entry: its title, Calendar Fractal, when it starts and ends (or All day), travel time, where it is, whether it repeats, alerts (before or after it starts, each one an alarm if you like), and a note. Its <strong>Meal</strong> button adds a meal instead, to the Meals fractal of the budget this icon was made in: its title, day, foods, and a note, whether it repeats, and Fill In From A Recipe (that budget's recipes).</li>
+            <li><strong>Waiting entries</strong> (with a dashed edge) are the ones this icon added that haven't joined your calendar yet. They join the next time Prismal Planning opens on the device that made this icon (a meal, once its budget is open there; on any other device, they wait on Home to be added). Until then, tap one here to change it or delete it.</li>
             <li>Entries already on your calendar can be looked at here, and changed after signing in.</li>
             <li><strong>Home</strong> goes to Prismal Planning (its login page, in this page's theme, when this browser isn't signed in). Opened from your home screen, Home goes to Prismal Planning in the icon's own app (signing in there first when it isn't signed in), and the app stays on whatever page you leave it on for 15 minutes; after that, it comes back here by itself.</li>
             <li><strong>Customize</strong> (at the bottom) changes this icon's picture and colors (a calendar, to start). It's kept with this icon; one already on your home screen shows the new look once it's added again.</li>

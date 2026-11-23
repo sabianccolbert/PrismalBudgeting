@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=1ff5ae9452">
+    <link rel="stylesheet" href="/budgetStyle.css?v=17933343a0">
     <link rel="stylesheet" href="/themes.css?v=33f6b67192">
     <title>Prismal Planning - Recurring Entries</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -41,19 +41,19 @@
       <header>
         <div class="brand">
           <img src="/Resources/Prismal.webp?v=b498fd3810" alt="Prismal Logo" class="brand-icon">
-          <div class="brandText">
-            <p class="logo" translate="no"><span class="logoStrong">Prismal</span> Planning</p>
-            <p class="tagline">Track • Plan • Learn</p>
+          <div class="brandText stacked">
+            <h1>Recurring Entries</h1>
+            <h2 translate="no">Prismal Planning</h2>
           </div>
         </div>
-        <nav class="navButtons" aria-label="Snapshot, menu, and logout">
-          <a class="navButton" href="/snapshot.html">
-            <img class="navIcon" src="/Resources/Icons/Snapshot.svg?v=fe2019cd62" alt="">
-            <span>Snapshot</span>
+        <nav class="navButtons" aria-label="Pages">
+          <a id="menuBack" class="navButton" href="/menu/">
+            <img class="navIcon" src="/Resources/Icons/BackNav.webp?v=5fc649006a" alt="">
+            <span>Back</span>
           </a>
-          <a class="navButton" href="/menu/">
-            <img class="navIcon" src="/Resources/Icons/Menu.webp?v=d60f1cd0ff" alt="">
-            <span>Menu</span>
+          <a class="navButton" href="/">
+            <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
+            <span>Home</span>
           </a>
           <a id="logoutButton" class="navButton logoutButton" href="logout">
             <img class="navIcon" src="/Resources/Icons/Logout.webp?v=38a63f5bfb" alt="">
@@ -62,38 +62,52 @@
         </nav>
       </header>
       <main>
-        <!-- The budget's four pages, as tabs (the one showing glows), beside this page's title and buttons (Budget Pages.js) -->
-        <div class="pageTop">
-          <nav class="pageTabs" aria-label="Budget pages">
-            <a class="pageTab" href="/"><img class="tabIcon" src="/Resources/Icons/Home.webp?v=995586f434" alt=""><span>Home</span></a>
-            <a class="pageTab" href="/menu/recurring.html" aria-current="page"><img class="tabIcon" src="/Resources/Icons/Recurring.webp?v=6724e4afad" alt=""><span>Recurring</span></a>
-            <a class="pageTab" href="/menu/accounts.html"><img class="tabIcon" src="/Resources/Icons/Accounts.webp?v=ced77c103a" alt=""><span>Equity</span></a>
-            <a class="pageTab" href="/menu/bob.html"><img class="tabIcon tabPicture" src="/Resources/Bob.webp?v=63c7f6554d" alt=""><span>Bob</span></a>
-          </nav>
-          <div class="controlsCard pageControls">
-            <div class="cardHeader">
-              <span class="cardIcon"><img src="/Resources/Icons/Recurring.webp?v=6724e4afad" alt=""></span>
-              <div class="cardHeading">
-                <h1 id="pageTitle" class="cardTitle">Recurring Entries</h1>
-                <p id="pageSubtitle" class="cardSubtitle" hidden></p>
-              </div>
+        <!-- Three cards: the budget's recurring entries (with Monthly and Yearly, Budget Pages.js), the calendar's
+             repeating entries (Calendar Fractals), and the meals that repeat (the Meals fractal) -->
+        <div class="controlsCard pageControls recurringControls">
+          <div class="cardHeader">
+            <span class="cardIcon"><img src="/Resources/Icons/Recurring.webp?v=6724e4afad" alt=""></span>
+            <div class="cardHeading">
+              <h2 id="pageTitle" class="cardTitle">Recurring Budget Entries</h2>
+              <p id="pageSubtitle" class="cardSubtitle" hidden></p>
             </div>
-            <div id="pageToolbar" class="tableToolbar"></div>
           </div>
+          <div id="pageToolbar" class="tableToolbar"></div>
         </div>
         <div id="panelSlot"></div>
-        <section class="budgetCard pageCard" aria-label="Recurring entries">
+        <section class="budgetCard pageCard" aria-label="Recurring budget entries">
           <p id="dataStatus" class="dataStatus">Loading...</p>
           <div id="dataView"></div>
+        </section>
+
+        <section id="calendarRepeatsCard" class="budgetCard pageCard repeatsCard" aria-labelledby="calendarRepeatsHeading" hidden>
+          <h2 id="calendarRepeatsHeading" class="repeatsHeading">Recurring Calendar Entries</h2>
+          <p class="panelHint">Your Calendar Fractals' entries that repeat. The calendar shows each one on every day it lands on.</p>
+          <div id="calendarRepeatsToolbar" class="tableToolbar"></div>
+          <div id="calendarRepeatsView"></div>
+        </section>
+
+        <section id="mealsCard" class="budgetCard pageCard repeatsCard" aria-labelledby="mealsHeading" hidden>
+          <h2 id="mealsHeading" class="repeatsHeading">Recurring Meal Entries</h2>
+          <p class="panelHint">Meals that repeat, in the calendar's Meals fractal. The calendar shows each one on every day it lands on.</p>
+          <div id="mealsToolbar" class="tableToolbar"></div>
+          <div id="mealsView"></div>
         </section>
 
         <!-- Help: opens this page's help, floating over the page (Layout.js) -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Recurring Entries Help</h3>
-          <p>Recurring entries are added to your calendar for you, like paychecks and bills, on every day they land on from today on. They start with a checkmark: ✔️ Regular, ✔️✖️ Hidden, or ✔️⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
+          <p>Everything that repeats, in three cards: your budget's recurring entries, your Calendar Fractals' entries that repeat, and your meals that repeat (the Meals fractal's). Recurring budget entries are added to your calendar for you, like paychecks and bills, on every day they land on from today on. They start with a checkmark: ✔️ Regular, ✔️✖️ Hidden, or ✔️⭕️ Transfer. Help on the home page explains what each refraction type does.</p>
 
-          <h4>Adding And Changing</h4>
+          <h4>Recurring Calendar Entries And Meal Entries</h4>
+          <ul>
+            <li><strong>Recurring Calendar Entries</strong> lists your Calendar Fractals' entries that repeat. Tap one to change it or delete it (for every time it repeats), or tap New Calendar Entry to add one; it starts with Repeat on. Turn Repeat off, and it's on its first day only, so it leaves this list.</li>
+            <li><strong>Recurring Meal Entries</strong> lists the meals that repeat, from the Recipes tab or New Entry's Meal. Tap one to change it or delete it, or tap New Meal Entry. A meal filled in from a recipe follows the recipe while its title, foods, and notes are left as the recipe has them.</li>
+            <li>To change just one day of either, tap it on that day on Home's calendar.</li>
+          </ul>
+
+          <h4>Adding And Changing Budget Entries</h4>
           <ul>
             <li>Tap New Entry to add one, or tap a row to change it or delete it. A title too long for its column ends in "..." (on a phone, after a second line): tap the title to see it whole, and tap it again to cut it short.</li>
             <li><strong>Placeholder</strong> makes every day it lands on a placeholder: a stand-in for an amount you expect, like an estimate for groceries. Its row and its days show in yellow, and each day's placeholder counts like any entry until that day passes, then it's deleted. With Placeholder on, <strong>Delete each one</strong> counts days from the current day: <strong>days behind the current day</strong> keeps each one until the current day is that many days past it (in your History too), and <strong>days ahead of the current day</strong> deletes them early, so the current day and the days after it, that many in all, don't have one (3 days ahead: today, tomorrow, and the day after); blank or 0 is once its own day passes. A day you change for it keeps its own Placeholder switch.</li>

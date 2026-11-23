@@ -22,12 +22,12 @@ window.workspaceReady.then((loaded) => {
   wireCalendar();
   wireCalendarHeader();
   wireGettingStarted();
-  wireUndoButtons();
+  BudgetUI.wireUndoButtons();
   wireQuickWaiting();
   wireBobWarnings();
   wireShownAccount();
   openLinkedDay();
-  // (New Entry starts as a budget entry; its two long buttons switch to a calendar entry)
+  // (New Entry starts as a budget entry; its long buttons switch to a calendar entry or a meal)
   document.getElementById("addEntryButton")?.addEventListener("click", (event) => BudgetUI.openNewEntry(event.currentTarget, { kind: "budget" }));
   document.getElementById("quickEntryButton")?.addEventListener("click", (event) => openQuickEntrySetup(event.currentTarget));
   document.getElementById("quickCalendarButton")?.addEventListener("click", (event) => openQuickCalendarSetup(event.currentTarget));
@@ -56,6 +56,13 @@ document.addEventListener("fractals:changed", () => {
   }
 });
 
+// Settings' Recipes switches (on this device, or in another tab) change which days glow orange
+document.addEventListener("kitchen:settings", () => {
+  if (!workspaceLoaded) return;
+  renderCalendar();
+  if (activeEditCell) refreshGuestDay();
+});
+
 // Coming back to the page shows what another device (or someone sharing an entry) changed on the calendar meanwhile
 document.addEventListener("visibilitychange", () => {
   if (workspaceLoaded && document.visibilityState === "visible") window.Fractals.load(true);
@@ -68,7 +75,7 @@ function renderHome() {
   renderCalendarWaiting();
   renderCalendar();
   renderInfoRow();
-  renderUndoButtons();
+  BudgetUI.renderUndoButtons();
   renderOtherEdits();
 }
 
@@ -156,55 +163,6 @@ function quickWaitingRow(quick) {
   });
   row.append(text, add, remove);
   return row;
-}
-
-//#endregion
-
-// =====================================================================
-// #region UNDO + REDO (calendar entries and quick entries; the steps are in Process Budget.js)
-// =====================================================================
-
-// Each button says what it would do ("Undo: added Coffee (-$4.50) on 10/05"), or is off with nothing to do
-function renderUndoButtons() {
-  const info = undoInfo();
-  for (const [id, label, verb] of [["undoButton", info.undo, "Undo"], ["redoButton", info.redo, "Redo"]]) {
-    const button = document.getElementById(id);
-    if (!button) continue;
-    button.disabled = historyBusy || !label;
-    button.title = label ? `${verb}: ${label}` : `Nothing to ${verb.toLowerCase()}`;
-    button.setAttribute("aria-label", button.title);
-  }
-}
-
-// The Undo and Redo buttons, and their keyboard shortcuts
-function wireUndoButtons() {
-  document.getElementById("undoButton")?.addEventListener("click", () => takeHistoryStep("undo"));
-  document.getElementById("redoButton")?.addEventListener("click", () => takeHistoryStep("redo"));
-  // Ctrl+Z (⌘Z on a Mac) undoes, and Ctrl+Shift+Z (⌘⇧Z) or Ctrl+Y redoes, except while typing in a box
-  // (where they undo the typing) or with a panel open
-  document.addEventListener("keydown", (event) => {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-    const key = event.key.toLowerCase();
-    const redo = (key === "z" && event.shiftKey) || (key === "y" && !event.shiftKey);
-    if (key !== "z" && !redo) return;
-    if (event.target.closest?.("input, textarea, select, [contenteditable]") || document.querySelector(".budgetPanel")) return;
-    event.preventDefault();
-    takeHistoryStep(redo ? "redo" : "undo");
-  });
-}
-
-let historyBusy = false;
-// Undo or Redo one step, with a note saying what it did (or why it couldn't)
-async function takeHistoryStep(direction) {
-  if (historyBusy || !undoInfo()[direction]) return;
-  historyBusy = true;
-  renderUndoButtons();
-  const result = await (direction === "undo" ? undoCalendarChange() : redoCalendarChange());
-  historyBusy = false;
-  renderUndoButtons();
-  if (!result.ok) return BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
-  if (result.saved === false) return BudgetUI.warnIfUnsaved(result);
-  BudgetUI.showToast(`${direction === "undo" ? "Undone" : "Redone"}: ${result.historyStep.label}.`);
 }
 
 //#endregion
@@ -436,6 +394,8 @@ function renderCalendar() {
     // (The days after the calendar going below $0 turn the Lowest card red instead, see renderAfterCalendar. A day
     // isn't red while the calendar shows only its own entries: the day's In Bank is hidden then.)
     td.classList.toggle("isNegative", dayBelowZero(calendarData[r][c], date) && mode !== "calendar");
+    // (Orange: a day whose meals the Pantry doesn't have enough for, with Settings' switch on and Meals showing)
+    td.classList.toggle("isMealShort", !!window.Kitchen && window.Kitchen.dayGlows(date));
     labelDay(td, date, shownDayText(calendarData[r][c], date));
     window.Fractals.renderDay(td, date);
   });
@@ -656,6 +616,7 @@ function renderCalendarList() {
     section.classList.toggle("isToday", date.getTime() === today.getTime());
     section.classList.toggle("isPast", date < today);
     section.classList.toggle("isNegative", dayBelowZero(day.text, date) && mode !== "calendar");
+    section.classList.toggle("isMealShort", !!window.Kitchen && window.Kitchen.dayGlows(date));
     if (date.getTime() === today.getTime()) todayEl = section;
 
     const head = BudgetUI.element("div", "listDayHead");
@@ -699,36 +660,65 @@ function renderCalendarList() {
 // A calendar entry made with a Quick Calendar icon joins the calendar by itself on the device that made the icon. From
 // any other device's icon it waits here, with Add (it goes on the calendar) and Delete (it's gone, never added).
 
+// A meal a Quick Calendar icon queued is for the budget the icon was made in: it waits for that budget to open (here, it
+// joins by itself on the device that made the icon: takeOwnWaitingMeals)
 function renderCalendarWaiting() {
   const card = document.getElementById("calendarWaiting");
   const list = document.getElementById("calendarWaitingList");
   if (!card || !list) return;
   const calendar = window.Fractals.data();
-  const waiting = calendar ? calendar.waiting : [];
+  const waiting = calendar ? calendar.waiting.filter(item => !item.meal || (budgetInfo && item.budget === budgetInfo.id)) : [];
   card.hidden = waiting.length === 0;
   list.replaceChildren(...waiting.map(calendarWaitingRow));
+  takeOwnWaitingMeals();
 }
 
-// One waiting calendar entry: its title over when it is, with Add and Delete
+let takingMeals = false;
+// The meals this device's own icons queued for the open budget join its Meals by themselves (then leave the API's queue)
+async function takeOwnWaitingMeals() {
+  const calendar = window.Fractals.data();
+  if (takingMeals || !calendar || !workspaceLoaded || !budgetInfo || !window.Kitchen) return;
+  const own = new Set(window.Fractals.ownIcons());
+  const mine = calendar.waiting.filter(item => item.meal && item.budget === budgetInfo.id && own.has(item.icon));
+  if (mine.length === 0) return;
+  takingMeals = true;
+  const result = await window.Kitchen.takeWaitingMeals(mine);
+  if (result.ok) {
+    for (const item of mine) await window.Fractals.change("waiting", { id: item.id, add: false });
+  }
+  takingMeals = false;
+}
+
+// One waiting calendar entry or meal: its title over when it is, with Add and Delete (a meal's Add puts it in the budget's
+// Meals, Kitchen.js)
 function calendarWaitingRow(waiting) {
   const row = BudgetUI.element("li", "waitingItem");
   const text = BudgetUI.noTranslate(BudgetUI.element("span", "waitingText"));
-  text.append(BudgetUI.element("span", "waitingTitle", waiting.event.title), BudgetUI.element("span", "waitingDetails", window.Fractals.whenWords(waiting.event)));
+  const title = waiting.meal ? waiting.meal.title : waiting.event.title;
+  const when = waiting.meal ? `Meal, ${waiting.meal.repeat ? "from" : "on"} ${showDate(createSafeMidnight(waiting.meal.start, true))}` : window.Fractals.whenWords(waiting.event);
+  text.append(BudgetUI.element("span", "waitingTitle", title), BudgetUI.element("span", "waitingDetails", when));
   const answer = async (add) => {
-    if (!add && !window.confirm(`Delete ${waiting.event.title}? It won't be added to your calendar.`)) return;
+    if (!add && !window.confirm(`Delete ${title}? It won't be added to your calendar.`)) return;
     row.querySelectorAll("button").forEach(control => { control.disabled = true; });
-    const result = await window.Fractals.change("waiting", { id: waiting.id, add });
+    if (waiting.meal && add) {
+      const took = await window.Kitchen.takeWaitingMeals([waiting]);
+      if (!took.ok) {
+        row.querySelectorAll("button").forEach(control => { control.disabled = false; });
+        return BudgetUI.showToast(took.message || "That didn't work. Please try again.", true);
+      }
+    }
+    const result = await window.Fractals.change("waiting", { id: waiting.id, add: add && !waiting.meal });
     if (!result.ok) return BudgetUI.showToast(window.Fractals.problem(result, "That didn't work. Please try again."), true);
     if (result.data.error) return BudgetUI.showToast(result.data.error, true);
-    BudgetUI.showToast(`${add ? "Added" : "Deleted"} ${waiting.event.title}.`);
+    BudgetUI.showToast(`${add ? "Added" : "Deleted"} ${title}.`);
   };
   const add = BudgetUI.element("button", "budgetButton primary waitingAdd", "Add");
   add.type = "button";
-  add.setAttribute("aria-label", `Add ${waiting.event.title}`);
+  add.setAttribute("aria-label", `Add ${title}`);
   add.addEventListener("click", () => answer(true));
   const remove = BudgetUI.element("button", "budgetButton danger waitingDelete", "Delete");
   remove.type = "button";
-  remove.setAttribute("aria-label", `Delete ${waiting.event.title}`);
+  remove.setAttribute("aria-label", `Delete ${title}`);
   remove.addEventListener("click", () => answer(false));
   row.append(text, add, remove);
   return row;

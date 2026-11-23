@@ -305,6 +305,68 @@ function showInList(list, item) {
   else if (itemBox.bottom > listBox.bottom) list.scrollTop += itemBox.bottom - listBox.bottom;
 }
 
+// When something that repeats happens: a calendar entry (Fractals.js) or a meal (Kitchen.js), worked out the same way
+// for both, and the same way the API's fractals.js works out a calendar entry's (change one and change the other). Days
+// are YYYY-MM-DD. An entry: { start, end (its last day; start for one day), repeat ({ count, unit: "days" | "weeks" |
+// "months" } or null), until (the last day it can start, or null), skip ([days left out]) }.
+const Repeats = (() => {
+  const dayOf = (ymd) => createSafeMidnight(ymd, true);
+  const plusDays = (ymd, days) => formatToYMD(addDays(dayOf(ymd), days));
+  const daysBetween = (from, to) => Math.round((dayOf(to) - dayOf(from)) / 86400000);
+
+  // The day an entry's occurrence starts (0: its first). A monthly one on the 31st lands on a shorter month's last day.
+  function occurrenceDay(event, index) {
+    if (!event.repeat || index === 0) return event.start;
+    const steps = event.repeat.count * index;
+    if (event.repeat.unit === "months") return formatToYMD(addMonths(dayOf(event.start), steps));
+    return plusDays(event.start, event.repeat.unit === "weeks" ? steps * 7 : steps);
+  }
+
+  // The first occurrence that starts on or after a day
+  function firstOccurrenceFrom(event, ymd) {
+    if (!event.repeat || ymd <= event.start) return 0;
+    if (event.repeat.unit !== "months") {
+      const period = event.repeat.count * (event.repeat.unit === "weeks" ? 7 : 1);
+      return Math.ceil(daysBetween(event.start, ymd) / period);
+    }
+    const months = (Number(ymd.slice(0, 4)) - Number(event.start.slice(0, 4))) * 12 + Number(ymd.slice(5, 7)) - Number(event.start.slice(5, 7));
+    let index = Math.max(0, Math.floor(months / event.repeat.count) - 1);
+    while (occurrenceDay(event, index) < ymd) index++;
+    return index;
+  }
+
+  // Each time an entry happens on the days from one through another: [{ event, day (it starts), last (it ends) }]. One
+  // that's over before the first of them isn't one (an entry that happens once, on a day before them).
+  function occurrences(event, from, to) {
+    const span = daysBetween(event.start, event.end || event.start);
+    const list = [];
+    let index = firstOccurrenceFrom(event, plusDays(from, -span));
+    for (let tries = 0; tries < 4000; tries++, index++) {
+      if (!event.repeat && index > 0) break;
+      const day = occurrenceDay(event, index);
+      if (day > to || (event.until && day > event.until)) break;
+      if (event.skip && event.skip.includes(day)) continue;
+      const last = span ? plusDays(day, span) : day;
+      if (last < from) continue;
+      list.push({ event, day, last });
+    }
+    return list;
+  }
+
+  // The first day it happens on or after a day (YYYY-MM-DD), or null when it doesn't anymore
+  function nextDay(event, ymd) {
+    let index = firstOccurrenceFrom(event, ymd);
+    for (let tries = 0; tries < 4000; tries++, index++) {
+      const day = occurrenceDay(event, index);
+      if ((!event.repeat && index > 0) || (event.until && day > event.until)) return null;
+      if (day >= ymd && !(event.skip && event.skip.includes(day))) return day;
+    }
+    return null;
+  }
+
+  return { occurrenceDay, firstOccurrenceFrom, occurrences, nextDay, plusDays, daysBetween };
+})();
+
 const DatePicker = (() => {
   const MONTH_LABELS = MONTH_NAMES.map(name => name[0].toUpperCase() + name.slice(1));
   const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

@@ -54,12 +54,13 @@ function renderCurrentPage() {
 // #region PAGE RENDERERS
 // =====================================================================
 
-// Recurring tab: [0] summary row, [1] column titles, then
+// Recurring Entries' table: [0] summary row, [1] column titles, then
 // [title, amount, start MM/DD/YYYY, frequency ("Every 2 Weeks"), end date or "None", type emoji]
 // Separator rows: ["-", category title, "", "", "", "-"]
 function renderRecurringPage(view) {
   renderToolbar("recurring", (origin) => openRecurringPanel(origin, null));
   view.replaceChildren();
+  renderRecurringRepeats();
 
   // Monthly and Yearly, under the card's title (each stays on one line, so a minus sign isn't left behind)
   const summary = recurringData[0] || [];
@@ -110,6 +111,85 @@ function renderRecurringPage(view) {
   });
   view.appendChild(wrapScroll(tableEl));
   markClipped(tableEl);
+}
+
+// The Recurring page's other two cards: the Calendar Fractals' entries that repeat (Fractals.js keeps them), and the meals
+// that repeat (Kitchen.js), each a table of its title, how often, and its first and last days, and a New button. Tapping
+// one opens its window for every time it repeats (one day's change is made on that day, on Home).
+function renderRecurringRepeats() {
+  const calendarCard = document.getElementById("calendarRepeatsCard");
+  const mealsCard = document.getElementById("mealsCard");
+  if (!calendarCard || !mealsCard) return;
+  const repeatsTable = (columns, rows, onTap) => {
+    const tableEl = createDataTable(columns);
+    tableEl.classList.add("repeatsTable");
+    for (const { cells, open } of rows) {
+      const tr = document.createElement("tr");
+      tr.classList.add("clickable");
+      tr.tabIndex = 0;
+      tr.append(...cells);
+      BudgetUI.makePressable(tr);
+      tr.addEventListener("click", () => onTap(open, tr));
+      tr.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onTap(open, tr);
+      });
+      tableEl.tBodies[0].append(tr);
+    }
+    return tableEl;
+  };
+  const day = (ymd) => (ymd ? showDate(createSafeMidnight(ymd, true)) : "None");
+  const every = (repeat) => describeFrequency(formatFrequency({ count: repeat.count, unit: repeat.unit }));
+
+  // Calendar Fractals' (once the calendar is in)
+  const calendar = window.Fractals && window.Fractals.data();
+  calendarCard.hidden = !calendar;
+  if (calendar) {
+    const bar = document.getElementById("calendarRepeatsToolbar");
+    bar.replaceChildren(toolbarButton("New Calendar Entry", "primary", (event) => window.Fractals.openNewEvent(event.currentTarget, { repeat: true })));
+    const events = calendar.events.filter(event => event.repeat).sort((a, b) => a.title.localeCompare(b.title));
+    const view = document.getElementById("calendarRepeatsView");
+    if (events.length === 0) {
+      view.replaceChildren(emptyMessage("None of your calendar entries repeat yet."));
+    } else {
+      const rows = events.map((event) => {
+        const fractal = BudgetUI.element("td", "fractalCell");
+        fractal.append(window.Fractals.swatch(window.Fractals.colorOf(event.fractal)), noTranslate(BudgetUI.element("span", "", window.Fractals.nameOf(event.fractal))));
+        return { open: event, cells: [noTranslate(clippedCell(event.title, "titleCell")), fractal, cell(every(event.repeat), "frequencyCell"), noTranslate(cell(day(event.start), "dateCell")), noTranslate(cell(day(event.until), "dateCell"))] };
+      });
+      const tableEl = repeatsTable([{ label: "Title", className: "titleHead" }, "Calendar Fractal", "Frequency", "Start Date", "End Date"], rows, (event, tr) => window.Fractals.openEvent(tr, event, event.start, { every: true }));
+      view.replaceChildren(wrapScroll(tableEl));
+      markClipped(tableEl);
+    }
+  }
+
+  // Meals'
+  mealsCard.hidden = !window.Kitchen || !window.KitchenUI;
+  if (mealsCard.hidden) return;
+  document.getElementById("mealsToolbar").replaceChildren(toolbarButton("New Meal Entry", "primary", (event) => window.KitchenUI.openMeal(event.currentTarget, { repeat: true })));
+  const meals = window.Kitchen.data().meals.filter(meal => meal.repeat).map(meal => ({ meal, view: window.Kitchen.mealView(meal) })).sort((a, b) => a.view.title.localeCompare(b.view.title));
+  const mealsView = document.getElementById("mealsView");
+  if (meals.length === 0) {
+    mealsView.replaceChildren(emptyMessage("No meals repeat yet. Tap New Meal Entry, or a recipe's + on the Recipes tab."));
+    return;
+  }
+  const rows = meals.map(({ meal, view }) => {
+    const title = noTranslate(clippedCell(view.title, "titleCell"));
+    if (view.recipe) title.append(BudgetUI.element("span", "mealFollowsMark", " (recipe)"));
+    return { open: meal, cells: [title, cell(every(meal.repeat), "frequencyCell"), noTranslate(cell(day(meal.start), "dateCell")), noTranslate(cell(day(meal.until), "dateCell"))] };
+  });
+  const tableEl = repeatsTable([{ label: "Title", className: "titleHead" }, "Frequency", "Start Date", "End Date"], rows, (meal, tr) => window.KitchenUI.openMeal(tr, { meal }));
+  mealsView.replaceChildren(wrapScroll(tableEl));
+  markClipped(tableEl);
+}
+if (window.PAGE === "recurring") {
+  // (The calendar loads by itself, before or after the budget: either way the cards are drawn once both are in)
+  window.workspaceReady.then((loaded) => {
+    if (!loaded || !window.Fractals) return;
+    window.Fractals.load().then(() => renderRecurringRepeats());
+  });
+  document.addEventListener("fractals:changed", () => { if (workspaceLoaded) renderRecurringRepeats(); });
 }
 
 // "Needs a look" over the table: recurring entries that match another one in title, Equity account, and refraction type,
@@ -435,16 +515,28 @@ const LOG_PLACES = {
   snapshot: ["Go To Snapshot", "/snapshot.html"],
   sheets: ["Go To Budgets, Calendars & Spreadsheets", "/menu/spreadsheets.html"],
   calculator: ["Go To The Paycheck Calculator", "/menu/calculator.html"],
-  business: ["Go To Business", "/menu/business.html"]
+  business: ["Go To Business", "/menu/business.html"],
+  pantry: ["Go To The Pantry", "/menu/recipes.html#pantryCard"],
+  foods: ["Go To Your Foods", "/menu/recipes.html#foodsCard"],
+  recipes: ["Go To Recipes", "/menu/recipes.html#recipesCard"],
+  meals: ["Go To Recurring Meal Entries", "/menu/recurring.html#mealsCard"],
+  mealsColor: ["Go To Recipes", "/menu/recipes.html"]
 };
 const LOG_PART_NAMES = {
   recurring: "Recurring Entries", tracker: "The Tracker", accounts: "Equity Accounts", goals: "Goals", bob: "Bob's cards and settings",
   snapshot: "The Snapshot page", equity: "Equity's settings", sheets: "Connected spreadsheets and calendars", calculator: "The Paycheck Calculator",
-  business: "Business"
+  business: "Business", pantry: "The Pantry", foods: "Your foods", recipes: "Recipes", meals: "Meal entries", mealsColor: "The Meals fractal's color"
 };
 
-// A row from a table, in words, for what a change added or took off
+// A row from a table, in words, for what a change added or took off (a recipe or a meal is an object: its title, and a
+// meal's day)
 function logTableRow(table, row) {
+  if (table === "recipes") return String(row?.title ?? "");
+  if (table === "meals") {
+    const title = row?.title ?? kitchenData?.recipes.find(recipe => recipe.id === row?.recipe)?.title ?? "Meal";
+    const day = createSafeMidnight(String(row?.start ?? ""), true);
+    return `${title}${isNaN(day.getTime()) ? "" : `, ${row.repeat ? "from" : "on"} ${showDate(day)}`}`;
+  }
   if (String(row?.[0] ?? "").trim() === "-") return `Section: ${row[1] ?? ""}`;
   if (table === "recurring") return `${shownLine(`${row[5] || "✔️"} ${row[1]} ${row[0]}`)}, ${formatFrequency(parseFrequency(row[3]))}`;
   return String(row?.[0] ?? "");
@@ -494,7 +586,8 @@ function logChanges(row, record) {
   }
   const place = /Recurring/.test(action) ? "recurring" : /Tracker/.test(action) ? "tracker" : /🏦|Account/.test(action) ? "accounts"
     : /🎯|Goal/.test(action) ? "goals" : /Calculator/.test(action) && !/Accrual|Debt/.test(action) ? "calculator" : /Snapshot/.test(action) ? "snapshot"
-    : /Spreadsheet|Calendar/.test(action) ? "sheets" : /Business/.test(action) ? "business" : null;
+    : /Spreadsheet|Calendar/.test(action) ? "sheets" : /Business/.test(action) ? "business" : /Pantry/.test(action) ? "pantry"
+    : /Recipe|Food|Meal/.test(action) ? "recipes" : null;
   if (place && parts.length === 0) parts.push({ heading: LOG_PART_NAMES[place], lines: [], go: LOG_PLACES[place] });
   return parts;
 }
@@ -2163,7 +2256,9 @@ function updateDeleteButton() {
 
 const DELETE_NOTES = {
   recurring: " Recurring entries stop from today on; days that already passed keep theirs.",
-  accounts: " Their entries stay on your calendar, but they won't change an account anymore."
+  accounts: " Their entries stay on your calendar, but they won't change an account anymore.",
+  pantry: " Undo can bring them back.",
+  foods: " Your recipes, meals, and Pantry keep these foods; the list just won't offer their names anymore. Undo can bring them back."
 };
 
 // Edit mode's Delete Selected: delete the checked rows (after asking)
@@ -2194,20 +2289,22 @@ function followCheckedRows(moved) {
 
 // Rows for a table: entries and sections, with a move bar + delete checkbox in edit mode,
 // and "+ Section" buttons between rows (sections: false leaves those out). canSelect(row) false
-// locks a row out of deleting; lockedNote(row) says why when it's tapped in edit mode.
-function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, extraClass, sections = true, canSelect = () => true, lockedNote = null }) {
-  const headers = editMode ? ["", "", ...columns] : columns;
+// locks a row out of deleting; lockedNote(row) says why when it's tapped in edit mode. editing: whether this table is
+// in edit mode (the page's, to start; the Recipes page has two tables, and only one is in it at a time).
+function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, extraClass, sections = true, canSelect = () => true, lockedNote = null, editing = editMode }) {
+  // (Edit's two columns, the ≡ bar and the checkbox, have names a screen reader says, and nothing to see)
+  const headers = editing ? [{ label: "Move", unseen: true }, { label: "Select", unseen: true }, ...columns] : columns;
   const tableEl = createDataTable(headers);
   if (extraClass) tableEl.classList.add(extraClass);
-  if (editMode) tableEl.classList.add("isEditing");
+  if (editing) tableEl.classList.add("isEditing");
   const body = tableEl.tBodies[0];
 
   for (const { index, row } of rows) {
-    if (editMode && sections) body.appendChild(sectionButtonRow(index, headers.length));
+    if (editing && sections) body.appendChild(sectionButtonRow(index, headers.length));
 
     const tr = document.createElement("tr");
     tr.dataset.index = index;
-    if (editMode) {
+    if (editing) {
       tr.appendChild(moveBarCell());
       tr.appendChild(selectCell(index, canSelect(row)));
       if (selectedRows.has(index)) tr.classList.add("selected");
@@ -2225,7 +2322,7 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
     BudgetUI.makePressable(tr);
     body.appendChild(tr);
   }
-  if (editMode && sections) body.appendChild(sectionButtonRow(ROW_TABLES[tableName].get().length, headers.length));
+  if (editing && sections) body.appendChild(sectionButtonRow(ROW_TABLES[tableName].get().length, headers.length));
 
   // Where a press started: a swipe that starts on a row scrolls the page, and only a tap (one that barely moved,
   // with the page still in place) opens the row
@@ -2247,7 +2344,7 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
     if (!tr || event.target.closest(".moveBar")) return;
     const index = Number(tr.dataset.index);
 
-    if (editMode) {
+    if (editing) {
       // Tapping a row (or its checkbox) toggles it for deletion
       const checkbox = tr.querySelector(".selectRow");
       if (!checkbox) {
@@ -2264,11 +2361,11 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
 
   body.addEventListener("pointerdown", (event) => {
     const bar = event.target.closest(".moveBar");
-    if (bar && editMode) startRowDrag(event, bar, tableEl, tableName);
+    if (bar && editing) startRowDrag(event, bar, tableEl, tableName);
   });
   body.addEventListener("keydown", (event) => {
     const bar = event.target.closest(".moveBar");
-    if (bar && editMode) moveRowWithKey(event, bar, tableEl, tableName);
+    if (bar && editing) moveRowWithKey(event, bar, tableEl, tableName);
   });
   return tableEl;
 }
@@ -3194,14 +3291,16 @@ function openCategoryPanel(tableName, origin, index, atIndex) {
 // #region TABLE HELPERS
 // =====================================================================
 
-// A table with its column titles: each a title, or { label, className } for one its column's styles go by
+// A table with its column titles: each a title, or { label, className } for one its column's styles go by (unseen: its
+// title is only for a screen reader)
 function createDataTable(headers) {
   const tableEl = document.createElement("table");
   tableEl.className = "dataTable";
   const headRow = tableEl.createTHead().insertRow();
   for (let header of headers) {
     const th = document.createElement("th");
-    th.textContent = typeof header === "string" ? header : header.label;
+    if (header && header.unseen) th.append(BudgetUI.element("span", "srOnly", header.label));
+    else th.textContent = typeof header === "string" ? header : header.label;
     if (header && header.className) th.className = header.className;
     headRow.appendChild(th);
   }

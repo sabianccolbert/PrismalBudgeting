@@ -177,9 +177,10 @@ window.Fractals = (() => {
   // Does a zoomed day list its calendar entries (instead of drawing them beside the hours)?
   const listMode = () => read(LIST_KEY) === "1";
 
-  // A fractal by its id: the account's or the budget's, a linked one, or Holidays (null for none)
+  // A fractal by its id: the account's or the budget's, a linked one, Holidays, or Meals (null for none)
   function fractalById(fractalId) {
-    return (data && data.fractals.find(item => item.id === fractalId)) || (String(fractalId).startsWith("linked:") ? linkedFractal(fractalId) : null) || (fractalId === HOLIDAYS_ID ? holidayFractals()[0] || null : null);
+    return (data && data.fractals.find(item => item.id === fractalId)) || (String(fractalId).startsWith("linked:") ? linkedFractal(fractalId) : null)
+      || (fractalId === HOLIDAYS_ID ? holidayFractals()[0] || null : null) || (fractalId === MEALS_ID ? mealFractals()[0] || null : null);
   }
 
   // A fractal's color (Shared With You's is grey; a linked fractal's is its own)
@@ -216,45 +217,9 @@ window.Fractals = (() => {
   // =====================================================================
 
   const dayOf = (ymd) => createSafeMidnight(ymd, true);
-  const plusDays = (ymd, days) => formatToYMD(addDays(dayOf(ymd), days));
-  const daysBetween = (from, to) => Math.round((dayOf(to) - dayOf(from)) / 86400000);
   const minutesOf = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-
-  // The day an entry's occurrence starts (0: its first). A monthly one on the 31st lands on a shorter month's last day.
-  function occurrenceDay(event, index) {
-    if (!event.repeat || index === 0) return event.start;
-    const steps = event.repeat.count * index;
-    if (event.repeat.unit === "months") return formatToYMD(addMonths(dayOf(event.start), steps));
-    return plusDays(event.start, event.repeat.unit === "weeks" ? steps * 7 : steps);
-  }
-
-  // The first occurrence that starts on or after a day
-  function firstOccurrenceFrom(event, ymd) {
-    if (!event.repeat || ymd <= event.start) return 0;
-    if (event.repeat.unit !== "months") {
-      const period = event.repeat.count * (event.repeat.unit === "weeks" ? 7 : 1);
-      return Math.ceil(daysBetween(event.start, ymd) / period);
-    }
-    const months = (Number(ymd.slice(0, 4)) - Number(event.start.slice(0, 4))) * 12 + Number(ymd.slice(5, 7)) - Number(event.start.slice(5, 7));
-    let index = Math.max(0, Math.floor(months / event.repeat.count) - 1);
-    while (occurrenceDay(event, index) < ymd) index++;
-    return index;
-  }
-
-  // Each time an entry happens on the days from one through another: [{ event, day (it starts), last (it ends) }]
-  function occurrences(event, from, to) {
-    const span = daysBetween(event.start, event.end);
-    const list = [];
-    let index = firstOccurrenceFrom(event, plusDays(from, -span));
-    for (let tries = 0; tries < 4000; tries++, index++) {
-      if (!event.repeat && index > 0) break;
-      const day = occurrenceDay(event, index);
-      if (day > to || (event.until && day > event.until)) break;
-      if (event.skip && event.skip.includes(day)) continue;
-      list.push({ event, day, last: span ? plusDays(day, span) : day });
-    }
-    return list;
-  }
+  // (Worked out in Dates.js, which meals share: occurrenceDay, firstOccurrenceFrom, occurrences)
+  const { occurrenceDay, firstOccurrenceFrom, occurrences, plusDays, daysBetween } = Repeats;
 
   // The part of an occurrence that's on one day: { event, day, last, whole (all of that day), start, end (minutes) }, or
   // null when none of it is (one that ends at midnight isn't on the day after)
@@ -727,9 +692,10 @@ window.Fractals = (() => {
     }, 520);
   }
 
-  // The entry a tapped line or block is: { event, day }, or null (a linked fractal's or Holidays', from the days drawn)
+  // The entry a tapped line or block is: { event, day }, or null (a linked fractal's, Holidays', or a meal, from the days
+  // drawn)
   function tapped(node) {
-    const event = (data && data.events.find(item => item.id === node.dataset.event)) || linkedEvents.get(node.dataset.event);
+    const event = (data && data.events.find(item => item.id === node.dataset.event)) || linkedEvents.get(node.dataset.event) || mealEvents.get(node.dataset.event);
     return event ? { event, day: node.dataset.day } : null;
   }
 
@@ -1044,10 +1010,6 @@ window.Fractals = (() => {
     });
   }
 
-  // The fractals that aren't the account's or the budget's: the linked ones and Holidays
-  const otherFractals = () => [...linkedFractals(), ...holidayFractals()];
-  const otherEventsIn = (fractal, from, to) => (fractal.holidays ? holidayEventsIn(from, to) : linkedEventsIn(fractal, from, to));
-
   // Its window: its color (its name and days are as they are), Save, and Cancel
   function openHolidays(origin, fractal) {
     BudgetUI.openPanel({
@@ -1078,6 +1040,79 @@ window.Fractals = (() => {
       }
     });
   }
+
+  //#endregion
+
+  // =====================================================================
+  // #region MEALS (the budget's meals, from the Recipes tab and New Entry's Meal: Kitchen.js)
+  // =====================================================================
+  // Meals is on every budget's calendar where Kitchen.js is (and on the Quick Calendar page, from its icon's answer). Its
+  // entries are the budget's meals, all day, each on the days it lands on, and tapping one opens it (Kitchen UI.js). It
+  // can't be deleted and is never the default; its color is the budget's (kitchenData.color: Kitchen.saveColor), it moves
+  // in the order like any fractal, and it's checked on Home or not (this device).
+
+  const MEALS_ID = "meals";
+  let mealEvents = new Map(); // The meals as entries, by their id (for a tap)
+
+  // (The meals are the budget's: a change to it can change which days have them)
+  document.addEventListener("budget:updated", () => { dayCache = new Map(); });
+
+  // [Meals, as a fractal: { id, name, color, meals: true }], or [] where it doesn't show
+  function mealFractals() {
+    if (!window.Kitchen) return [];
+    return [{ id: MEALS_ID, name: "Meals", color: window.Kitchen.data().color, meals: true }];
+  }
+
+  // Its entries: every meal, as an entry that repeats the way the meal does (the days drawn are worked out from them). A
+  // meal from a Quick Calendar icon that hasn't joined the budget yet is waiting (a dashed edge), like a calendar entry.
+  function mealEventsIn() {
+    mealEvents = new Map();
+    return window.Kitchen.data().meals.map((meal) => {
+      const shown = window.Kitchen.mealView(meal);
+      const event = {
+        id: `meal:${meal.id}`, fractal: MEALS_ID, title: shown.title, allDay: true, start: meal.start, end: meal.start, startTime: null,
+        endTime: null, travel: 0, location: null, notes: shown.notes, repeat: meal.repeat || null, until: meal.until || null,
+        skip: meal.skip || [], meal: meal.id, owned: true, ...(window.Kitchen.isWaiting(meal) ? { waiting: true } : {})
+      };
+      mealEvents.set(event.id, event);
+      return event;
+    });
+  }
+
+  // Its window: its color (its entries are the meals), Save, and Cancel
+  function openMealsFractal(origin, fractal) {
+    BudgetUI.openPanel({
+      origin,
+      size: "small",
+      stacked: !!(origin && origin.closest(".budgetPanel")),
+      title: "Edit Meals",
+      build(form, panel) {
+        const color = colorField(fractal.color);
+        form.append(
+          el("p", "panelText", "Your budget's meal entries, from the Recipes tab and New Entry's Meal."),
+          color.el,
+          el("p", "panelHint", "It can't be deleted. To hide its meals on this device, uncheck Meals in Home's Calendar Fractals. Its color is kept with the budget."),
+          BudgetUI.buttonRow([{ label: "Save", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }])
+        );
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          panel.setError("");
+          panel.setBusy(true);
+          const result = await window.Kitchen.saveColor(color.value());
+          panel.setBusy(false);
+          if (!result.ok) return panel.setError(result.message || "Couldn't save it. Please try again.");
+          panel.close();
+          toast("Meals was saved.");
+          dayCache = new Map();
+          document.dispatchEvent(new CustomEvent("fractals:changed"));
+        });
+      }
+    });
+  }
+
+  // The fractals that aren't the account's or the budget's Calendar Fractals: the linked ones, Holidays, and Meals
+  const otherFractals = () => [...linkedFractals(), ...holidayFractals(), ...mealFractals()];
+  const otherEventsIn = (fractal, from, to) => (fractal.meals ? mealEventsIn() : fractal.holidays ? holidayEventsIn(from, to) : linkedEventsIn(fractal, from, to));
 
   //#endregion
 
@@ -1160,7 +1195,7 @@ window.Fractals = (() => {
       list.append(...items);
       box.append(list);
     };
-    section("Yours", inOrder([...data.fractals, ...holidayFractals()]).map(fractalItem));
+    section("Yours", inOrder([...data.fractals, ...holidayFractals(), ...mealFractals()]).map(fractalItem));
     section("Linked", inOrder(linkedFractals()).map(fractalItem));
     section("Shared With You", hasShared() ? [fractalItem({ id: SHARED, name: "Shared With You", color: SHARED_COLOR })] : []);
     section("Invitations", data.invitations.map(invitationItem));
@@ -1270,6 +1305,7 @@ window.Fractals = (() => {
   function openFractal(origin, fractal) {
     if (fractal && fractal.linked) return openLinkedFractal(origin, fractal);
     if (fractal && fractal.holidays) return openHolidays(origin, fractal);
+    if (fractal && fractal.meals) return openMealsFractal(origin, fractal);
     BudgetUI.openPanel({
       origin,
       size: "small",
@@ -1536,7 +1572,7 @@ window.Fractals = (() => {
   // The form's fields for a calendar entry. event: the one being changed (null for a new one); day: the day of it that
   // was tapped (a repeating one's), or the day a new one starts. read(): { event, fractal } as the API takes them, or
   // { error }. noteEl goes under the form's buttons, like a budget entry's note.
-  function eventFields({ event = null, day = null, title = "" } = {}) {
+  function eventFields({ event = null, day = null, title = "", repeat = false } = {}) {
     const fractals = data ? inOrder(data.fractals) : [];
     const startDay = day || (event ? event.start : formatToYMD(today));
     const span = event ? daysBetween(event.start, event.end) : 0;
@@ -1567,7 +1603,7 @@ window.Fractals = (() => {
     });
     const location = locationField(event ? event.location : null);
 
-    const repeats = BudgetUI.checkboxField({ label: "Repeat", checked: !!(event && event.repeat) });
+    const repeats = BudgetUI.checkboxField({ label: "Repeat", checked: event ? !!event.repeat : repeat });
     const count = el("input", "frequencyCount");
     count.type = "text";
     count.inputMode = "numeric";
@@ -1609,6 +1645,8 @@ window.Fractals = (() => {
       repeatEls: [repeats.el, repeatBox], // (Repeat, and its Frequency and End repeat)
       noteEl: notes.el,
       titleInput: titleField.input,
+      // What's typed so far, for another kind of New Entry: { title, date (a Date, or null) }
+      typed: () => ({ title: titleField.value(), date: starts.value() || null }),
       pendingShares: () => (share ? share.pending() : []),
       read() {
         const from = starts.value();
@@ -1647,13 +1685,15 @@ window.Fractals = (() => {
     };
   }
 
-  // Save a new entry, or a changed one (id), then send a new one's invitations. sharesFrom: see store.save. Resolves to
-  // { ok, message }.
+  // Save a new entry, or a changed one (id), then send a new one's invitations, noting the change for Undo (UNDO, below).
+  // sharesFrom: see store.save. Resolves to { ok, message }.
   async function saveEvent(id, fractal, event, invites = [], sharesFrom = null) {
+    const before = id ? entryNow(id) : null;
     const result = await store.save(id, fractal, event, sharesFrom);
     if (!result.ok || !result.data) return { ok: false, message: problem(result, "Couldn't save it. Please try again.") };
     if (Array.isArray(result.data.fractals)) took(result.data);
     if (result.data.error) return { ok: false, message: result.data.error };
+    noteChange(result.data.saved, before, entryNow(result.data.saved), sharesFrom);
     const problems = [];
     for (const who of invites) {
       const shared = await change("share", { event: result.data.saved, to: who });
@@ -1663,27 +1703,37 @@ window.Fractals = (() => {
     return { ok: true, id: result.data.saved };
   }
 
-  // The two long buttons across the top of New Entry: a budget entry, or a calendar entry
+  // The long buttons across the top of New Entry: a budget entry (not on the Quick Calendar page, which has no budget), a
+  // calendar entry, or a meal (where Kitchen UI.js is: Home and the Quick Calendar page)
   function kindSwitch(kind, onPick) {
-    const picker = BudgetUI.segmented([{ key: "budget", label: "Budget Entry" }, { key: "calendar", label: "Calendar Entry" }], kind, onPick);
+    const kinds = [
+      ...(store.quick ? [] : [{ key: "budget", label: "Budget Entry" }]),
+      { key: "calendar", label: "Calendar Entry" },
+      ...(window.KitchenUI ? [{ key: "meal", label: "Meal" }] : [])
+    ];
+    const picker = BudgetUI.segmented(kinds, kind, onPick);
     picker.el.classList.add("entryKind");
-    picker.el.setAttribute("aria-label", "A budget entry or a calendar entry");
+    picker.el.classList.toggle("threeKinds", kinds.length === 3);
+    picker.el.setAttribute("aria-label", "What kind of entry");
     return picker.el;
   }
 
-  // New Entry as a calendar entry (date: the day it starts; title: what was typed in the budget entry's form). Its
-  // Budget Entry button goes back to that form.
-  function openNewEvent(origin, { date = today, title = "" } = {}) {
+  // New Entry as a calendar entry (date: the day it starts; title: what was typed in the other kind's form; repeat: it
+  // starts with Repeat on, from the Recurring page). Its other buttons go to those forms.
+  function openNewEvent(origin, { date = today, title = "", repeat = false } = {}) {
     BudgetUI.openPanel({
       origin,
       size: "large",
       title: "New Entry",
       build(form, panel) {
         panel.panel.classList.add("eventPanel");
-        const fields = eventFields({ day: formatToYMD(date), title });
-        const kinds = store.quick ? [] : [kindSwitch("calendar", (kind) => {
-          if (kind === "budget") BudgetUI.openNewEntry(origin, { date, kind: "budget" });
-        })];
+        const fields = eventFields({ day: formatToYMD(date), title, repeat });
+        const switchable = !store.quick || window.KitchenUI;
+        const kinds = switchable && window.PAGE !== "recurring" ? [kindSwitch("calendar", (kind) => {
+          const typed = fields.typed();
+          if (kind === "budget") BudgetUI.openNewEntry(origin, { date: typed.date || date, kind: "budget" });
+          if (kind === "meal") window.KitchenUI.openNewMeal(origin, { date: typed.date || date, title: typed.title });
+        })] : [];
         form.append(...kinds, ...fields.els, BudgetUI.buttonRow([
           { label: "Add Entry", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }
@@ -1694,7 +1744,7 @@ window.Fractals = (() => {
           const { event, fractal, error } = fields.read();
           if (error) return panel.setError(error);
           panel.setBusy(true);
-          const result = await saveEvent(null, fractal, event, fields.pendingShares());
+          const result = await undoable(`added ${event.title} on ${showDay(dayOf(event.start))} to your calendar`, () => saveEvent(null, fractal, event, fields.pendingShares()));
           panel.setBusy(false);
           if (!result.ok) return panel.setError(result.message);
           panel.close();
@@ -1732,9 +1782,8 @@ window.Fractals = (() => {
     }
     const after = (from) => (event.skip || []).filter(skipped => skipped > from);
     if (!earlier && !next) {
-      const result = await store.remove(event.id);
+      const result = await removeEvent(event.id);
       if (!result.ok || !result.data) return { ok: false, message: problem(result, "Couldn't delete it. Please try again.") };
-      if (Array.isArray(result.data.fractals)) took(result.data);
       return result.data.error ? { ok: false, message: result.data.error } : { ok: true };
     }
     if (next && event.repeat.unit === "months" && next.slice(8) !== event.start.slice(8)) {
@@ -1751,10 +1800,15 @@ window.Fractals = (() => {
 
   // A tapped entry's window. One shared with the account (or, on the Quick Calendar page, one already on the calendar)
   // only shows; the account's own can be changed or deleted, and a repeating one asks whether that's for the tapped day
-  // or every time. It says it opened ("entry:opened"), so Home can give it ‹ and › to the entries around it.
-  function openEvent(origin, event, day = event.start) {
-    // (A linked fractal's entry only shows, too: it comes from another calendar)
-    const locked = !event.owned || !!event.linked || (store.quick && !event.waiting);
+  // or every time (every: it starts on Every time, from the Recurring page). It says it opened ("entry:opened"), so Home
+  // can give it ‹ and › to the entries around it. A meal opens the meal's own window (Kitchen UI.js).
+  function openEvent(origin, event, day = event.start, { every = false } = {}) {
+    if (event.meal && window.KitchenUI && window.Kitchen) {
+      const meal = window.Kitchen.data().meals.find(item => item.id === event.meal);
+      return meal ? window.KitchenUI.openMeal(origin, { meal, day: every ? null : day }) : null;
+    }
+    // (A linked fractal's entry only shows, too: it comes from another calendar. So does a meal on a page without its window)
+    const locked = !event.owned || !!event.linked || !!event.meal || (store.quick && !event.waiting);
     const panelApi = BudgetUI.openPanel({
       origin,
       size: "large",
@@ -1767,11 +1821,12 @@ window.Fractals = (() => {
         heading.style.color = textOn(colorOf(event.fractal));
         form.append(heading);
         if (locked) {
-          const lines = [whenWords(event, day), repeatWords(event), event.location ? event.location.text : "", event.linked ? event.linked : event.owned ? (fractal ? fractal.name : "") : `Shared by ${event.owner}`];
+          const lines = [whenWords(event, day), repeatWords(event), event.location ? event.location.text : "", event.meal ? "Meals" : event.linked ? event.linked : event.owned ? (fractal ? fractal.name : "") : `Shared by ${event.owner}`];
           for (const line of lines.filter(Boolean)) form.append(BudgetUI.noTranslate(el("p", "panelText", line)));
           if (event.notes) form.append(BudgetUI.noTranslate(el("p", "panelText eventNotes", event.notes)));
           if (store.quick) form.append(el("p", "panelHint", "Sign in to Prismal Planning to change it."));
-          if (event.holiday) form.append(el("p", "panelHint", "It's one of the Holidays fractal's, so it can't be changed or taken out."));
+          if (event.meal) form.append(el("p", "panelHint", "It's a meal: change it on Home, or on the Recurring Entries page when it repeats."));
+          else if (event.holiday) form.append(el("p", "panelHint", "It's one of the Holidays fractal's, so it can't be changed or taken out."));
           else if (event.linked) form.append(el("p", "panelHint", "It comes from a linked calendar, so it can't be changed here. Change it in that calendar, and it changes here the next time that's read (at most 15 minutes later)."));
           form.append(BudgetUI.buttonRow([
             ...(event.owned || event.linked ? [] : [{ label: "Remove From My Calendar", kind: "danger", onClick: async () => {
@@ -1792,7 +1847,7 @@ window.Fractals = (() => {
         const repeating = !!event.repeat;
         // Just this day to start, so a change or Delete only reaches the other days when that's picked. Changing how it
         // repeats (Repeat, Frequency, End repeat) is about every time, so that picks Every time by itself.
-        const scope = BudgetUI.segmented([{ key: "one", label: "Just this day" }, { key: "all", label: "Every time" }], "one");
+        const scope = BudgetUI.segmented([{ key: "one", label: "Just this day" }, { key: "all", label: "Every time" }], every ? "all" : "one");
         const scopeField = BudgetUI.field("Change or delete", scope.el, { hint: `It repeats (${repeatWords(event).toLowerCase()}). Just this day leaves the rest as they are; changing how it repeats changes every time.` });
         scopeField.hidden = !repeating;
         if (repeating) {
@@ -1804,18 +1859,15 @@ window.Fractals = (() => {
           { label: "Save", kind: "primary", type: "submit" },
           { label: "Delete", kind: "danger", onClick: async () => {
             const one = repeating && scope.value() === "one";
-            if (!window.confirm(one ? `Delete ${event.title} on ${showDate(dayOf(day))} only?` : `Delete ${event.title}${repeating ? ", every time it repeats" : ""}? This can't be undone.`)) return;
+            if (!window.confirm(one ? `Delete ${event.title} on ${showDate(dayOf(day))} only?` : `Delete ${event.title}${repeating ? ", every time it repeats" : ""}?${store.quick ? " This can't be undone." : ""}`)) return;
             panel.setBusy(true);
-            if (one) {
-              const split = await deleteOneDay(event, day);
-              panel.setBusy(false);
-              if (!split.ok) return panel.setError(split.message || "Couldn't delete it. Please try again.");
-            } else {
-              const result = await store.remove(event.id);
-              panel.setBusy(false);
-              if (!result.ok) return panel.setError(problem(result, "Couldn't delete it. Please try again."));
-              if (result.data && Array.isArray(result.data.fractals)) took(result.data);
-            }
+            const deleted = await undoable(one ? `deleted ${event.title} (just ${showDay(dayOf(day))}) from your calendar` : `deleted ${event.title} from your calendar`, async () => {
+              if (one) return deleteOneDay(event, day);
+              const result = await removeEvent(event.id);
+              return result.ok && result.data && !result.data.error ? { ok: true } : { ok: false, message: (result.data && result.data.error) || problem(result, "Couldn't delete it. Please try again.") };
+            });
+            panel.setBusy(false);
+            if (!deleted.ok) return panel.setError(deleted.message || "Couldn't delete it. Please try again.");
             panel.close();
             toast(`Deleted ${event.title}${one ? ` on ${showDate(dayOf(day))}` : ""}.`);
           } },
@@ -1832,7 +1884,7 @@ window.Fractals = (() => {
               const { event: shown, fractal: picked, error } = fields.read();
               if (error) return { ok: false, message: error };
               const start = formatToYMD(target);
-              return saveEvent(null, picked, { ...shown, start, end: plusDays(start, daysBetween(shown.start, shown.end)), repeat: null, until: null, skip: [] });
+              return undoable(`copied ${shown.title} to ${showDay(target)} on your calendar`, () => saveEvent(null, picked, { ...shown, start, end: plusDays(start, daysBetween(shown.start, shown.end)), repeat: null, until: null, skip: [] }));
             }
           });
         }
@@ -1843,23 +1895,25 @@ window.Fractals = (() => {
           const { event: changed, fractal: picked, error } = fields.read();
           if (error) return panel.setError(error);
           panel.setBusy(true);
-          let result;
-          if (repeating && scope.value() === "one") {
-            // The tapped day comes out of the repeating entry, and goes on by itself as the form has it (shared with
-            // the same people)
-            result = await saveEvent(event.id, event.fractal, { ...storedOf(event), skip: [...(event.skip || []), day] });
-            if (result.ok) result = await saveEvent(null, picked, { ...changed, repeat: null, until: null, skip: [] }, [], event.id);
-          } else if (repeating && changed.repeat) {
-            // The form shows the tapped day: the days it moved by move the whole entry (its first day, and the days
-            // left out of it)
-            const moved = daysBetween(day, changed.start);
-            const first = plusDays(event.start, moved);
-            const skip = (changed.skip || []).map(skipped => plusDays(skipped, moved));
-            result = await saveEvent(event.id, picked, { ...changed, start: first, end: plusDays(first, daysBetween(changed.start, changed.end)), skip });
-          } else {
+          const one = repeating && scope.value() === "one";
+          const result = await undoable(one ? `changed ${event.title} (just ${showDay(dayOf(day))}) on your calendar` : `changed ${event.title} on your calendar`, async () => {
+            if (one) {
+              // The tapped day comes out of the repeating entry, and goes on by itself as the form has it (shared with
+              // the same people)
+              const left = await saveEvent(event.id, event.fractal, { ...storedOf(event), skip: [...(event.skip || []), day] });
+              return left.ok ? saveEvent(null, picked, { ...changed, repeat: null, until: null, skip: [] }, [], event.id) : left;
+            }
+            if (repeating && changed.repeat) {
+              // The form shows the tapped day: the days it moved by move the whole entry (its first day, and the days
+              // left out of it)
+              const moved = daysBetween(day, changed.start);
+              const first = plusDays(event.start, moved);
+              const skip = (changed.skip || []).map(skipped => plusDays(skipped, moved));
+              return saveEvent(event.id, picked, { ...changed, start: first, end: plusDays(first, daysBetween(changed.start, changed.end)), skip });
+            }
             // One that happens once (or stops repeating): it's on the days the form shows
-            result = await saveEvent(event.id, picked, changed);
-          }
+            return saveEvent(event.id, picked, changed);
+          });
           panel.setBusy(false);
           if (!result.ok) return panel.setError(result.message);
           panel.close();
@@ -1869,6 +1923,112 @@ window.Fractals = (() => {
     });
     document.dispatchEvent(new CustomEvent("entry:opened", { detail: { panel: panelApi, kind: "event", id: event.id, day } }));
     return panelApi;
+  }
+
+  //#endregion
+
+  // =====================================================================
+  // #region UNDO (changes to calendar entries, as steps of Home's and the Recipes page's Undo)
+  // =====================================================================
+  // An entry added, changed, or deleted (a repeating entry's day changed or deleted by itself is two such changes, and a
+  // Copy is one) is noted while the action is made, and becomes one step in the same list as the budget's (Process
+  // Budget.js, UNDO + REDO): { label, calendar: [{ id, before, after, people, sharesFrom }] }, each side the entry as the
+  // API keeps it, { fractal, event } (storedOf), read back once it's saved, or null (before: it was added; after: it was
+  // deleted). Undo puts each back, newest first, while each is still as the action left it (when one changed since, it
+  // says so and lets the step go, like the budget's); Redo makes the action again. An entry back after a delete, or
+  // added again by Redo, is a new one (its new id goes in the step), shared again with the people it had, who are invited
+  // again. The Quick Calendar page records none (it has no Undo).
+
+  let recording = null; // The changes being noted, while an action that can be undone is being made
+
+  // An entry of the account's as it is now: { fractal, event, people (their names) }, or null when it isn't there
+  function entryNow(id) {
+    const found = data && data.events.find(event => event.id === id && !event.waiting);
+    return found ? { fractal: found.fractal, event: storedOf(found), people: (found.people || []).map(person => person.name).filter(Boolean) } : null;
+  }
+
+  // An entry's two versions compared as the API keeps them (the order of their keys doesn't count)
+  const sortedJson = (value) => JSON.stringify(value, (key, part) => (part && typeof part === "object" && !Array.isArray(part) ? Object.fromEntries(Object.keys(part).sort().map(name => [name, part[name]])) : part));
+  const sameEntry = (a, b) => (!a || !b ? !a && !b : sortedJson({ fractal: a.fractal, event: a.event }) === sortedJson({ fractal: b.fractal, event: b.event }));
+
+  // Note one entry's change, once it's saved (before and after: entryNow's, or null)
+  function noteChange(id, before, after, sharesFrom = null) {
+    if (!recording) return;
+    recording.push({ id, before: before && { fractal: before.fractal, event: before.event }, after: after && { fractal: after.fractal, event: after.event }, people: before ? before.people : [], ...(sharesFrom ? { sharesFrom } : {}) });
+  }
+
+  // Delete an entry, noted for Undo. Resolves to the request's result.
+  async function removeEvent(id) {
+    const before = entryNow(id);
+    const result = await store.remove(id);
+    if (result.ok && result.data && !result.data.error) {
+      if (Array.isArray(result.data.fractals)) took(result.data);
+      noteChange(id, before, null);
+    }
+    return result;
+  }
+
+  // Make an action that changes entries one Undo step, once it works (label: what it did, as Undo's button says it, like
+  // "added Lunch on 12/01 to your calendar"). work resolves to { ok, ... }, which this resolves to.
+  async function undoable(label, work) {
+    if (store.quick || typeof rememberUndoStep !== "function") return work();
+    const changes = [];
+    recording = changes;
+    let result = null;
+    try {
+      result = await work();
+    } finally {
+      recording = null;
+      if (changes.length > 0 && result && result.ok) {
+        rememberUndoStep({ label, calendar: changes });
+        BudgetUI.renderUndoButtons();
+      }
+    }
+    return result;
+  }
+
+  // Put one entry to a version: { fractal, event }, or null to delete it (made: it isn't there now, so it's added).
+  // Resolves to { ok, id, message }.
+  async function putEntry(item, version, made) {
+    const result = !version ? await store.remove(item.id) : await store.save(made ? null : item.id, version.fractal, version.event, made && item.sharesFrom ? item.sharesFrom : null);
+    if (!result.ok || !result.data || result.data.error) return { ok: false, message: (result.data && result.data.error) || problem(result, "Couldn't reach your calendar. Check your connection, then try again.") };
+    if (Array.isArray(result.data.fractals)) took(result.data);
+    return { ok: true, id: version && made ? result.data.saved : item.id };
+  }
+
+  // Take a step of calendar changes back (undo) or forward again (redo). Resolves to { ok, message, stale (it can't be
+  // taken anymore), step (as it is now: entries made again have new ids) }. When one change of several can't be saved,
+  // the ones already taken go back, so the step stays whole.
+  async function takeStep(step, direction) {
+    const undoing = direction === "undo";
+    await load(true);
+    if (!data) return { ok: false, message: "Couldn't reach your calendar. Check your connection, then try again." };
+    const changed = step.calendar.find(item => !sameEntry(entryNow(item.id), undoing ? item.after : item.before));
+    if (changed) {
+      const title = (changed.after || changed.before).event.title;
+      return { ok: false, stale: true, message: `That (${step.label}) can't be ${undoing ? "undone" : "redone"} anymore, because ${title} changed since.` };
+    }
+    const now = step.calendar.map(item => ({ ...item }));
+    const order = undoing ? [...now].reverse() : now;
+    const taken = [];
+    for (const item of order) {
+      const to = undoing ? item.before : item.after;
+      const from = undoing ? item.after : item.before;
+      const done = await putEntry(item, to, !from);
+      if (!done.ok) {
+        // (Back as they were, newest first)
+        for (const back of taken.reverse()) {
+          const put = await putEntry(back, undoing ? back.after : back.before, !(undoing ? back.before : back.after));
+          if (put.ok) back.id = put.id;
+        }
+        return { ok: false, message: done.message };
+      }
+      item.id = done.id;
+      taken.push(item);
+      // (Made again after a delete: shared with whoever it was then)
+      if (to && !from) for (const name of item.people || []) await change("share", { event: item.id, to: name });
+    }
+    return { ok: true, step: { ...step, calendar: now } };
   }
 
   //#endregion
@@ -2003,6 +2163,19 @@ window.Fractals = (() => {
         item.append(about, buttons);
         return item;
       };
+      // (Meals: the budget's meals, and Edit for its color)
+      const mealsItem = (fractal) => {
+        const item = el("li", "budgetItem");
+        const about = el("div", "budgetOpen");
+        const name = el("span", "budgetName");
+        name.append(swatch(fractal.color), fractal.name);
+        const count = window.Kitchen.data().meals.length;
+        about.append(name, el("span", "budgetDetail", `${count} meal ${count === 1 ? "entry" : "entries"} (from the Recipes tab and New Entry's Meal)`));
+        const buttons = el("div", "budgetInvitationButtons");
+        buttons.append(button("Edit", "", (event) => openMealsFractal(event.currentTarget, fractal), "Edit Meals"));
+        item.append(about, buttons);
+        return item;
+      };
       // (Linked ones: where each comes from, and what went wrong reading it, if anything did)
       const linkedItem = (fractal) => {
         const item = el("li", "budgetItem");
@@ -2021,7 +2194,7 @@ window.Fractals = (() => {
       const ordered = inOrder([...data.fractals, ...otherFractals()]);
       const save = (ids) => saveOrder(ids);
       ordered.forEach((fractal, at) => {
-        const item = fractal.holidays ? holidaysItem(fractal) : fractal.linked ? linkedItem(fractal) : ownItem(fractal);
+        const item = fractal.meals ? mealsItem(fractal) : fractal.holidays ? holidaysItem(fractal) : fractal.linked ? linkedItem(fractal) : ownItem(fractal);
         item.dataset.fractal = String(fractal.id);
         const handle = el("span", "prismHandle fractalHandle", "≡");
         handle.title = "Hold and drag to move, or use the up and down arrow keys";
@@ -2050,7 +2223,7 @@ window.Fractals = (() => {
     document.addEventListener("budget:updated", draw);
   }
 
-  // The fractals (own, the budget's, linked, and Holidays, any of them) in the order kept with the budget
+  // The fractals (own, the budget's, linked, Holidays, and Meals, any of them) in the order kept with the budget
   // (sheetsData.fractalOrder, their ids: Process Budget.js saveFractalOrder), the rest after them as they come
   function inOrder(list) {
     const order = typeof sheetsData !== "undefined" && sheetsData && Array.isArray(sheetsData.fractalOrder) ? sheetsData.fractalOrder : [];
@@ -2225,14 +2398,18 @@ window.Fractals = (() => {
     problem,
     data: () => data,
     useStore(other) { store = { ...store, ...other }; },
+    takeStep,
     isQuick: () => store.quick,
     rememberIcon,
+    ownIcons,
     view,
     setView,
     isShown,
     listMode,
     colorOf,
+    nameOf,
     textOn,
+    MEALS_ID,
     prepare,
     eventsOn,
     renderDay,
