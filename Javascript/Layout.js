@@ -1125,14 +1125,15 @@ document.addEventListener("click", (EVENT) => {
 // whether music and sound effects are off (Sounds.js), the kind of phone picked for the Steps for lists, the passkey
 // it last signed in with (Passkeys.js; the login page tries it by itself), the Quick Budget icons it made or used
 // (their entries are added when the budget opens here, see holdQuickEntries), the day picked for Bob's Accounts
-// card and the days each Wavelength Planning card adds up (Bob Page.js), its theme and Custom theme and its Reduced Motion
+// card, the days each Wavelength Planning card adds up, and the tracker's From and To for Bob and each Snapshot card
+// (Bob Page.js), its theme and Custom theme and its Reduced Motion
 // switches (Boot.js), so the next sign-in here
 // looks the same, whether push notifications were turned off here on purpose (Notifications.js), and what Home's
 // calendar shows here: the budget, the calendar, or both, which Calendar Fractals are checked, whether a zoomed day
 // lists its calendar entries, and the Quick Calendar icons this device made or used (Fractals.js), whether Home's
 // calendar is in List Mode, and which Change Logs rows it has seen (Home's count of other devices' edits, see
 // markLogsSeen in Process Budget.js).
-const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_look_ahead", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day", "prismal_wave_days",
+const DEVICE_SETTINGS = ["prismal_analytics", "prismal_date_format", "prismal_time_format", "prismal_look_ahead", "prismal_music", "prismal_sound_effects", "prismal_device", "prismal_last_passkey", "prismal_quick_icons", "prismal_bob_accounts_day", "prismal_wave_days", "prismal_tracker_days",
   "prismal_theme", "prismal_custom_theme", "prismal_still_stars", "prismal_less_motion", "prismal_push_off", "prismal_push_asked",
   "prismal_calendar_view", "prismal_fractals_off", "prismal_calendar_list", "prismal_quickcal_icons", "prismal_list_mode", "prismal_logs_seen", "prismal_bob_okayed",
   "prismal_kitchen"];

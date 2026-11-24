@@ -291,20 +291,21 @@ function markClipped(table) {
 // interest since, max] (see Equity in Process Budget.js). Balances are each account's starting amount plus its
 // entries (Hidden and Transfer entries with it picked): today (over its max, when it has one: "$500.00/$2000.00"), and
 // in 6 months (AHEAD_MONTHS, see budgetAhead). Tapping an account opens it, with every entry for it to change. Savings
-// and Cash can't be deleted.
+// and Cash can't be deleted. Sections (Edit's + Section, like Recurring's) group the accounts under them, and each
+// section's heading has their totals, today and in 6 months (sectionTotals).
 function renderAccountsPage(view) {
   renderToolbar("accounts", (origin) => openAccountPanel(origin, null), { newLabel: "New Account", newInEditMode: true });
   view.replaceChildren();
   const summaries = new Map(accountSummaries().map(summary => [summary.index, summary]));
   const ahead = budgetAhead([...summaries.values()]);
   view.appendChild(accountsTotal([...summaries.values()], ahead));
+  const totals = sectionTotals(accountsData.list, (index) => ({ today: summaries.get(index)?.today ?? 0, ahead: ahead.accounts.get(index) ?? 0 }));
 
   const tableEl = buildRowTable({
     tableName: "accounts",
     columns: ["Account", "Balance", AHEAD_LABEL],
     rows: indexedRows(accountsData.list, 1),
     extraClass: "accountsTable",
-    sections: false,
     canSelect: (row) => !isMandatoryAccount(row),
     lockedNote: (row) => mandatoryAccountNote(row[0]),
     renderEntry(tr, row, index) {
@@ -313,10 +314,38 @@ function renderAccountsPage(view) {
       tr.appendChild(noTranslate(balanceCell(summary ? summary.today : 0, row, summary?.interest?.separate ? summary.owed ?? 0 : null)));
       tr.appendChild(noTranslate(cell(formatMoney(ahead.accounts.get(index) ?? 0), "amountCell")));
     },
+    renderSection(tr, row, index) {
+      const total = totals.get(index) || { today: 0, ahead: 0 };
+      tr.classList.add("withTotals");
+      const title = noTranslate(cell(row[1] ?? "", "titleCell sectionTitle"));
+      const today = noTranslate(cell(formatMoney(total.today), `amountCell sectionTotal ${BudgetUI.amountClass(total.today)}`));
+      const later = noTranslate(cell(formatMoney(total.ahead), `amountCell sectionTotal ${BudgetUI.amountClass(total.ahead)}`));
+      today.setAttribute("aria-label", `${row[1] ?? ""} total: ${formatMoney(total.today)}`);
+      later.setAttribute("aria-label", `${row[1] ?? ""} total ${AHEAD_LABEL.toLowerCase()}: ${formatMoney(total.ahead)}`);
+      tr.append(title, today, later);
+    },
     onEntryClick: (index, origin) => openAccountPanel(origin, index)
   });
   view.appendChild(wrapScroll(tableEl));
-  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", `Balances come from each account's Hidden and Transfer entries (and its interest, when it has some). ${AHEAD_LABEL} counts the ones still to come: on the calendar, in Upcoming, and from your recurring entries and connected spreadsheets. Tap an account to rename it, set its balance, interest, or max, or see every entry for it, and tap an entry to change it.`));
+  if (!editMode) view.appendChild(BudgetUI.element("p", "dataHint", `Balances come from each account's Hidden and Transfer entries (and its interest, when it has some). ${AHEAD_LABEL} counts the ones still to come: on the calendar, in Upcoming, and from your recurring entries and connected spreadsheets. Tap an account to rename it, set its balance, interest, or max, or see every entry for it, and tap an entry to change it. To group accounts under sections, each with its totals at the top, tap Edit, then + Section.`));
+}
+
+// Each section's totals in a table with sections (["-", title, ...] rows): { today, ahead } added up from the rows under
+// it, up to the next section, by its heading's index. amounts(index): a row's own { today, ahead }.
+function sectionTotals(rows, amounts) {
+  const totals = new Map();
+  let current = null;
+  for (let index = 1; index < rows.length; index++) {
+    if (isSeparatorRow(rows[index])) {
+      current = { today: 0, ahead: 0 };
+      totals.set(index, current);
+    } else if (current && !isBlankRow(rows[index])) {
+      const amount = amounts(index);
+      current.today = Math.round((current.today + amount.today) * 100) / 100;
+      current.ahead = Math.round((current.ahead + amount.ahead) * 100) / 100;
+    }
+  }
+  return totals;
 }
 
 // An account's balance today, with its max after it when it has one ("$500.00/$2000.00"). On a narrow screen the max can
@@ -354,6 +383,8 @@ function accountEntryRow(entry) {
   // (What it did to the account, for an account's list)
   if (typeof entry.change === "number") button.append(noTranslate(BudgetUI.element("span", `accountEntryAmount ${BudgetUI.amountClass(entry.change)}`, (entry.change > 0 ? "+" : "") + formatMoney(entry.change))));
   button.addEventListener("click", () => BudgetUI.openEntryOptions(button, entry.line, entry.date, { inHistory: entry.place === "history", stacked: true }));
+  // (Held down, or right-clicked: its quick menu, Edit, Move, Copy, and Delete)
+  BudgetUI.wireQuickMenus(item, ".accountEntryButton", (target, point) => BudgetUI.entryQuickMenu(target, entry.line, entry.date, { inHistory: entry.place === "history", stacked: true, point }));
   item.appendChild(button);
   return item;
 }
@@ -2290,8 +2321,9 @@ function followCheckedRows(moved) {
 // Rows for a table: entries and sections, with a move bar + delete checkbox in edit mode,
 // and "+ Section" buttons between rows (sections: false leaves those out). canSelect(row) false
 // locks a row out of deleting; lockedNote(row) says why when it's tapped in edit mode. editing: whether this table is
-// in edit mode (the page's, to start; the Recipes page has two tables, and only one is in it at a time).
-function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, extraClass, sections = true, canSelect = () => true, lockedNote = null, editing = editMode }) {
+// in edit mode (the page's, to start; the Recipes page has two tables, and only one is in it at a time). renderSection(tr,
+// row, index): a section's heading row's cells (Equity's have its totals), or its title across the row without one.
+function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, extraClass, sections = true, canSelect = () => true, lockedNote = null, editing = editMode, renderSection = null }) {
   // (Edit's two columns, the ≡ bar and the checkbox, have names a screen reader says, and nothing to see)
   const headers = editing ? [{ label: "Move", unseen: true }, { label: "Select", unseen: true }, ...columns] : columns;
   const tableEl = createDataTable(headers);
@@ -2311,10 +2343,13 @@ function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, ex
     }
     if (isSeparatorRow(row)) {
       tr.classList.add("categoryRow");
-      const td = document.createElement("td");
-      td.colSpan = columns.length;
-      td.textContent = row[1] ?? "";
-      tr.appendChild(td);
+      if (renderSection) renderSection(tr, row, index);
+      else {
+        const td = document.createElement("td");
+        td.colSpan = columns.length;
+        td.textContent = row[1] ?? "";
+        tr.appendChild(td);
+      }
     } else {
       renderEntry(tr, row, index);
     }
@@ -2623,7 +2658,13 @@ function openRecurringPanel(origin, index, fill = null) {
         days: true,
         hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes (or, with days picked under it, that many days behind or ahead of the current day)."
       });
-      const showPlaceholder = () => placeholder.setDate(end.value() ?? null);
+      // A reminder before each day it lands on (offered while it can still land, like Placeholder)
+      const reminder = BudgetUI.reminderField({ days: existing ? recurringReminder(existing[0], existing[5]) : null });
+      const showPlaceholder = () => {
+        placeholder.setDate(end.value() ?? null);
+        const ends = end.value();
+        reminder.el.hidden = ends instanceof Date && !isNaN(ends.getTime()) && ends <= today;
+      };
       end.input.addEventListener("input", showPlaceholder);
       end.input.addEventListener("change", showPlaceholder);
       showPlaceholder();
@@ -2652,35 +2693,95 @@ function openRecurringPanel(origin, index, fill = null) {
       const buttons = existing
         ? [{ label: "Save", kind: "primary", type: "submit" }, { label: "Delete", kind: "danger", onClick: deleteEntry }, { label: "Cancel", onClick: () => panel.close() }]
         : [{ label: "Add Entry", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
-      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, purpose.el, business.el, ...(days ? [days.el] : []), BudgetUI.buttonRow(buttons), note.el);
+      form.append(title.el, refraction.el, account.el, amount.el, frequency.el, start.el, end.el, placeholder.el, reminder.el, purpose.el, business.el, ...(days ? [days.el] : []), BudgetUI.buttonRow(buttons), note.el);
 
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        if (hasTitleArrow(title.value())) return panel.setError(TITLE_ARROW);
+      // What the form says, as saveRecurringEntry takes it, or null after saying what's wrong
+      const fail = (words) => {
+        panel.setError(words);
+        return null;
+      };
+      const readFields = () => {
+        if (hasTitleArrow(title.value())) return fail(TITLE_ARROW);
         // (A blank amount is $0.00)
         const { percent, error: percentError } = BudgetUI.readPercentField(amount);
-        if (percentError) return panel.setError(percentError);
+        if (percentError) return fail(percentError);
         const fields = { title: withAccount(title.value(), account.value(), account.from()), amount: percent !== null ? undefined : amount.value() ?? 0, percent, startDate: start.value(), endDate: end.value() };
-        if (!fields.title) return panel.setError("Give the recurring entry a title.");
-        if (account.from() && cleanString(account.from()) === cleanString(account.value())) return panel.setError(SAME_ACCOUNT);
-        if (percent === null && Number.isNaN(fields.amount)) return panel.setError("Enter an amount, like 12.50.");
-        if (percent === null && Math.abs(fields.amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
-        if (fields.startDate === undefined || fields.endDate === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+        if (!fields.title) return fail("Give the recurring entry a title.");
+        if (account.from() && cleanString(account.from()) === cleanString(account.value())) return fail(SAME_ACCOUNT);
+        if (percent === null && Number.isNaN(fields.amount)) return fail("Enter an amount, like 12.50.");
+        if (percent === null && Math.abs(fields.amount) > MAX_AMOUNT) return fail(AMOUNT_TOO_BIG);
+        if (fields.startDate === undefined || fields.endDate === undefined) return fail(`That date isn't a real day. Use ${datePattern()}.`);
         fields.frequency = frequency.value();
-        if (!fields.frequency) return panel.setError(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
+        if (!fields.frequency) return fail(`How often should it land? Use a whole number from 1 to ${MAX_FREQUENCY_COUNT}, like every 2 weeks.`);
         fields.sprite = BudgetUI.RECURRING_SPRITES[refraction.value()];
         fields.endDate = fields.endDate || "None";
         // (Left as it was when the switch isn't there: an End Date before today)
         if (!placeholder.el.hidden) fields.placeholder = placeholder.value();
         if (fields.placeholder) {
           fields.until = placeholder.until();
-          if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return panel.setError(`Enter how many days behind or ahead of the current day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
+          if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return fail(`Enter how many days behind or ahead of the current day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
         }
+        // (Its reminder: days, or null for none; hidden for one that's ended, which keeps none)
+        fields.reminder = reminder.value();
+        if (Number.isNaN(fields.reminder)) return fail(`Enter how many days before each day it lands on to be reminded: a whole number from 0 to ${MAX_REMINDER_DAYS}.`);
         fields.purpose = purpose.value();
         fields.purposePerTitle = purpose.perTitle();
         fields.business = business.value();
         if (note.value() !== currentNote) fields.note = note.value();
-        BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
+        return fields;
+      };
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const fields = readFields();
+        if (fields) BudgetUI.submit(panel, () => saveRecurringEntry(fields, index));
+      });
+
+      // Until $0, under End Date: for a Hidden or Transfer entry with an Equity account and an amount (not a %). It saves
+      // the entry as the form has it, then works out the day its account gets to $0.00 with everything planned, and asks
+      // before ending it the day before, with a one-time entry that day for only what's left (endRecurringAtZero).
+      const untilZero = BudgetUI.element("button", "budgetButton untilZeroButton", "Until $0");
+      untilZero.type = "button";
+      const showUntilZero = () => {
+        untilZero.hidden = !BudgetUI.isAccountType(refraction.value()) || !account.value() || amount.isPercent();
+      };
+      refraction.el.addEventListener("click", () => requestAnimationFrame(showUntilZero));
+      account.el.addEventListener("pick", showUntilZero);
+      amount.el.addEventListener("click", () => requestAnimationFrame(showUntilZero));
+      showUntilZero();
+      end.el.append(untilZero);
+      untilZero.addEventListener("click", async () => {
+        const fields = readFields();
+        if (!fields) return;
+        panel.setError("");
+        panel.setBusy(true);
+        const saved = await saveRecurringEntry(fields, index);
+        if (!saved.ok) {
+          panel.setBusy(false);
+          return panel.setError(saved.message || "That didn't work. Please try again.");
+        }
+        const at = index !== null ? index : recurringData.findIndex((row, i) => i >= 2 && String(row[0]).trim() !== "-" && cleanString(row[0]) === cleanString(fields.title) && getSpecialType(row[5]) === getSpecialType(fields.sprite));
+        // (A frame for the busy look to show: working the budget out ahead takes a moment)
+        await new Promise(done => requestAnimationFrame(() => setTimeout(done, 0)));
+        const plan = at === -1 ? { error: "That recurring entry couldn't be found. Please try again." } : untilZeroPlan(at);
+        panel.setBusy(false);
+        if (plan.error) {
+          if (index !== null) return panel.setError(plan.error);
+          panel.close();
+          return BudgetUI.showToast(`${fields.title} was added. ${plan.error}`, true);
+        }
+        const lastWords = plan.last !== null ? ` and ${showDate(plan.day)} gets a last one of only ${formatMoney(plan.last)}` : "";
+        if (!window.confirm(`${plan.account} gets to $0.00 on ${showDate(plan.day)} with everything planned. End ${plan.title} on ${showDate(plan.endDate)}${lastWords}, so it lands on $0.00 exactly?`)) {
+          panel.close();
+          return BudgetUI.showToast(`${plan.title} was saved, without Until $0.`);
+        }
+        panel.setBusy(true);
+        const result = await endRecurringAtZero(at);
+        panel.setBusy(false);
+        if (!result.ok) return panel.setError(result.message || "That didn't work. Please try again.");
+        BudgetUI.warnIfUnsaved(result);
+        panel.close();
+        BudgetUI.showToast(`${plan.title} ends on ${showDate(plan.endDate)}${lastWords}: ${plan.account} lands on $0.00.`);
       });
 
       // Delete: it stops from today on (it ends yesterday), and days that passed keep it

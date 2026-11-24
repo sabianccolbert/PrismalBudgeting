@@ -1747,6 +1747,14 @@ html.lightCards .goalItem.isWarning .goalStatus {
   color: #b45309;
 }
 
+html.lightCards :is(.purposeLegendItem.isWaveNear :is(.purposeAmount, .purposeShare), .panelText.isWaveNear, .isWaveNear > .waveMaxFigure) {
+  color: #b45309;
+}
+
+html.lightCards .budgetCard p.snapshotNumber.isWaveNear {
+  color: #b45309;
+}
+
 html.lightCards .logsTable tr.errorRow td {
   background: #fee2e2;
 }

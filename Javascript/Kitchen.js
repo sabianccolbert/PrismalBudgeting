@@ -533,7 +533,7 @@ window.Kitchen = (() => {
     const meal = { id: keep.id || newKitchenId(), start };
     if (fields.repeat) {
       meal.repeat = kitchenRepeat(fields.repeat);
-      if (!meal.repeat) throw new BudgetInputError("Pick how often it repeats: every 1 to 999 days, weeks, or months.");
+      if (!meal.repeat) throw new BudgetInputError(`Pick how often it repeats: every 1 to ${LIMITS.frequencyCount} days, weeks, or months.`);
       const until = fields.until ? kitchenDay(fields.until) : "";
       if (fields.until && (!until || until < start)) throw new BudgetInputError("It can stop repeating on its first day or any day after.");
       if (until) meal.until = until;

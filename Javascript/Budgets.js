@@ -228,9 +228,11 @@ window.Budgets = (() => {
     const known = listed && listed.budgets.find(budget => budget.id === shownId);
     const name = (known && known.name) || (opened && opened.name) || (tabBudget && tabBudget.name) || "";
     const invitations = listed ? listed.invitations.length : 0;
-    picker.querySelector(".budgetPickerName").textContent = name || "Budgets";
     picker.querySelector(".budgetPickerDot").hidden = invitations === 0;
-    picker.setAttribute("aria-label", `${name ? `Budget: ${name}.` : "Budgets."}${invitations > 0 ? ` ${invitations} invitation${invitations === 1 ? "" : "s"}.` : ""} Switch budgets`);
+    // (One shared with the account that it can only look at says so, beside its name)
+    const viewOnly = (known && known.canEdit === false) || (opened && opened.id === shownId && opened.canEdit === false);
+    picker.querySelector(".budgetPickerName").textContent = name ? `${name}${viewOnly ? " (view only)" : ""}` : "Budgets";
+    picker.setAttribute("aria-label", `${name ? `Budget: ${name}${viewOnly ? ", view only" : ""}.` : "Budgets."}${invitations > 0 ? ` ${invitations} invitation${invitations === 1 ? "" : "s"}.` : ""} Switch budgets`);
   }
 
   // ---------- The list that drops down ----------
@@ -254,7 +256,7 @@ window.Budgets = (() => {
   // Who a budget is shared with, in a few words: "Shared with Ben", "Shared with 3 people", "Invited: ben@example.com",
   // "From Ana" (one shared with the account), or "" (just the account's)
   function sharedWords(budget) {
-    if (!budget.owned) return `From ${budget.owner}`;
+    if (!budget.owned) return `From ${budget.owner}${budget.canEdit === false ? ", to look at" : ""}`;
     const joined = budget.people.filter(person => person.joined);
     const invited = budget.people.filter(person => !person.joined);
     if (joined.length === 1) return `Shared with ${joined[0].name}${invited.length > 0 ? `, ${invited.length} invited` : ""}`;
@@ -388,12 +390,18 @@ window.Budgets = (() => {
       title: `Share ${budget.name}`,
       build(form, panel) {
         panel.panel.classList.add("budgetsPanel");
-        form.append(el("p", "panelText", `Type the username or email of their Prismal Planning account. Once they join, they can open this budget and see and change anything in it, like you can, its connected spreadsheets and calendars too. Only you can share it, rename it, or delete it.${budget.first ? "" : " Give It To Them (beside someone who joined) makes them its owner instead, and you stay in it."}`));
+        form.append(el("p", "panelText", `Type the username or email of their Prismal Planning account. Once they join, they can open this budget and see anything in it, its connected spreadsheets and calendars too, and with Can Edit on, change anything in it, like you can (off, they only look). Only you can share it, change who can edit it, rename it, or delete it.${budget.first ? "" : " Give It To Them (beside someone who joined) makes them its owner instead, and you stay in it."}`));
         const to = BudgetUI.textField({ label: "Username or email", placeholder: "Their username or email" });
-        to.input.maxLength = 254;
+        to.input.maxLength = LIMITS.email;
         to.input.autocomplete = "off";
         to.input.spellcheck = false;
         to.input.setAttribute("autocapitalize", "none");
+        const canEdit = BudgetUI.checkboxField({ label: "Can Edit", checked: true });
+        BudgetUI.addSwitchHelp(canEdit.el, "What Can Edit does", BudgetUI.helpList([
+          ["On: ", "they can change anything in the budget, like you can."],
+          ["Off: ", "they can open it and see everything, but nothing they do changes it."],
+          ["Later: ", "change it beside their name here, or in Settings' Shared Users."]
+        ]));
         const people = el("ul", "budgetList budgetPeople");
         const showPeople = () => {
           const now = listed && listed.budgets.find(item => item.id === budget.id);
@@ -401,7 +409,7 @@ window.Budgets = (() => {
           people.hidden = people.childElementCount === 0;
         };
         showPeople();
-        form.append(to.el, BudgetUI.buttonRow([
+        form.append(to.el, canEdit.el, BudgetUI.buttonRow([
           { label: "Share", kind: "primary", type: "submit" },
           { label: "Done", onClick: () => panel.close() }
         ]), people);
@@ -413,10 +421,12 @@ window.Budgets = (() => {
           const typed = to.value();
           if (!typed) return panel.setError("Type their username or email.");
           panel.setBusy(true);
-          const result = await call("/api/budgets/share", { budget: budget.id, to: typed });
+          const result = await call("/api/budgets/share", { budget: budget.id, to: typed, canEdit: canEdit.input.checked });
           panel.setBusy(false);
           if (!result.ok || !result.data) return panel.setError(problem(result, "Couldn't share it. Please try again."));
           took(result.data);
+          const shared = listed && listed.budgets.find(item => item.id === budget.id);
+          if (result.data.invited && shared && Array.isArray(shared.people)) Limits.near("budgetPeople", shared.people.length);
           to.input.value = "";
           if (result.data.already === "joined") toast("It's already shared with them.");
           else if (result.data.already === "invited") toast("They're already invited. It's in their budget list for them to join.");
@@ -427,14 +437,23 @@ window.Budgets = (() => {
     watchClosed(sharePanel, () => document.removeEventListener("budgets:changed", refresh));
   }
 
-  // Someone a budget is shared with (or invited to it), with Stop Sharing
+  // Someone a budget is shared with (or invited to it), with their Can Edit switch and Stop Sharing (and Give It To Them).
+  // panel: the window it's in, which says what went wrong.
   function personItem(budget, person, panel) {
     const item = el("li", "budgetItem");
     const about = el("div", "budgetOpen");
     const name = el("span", "budgetName", person.name);
     name.translate = false;
-    about.append(name, el("span", "budgetDetail", person.joined ? "Joined" : "Invited, hasn't joined yet"));
-    item.append(about);
+    about.append(name, el("span", "budgetDetail", `${person.joined ? "Joined" : "Invited, hasn't joined yet"}${person.canEdit === false ? ", can only look" : ""}`));
+    item.append(about, canEditSwitch(person, async (on) => {
+      const result = await call("/api/budgets/people", { budget: budget.id, person: person.id, canEdit: on });
+      if (!result.ok || !result.data || result.data.error) {
+        panel.setError(problem(result, result.data?.error || "That didn't work. Please try again."));
+        return false;
+      }
+      took(result.data);
+      return true;
+    }));
     // Someone who joined can be given the budget (never the account's first, which is always its own)
     if (person.joined && !budget.first) {
       item.append(button("Give It To Them", "budgetShare", async (event) => {
@@ -449,7 +468,7 @@ window.Budgets = (() => {
         toast(`${budget.name} is ${person.name}'s now. You're still in it.`);
         // (The page that has it open reloads, so it shows what an owner can't do anymore)
         if (budget.id === id()) reopenPage();
-      }, `Give ${budget.name} to ${person.name}`));
+      }, `Give It To Them: ${budget.name}, to ${person.name}`));
     }
     item.append(button(person.joined ? "Stop Sharing" : "Cancel Invite", "danger budgetShare", async (event) => {
       const what = person.joined ? `Stop sharing ${budget.name} with ${person.name}? They won't be able to open it anymore. What they added stays in it.` : `Take back the invitation to ${person.name}?`;
@@ -460,8 +479,28 @@ window.Budgets = (() => {
       if (target.isConnected) target.disabled = false;
       if (!result.ok || !result.data) return panel.setError(problem(result, "That didn't work. Please try again."));
       took(result.data);
-    }, `${person.joined ? "Stop sharing with" : "Cancel the invitation to"} ${person.name}`));
+    }, `${person.joined ? "Stop Sharing with" : "Cancel Invite for"} ${person.name}`));
     return item;
+  }
+
+  // A person's Can Edit, as a small pill switch beside their name: send(on) resolves to whether it was saved (when it
+  // wasn't, the switch goes back). Calendar Fractals' people use it too (Fractals.js).
+  function canEditSwitch(person, send) {
+    const label = el("label", "canEditSwitch");
+    const input = el("input", "pillSwitch");
+    input.type = "checkbox";
+    input.checked = person.canEdit !== false;
+    input.setAttribute("aria-label", `${person.name} can edit`);
+    input.addEventListener("change", async () => {
+      input.disabled = true;
+      const saved = await send(input.checked);
+      if (input.isConnected) {
+        input.disabled = false;
+        if (!saved) input.checked = !input.checked;
+      }
+    });
+    label.append(input, el("span", "canEditWords", "Can Edit"));
+    return label;
   }
 
   // ---------- New, rename, delete, leave ----------
@@ -477,7 +516,7 @@ window.Budgets = (() => {
       build(form, panel) {
         form.append(el("p", "panelText", "It starts empty, with its own calendar, entries, Equity, and Bob. You can share it once it's made."));
         const name = BudgetUI.textField({ label: "Name", placeholder: "Like Household or Vacation" });
-        name.input.maxLength = 30;
+        name.input.maxLength = LIMITS.budgetName;
         form.append(name.el, BudgetUI.buttonRow([
           { label: "Make It", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }
@@ -493,6 +532,8 @@ window.Budgets = (() => {
             return panel.setError(problem(result, "Couldn't make it. Please try again."));
           }
           took(result.data);
+          // (Opening it reloads the page: the next one says so when budgets of its own come near their limit)
+          Limits.nearNext("ownBudgets", listed.budgets.filter(item => item.owned).length);
           const made = listed.budgets.find(budget => budget.id === result.data.made);
           if (made) await switchTo(made);
           panel.setBusy(false);
@@ -509,7 +550,7 @@ window.Budgets = (() => {
       title: `Rename ${budget.name}`,
       build(form, panel) {
         const name = BudgetUI.textField({ label: "Name", value: budget.name });
-        name.input.maxLength = 30;
+        name.input.maxLength = LIMITS.budgetName;
         form.append(name.el, BudgetUI.buttonRow([
           { label: "Rename", kind: "primary", type: "submit" },
           { label: "Cancel", onClick: () => panel.close() }
@@ -610,6 +651,11 @@ window.Budgets = (() => {
     switchTo,
     openNewBudget,
     renderManager,
-    sharedWords
+    sharedWords,
+    // (Settings' Shared Users: each budget's people, their Can Edit, Stop Sharing, and Share to add someone)
+    openShare,
+    personItem,
+    canEditSwitch,
+    listed: () => listed
   };
 })();

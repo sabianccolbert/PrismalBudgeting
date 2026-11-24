@@ -178,6 +178,62 @@ function renderQuickCalendarIcons() {
   }));
 }
 
+// Sharing's Shared Users: every budget and Calendar Fractal of the account's own, each with the people it's shared with
+// (their Can Edit switch, and Stop Sharing or Remove: Budgets.js personItem, Fractals.js personRow) and Share, which opens
+// its own Share window to add someone. A budget's fractal is its people's, so only the account's own fractals are here.
+// Drawn again as either list changes.
+document.getElementById("sharedUsersButton")?.addEventListener("click", (event) => openSharedUsers(event.currentTarget));
+
+function openSharedUsers(origin) {
+  let draw = null;
+  const panelApi = BudgetUI.openPanel({
+    origin,
+    size: "large",
+    title: "Shared Users",
+    build(form, panel) {
+      form.addEventListener("submit", (submitted) => submitted.preventDefault());
+      const box = BudgetUI.element("div", "sharedUsers");
+      const group = (heading, items) => {
+        if (items.length === 0) return [];
+        return [BudgetUI.element("h3", "budgetListHeading", heading), ...items];
+      };
+      const thing = (name, people, row, share) => {
+        const part = BudgetUI.element("div", "sharedThing");
+        const title = BudgetUI.element("div", "sharedThingHead");
+        title.append(BudgetUI.noTranslate(BudgetUI.element("span", "sharedThingName", name)), settingsButton("Share", "", (clicked) => share(clicked.currentTarget)));
+        const list = BudgetUI.element("ul", "budgetList budgetPeople");
+        list.append(...people.map(row));
+        part.append(title, people.length > 0 ? list : BudgetUI.element("p", "panelHint", "Not shared with anyone."));
+        return part;
+      };
+      draw = () => {
+        const budgets = (window.Budgets.listed()?.budgets || []).filter(budget => budget.owned);
+        const fractals = (window.Fractals.data()?.fractals || []).filter(fractal => !fractal.perBudget && !fractal.sharedBy);
+        box.replaceChildren(
+          BudgetUI.element("p", "panelText", "Everyone each of your budgets and Calendar Fractals is shared with. Can Edit on lets them change it (a budget's anything, a fractal's entries); off, they only look. Share adds someone."),
+          ...group("Budgets", budgets.map(budget => thing(budget.name, budget.people || [], (person) => window.Budgets.personItem(budget, person, panel), (button) => window.Budgets.openShare(budget, button)))),
+          ...group("Calendar Fractals", fractals.map(fractal => thing(fractal.name, fractal.people || [], (person) => window.Fractals.personRow(fractal, person, panel), (button) => window.Fractals.openShare(button, fractal))))
+        );
+      };
+      form.append(box, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+      draw();
+      document.addEventListener("budgets:changed", draw);
+      document.addEventListener("fractals:changed", draw);
+      // (Both lists, fresh, in case they changed somewhere else)
+      Promise.all([window.Budgets.list(true), window.Fractals.load(true)]).then(() => draw());
+    }
+  });
+  // (Once it closes, it stops following the lists)
+  const watch = new MutationObserver(() => {
+    if (panelApi.panel.isConnected && !panelApi.panel.classList.contains("isClosing")) return;
+    watch.disconnect();
+    document.removeEventListener("budgets:changed", draw);
+    document.removeEventListener("fractals:changed", draw);
+  });
+  watch.observe(panelApi.panel, { attributes: true, attributeFilter: ["class"] });
+  if (panelApi.panel.parentNode) watch.observe(panelApi.panel.parentNode, { childList: true });
+}
+
 // With more than one budget, which one the reminders are about (the account's first, until another is picked)
 function renderReminderBudget() {
   const field = document.getElementById("reminderBudgetField");
@@ -945,10 +1001,10 @@ async function changePassword(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const newPassword = document.getElementById("newPassword").value;
-  // The API's rule (passwords.js): 8 to 256 characters, any at all, counted as Unicode characters
+  // The API's rule (passwords.js): LIMITS.passwordMin to LIMITS.password characters, any at all, counted as Unicode characters
   const length = [...newPassword.normalize("NFKC")].length;
-  if (length < 8 || length > 256) {
-    BudgetUI.showToast(length < 8 ? "Your new password must be at least 8 characters." : "Your new password can be at most 256 characters.", true);
+  if (length < LIMITS.passwordMin || length > LIMITS.password) {
+    BudgetUI.showToast(length < LIMITS.passwordMin ? `Your new password must be at least ${LIMITS.passwordMin} characters.` : `Your new password can be at most ${LIMITS.password} characters.`, true);
     return;
   }
   if (newPassword !== document.getElementById("newPasswordAgain").value) {
@@ -1053,8 +1109,8 @@ document.addEventListener("visibilitychange", async () => {
 
 // Prismal Planning is for people 18 and older. The birth date given when signing up can be fixed here (like a
 // typo), never to one under 18 (the API checks it too).
-const MIN_AGE = 18;
-const MAX_AGE = 120;
+const MIN_AGE = LIMITS.ageMin;
+const MAX_AGE = LIMITS.age;
 
 // The Birth Date card (an account from before birth dates has only an age, so its box starts empty). The box shows it in
 // this device's date format.
@@ -1191,7 +1247,7 @@ function setFormBusy(form, busy) {
 // account shares with admin@prismalplanning.org can be connected. Each one shows whether it's confirmed or waiting (with
 // Send Again), and Remove. Adding one needs the account's own email verified first.
 
-const MAX_OTHER_EMAILS = 5;
+const MAX_OTHER_EMAILS = LIMITS.otherEmails;
 const SHARING_EMAIL = "admin@prismalplanning.org";
 
 // The list, and Add Email (once the account's own email is verified)
@@ -1251,7 +1307,7 @@ function openOtherEmailPanel(origin) {
       email.input.type = "email";
       email.input.autocomplete = "email";
       email.input.spellcheck = false;
-      email.input.maxLength = 254;
+      email.input.maxLength = LIMITS.email;
       form.append(email.el, BudgetUI.buttonRow([
         { label: "Send Link", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }
@@ -1657,6 +1713,7 @@ function renderPasskeys() {
     : `Add a passkey for another device or password manager: ${steps}.`;
   document.getElementById("passkeyAddButton").textContent = count === 0 ? "Turn On" : "Add Passkey";
   const nameInput = document.getElementById("passkeyName");
+  nameInput.maxLength = LIMITS.passkeyName;
   if (!nameInput.value) nameInput.value = Passkeys.deviceName();
 }
 

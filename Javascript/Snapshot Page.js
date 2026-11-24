@@ -119,6 +119,7 @@
             panel.setError(result.status === 0 ? "Couldn't reach the server. Please try again." : "Couldn't make the icon. Please try again.");
             return;
           }
+          Limits.nearNext("snapshotIcons", result.data.icons);
           const url = `/snapshot.html?key=${encodeURIComponent(result.data.key)}&setup=1`;
           if (typeof window.transitionTo === "function") window.transitionTo(url);
           else window.location.href = url;
@@ -252,14 +253,14 @@
     return {
       keeps: true,
       title: (ref) => (typeof title === "function" ? title(ref) : title),
-      render(body, ref, keep) {
-        const now = key(ref);
+      render(body, ref, keep, id) {
+        const now = key(ref, id);
         if (cache && keep.graph && keep.key === now) {
           keep.graph.draw();
           if (keep.graph.el.parentNode !== body) body.replaceChildren(keep.graph.el);
           return;
         }
-        const graph = make(ref);
+        const graph = make(ref, id);
         if (!graph) throw new Gone();
         keep.graph = graph;
         keep.key = now;
@@ -270,6 +271,35 @@
 
   // The tracker row with this title (as kept: "⭕️Food" is the one that counts transfers), or -1
   const trackerIndexOf = (title) => trackerData.findIndex((row, index) => index > 0 && !isSeparatorRow(row) && String(row[0]).trim() === title);
+  // A tracker card's own days on this device (Bob Page.js trackerDays), by the card's id
+  const trackerDaysKey = (id) => `snapshot:${id}`;
+  const TRACKER_CARDS = ["tracker.row", "graph.tracker"];
+
+  // A single wavelength's card: whether its wavelength is still there (by its id, "none" for Undefined), its name, and
+  // the card Bob Page.js's days work with (kept with the card between drawings: its own days on this device, and a redraw)
+  const waveKnown = (id) => id === "none" || wavelengthList().some(wave => wave.id === id);
+  const waveTitle = (id) => (id === "none" ? "Undefined" : waveKnown(id) ? wavelengthName(id) : "A Wavelength");
+  function waveCardOf(keep, id) {
+    if (!keep.waveCard) keep.waveCard = { waveKey: `snapshot:${id}`, redraw: () => draw() };
+    keep.waveCard.waveDays = waveDaysOf(keep.waveCard.waveKey);
+    return keep.waveCard;
+  }
+
+  // A single recurring entry's card: its ref ([title, type] as JSON) read, and its row now (by its title and type), or null
+  const RECURRING_NEXT_DAYS = 366; // How far ahead its card looks for the next day it lands
+  function readRecurringRef(ref) {
+    try {
+      const parts = JSON.parse(ref);
+      return Array.isArray(parts) && typeof parts[0] === "string" && typeof parts[1] === "string" ? parts : null;
+    } catch {
+      return null;
+    }
+  }
+  function recurringOf(ref) {
+    const parts = readRecurringRef(ref);
+    if (!parts) return null;
+    return getParsedRecurringRows().find(row => cleanString(row.title) === cleanString(parts[0]) && baseSprite(row.sprite) === baseSprite(parts[1])) || null;
+  }
   // The goal a card is for: its place and its name ("2:Savings"), found at its place, or by its name if it moved
   function goalFor(ref) {
     const goals = accountsData?.goals || [];
@@ -408,14 +438,50 @@
         numberBody(body, row.value, row.note, { amount: row.amount, open: row.open });
       }
     },
+    // (Each tracker card adds up its own days on this device, picked in Edit: see trackerDaysKey)
     "tracker.row": {
       title: (ref) => ref,
-      render(body, ref) {
+      render(body, ref, keep, id) {
         const index = trackerIndexOf(ref);
         if (index === -1) throw new Gone();
-        const { from, to } = trackerDays();
+        const key = trackerDaysKey(id);
+        const { from, to } = trackerDays(key);
         const figure = trackerTotals(from, to).get(index) || { total: 0 };
-        numberBody(body, formatMoney(figure.total), `From ${showDay(from)} through ${showDay(to)}`, { amount: figure.total, open: (origin) => openTrackerRowWindow(origin, index) });
+        numberBody(body, formatMoney(figure.total), `From ${showDay(from)} through ${showDay(to)}`, { amount: figure.total, open: (origin) => openTrackerRowWindow(origin, index, key) });
+      }
+    },
+    // One wavelength: what it came to in its own days on this device (like a Wavelength Planning card's: picked in Edit),
+    // its share of everything on a wavelength, and its max (orange near it, red past it: Bob Page.js waveMaxStanding)
+    "bob.wavelength": {
+      title: (ref) => waveTitle(ref),
+      render(body, ref, keep, id) {
+        if (!waveKnown(ref)) throw new Gone();
+        const card = waveCardOf(keep, id);
+        const range = purposeRangeOf(card);
+        const totals = purposeTotals(range.from, range.to);
+        const sum = totals.slices.reduce((all, slice) => all + slice.total, 0);
+        const standing = waveMaxStanding(ref, totals.slices.find(slice => slice.key === ref)?.total ?? 0, sum);
+        numberBody(body, standing.amount, `${standing.share} of the spending on a wavelength, from ${showDay(range.from)} through ${showDay(range.to)}`, { open: (origin) => openPurposeWindow(origin, ref, card) });
+        if (standing.level) body.querySelector(".snapshotNumber")?.classList.add(standing.level);
+      }
+    },
+    // One recurring entry (ref: [its title, its type] as JSON): its amount, how often, and the next day it lands
+    "recurring.entry": {
+      title: (ref) => recurringOf(ref)?.title || readRecurringRef(ref)?.[0] || "A Recurring Entry",
+      render(body, ref) {
+        const row = recurringOf(ref);
+        if (!row) throw new Gone();
+        const next = recurringHitDays(row.parsed, today, addDays(today, RECURRING_NEXT_DAYS))[0];
+        const amount = row.percent !== null ? `${row.percent < 0 ? "-" : ""}${showPercent(row.percent)}` : formatMoney(row.amt);
+        const words = [describeFrequency(formatFrequency(row.parsed.frequency)), next ? `next on ${showDay(next)}` : "not in the next year"];
+        numberBody(body, amount, words.join(", "), { amount: row.percent !== null ? row.percent : row.amt });
+      }
+    },
+    // One Calendar Fractal's next 7 days (ref: its id)
+    "calendar.fractal": {
+      title: (ref) => `${(window.Fractals && window.Fractals.nameOf(ref)) || "A Calendar"}: The Next 7 Days`,
+      render(body, ref) {
+        calendarBody(body, today, addDays(today, 6), ref);
       }
     },
     "equity.total": {
@@ -506,11 +572,12 @@
       spectrum.draw();
       return spectrum;
     }),
-    // (Made again when the row moves, since the graph works from its place in the tracker)
-    "graph.tracker": graphType((ref) => `${ref}, Added Up`, (ref) => {
+    "graph.wavelength": graphType((ref) => `${waveTitle(ref)}, Week By Week`, (ref) => (waveKnown(ref) ? wavelengthGraph(ref) : null), { key: (ref) => `${ref}|${waveTitle(ref)}` }),
+    // (Made again when the row moves, since the graph works from its place in the tracker, and when its days are picked)
+    "graph.tracker": graphType((ref) => `${ref}, Added Up`, (ref, id) => {
       const index = trackerIndexOf(ref);
-      return index === -1 ? null : trackerGraph(index, ref);
-    }, { key: (ref) => String(trackerIndexOf(ref)) }),
+      return index === -1 ? null : trackerGraph(index, ref, trackerDaysKey(id));
+    }, { key: (ref, id) => { const days = trackerDays(trackerDaysKey(id)); return `${trackerIndexOf(ref)}|${days.from.getTime()}|${days.to.getTime()}`; } }),
     "graph.gem": graphType((ref) => (gemFor(ref) ? `${presetName(gemFor(ref), describeDebt)} Over Time` : "A Gem Over Time"), (ref) => {
       const gem = gemFor(ref);
       if (!gem) return null;
@@ -535,12 +602,14 @@
   }
 
   // The calendar's entries (Fractals.js) from one day through another, each day's under it
-  function calendarBody(body, from, to) {
+  function calendarBody(body, from, to, fractalId = null) {
     if (window.SNAPSHOT_KEY) return body.append(el("p", "panelHint", "Your calendar's entries show here when you're logged in (a no-login icon doesn't read your calendar)."));
     if (!window.Fractals || !window.Fractals.data()) return body.append(el("p", "panelHint", "Loading your calendar..."));
+    if (fractalId && !window.Fractals.nameOf(fractalId)) throw new Gone();
     const items = [];
     for (let day = from; day <= to; day = addDays(day, 1)) {
       for (const part of window.Fractals.eventsOn(day)) {
+        if (fractalId && part.event.fractal !== fractalId) continue;
         items.push({ text: `${from.getTime() === to.getTime() ? "" : `${showDay(day)} `}${window.Fractals.partWords(part, false)}: ${part.event.title}`, figure: "" });
       }
     }
@@ -648,9 +717,30 @@
       head.prepend(handle);
       head.append(remove);
     }
-    // (A Lowest card's own until, in Edit: how far past the calendar it looks, or as far as this device's Lowest does)
+    // (A Lowest card's own until, in Edit: how far past the calendar it looks, or as far as this device's Lowest does; a
+    // tracker card's own From and To, kept from one drawing to the next so a box being typed in stays)
     const untilField = editing && card.type === "home.lowest" ? untilPicker(card, list, title) : null;
-    section.replaceChildren(head, ...(untilField ? [untilField] : []), body);
+    let daysField = null;
+    if (editing && TRACKER_CARDS.includes(card.type)) {
+      if (!entry.days) entry.days = trackerDateBoxes(trackerDaysKey(card.id));
+      entry.days.show();
+      daysField = entry.days.el;
+      daysField.classList.add("snapshotDays");
+    }
+    // (A single wavelength's own Days, the same way: Past, Since Last Paycheck, or From And To)
+    if (editing && card.type === "bob.wavelength" && waveKnown(card.ref)) {
+      const waveCard = waveCardOf(entry.keep, card.id);
+      if (!entry.days) entry.days = purposeDaysControl(waveCard);
+      entry.days.show(purposeRangeOf(waveCard));
+      daysField = entry.days.el;
+      daysField.classList.add("snapshotDays");
+    }
+    if (daysField && daysField.parentNode === section) {
+      // (Left where it is: taken out and put back, a box loses its focus)
+      for (const child of [...section.children]) if (child !== daysField) child.remove();
+      section.insertBefore(head, daysField);
+      section.append(body);
+    } else section.replaceChildren(head, ...(untilField ? [untilField] : []), ...(daysField ? [daysField] : []), body);
     try {
       if (!type) throw new Gone();
       if (!type.keeps) body.replaceChildren();
@@ -765,6 +855,11 @@
     const accounts = shared.summaries();
     const bobDef = (id) => CARDS.find(def => def.id === id);
     const card = (label, type, ref = "") => ({ label, type, ref });
+    // (One of each: a wavelength, Undefined too; a recurring entry, by its title and type; a Calendar Fractal of the account's
+    // or the budget's, or one linked from elsewhere)
+    const waves = [...wavelengthList(), { id: "none", name: "Undefined" }];
+    const recurring = getParsedRecurringRows();
+    const fractals = window.Fractals && window.Fractals.data() && !window.SNAPSHOT_KEY ? [...window.Fractals.data().fractals, ...window.Fractals.linkedFractals()] : [];
     return [
       { label: "Spectrum Graph", about: "Bob's one graph to compare anything: In Bank, accounts, tracker rows, and more", type: "graph.spectrum" },
       { label: "Main Budget", about: "Home's numbers: In Bank, the lowest it gets, and what's coming", items: [
@@ -776,19 +871,21 @@
         card("Spectrum Graph", "bob.card.spectrum"),
         { label: "Goals", items: [card("All of your goals", "bob.card.goals"), ...goals.map((goal, index) => card(`🎯 ${goalName(goal)}`, "bob.goal", `${index}:${goalName(goal)}`))] },
         ...["purposes", "payday", "pace", "bills", "weekly", "catchup", "refund"].map(id => card(bobDef(id).title, `bob.card.${id}`)),
+        { label: "One wavelength", items: waves.map(wave => card(`🌈 ${wave.name}`, "bob.wavelength", wave.id)) },
         { label: "Data", items: [card("All of Data", "bob.card.data"), ...dataRows().map(row => card(row.label, "bob.data", row.label))] }
       ] },
-      { label: "Tracker", about: "What each row came to in the last 3 months", items: rows.map(title => card(title, "tracker.row", title)) },
+      { label: "Tracker", about: "What each row came to in the last 3 months, or the days you pick for its card in Edit", items: rows.map(title => card(title, "tracker.row", title)) },
       { label: "Equity", about: "Your accounts, and the Total", items: [card("Total (In Bank and every account)", "equity.total"), ...accounts.map(summary => card(summary.name, "equity.account", summary.name))] },
-      { label: "Recurring Entries", about: "What they come to each month", items: [card("Each month", "recurring.month")] },
+      { label: "Recurring Entries", about: "What they come to each month, or one of them", items: [card("Each month", "recurring.month"), ...recurring.map(row => card(`${baseSprite(row.sprite)} ${row.title}`, "recurring.entry", JSON.stringify([row.title, baseSprite(row.sprite)])))] },
       { label: "Gems", about: "The Accrual Calculator's gems: when each is paid off or reached", items: gems.map(gem => card(`💠 ${presetName(gem, describeDebt)}`, "gem", gem.id)), empty: "No gems yet: save one in the Accrual Calculator (Menu)." },
       { label: "Crystals", about: "The Paycheck Calculator's crystals: each one's take-home pay", items: crystals.map(crystal => card(`💎 ${presetName(crystal, describeCrystal)}`, "crystal", crystal.id)), empty: "No crystals yet: save one in the Paycheck Calculator (Menu)." },
-      { label: "Calendar", about: "Your calendar's entries", items: [card("Today", "calendar.today"), card("The next 7 days", "calendar.week")] },
+      { label: "Calendar", about: "Your calendar's entries, or one Calendar Fractal's", items: [card("Today", "calendar.today"), card("The next 7 days", "calendar.week"), ...fractals.map(fractal => card(`📅 ${fractal.name}: the next 7 days`, "calendar.fractal", fractal.id))] },
       { label: "Graphs", about: "Every graph on the site", items: [
         card("Spectrum Graph", "graph.spectrum"), card("In Bank over time", "graph.inBank"), card("Equity over time", "graph.equity"), card("Goals over time", "graph.goals"),
         card("Spent each week", "graph.spent"), card("Spent after each payday", "graph.paydays"), card("Recurring entries each month", "graph.recurring"),
         card("Each wavelength, week by week", "graph.wavelengths"), card("Catchup entries, added up", "graph.catchups"), card("Purchases, added up", "graph.purchases"),
         card("Big bills, added up", "graph.bills"),
+        { label: "One wavelength, week by week", items: waves.map(wave => card(`🌈 ${wave.name}`, "graph.wavelength", wave.id)) },
         { label: "Tracker rows", items: rows.map(title => card(title, "graph.tracker", title)), empty: "No tracker rows yet." },
         { label: "Gems", items: gems.map(gem => card(`💠 ${presetName(gem, describeDebt)}`, "graph.gem", gem.id)), empty: "No gems yet." }
       ] }

@@ -241,7 +241,7 @@ window.KitchenUI = (() => {
     const count = el("input", "frequencyCount");
     count.type = "text";
     count.inputMode = "numeric";
-    count.maxLength = 3;
+    count.maxLength = String(LIMITS.frequencyCount).length;
     count.value = String(meal && meal.repeat ? meal.repeat.count : 1);
     count.setAttribute("aria-label", "How many days, weeks, or months");
     const unit = el("select", "selectInput frequencyUnit");
@@ -262,7 +262,7 @@ window.KitchenUI = (() => {
       read() {
         if (!repeats.input.checked) return { repeat: null, until: null };
         const number = Number(count.value.trim());
-        if (!Number.isInteger(number) || number < 1 || number > 999) return { error: "Pick how often it repeats: every 1 to 999 days, weeks, or months." };
+        if (!Number.isInteger(number) || number < 1 || number > LIMITS.frequencyCount) return { error: `Pick how often it repeats: every 1 to ${LIMITS.frequencyCount} days, weeks, or months.` };
         const stop = until.value();
         if (stop === undefined) return { error: "End repeat isn't a date. Clear it, or pick a day." };
         return { repeat: { count: number, unit: unit.value }, until: stop ? formatToYMD(stop) : null };

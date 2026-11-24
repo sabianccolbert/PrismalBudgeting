@@ -30,10 +30,10 @@ const SESSION_KEYS = ['prismal_jwt', 'prismal_username', 'prismal_last_activity'
 // characters, any you can see, counted the way a person does (an emoji is one). Passwords: 8 to 256
 // characters, any at all, counted as Unicode characters (an emoji joined from several, like a family, is
 // several).
-const MIN_USERNAME = 5;
-const MAX_USERNAME = 30;
-const MIN_PASSWORD = 8;
-const MAX_PASSWORD = 256;
+const MIN_USERNAME = LIMITS.usernameMin;
+const MAX_USERNAME = LIMITS.username;
+const MIN_PASSWORD = LIMITS.passwordMin;
+const MAX_PASSWORD = LIMITS.password;
 // Invisible characters (control, format, and default-ignorable ones, and the blank Braille pattern),
 // except the joiners, variation selectors, and tags inside emoji (the API's HIDDEN_CHARACTERS)
 const HIDDEN_CHARACTERS = /(?![\u200C\u200D\uFE00-\uFE0F\u{E0020}-\u{E007F}\u{E0100}-\u{E01EF}])[\p{Cc}\p{Cf}\p{Cs}\p{Default_Ignorable_Code_Point}\u2800]/u;
@@ -66,8 +66,8 @@ function passwordProblem(value) {
 // Prismal Planning is for people 18 and older (the API's readBirthdate): an account can't be made for anyone younger.
 // The birth date is typed in this device's date format (a 2-digit year is a past one: 90 is 1990), or picked on a
 // calendar (its button, from Dates.js, up to today), and goes to the API as YYYY-MM-DD.
-const MIN_AGE = 18;
-const MAX_AGE = 120;
+const MIN_AGE = LIMITS.ageMin;
+const MAX_AGE = LIMITS.age;
 const pageOpened = createSafeMidnight(new Date());
 birthdateInput.placeholder = datePattern();
 birthdateInput.translate = false;

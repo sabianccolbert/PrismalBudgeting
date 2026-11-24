@@ -52,9 +52,9 @@ const TABLE_SHAPES = {
 // Limits on what's typed in. Amounts go up to a billion dollars (the API's Quick Budget has the same limit):
 // bigger numbers can't be kept to the cent, and past 1e21 JavaScript writes them as "1e+21". Titles go up to 100
 // characters, like Quick Budget's and connected spreadsheets'.
-const MAX_AMOUNT = 1000000000;
+const MAX_AMOUNT = LIMITS.amount;
 const AMOUNT_TOO_BIG = "Amounts can be up to $1,000,000,000.";
-const MAX_TITLE = 100;
+const MAX_TITLE = LIMITS.title;
 
 // An entry for an Equity account keeps its own title, with the account after an arrow: "Payday Transfer → Savings"
 // (see splitAccount). One with no title of its own is just the account's name, like "Savings".
@@ -62,7 +62,7 @@ const ACCOUNT_ARROW = "→";
 // A Transfer can come from another Equity account instead of In Bank, kept before the account it goes to: "Move ← Savings
 // → HSA" (see fromAccount)
 const FROM_ARROW = "←";
-const MAX_ENTRY_TITLE = 233; // A title (100), the account it comes from (60), the account it goes to (60), and the arrows
+const MAX_ENTRY_TITLE = LIMITS.entryTitle; // A title (100), the account it comes from (60), the account it goes to (60), and the arrows
 
 // Load/Save Safety
 let workspaceLoaded = false;      // saveChanges refuses to run until real data has loaded
@@ -306,6 +306,12 @@ function openedBudget(budget) {
 // Is the budget shared (anyone else can open it)? Some things only the person who set them up can keep up to date then
 // (see CONNECTED SPREADSHEETS).
 const budgetIsShared = () => !!budgetInfo && (budgetInfo.shared || !budgetInfo.owned);
+
+// Can this account only look at the budget (shared with it without Can Edit)? Then no change is made, and nothing is
+// saved: what the page works out as it loads (the daily update) stays on the page, like a Snapshot icon's, until someone
+// who can change the budget opens it. The API refuses their saves anyway.
+const budgetViewOnly = () => !!budgetInfo && budgetInfo.canEdit === false;
+const VIEW_ONLY_WORDS = "You can look at this budget, but not change it. Ask its owner to turn on Can Edit for you.";
 
 // The account signed in here (Change Logs say who made each change in a shared budget)
 const signedInName = () => { try { return localStorage.getItem("prismal_username") || ""; } catch (e) { return ""; } };
@@ -786,8 +792,9 @@ function formatHistoryCell(cellText, cellDate) {
   return kept.join("\n");
 }
 
-// Save which day the daily update has processed through
+// Save which day the daily update has processed through (never from a page that only looks: its update isn't saved)
 async function saveProcessedDate(dateString) {
+  if (budgetViewOnly()) return true;
   const token = localStorage.getItem('prismal_jwt');
   if (!token) return false;
 
@@ -829,9 +836,9 @@ entries with the account picked, see OTHER ACCOUNTS below.
 */
 
 // Change Logs rows kept. Each table is saved as a single database row (2 MB max), so this is capped.
-const MAX_LOG_ROWS = 1000;
+const MAX_LOG_ROWS = LIMITS.logRows;
 // The most one table can hold when it's saved (the API refuses more)
-const MAX_TABLE_BYTES = 1900000;
+const MAX_TABLE_BYTES = LIMITS.tableBytes;
 
 // Tracker rows that updateTrackerTab fills in itself (their titles and aliases aren't user-edited, and they
 // can't be deleted)
@@ -845,7 +852,8 @@ const NEW_TRACKER_ROWS = [["Unknown", ["Misc", "Catchup", "Other"]]];
 const ROW_TABLES = {
   recurring: { name: "Recurring", headerRows: 2, get: () => recurringData, set: (rows) => { recurringData = rows; }, categoryRow: (title) => ["-", title, "", "", "", "-"] },
   tracker:   { name: "Tracker",   headerRows: 1, get: () => trackerData,   set: (rows) => { trackerData = rows; },   categoryRow: (title) => ["-", title, "", "", "-"] },
-  accounts:  { name: "Accounts",  headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; } },
+  // (Equity's sections are rows like Recurring's, ["-", title, ...]: accountRows and the API's readAccounts skip them)
+  accounts:  { name: "Accounts",  headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; }, categoryRow: (title) => ["-", title, ...new Array(TABLE_SHAPES.accounts.cols - 2).fill("")] },
   // The Recipes page's Pantry (sections like Recurring's) and its list of foods (see THE KITCHEN)
   pantry:    { name: "Pantry",    headerRows: 0, get: () => kitchenData.pantry, set: (rows) => { kitchenData.pantry = rows; }, categoryRow: (title) => ["-", title, null, "", ""] },
   foods:     { name: "Foods",     headerRows: 0, get: () => kitchenData.foods, set: (rows) => { kitchenData.foods = rows; } }
@@ -1322,8 +1330,103 @@ function saveRecurringEntry(fields, index = null) {
       }
     }
     noteEntryBusiness(fields.title, fields.business);
-    followRecurringNote(before, fields);
+    // (Its notes go by the row as it's saved: a change that leaves its type out, like End It Then's, keeps the row's)
+    const saved = index === null ? null : recurringData[index];
+    followRecurringNote(before, saved ? { ...fields, title: String(saved[0]), sprite: String(saved[5] || "") } : fields);
     return result;
+  });
+}
+
+// Until $0 (a recurring entry's End Date button): the Equity account a recurring Hidden or Transfer entry pays into (or takes
+// from) gets to $0.00 on some day, with everything planned (projectBudget, up to UNTIL_ZERO_YEARS ahead or the entry's own
+// End Date). The entry ends the day before, and that day gets a one-time entry of only what it takes, so the account lands
+// on $0.00 exactly. untilZeroPlan(index) says what it would do: { title, account, day (the day it gets to $0.00), last (that
+// day's one-time entry, signed like the recurring entry's amount, or null when it needs none), endDate (the recurring
+// entry's new End Date) }, or { error } (a % entry, one without an account, one at $0.00 already, one each landing takes
+// further from $0.00, or one that doesn't get there in time).
+const UNTIL_ZERO_YEARS = 10;
+function untilZeroPlan(index) {
+  const row = recurringData[index];
+  const title = String(row?.[0] ?? "").trim();
+  if (!row || !title || title === "-") return { error: "That recurring entry couldn't be found. Please try again." };
+  const parsed = parseRecurringRow(row);
+  const { account } = splitAccount(title);
+  if (!parsed || !account || getSpecialType(String(row[5] || "")) === "❗️") return { error: "Until $0 is for a Hidden or Transfer entry with an Equity account: it ends the entry once that account gets to $0.00." };
+  if (percentOf(row[5]) !== null) return { error: "Until $0 needs an amount, not a %: a % entry's payments get smaller with its account, so it never quite gets there." };
+  const summaries = accountSummaries();
+  const summary = summaries.find(item => cleanString(item.name) === cleanString(account));
+  if (!summary) return { error: `${account} isn't one of your Equity accounts anymore.` };
+  const start = summary.today;
+  if (Math.abs(start) < 0.005) return { error: `${summary.name} is at $0.00 already.` };
+  const each = accountChange(String(row[5] || ""), parseAmount(row[1]));
+  if (!(start < 0 ? each > 0 : each < 0)) return { error: `Each ${title} takes ${summary.name} further from $0.00 (it's ${formatMoney(start)} today), so it never gets there.` };
+  const far = addMonths(today, 12 * UNTIL_ZERO_YEARS);
+  const ends = parsed.endDate && parsed.endDate < far ? parsed.endDate : far;
+  const projection = projectBudget(ends, summaries);
+  let day = null;
+  for (let date = addDays(today, 1); date <= projection.until; date = addDays(date, 1)) {
+    const balance = projection.accountOn(summary.index, date);
+    if (start < 0 ? balance >= -0.005 : balance <= 0.005) {
+      day = date;
+      break;
+    }
+  }
+  if (!day) {
+    return { error: ends < far
+      ? `${summary.name} doesn't get to $0.00 before ${title}'s End Date (${showDate(ends)}). Clear its End Date first, then tap Until $0.`
+      : `${summary.name} doesn't get to $0.00 by ${showDate(far)} with what's planned.` };
+  }
+  // (Its balance that day before this payment: after the day's interest and anything else for it that day)
+  if (recurringHitDays(parsed, day, day).length === 0) return { title, account: summary.name, accountIndex: summary.index, day, last: null, endDate: addDays(day, -1) };
+  const before = projection.accountOn(summary.index, day) - each;
+  const unit = accountChange(String(row[5] || ""), 1);
+  const last = Math.round(-before / unit * 100) / 100;
+  const amount = parseAmount(row[1]);
+  if (Math.abs(last - amount) < 0.005) return { title, account: summary.name, accountIndex: summary.index, day, last: null, endDate: day };
+  if (Math.abs(last) < 0.005 || Math.sign(last) !== Math.sign(amount)) return { title, account: summary.name, accountIndex: summary.index, day, last: null, endDate: addDays(day, -1) };
+  return { title, account: summary.name, accountIndex: summary.index, day, last, endDate: addDays(day, -1) };
+}
+
+// Until $0, done (see untilZeroPlan): the End Date, the one-time entry, and, once everything is worked out again, a check
+// that the account is at $0.00 that day (a cent its interest or escrow make it miss goes on the one-time entry)
+function endRecurringAtZero(index) {
+  const plan = untilZeroPlan(index);
+  if (plan.error) return Promise.resolve({ ok: false, message: plan.error });
+  return runBudgetAction("", () => {
+    const row = recurringData[index];
+    if (!row || String(row[0]).trim() !== plan.title) throw new BudgetInputError("That recurring entry changed. Please try again.");
+    const sprite = String(row[5] || "");
+    const type = getSpecialType(sprite);
+    const ownPurpose = noteText("recurringPurposes", recurringNoteKey(row[0], sprite));
+    // (It ends first, so the day's one-time entry isn't taken as a change to that day's recurring one)
+    editRecurringRow(index, { title: plan.title, endDate: plan.endDate });
+    const logged = formEntryRow.slice(2, 7);
+    let last = plan.last;
+    const write = (amount, set) => unique(set
+      ? { title: plan.title, sprite: type, action: "set", amount: String(amount), percent: null, date: plan.day }
+      : { title: plan.title, sprite: type, action: amount > 0 ? "add" : "subtract", amount: String(Math.abs(amount)), percent: null, date: plan.day, placeholder: false, adding: true });
+    if (last !== null) {
+      write(last, false);
+      if (ownPurpose) applyEntryPurpose(plan.day, plan.title, type, ownPurpose);
+    }
+    formEntryRow.splice(2, logged.length, ...logged);
+    formEntryRow[6] = last !== null ? `Until $0: ${formatMoney(last)} on ${showDate(plan.day)}` : `Until $0: ends ${showDate(plan.endDate)}`;
+    return {
+      // (The account that day, worked out again with all of it: a cent off, from its interest or escrow, goes on the
+      // one-time entry, worked out the way a change is)
+      afterRefresh: () => {
+        if (last === null) return;
+        const unit = accountChange(type, 1);
+        for (let tries = 0; tries < 3; tries++) {
+          const off = projectBudget(plan.day).accountOn(plan.accountIndex, plan.day);
+          if (Math.abs(off) < 0.005) return;
+          last = Math.round((last - off / unit) * 100) / 100;
+          stripRecurringEntries();
+          write(last, true);
+          refreshBudgetData();
+        }
+      }
+    };
   });
 }
 
@@ -1420,7 +1523,7 @@ let waitingQuickEntries = [];
 // site's storage), each as the start of its key's hash (the API's icon for each waiting entry), newest first. Kept on
 // this device, even after signing out, so its own entries are still its own.
 const OWN_ICONS_KEY = "prismal_quick_icons";
-const MAX_OWN_ICONS = 20;
+const MAX_OWN_ICONS = LIMITS.ownIcons;
 const ICON_ID_LENGTH = 16;
 
 // An icon's id: the start of its key's SHA-256, the way the API names the icon a waiting entry came from
@@ -1601,6 +1704,7 @@ function runBudgetAction(logType, change, undo = null) {
 async function processBudgetAction(logType, change, undo = null, requestedAt = performance.now()) {
   if (!workspaceLoaded) return { ok: false, message: "Your budget hasn't finished loading yet." };
   if (SNAPSHOT_KEY) return { ok: false, message: "This icon only shows your Snapshot. Open Prismal Planning to change anything." };
+  if (budgetViewOnly()) return { ok: false, message: VIEW_ONLY_WORDS };
 
   // The page stayed open past midnight (or the device moved to another time zone): reload so the daily
   // update runs before any change
@@ -1611,6 +1715,7 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
 
   const snapshot = snapshotTables();
   const undoBefore = undo ? captureEntryDays(undo.dates) : null;
+  const countsBefore = budgetCounts();
   let result = {};
 
   try {
@@ -1639,6 +1744,7 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
   }
 
   const changedTables = markChangedTables(snapshot);
+  nearBudgetLimits(countsBefore);
   // What it did, for its Change Logs row's Undo (see CHANGE LOG UNDO)
   const record = notFound || NO_LOG_UNDO.includes(formEntryRow[2]) ? null : changeRecord(snapshot, changedTables, result.undid);
   delete result.undid;
@@ -1692,12 +1798,69 @@ function restoreTables(snapshot) {
 function markChangedTables(snapshot) {
   const changed = new Set();
   for (const [name, table] of Object.entries(BUDGET_TABLES)) {
-    if (JSON.stringify(table.get()) !== snapshot[name]) {
+    const text = JSON.stringify(table.get());
+    if (text !== snapshot[name]) {
       table.markEdited();
       changed.add(name);
+      nearTableLimit(name, text);
     }
   }
   return changed;
+}
+
+/* ---------- Near a limit ---------- */
+// After a change, a toast once something in the budget comes near its limit (Limits.near, once a page for each): a part
+// of it that's near what one can hold (MAX_TABLE_BYTES, or MAX_NOTES_BYTES for the notes), or a list that grew near its
+// most (goals, wavelengths, recipes, ...). Change Logs keep themselves under it (the oldest rows go first), and Search's
+// table is a few rows.
+const TABLE_ROOM_WORDS = {
+  calendar: "the calendar's entries", future: "Upcoming", history: "History", recurring: "Recurring Entries", tracker: "the Tracker",
+  calculator: "the calculators", accounts: "Equity and Bob's settings", sheets: "connected spreadsheets and calendars",
+  kitchen: "your recipes, Pantry, and meals", notes: "your notes"
+};
+function nearTableLimit(name, text) {
+  const words = TABLE_ROOM_WORDS[name];
+  const kind = name === "notes" ? "notesBytes" : "tableBytes";
+  // (A UTF-8 byte count is at least the text's length and at most three times it: most saves needn't count it)
+  if (!words || Limits.said(kind, words) || text.length * 3 < LIMITS[kind] * 0.9) return;
+  Limits.near(kind, new TextEncoder().encode(text).length, words);
+}
+
+// The budget's lists that have limits, counted (before and after a change: see nearBudgetLimits)
+function budgetCounts() {
+  try {
+    const bob = accountsData?.bob || {};
+    const business = accountsData?.business || {};
+    const kitchen = kitchenData || {};
+    const pantry = Array.isArray(kitchen.pantry) ? kitchen.pantry : [];
+    const sections = pantry.filter(row => String(row[0]).trim() === "-").length;
+    return {
+      goals: (accountsData?.goals || []).length,
+      wavelengths: (bob.wavelengths || []).length,
+      purposes: Object.keys(bob.purposes || {}).length,
+      spectrumLines: (bob.spectrum || []).length,
+      snapshotCards: (accountsData?.snapshot?.cards || []).length,
+      businessOwners: (business.owners || []).length,
+      businessTitles: Object.keys(business.titles || {}).length,
+      recipes: (kitchen.recipes || []).length,
+      pantryRows: pantry.length - sections,
+      pantrySections: sections,
+      foodRows: (kitchen.foods || []).length,
+      meals: (kitchen.meals || []).length,
+      linked: (sheetsData?.linked || []).length,
+      sheets: (sheetsData?.list || []).length,
+      presets: Math.max(calculatorStore("gems").length, calculatorStore("crystals").length)
+    };
+  } catch (e) {
+    return {};
+  }
+}
+
+// Each list that grew since before (budgetCounts' counts) and is near its limit says so
+function nearBudgetLimits(before) {
+  for (const [kind, count] of Object.entries(budgetCounts())) {
+    if (Number.isInteger(before[kind]) && count > before[kind]) Limits.near(kind, count);
+  }
 }
 
 /* ---------- Change Logs (the spreadsheet's "Form Entries" tab) ---------- */
@@ -2648,7 +2811,7 @@ function describeAliases(text) {
 
 const ACCOUNTS_VERSION = 3;
 const DEFAULT_ACCOUNT = "Savings";
-const MAX_ACCOUNT_NAME = 60;
+const MAX_ACCOUNT_NAME = LIMITS.accountName;
 // The accounts every budget has, which can't be deleted (either can be renamed): Savings, the default, and Cash. Each is
 // marked in its row's [2].
 const MANDATORY_ACCOUNTS = [[DEFAULT_ACCOUNT, "default"], ["Cash", "cash"]];
@@ -2683,7 +2846,8 @@ function accountRows() {
   for (let i = 1; i < list.length; i++) {
     let name = String(list[i][0] ?? "").trim();
     let clean = cleanString(name);
-    if (clean) accounts.push({ index: i, row: list[i], name, clean });
+    // (A section's heading, ["-", its title, ...], isn't an account)
+    if (clean && name !== "-") accounts.push({ index: i, row: list[i], name, clean });
   }
   return accounts;
 }
@@ -3071,8 +3235,8 @@ const accountKind = (row) => (ACCOUNT_KIND_KEYS.includes(String(row?.[16] ?? "")
 // DEBT_KINDS) }, or null when it has none. Its row's [4],
 // [5], [7], [8], [9], [10], [11], and [15]; blank ones are monthly, every month, the day of the month it started
 // counting, not separate, and counting from since.
-const MAX_INTEREST_RATE = 1000;
-const MAX_PERIOD_DAYS = 370; // The longest stretch between the days interest is added (a year), with some room
+const MAX_INTEREST_RATE = LIMITS.interestRate;
+const MAX_PERIOD_DAYS = LIMITS.interestPeriodDays; // The longest stretch between the days interest is added (a year), with some room
 // How often interest earns interest: every day, every 1, 3, or 12 months, or never ("simple": only the balance without
 // the interest added to it earns any)
 const INTEREST_COMPOUNDING = { daily: 0, monthly: 1, quarterly: 3, yearly: 12, simple: null };
@@ -3870,7 +4034,7 @@ function combineSameUpcoming() {
 // from there, like a credit card climbing to $0; left out by goals set before it was kept), gem (the id of the Accrual
 // Calculator gem it follows, left out for none: see Gems and goals) }], dates as MM/DD/YYYY.
 
-const MAX_GOALS = 20;
+const MAX_GOALS = LIMITS.goals;
 const GOAL_KINDS = ["none", "inBank", "total", "account"];
 
 // New goal (index null) or change one, and delete one
@@ -4061,7 +4225,7 @@ const BOB_WARNING_CARDS = [...BOB_CARDS.keys()];
 // name, a tracker row's title, a figure's key, or a wavelength's id; part: a tracker row's alias, as compared, or ""), up to
 // MAX_SPECTRUM_LINES, each once
 const SPECTRUM_KINDS = ["inBank", "total", "account", "tracker", "figure", "wavelength"];
-const MAX_SPECTRUM_LINES = 12;
+const MAX_SPECTRUM_LINES = LIMITS.spectrumLines;
 
 // Stored lines, checked (null when there's no list)
 function normalizeSpectrum(list) {
@@ -4097,7 +4261,14 @@ function normalizeBob(stored, hasGoals) {
       if (kept) goals[id] = kept;
     }
   }
-  const extras = { ...(warnings.length > 0 ? { warnings } : {}), ...(spectrum ? { spectrum } : {}), ...(Object.keys(goals).length > 0 ? { waveGoals: goals } : {}) };
+  const maxes = {};
+  if (stored.waveMaxes && typeof stored.waveMaxes === "object" && !Array.isArray(stored.waveMaxes)) {
+    for (const [id, max] of Object.entries(stored.waveMaxes)) {
+      const kept = (id === "none" || known.has(id)) ? readWaveMax(max) : null;
+      if (kept) maxes[id] = kept;
+    }
+  }
+  const extras = { ...(warnings.length > 0 ? { warnings } : {}), ...(spectrum ? { spectrum } : {}), ...(Object.keys(goals).length > 0 ? { waveGoals: goals } : {}), ...(Object.keys(maxes).length > 0 ? { waveMaxes: maxes } : {}) };
   const purposes = {};
   const kept = stored.purposes && typeof stored.purposes === "object" && !Array.isArray(stored.purposes) ? stored.purposes : {};
   for (const [key, purpose] of Object.entries(kept).slice(0, MAX_PURPOSES)) {
@@ -4200,7 +4371,7 @@ function normalizeOkayed(stored) {
 // = { cards: [{ id, type (what it shows, like "home.inBank" or "graph.equity"), ref (which one, for a type that has
 // more than one: an account's name, a goal's place, a gem's id...; "" for none) }] }, left out until it's changed (the
 // page starts with a few of its own). Logged as "📸 Snapshot".
-const MAX_SNAPSHOT_CARDS = 40;
+const MAX_SNAPSHOT_CARDS = LIMITS.snapshotCards;
 
 // The kept cards, checked (null without any kept)
 function normalizeSnapshot(stored) {
@@ -4245,10 +4416,10 @@ function setSpectrumLines(list, words) {
 // adds up what each one cost.
 
 const DEFAULT_WAVELENGTHS = [{ id: "needs", name: "Needs" }, { id: "wants", name: "Wants" }, { id: "future", name: "Future" }];
-const MAX_WAVELENGTHS = 10;
-const MAX_WAVELENGTH_NAME = 30;
+const MAX_WAVELENGTHS = LIMITS.wavelengths;
+const MAX_WAVELENGTH_NAME = LIMITS.wavelengthName;
 const WAVELENGTH_ID = /^[a-z0-9]{1,24}$/;
-const MAX_PURPOSES = 2000;
+const MAX_PURPOSES = LIMITS.purposes;
 
 // The budget's wavelengths, in order: [{ id, name }]
 function wavelengthList() {
@@ -4363,7 +4534,7 @@ const WAVE_GOAL_UNITS = ["days", "weeks", "months"];
 function readWaveGoal(goal) {
   if (!goal || typeof goal !== "object") return null;
   const count = Number(goal.count);
-  if (!Number.isInteger(count) || count < 1 || count > 366 || !WAVE_GOAL_UNITS.includes(goal.unit)) return null;
+  if (!Number.isInteger(count) || count < 1 || count > LIMITS.waveCount || !WAVE_GOAL_UNITS.includes(goal.unit)) return null;
   const amount = Number(goal.amount);
   const percent = Number(goal.percent);
   if (goal.percent !== null && goal.percent !== undefined && Number.isFinite(percent) && percent > 0 && percent <= 100) return { percent: Math.round(percent * 100) / 100, count, unit: goal.unit };
@@ -4376,11 +4547,30 @@ function waveGoals() {
   return accountsData?.bob?.waveGoals || {};
 }
 
+// A wavelength's max, checked: { amount (the most it should come to in the days it's shown for), percent (the biggest
+// share of the spending it should be, up to 100) }, either or both, or null for none. Unlike a goal, a max has no days
+// of its own: it's held up against whatever days the wavelength is shown for. (Bob's page shows "$250.00/$300.00" and
+// "45%/50%", orange from WAVE_GOAL_WARN of either, red past either.)
+function readWaveMax(max) {
+  if (!max || typeof max !== "object") return null;
+  const kept = {};
+  const amount = Number(max.amount);
+  const percent = Number(max.percent);
+  if (max.amount !== null && max.amount !== undefined && Number.isFinite(amount) && amount > 0 && amount <= MAX_AMOUNT) kept.amount = Math.round(amount * 100) / 100;
+  if (max.percent !== null && max.percent !== undefined && Number.isFinite(percent) && percent > 0 && percent <= 100) kept.percent = Math.round(percent * 100) / 100;
+  return Object.keys(kept).length > 0 ? kept : null;
+}
+
+// Each wavelength's max, by its id ("none" for Undefined): { id: max }
+function waveMaxes() {
+  return accountsData?.bob?.waveMaxes || {};
+}
+
 // The wavelengths as Bob's card's window leaves them: [{ id (one that's there now, or null for a new one), name, goal
-// (see readWaveGoal; null or left out for none) }], in order, and undefinedGoal, Undefined's (left out: as it is). A new
-// one gets an id no other one has; titles and entries on one that was taken out have none after. Back to Needs, Wants,
-// and Future with no goals, they're left out of the budget again.
-function saveWavelengths(list, undefinedGoal = undefined) {
+// (see readWaveGoal; null or left out for none), max (see readWaveMax; the same) }], in order, and undefinedGoal and
+// undefinedMax, Undefined's (left out: as they are). A new one gets an id no other one has; titles and entries on one that
+// was taken out have none after. Back to Needs, Wants, and Future with no goals, they're left out of the budget again.
+function saveWavelengths(list, undefinedGoal = undefined, undefinedMax = undefined) {
   return runBudgetAction("🌈 Wavelengths", () => {
     if (!Array.isArray(list) || list.length < 1 || list.length > MAX_WAVELENGTHS) throw new BudgetInputError(`Keep 1 to ${MAX_WAVELENGTHS} wavelengths.`);
     const current = wavelengthList();
@@ -4395,7 +4585,7 @@ function saveWavelengths(list, undefinedGoal = undefined) {
       names.add(name.toLowerCase());
       const id = current.some(wave => wave.id === item.id) && !kept.has(item.id) ? item.id : null;
       if (id) kept.add(id);
-      return { id, name, goal: readWaveGoal(item?.goal) };
+      return { id, name, goal: readWaveGoal(item?.goal), max: readWaveMax(item?.max) };
     });
     for (const wave of next) {
       if (wave.id) continue;
@@ -4412,14 +4602,21 @@ function saveWavelengths(list, undefinedGoal = undefined) {
       for (const [key, id] of Object.entries(notesData?.[part] || {})) if (gone.some(wave => wave.id === id)) delete notesData[part][key];
     }
     const goals = {};
+    const maxes = {};
     for (const wave of next) {
       if (wave.goal) goals[wave.id] = wave.goal;
+      if (wave.max) maxes[wave.id] = wave.max;
       delete wave.goal;
+      delete wave.max;
     }
     const noneGoal = undefinedGoal === undefined ? readWaveGoal(bob.waveGoals?.none) : readWaveGoal(undefinedGoal);
     if (noneGoal) goals.none = noneGoal;
     if (Object.keys(goals).length > 0) bob.waveGoals = goals;
     else delete bob.waveGoals;
+    const noneMax = undefinedMax === undefined ? readWaveMax(bob.waveMaxes?.none) : readWaveMax(undefinedMax);
+    if (noneMax) maxes.none = noneMax;
+    if (Object.keys(maxes).length > 0) bob.waveMaxes = maxes;
+    else delete bob.waveMaxes;
     if (JSON.stringify(next) === JSON.stringify(DEFAULT_WAVELENGTHS)) delete bob.wavelengths;
     else bob.wavelengths = next;
     formEntryRow[3] = next.map(wave => wave.name).join(", ");
@@ -4442,9 +4639,9 @@ const BUSINESS_CATEGORIES = [
   { id: "purchases", name: "Asset Purchases" },
   { id: "assets", name: "Assets" }
 ];
-const MAX_OWNERS = 10;
-const MAX_OWNER_NAME = 40;
-const MAX_BUSINESS_TITLES = 2000;
+const MAX_OWNERS = LIMITS.businessOwners;
+const MAX_OWNER_NAME = LIMITS.businessOwnerName;
+const MAX_BUSINESS_TITLES = LIMITS.businessTitles;
 const OWNER_ID = /^[a-z0-9]{4,16}$/;
 
 // Is Business Mode on for the open budget?
@@ -4621,14 +4818,14 @@ function businessFigures(from, to) {
 // recurring entry's own (notesData.recurringPurposes, keyed like its note): see WAVELENGTH PLANNING.
 
 const NOTE_TYPES = { "❗️": "regular", "✖️": "hidden", "⭕️": "transfer" };
-const NOTE_PARTS = ["entries", "recurring", "reminders", "purposes", "recurringPurposes"];
-const MAX_NOTES_BYTES = 1800000;     // Every note together (a little under MAX_TABLE_BYTES)
-const MAX_UNDO_NOTE_CHARS = 100000;  // A change's notes kept for Undo in this tab (more than that, Undo leaves them be)
+const NOTE_PARTS = ["entries", "recurring", "reminders", "purposes", "recurringPurposes", "recurringReminders"];
+const MAX_NOTES_BYTES = LIMITS.notesBytes;         // Every note together (a little under MAX_TABLE_BYTES)
+const MAX_UNDO_NOTE_CHARS = LIMITS.undoNoteChars; // A change's notes kept for Undo in this tab (more than that, Undo leaves them be)
 const NOTES_FULL = "Your notes are full (about 1.8 MB of them together). Make some shorter, or delete some, first.";
 
 // No notes yet
 function emptyNotes() {
-  return { version: 1, entries: {}, recurring: {}, reminders: {}, purposes: {}, recurringPurposes: {} };
+  return { version: 1, entries: {}, recurring: {}, reminders: {}, purposes: {}, recurringPurposes: {}, recurringReminders: {} };
 }
 
 // The stored notes, checked (none stored is none)
@@ -4643,6 +4840,9 @@ function normalizeApiNotes(stored) {
       if (part === "reminders") {
         const text = reminderText(Number(value));
         if (text && /^\d{4}-\d{2}-\d{2}\|/.test(key)) notes.reminders[key] = text;
+      } else if (part === "recurringReminders") {
+        const text = reminderText(Number(value));
+        if (text && !/^\d{4}-\d{2}-\d{2}\|/.test(key)) notes.recurringReminders[key] = text;
       } else if (part === "purposes" || part === "recurringPurposes") {
         const known = typeof value === "string" && (value === "none" || WAVELENGTH_ID.test(value));
         if (known && (part === "recurringPurposes" || /^\d{4}-\d{2}-\d{2}\|/.test(key))) notes[part][key] = value;
@@ -4785,6 +4985,17 @@ function followRecurringNote(before, fields) {
   const oldPurpose = noteText("recurringPurposes", from);
   if (to !== from) putNote("recurringPurposes", from, "");
   putNote("recurringPurposes", to, fields.entryPurpose !== undefined ? fields.entryPurpose : oldPurpose);
+  // Its reminder before each day it lands on (the form's, fields.reminder: days, or null for none; left out, as it was)
+  const oldReminder = noteText("recurringReminders", from);
+  if (to !== from) putNote("recurringReminders", from, "");
+  putNote("recurringReminders", to, fields.reminder !== undefined ? checkedReminder(fields.reminder) : oldReminder);
+  logReminderChange(oldReminder, noteText("recurringReminders", to));
+}
+
+// A recurring entry's reminder before each day it lands on: how many days before, or null for none (for its form)
+function recurringReminder(title, sprite) {
+  const text = noteText("recurringReminders", recurringNoteKey(title, sprite));
+  return text === "" ? null : Number(text);
 }
 
 // Within a recurring entry's new title, Equity account, or type (after moveRecurringTemps): the notes on its days from
@@ -4831,7 +5042,7 @@ function renameAccountNotes(oldClean, newName) {
     for (const key of Object.keys(notesData[part])) {
       // (An entry's key starts with its day, YYYY-MM-DD|, and so do its reminder's and its own wavelength's; the type is
       // after the last |)
-      const start = part === "recurring" || part === "recurringPurposes" ? 0 : 11;
+      const start = part === "recurring" || part === "recurringPurposes" || part === "recurringReminders" ? 0 : 11;
       const end = key.lastIndexOf("|");
       const title = renamed(key.slice(start, end));
       if (title === null) continue;
@@ -4879,10 +5090,12 @@ function dropStrayNotes() {
     for (const key of entryKeys) if (key.slice(0, 10) <= lastDay && !there.has(key)) delete notesData.entries[key];
     for (const key of purposeKeys) if (key.slice(0, 10) <= lastDay && !there.has(key)) delete notesData.purposes[key];
   }
-  if (recurringKeys.length + recurringPurposeKeys.length > 0) {
+  const recurringReminderKeys = Object.keys(notesData.recurringReminders);
+  if (recurringKeys.length + recurringPurposeKeys.length + recurringReminderKeys.length > 0) {
     const rows = new Set(recurringData.slice(2).filter(row => !["", "-"].includes(String(row[0] ?? "").trim())).map(row => recurringNoteKey(row[0], row[5])));
     for (const key of recurringKeys) if (!rows.has(key)) delete notesData.recurring[key];
     for (const key of recurringPurposeKeys) if (!rows.has(key)) delete notesData.recurringPurposes[key];
+    for (const key of recurringReminderKeys) if (!rows.has(key)) delete notesData.recurringReminders[key];
   }
   // Reminders go once their entry's day has come, or when their entry is gone
   const reminderKeys = Object.keys(notesData.reminders);
@@ -4971,7 +5184,7 @@ function saveEntryExtras(date, title, sprite, { purpose, purposePerTitle = false
 // One goes when its entry does, or once its day has come (dropStrayNotes). A recurring entry's or a connected
 // spreadsheet's day can have one too, like a note.
 
-const MAX_REMINDER_DAYS = 365;
+const MAX_REMINDER_DAYS = LIMITS.reminderDays;
 
 // A reminder as it's kept: how many days before its day, as text ("" for none, or for one that isn't a whole number from
 // 0 to MAX_REMINDER_DAYS)
@@ -5063,7 +5276,7 @@ function remindedEntries() {
 // own, from the side that wins (on a day with neither, the day before's). readBackup reads a file, backupPlans says what
 // each part would get (for the Upload A Backup window), and uploadBackup puts them in.
 
-const BACKUP_MAX_BYTES = 25 * 1024 * 1024; // The biggest file read (every part of a budget, with room to spare)
+const BACKUP_MAX_BYTES = LIMITS.backupFile; // The biggest file read (every part of a budget, with room to spare)
 const BACKUP_CHOICES = ["current", "uploaded", "remove"];
 // The tables a backup can fill, by the names its window gives them (Change Logs keep only their newest rows anyway)
 const BACKUP_TABLE_NAMES = { calendar: "Home's Calendar", future: "Upcoming", history: "History", recurring: "Recurring Entries", accounts: "Equity", tracker: "Tracker", sheets: "Connected Spreadsheets And Calendars", calculator: "Paycheck Calculator", notes: "Notes", kitchen: "Recipes, Pantry, And Meals" };
@@ -5251,14 +5464,15 @@ function backupPlans(backup) {
   }
 
   if (backup.accounts) {
-    // (Savings and Cash go by what they are, whatever they're named)
-    const accountKey = (row) => (isMandatoryAccount(row) ? `mark|${String(row[2]).trim()}` : `name|${cleanString(row[0])}`);
+    // (Savings and Cash go by what they are, whatever they're named, and a section by its title)
+    const isSection = (row) => String(row[0] ?? "").trim() === "-";
+    const accountKey = (row) => (isSection(row) ? `section|${cleanString(row[1])}` : isMandatoryAccount(row) ? `mark|${String(row[2]).trim()}` : `name|${cleanString(row[0])}`);
     const mine = accountsData.list.slice(1).filter(usedRow);
     const theirs = backup.accounts.list.slice(1).filter(usedRow);
     const count = (choice) => mergeKeyed(keyed(mine, accountKey), keyed(theirs, accountKey), choice, (a, b) => JSON.stringify(a.slice(2)) === JSON.stringify(b.slice(2)) && cleanString(a[0]) === cleanString(b[0]));
-    plan("accounts", "Equity", "accounts", mine.length, theirs.length, count(null).clashes, (choice) => {
+    plan("accounts", "Equity", "accounts", mine.filter(row => !isSection(row)).length, theirs.filter(row => !isSection(row)).length, count(null).clashes, (choice) => {
       const names = new Set();
-      const rows = count(choice).items.filter(row => !names.has(cleanString(row[0])) && names.add(cleanString(row[0])));
+      const rows = count(choice).items.filter(row => { const key = accountKey(row); return !names.has(key) && names.add(key); });
       accountsData.list = [accountsData.list[0], ...rows];
       // (Every budget still has its Savings and Cash)
       accountsData.list = normalizeApiAccounts({ version: ACCOUNTS_VERSION, list: accountsData.list }).list;
@@ -5570,9 +5784,9 @@ function uploadBackup(backup, choices) {
 // its fields are only typed: title, type, and account.
 
 const SHEETS_VERSION = 1;
-const MAX_SHEETS = 10; // Spreadsheets and calendars, together
-const MAX_SHEET_NAME = 60;
-const MAX_KEPT_PAYCHECKS = 120;
+const MAX_SHEETS = LIMITS.sheets; // Spreadsheets and calendars, together
+const MAX_SHEET_NAME = LIMITS.sheetName;
+const MAX_KEPT_PAYCHECKS = LIMITS.keptPaychecks;
 
 // The stored connected spreadsheets, checked and tidied: { version, list, linked (only when there are any, see LINKED
 // CALENDAR FRACTALS), fractalOrder, holidays (the Holidays fractal's color, once it's changed) }
@@ -5599,7 +5813,7 @@ function normalizeApiSheets(rawData) {
 // and the entry form follow it), kept with the budget beside the linked ones as sheetsData.fractalOrder: their ids as text,
 // the account's own and the budget's ("12"), linked ones ("linked:ab12"), and Holidays ("holidays"), top to bottom.
 // Fractals.js puts any not in it after the rest.
-const MAX_FRACTAL_ORDER = 60;
+const MAX_FRACTAL_ORDER = LIMITS.fractalOrder;
 const FRACTAL_ORDER_ID = /^(\d{1,15}|linked:[a-z0-9]{4,16}|holidays|meals)$/;
 
 function normalizeFractalOrder(order) {
@@ -5650,18 +5864,18 @@ function saveHolidays(fields) {
 //            the Meals fractal's entries, with days as YYYY-MM-DD like the calendar's (Fractals.js)
 //   color:   the Meals fractal's color; usedThrough: the last day (YYYY-MM-DD) whose meals came out of the Pantry
 const KITCHEN_VERSION = 1;
-const MAX_RECIPES = 500;
-const MAX_RECIPE_FOODS = 100;
-const MAX_PANTRY_ROWS = 1000;     // Foods in the Pantry (its sections aren't counted)
-const MAX_PANTRY_SECTIONS = 200;
-const MAX_FOOD_ROWS = 2000;
-const MAX_MEALS = 5000;
-const MAX_FOOD_NAME = 60;
-const MAX_FOOD_UNIT = 20;
-const MAX_FOOD_ALIASES = 20;
-const MAX_KITCHEN_NOTES = 20000;
-const MAX_FOOD_AMOUNT = 1000000;
-const MAX_MEAL_SKIPS = 500;
+const MAX_RECIPES = LIMITS.recipes;
+const MAX_RECIPE_FOODS = LIMITS.recipeFoods;
+const MAX_PANTRY_ROWS = LIMITS.pantryRows; // Foods in the Pantry (its sections aren't counted)
+const MAX_PANTRY_SECTIONS = LIMITS.pantrySections;
+const MAX_FOOD_ROWS = LIMITS.foodRows;
+const MAX_MEALS = LIMITS.meals;
+const MAX_FOOD_NAME = LIMITS.foodName;
+const MAX_FOOD_UNIT = LIMITS.foodUnit;
+const MAX_FOOD_ALIASES = LIMITS.foodAliases;
+const MAX_KITCHEN_NOTES = LIMITS.kitchenNotes;
+const MAX_FOOD_AMOUNT = LIMITS.foodAmount;
+const MAX_MEAL_SKIPS = LIMITS.mealSkips;
 const MEALS_COLOR = "#3fbf5f";
 const KITCHEN_ID = /^[a-z0-9]{6,16}$/;
 const KITCHEN_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -5721,7 +5935,7 @@ function normalizeKitchenFoods(list) {
 function kitchenRepeat(repeat) {
   if (!repeat || typeof repeat !== "object") return null;
   const count = Number(repeat.count);
-  return Number.isInteger(count) && count >= 1 && count <= 999 && ["days", "weeks", "months"].includes(repeat.unit) ? { count, unit: repeat.unit } : null;
+  return Number.isInteger(count) && count >= 1 && count <= LIMITS.frequencyCount && ["days", "weeks", "months"].includes(repeat.unit) ? { count, unit: repeat.unit } : null;
 }
 
 // The stored kitchen, checked (none stored is none)
@@ -5813,8 +6027,8 @@ function normalizeApiKitchen(stored) {
 // (Fractals.js reads and draws them). They're kept with the budget beside the connected calendars, as sheetsData.linked:
 // [{ id, name, color ("#rrggbb"), link (its own subscription link; "" for a connected calendar's), connection (a connected
 // calendar's id; "" for its own link) }], logged as "🔗 Linked Calendar".
-const MAX_LINKED = 10;
-const MAX_LINKED_NAME = 30;
+const MAX_LINKED = LIMITS.linked;
+const MAX_LINKED_NAME = LIMITS.linkedName;
 
 // Kept linked fractals, checked
 function normalizeLinkedFractals(list) {
@@ -5825,7 +6039,7 @@ function normalizeLinkedFractals(list) {
       id: item.id,
       name: String(item.name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_LINKED_NAME) || "Linked Calendar",
       color: /^#[0-9a-f]{6}$/i.test(String(item.color ?? "")) ? String(item.color).toLowerCase() : "#8a8fa8",
-      link: String(item.connection ?? "") ? "" : String(item.link ?? "").trim().slice(0, 2000),
+      link: String(item.connection ?? "") ? "" : String(item.link ?? "").trim().slice(0, LIMITS.link),
       connection: String(item.connection ?? "").slice(0, 40)
     }))
     .filter(item => item.link || item.connection);
@@ -5879,7 +6093,7 @@ function normalizeSheetConnection(item) {
   return {
     id: text(item.id, 40),
     name: text(item.name, MAX_SHEET_NAME).trim() || (isCalendar ? "Calendar" : "Spreadsheet"),
-    link: text(item.link, 2000).trim(),
+    link: text(item.link, LIMITS.link).trim(),
     on: item.on !== false,
     fields: isObject(item.fields) ? JSON.parse(JSON.stringify(item.fields)) : {},
     entries: (Array.isArray(item.entries) ? item.entries : [])
@@ -5887,7 +6101,7 @@ function normalizeSheetConnection(item) {
       .map(entry => [text(entry[0], 10), sheetEntryType(text(entry[1], 20)), Math.round((Number(entry[2]) || 0) * 100) / 100, text(entry[3], MAX_ENTRY_TITLE)])
       .filter(entry => Math.abs(entry[2]) <= MAX_AMOUNT), // Spreadsheets.js never reads a bigger one
     problems: (Array.isArray(item.problems) ? item.problems : []).map(problem => text(problem, 500)).slice(0, 50),
-    tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, 200),
+    tabs: (Array.isArray(item.tabs) ? item.tabs : []).map(tab => text(tab, 100)).slice(0, LIMITS.sheetTabs),
     access: item.access === "shared" ? "shared" : "public",
     ...(item.by ? { by: text(item.by, 120) } : {}), // The account that connected it (or changed it last), see readsConnection
     ...(item.placeholder === true ? { placeholder: true } : {}), // Its entries are placeholders
@@ -7522,8 +7736,8 @@ function calculator(values) {
 // boxes as they were last left (row 22: { box: value }), which start it the next time. A preset's id stays with it through
 // changes, so a goal can follow a gem (see Gems and goals).
 const CALCULATOR_STORES = { crystals: [21, "Crystals"], debt: [22, "Accrual Calculator"], gems: [23, "Gems"] };
-const MAX_PRESETS = 30;
-const MAX_PRESET_NAME = 40;
+const MAX_PRESETS = LIMITS.presets;
+const MAX_PRESET_NAME = LIMITS.presetName;
 const PRESET_ID = /^[a-z0-9]{4,16}$/;
 
 // A store's contents (see CALCULATOR_STORES): crystals and gems as a list ([] for none), each with its id (one kept from
@@ -7726,8 +7940,10 @@ function buildReminderPlan() {
     if (reminder.negative || reminder.uncommon > 0 || reminder.cost) days[formatToYMD(day)] = reminder;
   }
 
-  // Entries' reminders, on the day each one is due (the soonest entries first, at most MAX_DAY_REMINDERS a day)
-  const reminded = [...remindedEntries().values()].sort((a, b) => a.date - b.date);
+  // Entries' reminders, on the day each one is due (the soonest entries first, at most MAX_DAY_REMINDERS a day), and
+  // recurring entries' before each day they land on (a day with a reminder of its own goes by that one)
+  const ownReminders = remindedEntries();
+  const reminded = [...ownReminders.values(), ...recurringRemindedDays(lastDay, ownReminders, recurringRows, futureByDate, sheetDays)].sort((a, b) => a.date - b.date);
   for (const entry of reminded) {
     const on = addDays(entry.date, -entry.days);
     if (on < today) continue;
@@ -7749,7 +7965,32 @@ function buildReminderPlan() {
   return { from: formatToYMD(today), to: formatToYMD(lastDay), days: days };
 }
 
-const MAX_DAY_REMINDERS = 20; // Entries' reminders on one day (the API keeps that many)
+const MAX_DAY_REMINDERS = LIMITS.dayReminders; // Entries' reminders on one day (the API keeps that many)
+
+// The days recurring entries with a reminder of their own (notesData.recurringReminders) land on, whose reminder comes
+// from today through lastDay: [{ date, title, days }]. A day is looked at as the budget has it (a day it was changed on
+// keeps it, under its own amount; one it was deleted from, or $0.00 on, doesn't), and a day whose entry has a reminder
+// of its own (own: remindedEntries) is left to that one. recurringRows, futureByDate, and sheetDays: buildReminderPlan's.
+function recurringRemindedDays(lastDay, own, recurringRows, futureByDate, sheetDays) {
+  const wanted = notesData?.recurringReminders || {};
+  if (Object.keys(wanted).length === 0) return [];
+  const found = [];
+  for (const row of recurringRows) {
+    const text = wanted[recurringNoteKey(row.title, row.sprite)];
+    if (!text) continue;
+    const days = Number(text);
+    const type = getSpecialType(row.sprite);
+    for (const date of recurringHitDays(row.parsed, addDays(today, days), addDays(lastDay, days))) {
+      if (date <= today || own.has(entryNoteKey(date, row.title, row.sprite))) continue;
+      const spot = date <= gridEndDate ? calendarSpot(date) : null;
+      const dayText = spot ? calendarData[spot.r][spot.c] : dayAfterCalendar(date, recurringRows, futureByDate, sheetDays);
+      const landed = String(dayText ?? "").split("\n").slice(1).map(readLine)
+        .find(line => !line.blank && !line.system && line.clean === row.parsed.cleanTitle && getSpecialType(line.sprite) === type);
+      if (landed && Math.round(landed.amount * 100) !== 0) found.push({ date, title: landed.title, days });
+    }
+  }
+  return found;
+}
 
 // A day after the calendar the way the daily update will fill it in (before its In Bank, see performDailyUpdate): its
 // Upcoming entries, then, when scheduled, its recurring entries and connected spreadsheets' entries. recurringRows,
@@ -7803,8 +8044,8 @@ function currentTimeZone() {
 // refuses one from an older copy (the budget was saved on another device or tab since): then nothing
 // more is sent, and the page reloads with the newest budget instead of saving over it.
 async function saveChanges() {
-  // (A Snapshot icon only looks: what its page works out stays on the page)
-  if (SNAPSHOT_KEY) {
+  // (A Snapshot icon, and someone who can only look at the budget, only look: what its page works out stays on the page)
+  if (SNAPSHOT_KEY || budgetViewOnly()) {
     for (const table of Object.values(BUDGET_TABLES)) table.saved();
     return true;
   }
@@ -7891,6 +8132,8 @@ async function budgetApi(endpoint, payload) {
     });
     let data = null;
     try { data = await res.json(); } catch (e) {}
+    // (An account near one of the API's limits, like its test notifications: see Limits.fromApi)
+    if (data && data.limitNote) Limits.fromApi(data.limitNote);
     if (res.status === 401) signedOutElsewhere();
     if (res.status === 404 && data && data.budgetGone && BUDGET_ROUTES.test(endpoint)) {
       workspaceLoaded = false;
@@ -8273,7 +8516,7 @@ function entryMark(sprite) {
 // with it, and the one already there keeps its last day (see mergedPlaceholder).
 const PLACEHOLDER_MARK = "⏳";
 const PLACEHOLDER_PART = /⏳(\d{4}-\d{2}-\d{2}|[+-]\d{1,3})?/;
-const MAX_PLACEHOLDER_DAYS = 365; // A recurring entry's placeholders can go up to this many days before or after their day
+const MAX_PLACEHOLDER_DAYS = LIMITS.placeholderDays; // A recurring entry's placeholders can go up to this many days before or after their day
 function isPlaceholder(sprite) {
   return String(sprite ?? "").includes(PLACEHOLDER_MARK);
 }
@@ -8363,7 +8606,7 @@ function placeholderSprite(sprite, placeholder) {
 // When two entries become one (the same title and type on a day), the one entry is a plain amount: what the two came
 // to together.
 const PERCENT_MARK = "％";
-const MAX_PERCENT = 1000;
+const MAX_PERCENT = LIMITS.percent;
 const PERCENT_PART = /％(-?\d+(?:\.\d+)?)/;
 
 // The percent a sprite keeps (signed), or null for an entry with a plain amount
@@ -8631,7 +8874,7 @@ function parseRecurringRow(item) {
 // 6 Month, and Yearly are every 1 week, 2 weeks, 1 month, 3, 6, and 12 months. Its Semi-Monthly (the
 // 1st and 15th) has no every-N version, so a row that has it keeps it.
 
-const MAX_FREQUENCY_COUNT = 999;
+const MAX_FREQUENCY_COUNT = LIMITS.frequencyCount;
 const FREQUENCY_UNIT_NAMES = new Map([["days", "Day"], ["weeks", "Week"], ["months", "Month"]]);
 const SPREADSHEET_FREQUENCIES = new Map([
   ["weekly", { count: 1, unit: "weeks" }],
@@ -9169,8 +9412,9 @@ const ZOOM_TEXT_MIN = 15;
 const ZOOM_TEXT_MAX = 19;
 const ZOOM_MIN_HEIGHT_SHARE = 0.3;
 const ZOOM_EDGE_SHARE = 0.04;
-// What a zoom sets on its day (and closing it takes off)
-const ZOOM_PROPERTIES = ['transform', 'transform-origin', '--zoom', '--zoomText', '--dayX', '--dayY', '--dayW', '--dayH', '--viewW', '--viewH'];
+// What a zoom sets on its day (and closing it takes off). --pinch: how far the page itself was pinch-zoomed in when the day
+// opened, which a phone's zoomed day divides its round buttons by, like its words, so they're their own size on the screen.
+const ZOOM_PROPERTIES = ['transform', 'transform-origin', '--zoom', '--zoomText', '--pinch', '--dayX', '--dayY', '--dayW', '--dayH', '--viewW', '--viewH'];
 // How long a phone's day takes to grow out of its spot, to shrink back into it, and to slide over to the day next to it
 const ZOOM_OPEN_MS = 420;
 const ZOOM_CLOSE_MS = 320;
@@ -9736,6 +9980,7 @@ function fitZoomedDay(animate = false) {
   const textScale = Math.min(Math.max(textSize * scale * ZOOM_TEXT_SHARE, ZOOM_TEXT_MIN / pinch), ZOOM_TEXT_MAX / pinch) / textSize;
   cell.style.setProperty('--zoom', String(scale));
   cell.style.setProperty('--zoomText', String(textScale));
+  cell.style.setProperty('--pinch', String(pinch));
   const padding = parseFloat(getComputedStyle(content).paddingRight) || 0;
   const linesHeight = dayLinesHeight(content) + 2 * padding;
   const height = Math.max(linesHeight, width * ZOOM_MIN_HEIGHT_SHARE);
@@ -9953,7 +10198,7 @@ document.addEventListener('pointerout', (e) => {
 // (so going to another page and back keeps it), up to 25 steps, and forgotten on sign-out. Changes to Calendar Fractals'
 // entries are steps in the same list ({ label, calendar }), taken through the API by Fractals.js (UNDO) instead of here.
 
-const MAX_UNDO_STEPS = 25;
+const MAX_UNDO_STEPS = LIMITS.undoSteps;
 const OWN_ENTRY_SPRITES = ["❗️", "✖️", "⭕️"];
 
 // A step that can't be taken anymore, because a day it would change was changed since
@@ -10196,8 +10441,8 @@ function historySpot(date, history = historyData) {
 // measured as they're saved (the Change Logs table has to stay under MAX_TABLE_BYTES), so the newest rows keep theirs.
 
 const LOG_UNDO_COLUMN = 8;          // A Change Logs row's [8]: what its change did (see changeRecord)
-const MAX_LOG_UNDO_BYTES = 60000;   // One change's record, at most, as it's saved
-const MAX_LOG_UNDO_TOTAL = 800000;  // Every row's together, as they're saved: the oldest rows' Undo goes first past this
+const MAX_LOG_UNDO_BYTES = LIMITS.logUndoBytes; // One change's record, at most, as it's saved
+const MAX_LOG_UNDO_TOTAL = LIMITS.logUndoTotal; // Every row's together, as they're saved: the oldest rows' Undo goes first past this
 const NO_LOG_UNDO = ["🔎 Search", "📥 Upload Backup", "🧮 Accrual Calculator", "🧮 Debt Calculator", "➕ Spreadsheet Update", "➕ Calendar Update"];
 
 // A row table's rows as a change compares them: what's the person's own in each (the rest is worked out every time; a

@@ -283,6 +283,58 @@ const BudgetUI = (() => {
     return { el: field(label, input, { optional, hint }), input, value: () => input.value.replace(/\s+/g, " ").trim() };
   }
 
+  // The site's colors to pick from (Calendar Fractals, prisms' cards), and a color as "#rrggbb" or null
+  const CARD_COLORS = ["#4f8cff", "#00b8a9", "#3fbf5f", "#b8c400", "#f5a623", "#ff6b35", "#ff4d6d", "#d94fd3", "#9b6bff", "#5b6cff", "#8a8fa8", "#c98a5a"];
+  const readColor = (value) => (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim().toLowerCase() : null);
+
+  // A color to pick: the site's swatches, and a box for any other (the device's own color picker, where it has one).
+  // none: the words for a first choice of no color at all (its own look), or "" to always have one. value(): "#rrggbb", or
+  // null for none.
+  function colorField(value, { label = "Color", hint = "", none = "" } = {}) {
+    let current = readColor(value) || (none ? null : CARD_COLORS[0]);
+    const row = element("div", "fractalColors");
+    row.setAttribute("role", "radiogroup");
+    row.setAttribute("aria-label", label);
+    const custom = element("input", "fractalColorBox");
+    custom.type = "color";
+    custom.setAttribute("aria-label", "Another color");
+    const choices = CARD_COLORS.map(color => {
+      const choice = element("button", "fractalColor");
+      choice.type = "button";
+      choice.style.background = color;
+      choice.setAttribute("role", "radio");
+      choice.setAttribute("aria-label", `Color ${color}`);
+      choice.addEventListener("click", () => set(color));
+      return [color, choice];
+    });
+    if (none) {
+      const plain = element("button", "fractalColor noColor", "");
+      plain.type = "button";
+      plain.setAttribute("role", "radio");
+      plain.setAttribute("aria-label", none);
+      plain.title = none;
+      plain.addEventListener("click", () => set(null));
+      choices.unshift([null, plain]);
+    }
+    function set(color) {
+      current = color === null ? null : readColor(color) || current;
+      if (current) custom.value = current;
+      for (const [color2, choice] of choices) choice.setAttribute("aria-checked", String(color2 === current));
+    }
+    custom.addEventListener("input", () => set(custom.value));
+    row.append(...choices.map(([, choice]) => choice), custom);
+    set(current);
+    return { el: field(label, row, { hint }), value: () => current };
+  }
+
+  // A color with some of the page showing through it: "rgba(r, g, b, alpha)"
+  function colorTint(color, alpha) {
+    const hex = readColor(color);
+    if (!hex) return "";
+    const [r, g, b] = [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   // Amount with a Cost/Gain toggle (or another pair of names for the two signs: BALANCE_SIGNS for a balance, which
   // starts on + instead). It's typed like a cash register (cashRegister below), and an amount of 0 shows as a blank
   // box with 0.00 as its hint. value(): signed number, null when blank (callers count that as 0), NaN when unreadable.
@@ -399,7 +451,7 @@ const BudgetUI = (() => {
   // "$1,200") is read as it is. Nothing but zero shows as a blank box. A - or + typed anywhere goes to onSign(-1 or
   // 1) instead (a box with no sign of its own just drops it). Tapping into a box with an amount in it selects it,
   // so typing replaces it. A keyboard still putting a character together (composing) is left to finish first.
-  const MAX_DIGITS = 12; // $1,000,000,000.00
+  const MAX_DIGITS = String(LIMITS.amount).length + 2; // $1,000,000,000.00, its cents counted
   function cashRegister(input, onSign = null) {
     input.inputMode = "numeric";
     const digits = (text) => String(text).replace(/\D/g, "").replace(/^0+/, "").slice(0, MAX_DIGITS);
@@ -948,7 +1000,7 @@ const BudgetUI = (() => {
       count.type = "text";
       count.inputMode = "numeric";
       count.placeholder = "0";
-      count.maxLength = 3;
+      count.maxLength = String(LIMITS.placeholderDays).length;
       count.setAttribute("aria-label", "How many days");
       const side = element("select", "selectInput frequencyUnit");
       side.append(new Option("days behind the current day", "after"), new Option("days ahead of the current day", "before"));
@@ -1015,7 +1067,7 @@ const BudgetUI = (() => {
     const count = element("input", "frequencyCount reminderDays");
     count.type = "text";
     count.inputMode = "numeric";
-    count.maxLength = 3;
+    count.maxLength = String(LIMITS.reminderDays).length;
     count.placeholder = "0";
     count.value = String(days ?? 1);
     count.setAttribute("aria-label", "How many days before its day");
@@ -1079,6 +1131,7 @@ const BudgetUI = (() => {
     const picker = segmented(choices, own || titleWave(title), () => { touched = true; });
     picker.el.classList.add("purposeChoices");
     noTranslate(picker.el); // (Their own names)
+    showWaveMaxes(picker.el, choices);
     const hint = lookup
       ? "Bob's Wavelength Planning card adds up what each one costs, and its Add Or Change Wavelengths button makes your own."
       : "It's this entry's own.";
@@ -1113,6 +1166,30 @@ const BudgetUI = (() => {
       value: () => (el.hidden || !picker.value() ? undefined : picker.value()),
       perTitle: () => !!lookup && perTitle.input.checked
     };
+  }
+
+  // Under each wavelength's button that has a max, where it stands in the days Bob's Wavelength Planning card adds up
+  // ("$250.00/$300.00 · 45%/50%", orange near it and red past it: Bob Page.js waveMaxStanding). Only where his page's code
+  // is loaded (Home, Snapshot, his page), and only when some wavelength has a max.
+  function showWaveMaxes(group, choices) {
+    if (typeof waveMaxStanding !== "function" || typeof purposeTotals !== "function" || typeof waveMaxes !== "function" || Object.keys(waveMaxes()).length === 0) return;
+    try {
+      const range = purposeRangeOf({ waveDays: waveDaysOf("bob") });
+      const totals = purposeTotals(range.from, range.to);
+      const sum = totals.slices.reduce((all, slice) => all + slice.total, 0);
+      choices.forEach((choice, at) => {
+        const button = group.children[at];
+        const standing = waveMaxStanding(choice.key, totals.slices.find(slice => slice.key === choice.key)?.total ?? 0, sum);
+        if (!button || !standing.max) return;
+        const words = [standing.max.amount ? standing.amount : "", standing.max.percent ? standing.share : ""].filter(Boolean).join(" · ");
+        button.classList.add("hasWaveMax");
+        if (standing.level) button.classList.add(standing.level);
+        button.append(element("span", "waveMaxFigure", words));
+        button.setAttribute("aria-label", `${choice.label}: ${standing.words}, from ${showDate(range.from)} to ${showDate(range.to)}`);
+      });
+    } catch (error) {
+      console.error("A wavelength's max couldn't be shown:", error);
+    }
   }
 
   // Business: a title's business category (see Business Mode in Process Budget.js), in every form that makes or changes an
@@ -1507,6 +1584,245 @@ const BudgetUI = (() => {
     });
   }
 
+  // An entry's Move (its quick menu's): a small window asks for the day to move it to (and, for a repeating calendar entry,
+  // scope: the segmented Just this day or Every time, which move(date) reads), then move(date) moves it ({ ok, message }),
+  // and both windows close. hint: what moving it does, in words. past: the day it's on is before today, which asks first
+  // (confirmPastMove).
+  function openMoveTo(origin, { hint, move, scope = null, past = false }) {
+    openPanel({
+      origin,
+      size: "small",
+      stacked: true,
+      title: "Move To Another Day",
+      build(form, panel) {
+        const day = dateField({ label: "Move to" });
+        form.append(element("p", "panelHint", hint), ...(scope ? [scope] : []), day.el, buttonRow([
+          { label: "Move", kind: "primary", type: "submit" },
+          { label: "Cancel", onClick: () => panel.close() }
+        ]));
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          panel.setError("");
+          const picked = day.value();
+          if (picked === null) return panel.setError("Pick the day to move it to.");
+          if (picked === undefined) return panel.setError(`That date isn't a real day. Use ${datePattern()}.`);
+          const go = async () => {
+            panel.setBusy(true);
+            const result = await move(picked);
+            panel.setBusy(false);
+            if (!result.ok) return panel.setError(result.message || "Couldn't move it. Please try again.");
+            closeAllPanels();
+            warnIfUnsaved(result);
+            showToast(`Moved to ${showDay(picked)}.`);
+          };
+          if (past) confirmPastMove(form.querySelector('button[type="submit"]'), go);
+          else go();
+        });
+      }
+    });
+  }
+
+  // A budget entry's Copy (its window's, and its quick menu's): the entry as it's saved (its title, type, Equity account,
+  // amount or %, placeholder, note, and its own wavelength) goes on another day too, adding into an entry with its title
+  // and type there (which keeps its own wavelength, when it has one). A % one copied to a day before today is what it comes
+  // to, and a placeholder copied there is an ordinary entry (see PLACEHOLDERS in Process Budget.js).
+  function copyBudgetEntry(origin, line, date) {
+    const parts = getParts(line);
+    const refraction = getSpecialType(parts[0]);
+    const title = parts.slice(2).join(" ");
+    const currentPercent = percentOf(parts[0]);
+    const ownPurpose = noteText("purposes", entryNoteKey(date, title, refraction)) ||
+      (entryMark(parts[0]) === "✔️" ? noteText("recurringPurposes", recurringNoteKey(title, parts[0])) : "");
+    openCopyTo(origin, {
+      hint: `A copy of ${shownLine(line)} goes on the day you pick, with its note, adding into an entry with the same title and type already there. It's a copy: changing one later doesn't change the other.`,
+      copy: (target) => addCalendarEntry({
+        title,
+        sprite: refraction,
+        amount: parseAmount(parts[1]),
+        ...(currentPercent !== null && target >= today ? { percent: currentPercent } : {}),
+        date: target,
+        placeholder: isPlaceholder(parts[0]) && target >= today,
+        note: entryNote(date, title, refraction) || undefined,
+        ...(ownPurpose && !noteText("purposes", entryNoteKey(target, title, refraction)) ? { purpose: ownPurpose } : {})
+      })
+    });
+  }
+
+  // A budget entry held down or right-clicked (its line as its day stores it, on date): Edit (its window, as a tap opens),
+  // Move, Copy, and Delete. inHistory: a day in History, where the same changes keep the Equity accounts' balances.
+  // stacked: its window opens over the one that's open (an account's Entries).
+  function entryQuickMenu(target, line, date, { lineIndex = 1, inHistory = false, stacked = false, point = null } = {}) {
+    const parts = getParts(line);
+    const refraction = getSpecialType(parts[0]);
+    const title = parts.slice(2).join(" ");
+    const changeEntry = inHistory ? changeHistoryEntry : changeCalendarEntry;
+    const name = `${capitalize(title)} on ${showDay(date)}`;
+    quickMenu(target, [
+      { label: "Edit", onClick: () => openEntryOptions(target, line, date, { lineIndex, inHistory, stacked }) },
+      { label: "Move", onClick: () => openMoveTo(target, {
+        hint: `${shownLine(line)} moves from ${showDay(date)} to the day you pick, with its note and reminder, adding into an entry with the same title and type already there.`,
+        past: date < today,
+        move: (to) => (to.getTime() === date.getTime() ? Promise.resolve({ ok: true }) : changeEntry({ title, sprite: refraction, date, action: "set", amount: "", moveDate: to }))
+      }) },
+      { label: "Copy", onClick: () => copyBudgetEntry(target, line, date) },
+      { label: "Delete", danger: true, onClick: async () => {
+        if (!window.confirm(`Delete ${title} on ${showDay(date)}?`)) return;
+        const result = await changeEntry({ title, sprite: refraction, date, action: "delete" });
+        if (!result.ok) return showToast(result.message || "Couldn't delete it. Please try again.", true);
+        warnIfUnsaved(result);
+        showToast(`Deleted ${title} on ${showDay(date)}.`);
+      } }
+    ], { label: name, point });
+  }
+
+  // =====================================================================
+  // #region QUICK MENU (an entry held down, or right-clicked)
+  // =====================================================================
+  // A small menu where it was pressed (point: { x, y } on the screen, or under the element for the keyboard's menu key),
+  // over everything: items [{ label, onClick(), danger }], each a button. The arrow keys (and Home and End) move between
+  // them, Escape or a tap anywhere else closes it, and closing it without picking one puts the focus back on the element.
+  // One at a time.
+  let shownMenu = null; // { el, anchor, close }
+
+  // Close the quick menu that's showing, if one is
+  function closeQuickMenu() {
+    if (shownMenu) shownMenu.close(false);
+  }
+
+  // Show one (see above) for anchor, the element it's about
+  function quickMenu(anchor, items, { label = "Options", point = null } = {}) {
+    closeQuickMenu();
+    const menu = element("div", "quickMenu");
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", label);
+    const buttons = items.map(item => {
+      const button = element("button", `quickMenuItem${item.danger ? " danger" : ""}`, item.label);
+      button.type = "button";
+      button.setAttribute("role", "menuitem");
+      button.tabIndex = -1;
+      button.addEventListener("click", () => {
+        close(true);
+        item.onClick();
+      });
+      return button;
+    });
+    menu.append(...buttons);
+    onScreen(menu);
+    // Where it goes: at the press (in the screen layer's own pixels), kept on the screen
+    const layer = window.ScreenLayer;
+    const area = layer ? layer.size() : { width: document.documentElement.clientWidth, height: window.innerHeight };
+    const scale = layer ? layer.scale() : 1;
+    const layerBox = layer ? layer.element.getBoundingClientRect() : { left: 0, top: 0 };
+    const anchorBox = layer ? layer.rectOf(anchor) : anchor.getBoundingClientRect();
+    const at = point ? { x: (point.x - layerBox.left) * scale, y: (point.y - layerBox.top) * scale } : { x: anchorBox.left, y: anchorBox.bottom };
+    // (Without room under it, it goes over: its bottom at the press, or for the menu key, at the element's top)
+    const over = point ? at.y : anchorBox.top;
+    const margin = 8;
+    menu.style.left = `${Math.max(margin, Math.min(at.x, area.width - menu.offsetWidth - margin))}px`;
+    menu.style.top = `${at.y + menu.offsetHeight + margin > area.height ? Math.max(margin, over - menu.offsetHeight) : at.y}px`;
+
+    const outside = (event) => {
+      if (!menu.contains(event.target)) close(false);
+    };
+    const keys = (event) => {
+      const at = buttons.indexOf(document.activeElement);
+      const to = { ArrowDown: at + 1, ArrowRight: at + 1, ArrowUp: at - 1, ArrowLeft: at - 1, Home: 0, End: buttons.length - 1 }[event.key];
+      if (event.key === "Escape") {
+        // (Only the menu closes, not the zoomed day or the window under it)
+        event.preventDefault();
+        event.stopPropagation();
+        close(false);
+      } else if (event.key === "Tab") {
+        close(false);
+      } else if (to !== undefined) {
+        event.preventDefault();
+        buttons[(to + buttons.length) % buttons.length].focus();
+      }
+    };
+    const away = () => close(false);
+    // (A new width, like a phone turned sideways: a phone's toolbar sliding away only changes the height)
+    const width = window.innerWidth;
+    const resized = () => {
+      if (window.innerWidth !== width) close(false);
+    };
+    function close(picked) {
+      if (!shownMenu || shownMenu.el !== menu) return;
+      shownMenu = null;
+      document.removeEventListener("pointerdown", outside, true);
+      menu.removeEventListener("keydown", keys);
+      window.removeEventListener("scroll", away);
+      window.removeEventListener("resize", resized);
+      menu.remove();
+      if (!picked && anchor.isConnected) anchor.focus({ preventScroll: true });
+    }
+    shownMenu = { el: menu, anchor, close };
+    // (A frame later: the press that opened it isn't a tap outside it)
+    requestAnimationFrame(() => {
+      if (shownMenu?.el !== menu) return;
+      document.addEventListener("pointerdown", outside, true);
+      window.addEventListener("scroll", away, { passive: true });
+      window.addEventListener("resize", resized);
+    });
+    menu.addEventListener("keydown", keys);
+    buttons[0]?.focus({ preventScroll: true });
+  }
+
+  const LONG_PRESS_MS = 500; // How long a finger holds an entry down before its menu opens
+  const PRESS_SLOP = 10;     // Pixels it can move meanwhile (more is a swipe or a scroll)
+
+  // Holding a finger (or a pen) down on one of root's elements matching selector, without moving, or right-clicking one
+  // (or the keyboard's menu key on it) calls open(element, point) for its quick menu. The tap that ends a long press
+  // doesn't also do what a tap does, and a phone's own long press (its contextmenu, after ours) doesn't open it twice.
+  function wireQuickMenus(root, selector, open) {
+    if (!root) return;
+    let press = null;
+    let swallowClick = 0;
+    const cancel = () => {
+      if (press) clearTimeout(press.timer);
+      press = null;
+    };
+    root.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" || !event.isPrimary) return cancel();
+      const target = event.target.closest && event.target.closest(selector);
+      if (!target || !root.contains(target)) return;
+      cancel();
+      const started = { target, x: event.clientX, y: event.clientY, id: event.pointerId };
+      started.timer = setTimeout(() => {
+        press = null;
+        if (!target.isConnected || (shownMenu && shownMenu.anchor === target)) return;
+        swallowClick = Date.now() + 900;
+        open(target, { x: started.x, y: started.y });
+      }, LONG_PRESS_MS);
+      press = started;
+    }, { passive: true });
+    root.addEventListener("pointermove", (event) => {
+      if (press && event.pointerId === press.id && Math.hypot(event.clientX - press.x, event.clientY - press.y) > PRESS_SLOP) cancel();
+    }, { passive: true });
+    for (const type of ["pointerup", "pointercancel"]) {
+      root.addEventListener(type, (event) => {
+        if (press && event.pointerId === press.id) cancel();
+      }, { passive: true });
+    }
+    root.addEventListener("click", (event) => {
+      if (Date.now() > swallowClick) return;
+      swallowClick = 0;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+    root.addEventListener("contextmenu", (event) => {
+      const target = event.target.closest && event.target.closest(selector);
+      if (!target || !root.contains(target)) return;
+      event.preventDefault();
+      cancel();
+      if (shownMenu && shownMenu.anchor === target) return;
+      // (The keyboard's menu key: no point, so it opens under the element)
+      const fromKeys = event.button !== 2 && event.clientX === 0 && event.clientY === 0;
+      open(target, fromKeys ? null : { x: event.clientX, y: event.clientY });
+    });
+  }
+
+  //#endregion
+
   // An entry's options (an entry tapped on a zoomed day on Home or History, an account's Entries, or Search's
   // results): line is the entry as its day stores it ("❗️ -$4.50 Coffee") on date. Its title (see renameEntry in Process
   // Budget.js: any entry before today, and from today on one that doesn't land by itself from a recurring entry or a
@@ -1723,24 +2039,9 @@ const BudgetUI = (() => {
           submit(panel, () => changeEntry({ title, sprite: refraction, date, action: "delete" }));
         }
 
-        // Copy: the entry as it's saved (its title, type, Equity account, amount or %, placeholder, note, and its own
-        // wavelength) goes on another day too, adding into an entry with its title and type there (which keeps its own
-        // wavelength, when it has one). A % one copied to a day before today is what it comes to, and a placeholder copied
-        // there is an ordinary entry (see PLACEHOLDERS in Process Budget.js).
+        // Copy: the entry as it's saved goes on another day too (copyBudgetEntry)
         function copyEntry(button) {
-          openCopyTo(button, {
-            hint: `A copy of ${shownLine(line)} goes on the day you pick, with its note, adding into an entry with the same title and type already there. It's a copy: changing one later doesn't change the other.`,
-            copy: (target) => addCalendarEntry({
-              title,
-              sprite: refraction,
-              amount: currentAmount,
-              ...(currentPercent !== null && target >= today ? { percent: currentPercent } : {}),
-              date: target,
-              placeholder: wasPlaceholder && target >= today,
-              note: entryNote(date, title, refraction) || undefined,
-              ...(ownPurpose && !noteText("purposes", entryNoteKey(target, title, refraction)) ? { purpose: ownPurpose } : {})
-            })
-          });
+          copyBudgetEntry(button, line, date);
         }
       }
     });
@@ -2182,6 +2483,11 @@ const BudgetUI = (() => {
     renderUndoButtons,
     wireUndoButtons,
     openCopyTo,
+    openMoveTo,
+    quickMenu,
+    closeQuickMenu,
+    wireQuickMenus,
+    entryQuickMenu,
     businessField,
     REFRACTION_TYPES,
     RECURRING_SPRITES,
@@ -2194,6 +2500,10 @@ const BudgetUI = (() => {
     element,
     field,
     textField,
+    CARD_COLORS,
+    readColor,
+    colorField,
+    colorTint,
     amountField,
     readPercentField,
     BALANCE_SIGNS,
@@ -2206,6 +2516,7 @@ const BudgetUI = (() => {
     selectField,
     checkboxField,
     placeholderField,
+    reminderField,
     purposeField,
     noteField,
     frequencyField,
