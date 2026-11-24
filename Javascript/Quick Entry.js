@@ -119,10 +119,12 @@ async function checkQuickKey() {
 function openQuickEntryForm(mode = "entry", fill = null, changing = null) {
   const makingPrism = mode === "prism";
   const changingEntry = mode === "change" && !!changing;
+  // (A prism tapped in Edit Prisms: changing is { index }, its place in the list)
+  const prismAt = makingPrism && changing && Number.isInteger(changing.index) ? changing.index : null;
   quickFormDay = createSafeMidnight(new Date());
   BudgetUI.openPanel({
     size: "large",
-    title: makingPrism ? "New Prism" : changingEntry ? "Change Entry" : "New Entry",
+    title: makingPrism ? (prismAt !== null ? "Change Prism" : "New Prism") : changingEntry ? "Change Entry" : "New Entry",
     closable: false,
     inline: true, // The form is the page here, not something on top of it
     build(form, panel) {
@@ -142,15 +144,19 @@ function openQuickEntryForm(mode = "entry", fill = null, changing = null) {
         : changingEntry
           ? [{ label: "Save Changes", kind: "primary", type: "submit" }, { label: "Cancel", onClick: backToNewEntry }]
           : [{ label: "Add Entry", kind: "primary", type: "submit" }];
-      // A prism never keeps a date, a title's Wavelength, or a note, so New Prism has none of them
-      form.append(...fields.els.filter(el => !makingPrism || (el !== fields.dateEl && el !== fields.purposeEl)), BudgetUI.buttonRow(buttons));
+      // A prism never keeps a date, a title's Wavelength, or a note, so New Prism has none of them. It has a color for its
+      // card instead (none to start: its card looks like the rest).
+      const cardColor = makingPrism ? BudgetUI.colorField(fill && fill.color, { label: "Card color", none: "No color", hint: "Its button on this page shows in this color." }) : null;
+      form.append(...fields.els.filter(el => !makingPrism || (el !== fields.dateEl && el !== fields.purposeEl)));
+      if (cardColor) form.append(cardColor.el);
+      form.append(BudgetUI.buttonRow(buttons));
       if (!makingPrism) form.append(fields.noteEl);
       if (fill) fields.fill(fill);
       quickForm = { panel, fields, mode: changingEntry ? "change" : makingPrism ? "prism" : "entry", changing: changingEntry ? changing : null };
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        if (makingPrism) savePrismFromForm(panel, fields);
+        if (makingPrism) savePrismFromForm(panel, fields, cardColor.value(), prismAt);
         else if (changingEntry) saveWaitingChange(panel, fields, changing);
         else addQuickEntry(panel, fields);
       });
@@ -172,6 +178,7 @@ async function addQuickEntry(panel, fields) {
   if (!result.ok) return panel.setError(quickProblem(result));
   BudgetUI.showToast(`Added ${describeQueued(queued)}.`);
   showQuickAnswer(result.data);
+  Limits.near("waitingEntries", result.data.waiting);
   if (Number.isInteger(result.data.id)) {
     quickUndo.push({ id: result.data.id, entry: queued });
     quickRedo.length = 0;
@@ -229,7 +236,7 @@ function keyStopped() {
 // Entry and leaves the rest to fill in. Add Prism turns New Entry into New Prism; Edit Prisms drags them
 // into order (≡) and deletes them (×). Every change saves the whole list.
 
-const MAX_PRISMS = 30;
+const MAX_PRISMS = LIMITS.prisms;
 let editingPrisms = false;
 
 document.getElementById("addPrismButton").addEventListener("click", () => {
@@ -267,21 +274,37 @@ function renderPrisms() {
   edit.classList.toggle("primary", editingPrisms);
 }
 
-// A prism's button: tapping it fills in New Entry (a placeholder's is yellow)
+// A prism's button: tapping it fills in New Entry (a placeholder's is yellow, and one with a card color shows in it)
 function prismButton(prism) {
   const item = BudgetUI.element("li", "prismItem");
   const button = BudgetUI.noTranslate(BudgetUI.element("button", `budgetButton prismButton${prism.placeholder ? " isPlaceholder" : ""}`, prismLabel(prism)));
   button.type = "button";
+  colorPrism(button, prism);
   button.addEventListener("click", () => applyPrism(prism));
   item.appendChild(button);
   return item;
 }
 
-// A prism in Edit Prisms: ≡ to drag it, and × to delete it
+// A prism's card color, on its button or its row in Edit Prisms: its edge in the color, and a little of it over the glass
+function colorPrism(el, prism) {
+  const color = BudgetUI.readColor(prism.color);
+  el.classList.toggle("hasColor", !!color);
+  if (!color) return;
+  el.style.setProperty("--cardColor", color);
+  el.style.setProperty("--cardTint", BudgetUI.colorTint(color, 0.3));
+}
+
+// What a prism fills in, for its form (Change Prism) or New Entry
+function prismFill(prism) {
+  return { title: prism.title, amount: prism.amount, percent: prism.percent ?? null, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "", placeholder: !!prism.placeholder, color: prism.color || null };
+}
+
+// A prism in Edit Prisms: ≡ to drag it, its name to change it (Change Prism, with its card color), and × to delete it
 function prismEditRow(prism, index) {
   const label = prismLabel(prism);
   const item = BudgetUI.element("li", "prismItem prismEditRow");
   item.dataset.index = index;
+  colorPrism(item, prism);
   const handle = BudgetUI.element("span", "prismHandle", "≡");
   handle.title = "Hold and drag to move";
   handle.setAttribute("aria-label", `Move ${label}`);
@@ -296,7 +319,14 @@ function prismEditRow(prism, index) {
   remove.type = "button";
   remove.setAttribute("aria-label", `Delete ${label}`);
   remove.addEventListener("click", () => deletePrism(index));
-  item.append(handle, BudgetUI.noTranslate(BudgetUI.element("span", `prismLabel${prism.placeholder ? " isPlaceholder" : ""}`, label)), remove);
+  const change = BudgetUI.noTranslate(BudgetUI.element("button", `prismLabel${prism.placeholder ? " isPlaceholder" : ""}`, label));
+  change.type = "button";
+  change.setAttribute("aria-label", `Change ${label}`);
+  change.addEventListener("click", () => {
+    openQuickEntryForm("prism", prismFill(prism), { index });
+    highlightForm();
+  });
+  item.append(handle, change, remove);
   return item;
 }
 
@@ -319,7 +349,7 @@ function prismLabel(prism, inWords = false) {
 function applyPrism(prism) {
   if (!quickForm || quickForm.mode === "prism") openQuickEntryForm("entry");
   const { fields } = quickForm;
-  fields.fill({ title: prism.title, amount: prism.amount, percent: prism.percent ?? null, sprite: prism.type ? QUICK_ENTRY_TYPES[prism.type] : "", account: prism.account || "", placeholder: !!prism.placeholder });
+  fields.fill(prismFill(prism));
   // An account renamed or deleted since the prism was saved isn't in the list, so it says to pick one
   if (prism.account && !quickAccounts.some(account => cleanString(account.name) === cleanString(prism.account))) {
     BudgetUI.showToast(`${prism.account} isn't one of your Equity accounts anymore. Pick one under Equity Account, or leave it as None.`, true);
@@ -342,8 +372,9 @@ function highlightForm() {
 }
 
 // Save Prism: whatever's filled in or picked (Auto counts as nothing picked), and at least one thing (Placeholder alone
-// doesn't count: it goes with what the prism fills in)
-async function savePrismFromForm(panel, fields) {
+// doesn't count: it goes with what the prism fills in), with its card color (null for none). at: the place of the prism
+// being changed, or null for a new one.
+async function savePrismFromForm(panel, fields, color = null, at = null) {
   const { title, amount: typedAmount, percent, sprite, account, placeholder } = fields.values();
   if (hasTitleArrow(title)) return panel.setError(TITLE_ARROW);
   // (A % box left empty keeps no amount, like an empty amount box)
@@ -353,17 +384,18 @@ async function savePrismFromForm(panel, fields) {
   if (Number.isNaN(amount)) return panel.setError("Enter an amount, like 12.50, or leave it blank.");
   if (amount !== null && Math.abs(amount) > MAX_AMOUNT) return panel.setError(AMOUNT_TOO_BIG);
   // The title and the Equity account are kept apart, so the title is never the account's name unless it was typed
-  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null, ...(placeholder ? { placeholder: true } : {}), ...(percent ? { percent } : {}) };
+  const prism = { title, amount, type: sprite ? QUICK_TYPE_NAMES[sprite] : null, account: account || null, ...(placeholder ? { placeholder: true } : {}), ...(percent ? { percent } : {}), ...(color ? { color } : {}) };
   if (!prism.title && prism.amount === null && !prism.percent && !prism.type && !prism.account) {
     return panel.setError("Fill in or pick at least one thing for this prism: a title, an amount, a type, or an account.");
   }
-  if (quickPrisms.length >= MAX_PRISMS) return panel.setError(`You can have up to ${MAX_PRISMS} prisms. Delete one in Edit Prisms first.`);
+  const changing = at !== null && at < quickPrisms.length;
+  if (!changing && quickPrisms.length >= MAX_PRISMS) return panel.setError(`You can have up to ${MAX_PRISMS} prisms. Delete one in Edit Prisms first.`);
   panel.setError("");
   panel.setBusy(true);
-  const saved = await savePrisms([...quickPrisms, prism]);
+  const saved = await savePrisms(changing ? quickPrisms.map((old, i) => (i === at ? prism : old)) : [...quickPrisms, prism]);
   panel.setBusy(false);
   if (!saved) return;
-  BudgetUI.showToast(`Prism saved: ${prismLabel(prism)}.`);
+  BudgetUI.showToast(`${changing ? "Prism changed" : "Prism saved"}: ${prismLabel(prism)}.`);
   openQuickEntryForm(); // Back to New Entry
 }
 
@@ -379,6 +411,7 @@ async function deletePrism(index) {
 
 // Save the whole list. Resolves to true when it's saved; otherwise says why and shows the list as it was.
 async function savePrisms(list) {
+  const before = quickPrisms.length;
   const result = await quickApi("/api/quick/prisms", { key: quickKey, prisms: list });
   if (result.status === 401) {
     keyStopped();
@@ -392,6 +425,7 @@ async function savePrisms(list) {
   }
   quickPrisms = result.data.prisms;
   renderPrisms();
+  if (quickPrisms.length > before) Limits.near("prisms", quickPrisms.length);
   return true;
 }
 
@@ -489,6 +523,7 @@ async function redoQuickEntry() {
     if (Number.isInteger(result.data.id)) quickUndo.push({ id: result.data.id, entry: next });
     BudgetUI.showToast(`Added ${describeQueued(next)} again.`);
     showQuickAnswer(result.data);
+    Limits.near("waitingEntries", result.data.waiting);
   } else {
     BudgetUI.showToast(quickProblem(result), true);
   }

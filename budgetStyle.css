@@ -309,19 +309,21 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   visibility: visible;
 }
 
-/* A phone's zoomed day isn't scaled, so its buttons are just their size, in the top right corner of the day it draws */
+/* A phone's zoomed day isn't scaled, so its buttons are just their size, in the top right corner of the day it draws. On a
+   page still pinch-zoomed in, that size is divided by the page's zoom (--pinch, set with the day's), like its words, so
+   on the screen they're the same as ever. */
 .elastic-table td.is-fullZoom .cell-action-btn {
-  top: calc(var(--dayY, 0px) + var(--DAY_BUTTON_INSET));
-  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - var(--DAY_BUTTON_SPOT) - var(--DAY_BUTTON_INSET));
+  top: calc(var(--dayY, 0px) + var(--DAY_BUTTON_INSET) / var(--pinch, 1));
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - (var(--DAY_BUTTON_SPOT) + var(--DAY_BUTTON_INSET)) / var(--pinch, 1));
   right: auto;
-  width: var(--DAY_BUTTON_SPOT);
-  height: var(--DAY_BUTTON_SPOT);
-  border-width: 1.5px;
-  font-size: var(--DAY_BUTTON_SIZE);
+  width: calc(var(--DAY_BUTTON_SPOT) / var(--pinch, 1));
+  height: calc(var(--DAY_BUTTON_SPOT) / var(--pinch, 1));
+  border-width: calc(1.5px / var(--pinch, 1));
+  font-size: calc(var(--DAY_BUTTON_SIZE) / var(--pinch, 1));
 }
 
 .elastic-table td.is-fullZoom .cell-action-btn.cellAdd {
-  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * var(--DAY_BUTTON_SPOT) - 2 * var(--DAY_BUTTON_INSET));
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * (var(--DAY_BUTTON_SPOT) + var(--DAY_BUTTON_INSET)) / var(--pinch, 1));
 }
 
 /* On Home, what the calendar shows (the header's three buttons again: Process Budget.js cellViewButtons), on the zoomed
@@ -429,33 +431,33 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 }
 
 .elastic-table td.is-fullZoom .cellView {
-  top: calc(var(--dayY, 0px) + var(--DAY_BUTTON_INSET));
-  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - 2 * var(--DAY_BUTTON_SPOT) - 3 * var(--DAY_BUTTON_INSET) - var(--DAY_VIEW_WIDTH));
+  top: calc(var(--dayY, 0px) + var(--DAY_BUTTON_INSET) / var(--pinch, 1));
+  left: calc(var(--dayX, 0px) + var(--dayW, 100%) - (2 * var(--DAY_BUTTON_SPOT) + 3 * var(--DAY_BUTTON_INSET) + var(--DAY_VIEW_WIDTH)) / var(--pinch, 1));
   right: auto;
-  width: var(--DAY_VIEW_WIDTH);
-  height: var(--DAY_BUTTON_SPOT);
-  border-width: 1.5px;
-  border-radius: calc(var(--DAY_BUTTON_SPOT) / 2);
+  width: calc(var(--DAY_VIEW_WIDTH) / var(--pinch, 1));
+  height: calc(var(--DAY_BUTTON_SPOT) / var(--pinch, 1));
+  border-width: calc(1.5px / var(--pinch, 1));
+  border-radius: calc(var(--DAY_BUTTON_SPOT) / 2 / var(--pinch, 1));
 }
 
 .elastic-table td.is-fullZoom .cellViewButton {
-  font-size: calc(var(--DAY_BUTTON_SIZE) * 0.78);
+  font-size: calc(var(--DAY_BUTTON_SIZE) * 0.78 / var(--pinch, 1));
 }
 
 .elastic-table td.is-fullZoom .cellViewButton + .cellViewButton {
-  border-left-width: 1px;
+  border-left-width: calc(1px / var(--pinch, 1));
 }
 
 .elastic-table td.is-fullZoom.is-editing .cell-content > .lineDate {
-  padding-right: calc(var(--DAY_VIEW_WIDTH) + 2 * var(--DAY_BUTTON_SPOT) + 3 * var(--DAY_BUTTON_INSET));
+  padding-right: calc((var(--DAY_VIEW_WIDTH) + 2 * var(--DAY_BUTTON_SPOT) + 3 * var(--DAY_BUTTON_INSET)) / var(--pinch, 1));
   box-sizing: border-box;
 }
 
 /* A phone's zoomed day: its date is on the buttons' line, as tall as they are and as far from the day's top, so its middle
    is theirs (the day's lines start 4px * --zoomText down: the date comes up the rest of the way) */
 .elastic-table td.is-fullZoom.is-editing:not(.cellViewOwnRow) .cell-content > .lineDate {
-  margin-top: calc(var(--DAY_BUTTON_INSET) - 4px * var(--zoomText, 1));
-  line-height: var(--DAY_BUTTON_SPOT);
+  margin-top: calc(var(--DAY_BUTTON_INSET) / var(--pinch, 1) - 4px * var(--zoomText, 1));
+  line-height: calc(var(--DAY_BUTTON_SPOT) / var(--pinch, 1));
 }
 
 /*========================================*
@@ -3278,6 +3280,38 @@ html.watchView .quickBalanceAmount {
   text-overflow: ellipsis;
 }
 
+/* A prism with a card color (Quick Entry.js colorPrism): its edge in the color, and a little of it over the glass */
+.prismButton.hasColor {
+  border-color: var(--cardColor);
+  background: linear-gradient(var(--cardTint), var(--cardTint)), var(--GLASS_BUTTON);
+}
+
+.prismEditRow.hasColor {
+  border-color: var(--cardColor);
+  background: linear-gradient(var(--cardTint), var(--cardTint)), var(--BOX_FILL);
+}
+
+/* In Edit Prisms, a prism's name is a button that opens it to change it */
+button.prismLabel {
+  margin: 0;
+  padding: 0.2em 0;
+  font-size: 1em;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+button.prismLabel:hover,
+button.prismLabel:focus-visible {
+  transform: none;
+  text-decoration: underline;
+  box-shadow: none;
+}
+
 .prismList.isEditing {
   flex-direction: column;
   flex-wrap: nowrap;
@@ -3439,13 +3473,44 @@ html.lessMotion .budgetPanel.prismFlash {
   font-size: 0.9em;
 }
 
+/* The Lowest card's list looks like its Look Ahead button: a glass pill, with a small ▾ drawn in the words' color */
 .lowestAccount {
+  -webkit-appearance: none;
+  appearance: none;
   display: block;
   width: auto;
   max-width: 100%;
   margin: 0.15em 0 0.35em;
-  padding: 0.25em 0.5em;
-  font-size: 0.8em;
+  padding: 0.35em 2em 0.35em 0.9em;
+  font-family: var(--FONT);
+  font-size: 0.85em;
+  color: var(--TEXT_BRIGHT);
+  background:
+    linear-gradient(45deg, transparent 50%, currentColor 50%) calc(100% - 1.15em) 55% / 0.36em 0.36em no-repeat,
+    linear-gradient(135deg, currentColor 50%, transparent 50%) calc(100% - 0.79em) 55% / 0.36em 0.36em no-repeat,
+    var(--GLASS_BUTTON);
+  border: 1.5px solid var(--GLASS_LINE_BRIGHT);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(var(--TINT_RGB), 0.06);
+  cursor: pointer;
+  transition:
+    transform var(--SLOW_TRANSFORM),
+    box-shadow var(--SLOW_SHADOW),
+    border-color var(--SLOW_BORDER),
+    color var(--SLOW_COLOR);
+}
+
+.lowestAccount:hover,
+.lowestAccount:focus-visible {
+  transform: scale(1.05);
+  color: var(--TEXT_HOT);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+}
+
+.lowestAccount option {
+  color: var(--TEXT_BRIGHT);
+  background: var(--LIST_FILL);
 }
 
 /* Calendar Fractals: a glass button with a ▾, like the budget picker in the page's header */
@@ -4015,6 +4080,11 @@ button.fractalColor[aria-checked="true"] {
   box-shadow: 0 0 10px rgba(var(--TINT_RGB), 0.7);
 }
 
+/* No color (a prism's card looks like the rest): the box's own fill, crossed out */
+button.fractalColor.noColor {
+  background: linear-gradient(135deg, transparent 44%, var(--TEXT_BRIGHT) 44% 56%, transparent 56%), var(--BOX_FILL);
+}
+
 .fractalColorBox {
   width: 2.6em;
   height: 2em;
@@ -4212,6 +4282,35 @@ button.fractalColor[aria-checked="true"] {
 .accountsTable .titleCell {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Equity's section headings: the title, then its accounts' totals under Balance and In 6 Months, on one band across the
+   row (Budget Pages.js renderAccountsPage) */
+.dataTable .categoryRow.withTotals {
+  background: linear-gradient(to right, transparent, var(--PANEL_DEEP) 12%, var(--PANEL_DEEP) 88%, transparent);
+}
+
+.dataTable .categoryRow.withTotals td {
+  font-size: 1.05em;
+  background: none;
+}
+
+.dataTable .categoryRow.withTotals td.sectionTitle {
+  text-align: left;
+  font-weight: bold;
+}
+
+.dataTable .categoryRow.withTotals td.sectionTotal {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dataTable .categoryRow.withTotals td.sectionTotal.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.dataTable .categoryRow.withTotals td.sectionTotal.positive {
+  color: var(--POSITIVE_TEXT);
 }
 
 /* An account's entries (in its panel): every entry for it, newest first, each a button that opens its options. Its day,
@@ -4433,6 +4532,53 @@ a.budgetButton:hover {
 
 .budgetPeople {
   margin-top: 0.4em;
+}
+
+/* A person's Can Edit beside their name (Budgets.js canEditSwitch): a small pill switch with its words */
+.canEditSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.canEditSwitch input[type="checkbox"].pillSwitch {
+  margin: 0;
+}
+
+/* A fractal's Share window: its people, above its calendar link (Fractals.js peopleBox) */
+.fractalPeople {
+  margin: 0 0 1em;
+  padding-bottom: 0.8em;
+  border-bottom: 1px solid var(--PANEL_LINE);
+}
+
+/* Settings' Shared Users: each budget and fractal, its name and Share, then its people */
+.sharedThing {
+  margin: 0 0 0.9em;
+}
+
+.sharedThingHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6em;
+}
+
+.sharedThingName {
+  font-weight: bold;
+  color: var(--TEXT_BRIGHT);
+  overflow-wrap: anywhere;
+}
+
+.sharedThingHead .budgetButton {
+  margin: 0;
+  padding: 0.3em 1em;
+  font-size: 0.9em;
 }
 
 .budgetManager {
@@ -6460,6 +6606,85 @@ html.lessMotion .foldChevron {
   min-width: 0;
 }
 
+/* An entry's quick menu (held down, or right-clicked: Budget UI.js quickMenu): Edit, Move, Copy, and Delete in a small
+   window where it was pressed, over everything */
+.quickMenu {
+  position: absolute;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 9em;
+  max-width: min(18em, 90vw);
+  padding: 0.35em;
+  font-family: var(--FONT);
+  font-size: var(--UI_TEXT);
+  background: var(--HOVER_GRADIENT);
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 14px;
+  box-shadow: var(--FLOAT_SHADOW);
+}
+
+.quickMenuItem {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  white-space: nowrap;
+  margin: 0;
+  padding: 0.6em 1.1em;
+  font-size: 1.05em;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.quickMenuItem:hover,
+.quickMenuItem:focus-visible {
+  transform: none;
+  background: var(--GLASS_BUTTON);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: none;
+  outline: none;
+}
+
+.quickMenuItem.danger {
+  color: var(--DANGER_TEXT);
+}
+
+/* (Held down, an entry opens its quick menu: a phone's own text selection and its callout stay out of the way) */
+.elastic-table td.is-editing :is(.lineEntry, .fractalEvent),
+#calendarList :is(.lineEntry, .fractalEvent),
+.accountEntryButton {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* A recurring entry's Until $0, under its End Date (Budget Pages.js openRecurringPanel) */
+.budgetButton.untilZeroButton {
+  display: inline-block;
+  margin: 0.45em 0 0;
+  padding: 0.35em 1em;
+  font-size: 0.9em;
+}
+
+/* A tracker's Last 3 Months (Bob Page.js trackerDateBoxes), under its From and To while other days are picked; on the
+   Snapshot page, a tracker card's own (only in Edit) */
+.trackerDates .trackerUsualDays {
+  margin: 0;
+  padding: 0.35em 0.9em;
+  font-size: 0.85em;
+}
+
+.snapshotDays {
+  margin: 0 0 0.8em;
+}
+
 /* The spectrum: a glowing bar with each wavelength's stretch of the wave in its color (wavelengthSpectrum in
    Bob Page.js) */
 .spectrumBox {
@@ -6559,6 +6784,45 @@ html.lessMotion .foldChevron {
 
 .waveGoalRow .waveGoalUnit {
   width: auto;
+}
+
+/* A wavelength's max: an amount and a percent, side by side under its goal */
+.waveMaxRow :is(.waveMaxAmount, .waveMaxPercent) {
+  flex: 1 1 7em;
+  min-width: 0;
+  max-width: 10em;
+}
+
+/* Under an entry form's wavelength button, where it stands against its max (Budget UI.js showWaveMaxes) */
+.waveMaxFigure {
+  display: block;
+  margin-top: 0.15em;
+  font-size: 0.72em;
+  font-variant-numeric: tabular-nums;
+  color: var(--TEXT_DIM);
+  white-space: normal;
+}
+
+/* A wavelength near its max (Bob Page.js waveMaxStanding: from WAVE_GOAL_WARN of it) is orange, and one past it red,
+   wherever its amount and share show */
+.purposeLegendItem.isWaveNear :is(.purposeAmount, .purposeShare),
+.panelText.isWaveNear,
+.isWaveNear > .waveMaxFigure {
+  color: #ffb347;
+}
+
+.purposeLegendItem.isWaveOver :is(.purposeAmount, .purposeShare),
+.panelText.isWaveOver,
+.isWaveOver > .waveMaxFigure {
+  color: var(--NEGATIVE_TEXT);
+}
+
+.purposeLegendItem.isWaveNear .purposeLegendButton {
+  border-color: rgba(255, 179, 71, 0.6);
+}
+
+.purposeLegendItem.isWaveOver .purposeLegendButton {
+  border-color: rgba(255, 107, 122, 0.7);
 }
 
 .waveGoalPer {
@@ -7692,6 +7956,15 @@ html.snapshotKey .navButtons {
 }
 
 .budgetCard p.snapshotNumber.negative {
+  color: var(--NEGATIVE_TEXT);
+}
+
+/* A single wavelength near its max is orange, and past it red (Bob Page.js waveMaxStanding) */
+.budgetCard p.snapshotNumber.isWaveNear {
+  color: #ffb347;
+}
+
+.budgetCard p.snapshotNumber.isWaveOver {
   color: var(--NEGATIVE_TEXT);
 }
 

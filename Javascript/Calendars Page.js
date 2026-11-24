@@ -581,7 +581,7 @@ function openCalendarPanel(id, origin) {
       const pay = kept;
       const only = BudgetUI.textField({ label: "Only events with", value: pay.only, placeholder: "Blank: every timed event", hint: "Words (with commas between them), any of which an event's title needs to be a shift. Blank: every event with a time is a shift. Overlapping events count once." });
       const skip = BudgetUI.textField({ label: "Leave out events with", value: pay.skip, placeholder: "Day off, Meeting...", hint: "Words (with commas between them) that keep an event from being a shift." });
-      const bonusWord = BudgetUI.textField({ label: "Bonus word", value: pay.bonusWord, placeholder: "bonus", maxLength: 40, hint: "An all-day event with this word and an amount, like Bonus $25, is a bonus that week. Blank: no bonuses." });
+      const bonusWord = BudgetUI.textField({ label: "Bonus word", value: pay.bonusWord, placeholder: "bonus", maxLength: LIMITS.bonusWord, hint: "An all-day event with this word and an amount, like Bonus $25, is a bonus that week. Blank: no bonuses." });
       const aheadCount = BudgetUI.element("input", "frequencyCount");
       aheadCount.type = "text";
       aheadCount.inputMode = "numeric";
@@ -867,7 +867,7 @@ function openCalendarPanel(id, origin) {
         if (spec.kind === "text") {
           const input = BudgetUI.element("input", "textInput");
           input.type = "text";
-          input.maxLength = 60;
+          input.maxLength = LIMITS.premiumWord;
           input.dataset.key = spec.key;
           input.value = typeof version[spec.key] === "string" ? version[spec.key] : "";
           input.placeholder = later ? sameAs(before[spec.key]) : "";
@@ -1078,7 +1078,7 @@ function openCalendarPanel(id, origin) {
           summary.textContent = timeRuleSummary(rule, index);
           schedulePreview();
         };
-        const name = BudgetUI.textField({ label: "Name", value: rule.name || "", placeholder: "Like Weekends or Nights", maxLength: 40, optional: true, hint: "Shown on its shifts in Paychecks And Shifts." });
+        const name = BudgetUI.textField({ label: "Name", value: rule.name || "", placeholder: "Like Weekends or Nights", maxLength: LIMITS.payRuleName, optional: true, hint: "Shown on its shifts in Paychecks And Shifts." });
         name.input.addEventListener("input", () => { rule.name = name.value(); after(); });
         // (A button for each day, on or off)
         const days = BudgetUI.element("div", "calendarDays");

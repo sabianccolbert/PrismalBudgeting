@@ -305,6 +305,70 @@ function showInList(list, item) {
   else if (itemBox.bottom > listBox.bottom) list.scrollTop += itemBox.bottom - listBox.bottom;
 }
 
+// Time zones: a calendar entry with times keeps the zone it was made in (its zone: the API's alerts and calendar link go
+// by it), and a device in another zone shows it at the device's own time (Fractals.js shownOccurrences). Each zone's
+// clock is read with one formatter, made once.
+const Zones = (() => {
+  const formatters = new Map();
+  // This device's zone ("America/Chicago"), or UTC when the browser won't say
+  const device = () => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; }
+  };
+  // What reads a zone's wall clock (one for each zone, made once)
+  function formatter(zone) {
+    if (!formatters.has(zone)) {
+      formatters.set(zone, new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    }
+    return formatters.get(zone);
+  }
+  // Can this browser read a zone's clock?
+  function known(zone) {
+    try {
+      formatter(zone);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  // How far a zone's clock is ahead of UTC at an instant (ms)
+  function offset(zone, ms) {
+    const parts = {};
+    for (const part of formatter(zone).formatToParts(new Date(ms))) parts[part.type] = Number(part.value);
+    return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour % 24, parts.minute, parts.second) - Math.floor(ms / 1000) * 1000;
+  }
+  // The instant a zone's clock shows a wall time ("YYYY-MM-DD" and minutes after midnight): worked out with the zone's
+  // offsets a day before and a day after, keeping the ones whose clock really shows it. A time its clocks show twice
+  // (moving back) is the first; one they skip (moving ahead) counts from before the move, so it lands that much after it
+  // (2:30 on the morning clocks go from 2:00 to 3:00 is 3:30).
+  function instant(ymd, minutes, zone) {
+    const [year, month, day] = ymd.split("-").map(Number);
+    const wall = Date.UTC(year, month - 1, day, 0, minutes);
+    const before = wall - offset(zone, wall - 86400000);
+    const after = wall - offset(zone, wall + 86400000);
+    const shows = [before, after].filter(ms => wall - offset(zone, ms) === ms);
+    return shows.length > 0 ? Math.min(...shows) : before;
+  }
+  // A wall time in one zone as this device's: { ymd, minutes }
+  function toDevice(ymd, minutes, zone) {
+    const here = new Date(instant(ymd, minutes, zone));
+    return { ymd: formatToYMD(here), minutes: here.getHours() * 60 + here.getMinutes() };
+  }
+  // Is a zone another one than this device's (and one it can read)?
+  const differs = (zone) => typeof zone === "string" && !!zone && zone !== device() && known(zone);
+  // A zone's short name at an instant ("CST", or "GMT+1" where there isn't one), for a note
+  function shortName(zone, ms = Date.now()) {
+    try {
+      return new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" }).formatToParts(new Date(ms)).find(part => part.type === "timeZoneName")?.value || zone;
+    } catch {
+      return zone;
+    }
+  }
+  // A zone as people read it: "America/New_York" -> "New York"
+  const place = (zone) => String(zone).split("/").pop().replace(/_/g, " ");
+  return { device, differs, toDevice, instant, shortName, place };
+})();
+window.Zones = Zones;
+
 // When something that repeats happens: a calendar entry (Fractals.js) or a meal (Kitchen.js), worked out the same way
 // for both, and the same way the API's fractals.js works out a calendar entry's (change one and change the other). Days
 // are YYYY-MM-DD. An entry: { start, end (its last day; start for one day), repeat ({ count, unit: "days" | "weeks" |

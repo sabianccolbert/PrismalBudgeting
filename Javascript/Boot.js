@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.23.2026.A";
+  const SITE_VERSION = "11.24.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,37 +26,38 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "fa0c9c0113",
-    "/Javascript/Budget Pages.js": "f509c80dd3",
+    "/Javascript/Bob Page.js": "8f1801c202",
+    "/Javascript/Budget Pages.js": "a6d8b74915",
     "/Javascript/Budget Search.js": "7fd273fe6b",
-    "/Javascript/Budget UI.js": "08b71f5356",
-    "/Javascript/Budgets.js": "6535bf5dc1",
-    "/Javascript/Calendar Page.js": "be61cc781d",
-    "/Javascript/Calendars Page.js": "8d5d96f09e",
-    "/Javascript/Calendars.js": "019006cf32",
-    "/Javascript/Dates.js": "55d7a8cca8",
+    "/Javascript/Budget UI.js": "a509f1e96a",
+    "/Javascript/Budgets.js": "2f58afe81b",
+    "/Javascript/Calendar Page.js": "4967ff6aab",
+    "/Javascript/Calendars Page.js": "df9d932a85",
+    "/Javascript/Calendars.js": "15b458fed5",
+    "/Javascript/Dates.js": "e86fe94792",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "b01e24a042",
+    "/Javascript/Fractals.js": "0552e74a47",
     "/Javascript/Holidays.js": "eba1fab331",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Kitchen UI.js": "cf839ed8fe",
-    "/Javascript/Kitchen.js": "4a563acbdf",
-    "/Javascript/Layout.js": "cd4c64fe9d",
-    "/Javascript/Line Graph.js": "3a2585001d",
-    "/Javascript/Login.js": "5869bb48e7",
+    "/Javascript/Kitchen UI.js": "c51485d80f",
+    "/Javascript/Kitchen.js": "b8b56b9435",
+    "/Javascript/Layout.js": "80dece308e",
+    "/Javascript/Limits.js": "3ba2190ee5",
+    "/Javascript/Line Graph.js": "724e4fbb43",
+    "/Javascript/Login.js": "7c20578b0c",
     "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "ea84859448",
-    "/Javascript/Quick Calendar.js": "b0e25e99bf",
-    "/Javascript/Quick Entry.js": "3b2714f488",
-    "/Javascript/Quick Icon.js": "944d097f5a",
+    "/Javascript/Process Budget.js": "fc4fad2af4",
+    "/Javascript/Quick Calendar.js": "2c03bb5ad3",
+    "/Javascript/Quick Entry.js": "17a87ca937",
+    "/Javascript/Quick Icon.js": "bd8ba88f58",
     "/Javascript/Recipes Page.js": "ddf190ecc9",
     "/Javascript/Session.js": "2ba7a04b3e",
-    "/Javascript/Settings Page.js": "ede09202e5",
-    "/Javascript/Snapshot Page.js": "ba04e91628",
+    "/Javascript/Settings Page.js": "4b08667602",
+    "/Javascript/Snapshot Page.js": "f7a0bc379c",
     "/Javascript/Sounds.js": "21207f2cfd",
     "/Javascript/Spreadsheets Page.js": "5e1b61db41",
-    "/Javascript/Spreadsheets.js": "008d184ec1",
+    "/Javascript/Spreadsheets.js": "f7b459357f",
     "/Javascript/Sprites.js": "c6c86160d9",
     "/Javascript/Starfield Setup.js": "e86b316303",
     "/Resources/Sounds/Ambient1.mp3": "06aafa32d7",
@@ -82,7 +83,7 @@
     "/Resources/Sprites/Spreadsheet.webp": "dc1ebacc81",
     "/Resources/Sprites/Transfer.webp": "e62e14338d",
     "/Resources/Star.webp": "f2d3021d0b",
-    "/themes.css": "33f6b67192"
+    "/themes.css": "99a757e39a"
   };
   // </stamp:files>
 
@@ -689,11 +690,12 @@
    *  6) Append page scripts at END
    * =============================== */
   // Starfield Setup goes first, so the stars start right away (Boot.js has already started its worker, see
-  // above), and it has to come before Keyboard and Layout, which use window.STARFIELD. Then Sprites, so the
-  // emoji's images (the entry types, and In Bank, Gains, and Costs) are in before the page slides in. Sounds plays
-  // the site's sound effects and music.
+  // above), and it has to come before Keyboard and Layout, which use window.STARFIELD. Limits next: every limit,
+  // which the scripts after it name theirs from. Then Sprites, so the emoji's images (the entry types, and In Bank,
+  // Gains, and Costs) are in before the page slides in. Sounds plays the site's sound effects and music.
   const GLOBAL_SCRIPTS = [
     "/Javascript/Starfield Setup.js",
+    "/Javascript/Limits.js",
     "/Javascript/Sprites.js",
     "/Javascript/Layout.js",
     "/Javascript/Sounds.js",
@@ -765,12 +767,13 @@
       if (!keyPage || page === "quickcal") scripts.push("/Javascript/Kitchen.js");
       // Connected spreadsheets' reading (Quick Budget and Quick Calendar never read them)
       if (!keyPage) scripts.push("/Javascript/Spreadsheets.js");
-      // Connected calendars' reading and pay, on the pages that keep them up to date
-      if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Calendars.js");
+      // Connected calendars' reading and pay, on the pages that keep them up to date, and the Quick Calendar page, which reads
+      // its budget's linked Calendar Fractals with it
+      if (page === "home" || page === "spreadsheets" || page === "quickcal") scripts.push("/Javascript/Calendars.js");
       // Search (Home's): before the page script, which opens it
       if (page === "home") scripts.push("/Javascript/Budget Search.js");
       // The Holidays fractal's days, where linked fractals show (before Fractals.js, which shows them)
-      if (page === "home" || page === "spreadsheets") scripts.push("/Javascript/Holidays.js");
+      if (page === "home" || page === "spreadsheets" || page === "quickcal") scripts.push("/Javascript/Holidays.js");
       // The calendar (Calendar Fractals and their entries): Home shows it, the Budgets, Calendars & Spreadsheets page
       // manages it, Settings has its links, the Quick Calendar page is it, Snapshot can show its entries, Recurring
       // lists its repeating ones, and the Recipes page's Undo takes back changes to them, like Home's

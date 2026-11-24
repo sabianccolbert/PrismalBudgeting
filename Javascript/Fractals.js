@@ -18,10 +18,10 @@ window.Fractals = (() => {
 
   const SHARED = "shared";          // The fractal an entry shared with the account shows under
   const SHARED_COLOR = "#8a8fa8";
-  const COLORS = ["#4f8cff", "#00b8a9", "#3fbf5f", "#b8c400", "#f5a623", "#ff6b35", "#ff4d6d", "#d94fd3", "#9b6bff", "#5b6cff", "#8a8fa8", "#c98a5a"];
-  const MAX_TITLE = 100;
-  const MAX_NOTES = 20000;
-  const MAX_ALERTS = 30;
+  const COLORS = BudgetUI.CARD_COLORS;
+  const MAX_TITLE = LIMITS.title;
+  const MAX_NOTES = LIMITS.note;
+  const MAX_ALERTS = LIMITS.alerts;
   const DAY_MINUTES = 1440;
   const HOUR_EM = 2.2;         // How tall an hour is beside a zoomed day's times
   const MIN_BLOCK_MINUTES = 30; // The shortest a block is drawn (so its title fits)
@@ -70,6 +70,8 @@ window.Fractals = (() => {
       let answer = null;
       try { answer = await response.json(); } catch {}
       if (response.status === 401 && !store.quick && typeof signedOutElsewhere === "function") signedOutElsewhere();
+      // (Near the account's calendar reads for now, from a Quick Calendar icon's linked fractals: Limits.fromApi)
+      if (answer && answer.limitNote) Limits.fromApi(answer.limitNote);
       return { ok: response.ok, status: response.status, data: answer };
     } catch {
       return { ok: false, status: 0, data: null };
@@ -88,9 +90,15 @@ window.Fractals = (() => {
       fractals: answer.fractals,
       events: Array.isArray(answer.events) ? answer.events : [],
       invitations: Array.isArray(answer.invitations) ? answer.invitations : [],
+      // (Whole fractals shared with the account, for it to join)
+      fractalInvitations: Array.isArray(answer.fractalInvitations) ? answer.fractalInvitations : [],
       waiting: Array.isArray(answer.waiting) ? answer.waiting : [],
       links: answer.links || { all: null, fractals: {} },
-      icons: answer.icons || 0
+      icons: answer.icons || 0,
+      // (How many entries are kept under the account, for Limits.near)
+      kept: Number.isInteger(answer.kept) ? answer.kept : null,
+      // (A Quick Calendar icon's answer: its budget's linked fractals, Holidays, and order, see budgetSheets)
+      sheets: answer.sheets && typeof answer.sheets === "object" ? answer.sheets : null
     };
     dayCache = new Map();
     document.dispatchEvent(new CustomEvent("fractals:changed"));
@@ -109,9 +117,36 @@ window.Fractals = (() => {
 
   // A change to the calendar: the answer is the calendar as it is now. Resolves to the request's result.
   async function change(route, body) {
+    const before = data ? counts(data) : null;
     const result = await call(`/api/fractals/${route}`, body);
-    if (result.ok && result.data && Array.isArray(result.data.fractals)) took(result.data);
+    if (result.ok && result.data && Array.isArray(result.data.fractals)) {
+      took(result.data);
+      if (before) nearLimits(before, counts(data));
+    }
     return result;
+  }
+
+  // What the calendar has that has limits (LIMITS), counted: the entries kept under the account (the API's count), its
+  // own fractals and its budget's, and who each of its own fractals and entries is shared with
+  function counts(calendar) {
+    const shared = (list) => Object.fromEntries(list.filter(item => Array.isArray(item.people)).map(item => [item.id, item.people.length]));
+    return {
+      events: Number.isInteger(calendar.kept) ? calendar.kept : null,
+      own: calendar.fractals.filter(fractal => !fractal.perBudget && !fractal.sharedBy).length,
+      budget: calendar.fractals.filter(fractal => fractal.perBudget).length,
+      fractalPeople: shared(calendar.fractals),
+      eventPeople: shared(calendar.events)
+    };
+  }
+
+  // After a change, a toast for each that grew near its limit (Limits.near says so once a page for each)
+  function nearLimits(before, after) {
+    if (after.events !== null && before.events !== null && after.events > before.events) Limits.near("events", after.events);
+    if (after.own > before.own) Limits.near("fractals", after.own);
+    if (after.budget > before.budget) Limits.near("fractals", after.budget, "this budget");
+    for (const kind of ["fractalPeople", "eventPeople"]) {
+      for (const [id, count] of Object.entries(after[kind])) if (count > (before[kind][id] || 0)) Limits.near(kind, count);
+    }
   }
 
   // This device's own Quick Calendar icons, for the API: what they queued joins the calendar as it loads here
@@ -232,6 +267,35 @@ window.Fractals = (() => {
     return { ...occurrence, on: ymd, whole: start === 0 && end === DAY_MINUTES, start, end: Math.max(end, start) };
   }
 
+  // An entry's occurrences from one day through another, as this device shows them. One with times kept in another time
+  // zone (made in one, and this device is in another: Dates.js Zones) is shown at this device's time, each occurrence on
+  // its own (so a change of clocks in either zone moves it as it should), on the days that come to here: [{ event (a copy
+  // with this device's times, and shownFrom, its own zone), day, last, zoneDay (its day in its own zone, which taps and
+  // changes go by) }]. Any other is as occurrences gives it.
+  function shownOccurrences(event, from, to) {
+    if (event.allDay || !event.startTime || !Zones.differs(event.zone)) return occurrences(event, from, to);
+    const shown = [];
+    for (const occurrence of occurrences(event, plusDays(from, -1), plusDays(to, 1))) {
+      const start = Zones.toDevice(occurrence.day, minutesOf(event.startTime), event.zone);
+      const end = Zones.toDevice(occurrence.last, minutesOf(event.endTime), event.zone);
+      if (end.ymd < from || start.ymd > to) continue;
+      shown.push({ event: { ...event, startTime: clock(start.minutes), endTime: clock(end.minutes), shownFrom: event.zone }, day: start.ymd, last: end.ymd, zoneDay: occurrence.day });
+    }
+    return shown;
+  }
+
+  // A page left open while its device moves to another time zone (a trip): when it comes back into view there, its
+  // calendar's times are worked out again for the new one, and it says so (the budget's own days follow the device's
+  // date: Process Budget.js deviceDayChanged)
+  let zoneShown = Zones.device();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || Zones.device() === zoneShown) return;
+    zoneShown = Zones.device();
+    dayCache = new Map();
+    document.dispatchEvent(new CustomEvent("fractals:changed"));
+    if (data && data.events.some(event => !event.allDay && Zones.differs(event.zone))) toast(`You're in ${Zones.place(zoneShown)} time now, so your calendar shows its entries at the times they are here.`);
+  });
+
   // Work out the entries on each day from one through another, once (a window of the calendar)
   function prepare(from, to) {
     if (!data) return;
@@ -242,7 +306,7 @@ window.Fractals = (() => {
     const linked = otherFractals().filter(fractal => !off.includes(fractal.id)).flatMap(fractal => otherEventsIn(fractal, from, to));
     for (const event of [...data.events, ...linked]) {
       if (off.includes(String(event.fractal))) continue;
-      for (const occurrence of occurrences(event, from, to)) {
+      for (const occurrence of shownOccurrences(event, from, to)) {
         for (let day = occurrence.day < from ? from : occurrence.day; day <= occurrence.last && day <= to; day = plusDays(day, 1)) {
           const part = partOn(occurrence, day);
           if (part) days.get(day).push(part);
@@ -260,7 +324,7 @@ window.Fractals = (() => {
   function occurrencesBetween(from, to) {
     if (!data) return [];
     const linked = otherFractals().flatMap(fractal => otherEventsIn(fractal, from, to));
-    return [...data.events, ...linked].flatMap(event => occurrences(event, from, to));
+    return [...data.events, ...linked].flatMap(event => shownOccurrences(event, from, to));
   }
 
   // Each fractal's hours from one day through another (YYYY-MM-DD), checked or not, linked fractals' too: the time its
@@ -322,6 +386,19 @@ window.Fractals = (() => {
     return day === last ? `${first}, ${start} to ${end}` : `${first}, ${start} to ${showWeekdayDate(dayOf(last))}, ${end}`;
   }
 
+  // An entry's times when they're kept in another time zone than this device's, as they come to here: "Its times are New
+  // York time (EST). Here, that's 8:00 AM to 9:00 AM on Thu 11/12/2026." ("" for any other: its zone is only shown then)
+  function zoneWords(event, day = event.start) {
+    if (event.allDay || !event.startTime || !Zones.differs(event.zone)) return "";
+    const last = plusDays(day, daysBetween(event.start, event.end));
+    const start = Zones.toDevice(day, minutesOf(event.startTime), event.zone);
+    const end = Zones.toDevice(last, minutesOf(event.endTime), event.zone);
+    const when = start.ymd === end.ymd
+      ? `${timeText(start.minutes)} to ${timeText(end.minutes)} on ${showWeekdayDate(dayOf(start.ymd))}`
+      : `${showWeekdayDate(dayOf(start.ymd))}, ${timeText(start.minutes)} to ${showWeekdayDate(dayOf(end.ymd))}, ${timeText(end.minutes)}`;
+    return `Its times are ${Zones.place(event.zone)} time (${Zones.shortName(event.zone, Zones.instant(day, minutesOf(event.startTime), event.zone))}). Here, that's ${when}.`;
+  }
+
   // "Every 2 weeks until 12/31/2026"
   function repeatWords(event) {
     if (!event.repeat) return "";
@@ -346,7 +423,8 @@ window.Fractals = (() => {
   function mark(node, part) {
     node.classList.add("fractalEvent");
     node.dataset.event = part.event.id;
-    node.dataset.day = part.day;
+    // (One from another time zone is opened and changed by its day there)
+    node.dataset.day = part.zoneDay || part.day;
     // (One a Quick Calendar icon added that hasn't joined the calendar yet has a dashed edge)
     node.classList.toggle("isWaiting", !!part.event.waiting);
     const color = colorOf(part.event.fractal);
@@ -738,8 +816,9 @@ window.Fractals = (() => {
   // from that calendar. It's kept with the budget (sheetsData.linked: see Linked Calendar Fractals in Process Budget.js),
   // as a calendar's subscription link or one of the connected calendars on the Budgets, Calendars & Spreadsheets page.
   // Calendars.js reads it through the API (at most every 15 minutes on this device, which keeps what it read for then, and
-  // forgets it when it signs out) and works its repeating entries out for just the days being drawn. Home and that page
-  // show them (they load Calendars.js); the Quick Calendar page and Settings don't. Linked entries have no alerts.
+  // forgets it when it signs out) and works its repeating entries out for just the days being drawn. Home, that page, and
+  // the Quick Calendar page show them (they load Calendars.js; the Quick Calendar page reads them through its key, never
+  // seeing a link: budgetSheets); Settings doesn't. Linked entries have no alerts.
 
   const LINKED_PREFIX = "linked:";
   const LINKED_READ_MS = 15 * 60 * 1000;
@@ -748,19 +827,28 @@ window.Fractals = (() => {
   const linkedReads = new Map(); // A linked fractal's id -> { calendar (parsed), at, link, problem }
   let linkedEvents = new Map();  // The linked entries worked out for the days drawn, by their id (for a tap)
 
+  // The budget's Calendar Fractals settings (linked fractals, Holidays' color, the order): its sheetsData, or on the Quick
+  // Calendar page, what the icon's answer says of them (no links: the API reads a linked one for it, store.readLinked)
+  function budgetSheets() {
+    if (store.quick) return data && data.sheets ? data.sheets : null;
+    return typeof sheetsData !== "undefined" && sheetsData ? sheetsData : null;
+  }
+
   // Can this page show linked fractals?
-  const canLink = () => typeof Calendars !== "undefined" && typeof sheetsData !== "undefined" && !!sheetsData && !store.quick;
+  const canLink = () => typeof Calendars !== "undefined" && !!budgetSheets();
 
   // The linked fractals, as fractals: [{ id ("linked:" and its own), name, color, linked (as it's kept) }]
   function linkedFractals() {
     if (!canLink()) return [];
-    return (sheetsData.linked || []).map(item => ({ id: LINKED_PREFIX + item.id, name: item.name, color: item.color, linked: item }));
+    return (budgetSheets().linked || []).filter(item => !store.quick || item.readable).map(item => ({ id: LINKED_PREFIX + item.id, name: item.name, color: item.color, linked: item }));
   }
   const linkedFractal = (id) => linkedFractals().find(fractal => fractal.id === id) || null;
 
-  // The link a linked fractal reads: its own, or its connected calendar's ("" when that's gone)
+  // The link a linked fractal reads: its own, or its connected calendar's ("" when that's gone). On the Quick Calendar
+  // page, which never has a link, a name for it ("quick:" and its id), which store.readLinked reads.
   function linkedSource(fractal) {
     const item = fractal.linked;
+    if (store.quick) return `quick:${item.id}`;
     if (item.connection) return (typeof sheetConnectionById === "function" && sheetConnectionById(item.connection)?.link) || "";
     return item.link || "";
   }
@@ -815,7 +903,7 @@ window.Fractals = (() => {
           } catch {}
         }
         try {
-          const text = await Calendars.readCalendarFile(link);
+          const text = store.quick ? await store.readLinked(fractal.linked.id) : await Calendars.readCalendarFile(link);
           const calendar = Calendars.parseCalendar(text);
           linkedReads.set(fractal.id, { calendar, at: now, link, problem: "" });
           if (text.length <= LINKED_CACHE_MAX) keptReads()[fractal.id] = { at: now, link, text };
@@ -925,7 +1013,7 @@ window.Fractals = (() => {
       stacked: !!(origin && origin.closest(".budgetPanel")),
       title: `Edit ${fractal.name}`,
       build(form, panel) {
-        const name = BudgetUI.textField({ label: "Name", value: fractal.name, maxLength: 30 });
+        const name = BudgetUI.textField({ label: "Name", value: fractal.name, maxLength: LIMITS.fractalName });
         const color = colorField(fractal.color);
         const from = BudgetUI.field("Comes from", BudgetUI.noTranslate(el("p", "panelText", linkedFrom(fractal))), { hint: "Its entries can't be changed here: change them in that calendar, and they change here the next time it's read (at most 15 minutes later)." });
         const trouble = linkedProblem(fractal);
@@ -994,7 +1082,8 @@ window.Fractals = (() => {
   // [Holidays, as a fractal: { id, name, color, holidays: true }], or [] where it doesn't show
   function holidayFractals() {
     if (!canHolidays()) return [];
-    const kept = sheetsData.holidays && /^#[0-9a-f]{6}$/.test(sheetsData.holidays.color || "") ? sheetsData.holidays.color : HOLIDAYS_COLOR;
+    const sheets = budgetSheets();
+    const kept = sheets.holidays && /^#[0-9a-f]{6}$/.test(sheets.holidays.color || "") ? sheets.holidays.color : HOLIDAYS_COLOR;
     return [{ id: HOLIDAYS_ID, name: "Holidays", color: kept, holidays: true }];
   }
 
@@ -1150,11 +1239,41 @@ window.Fractals = (() => {
     label.append(box, swatch(fractal.color), name);
     // (A linked one says so, and what went wrong reading it, if anything did)
     if (fractal.linked) label.append(el("span", "budgetDetail fractalLinkedNote", linkedProblem(fractal) ? "Linked: couldn't read it" : "Linked"));
-    // (One that's the budget's says so)
-    if (fractal.perBudget) label.append(el("span", "budgetDetail fractalLinkedNote", "The budget's"));
+    // (One that's the budget's says so; one shared with the account says whose, and whether it can change it)
+    if (fractal.perBudget) label.append(el("span", "budgetDetail fractalLinkedNote", fractal.canChange === false ? "The budget's, to look at" : "The budget's"));
+    if (fractal.sharedBy) label.append(BudgetUI.noTranslate(el("span", "budgetDetail fractalLinkedNote", `${fractal.sharedBy}'s${fractal.canChange === false ? ", to look at" : ""}`)));
     item.append(label);
     if (fractal.linked) item.append(button("Edit", "budgetShare", (event) => openLinkedFractal(event.currentTarget, fractal), `Edit ${fractal.name}`));
-    else if (fractal.id !== SHARED && !store.quick) item.append(button("Edit", "budgetShare", (event) => openFractal(event.currentTarget, fractal), `Edit ${fractal.name}`));
+    else if (fractal.sharedBy && !store.quick) item.append(button("Leave", "budgetShare", () => leaveShared(fractal), `Take ${fractal.name} off your calendar`));
+    else if (fractal.id !== SHARED && !store.quick && fractal.canChange !== false) item.append(button("Edit", "budgetShare", (event) => openFractal(event.currentTarget, fractal), `Edit ${fractal.name}`));
+    return item;
+  }
+
+  // A fractal shared with the account, taken off its calendar (its owner can share it again)
+  async function leaveShared(fractal) {
+    if (!window.confirm(`Take ${fractal.name} off your calendar? ${fractal.sharedBy} can share it with you again.`)) return;
+    const result = await change("people/decline", { fractal: fractal.id });
+    if (!result.ok) return toast(problem(result, "That didn't work. Please try again."), true);
+    if (result.data.error) return toast(result.data.error, true);
+    toast(`${fractal.name} is off your calendar.`);
+  }
+
+  // A whole fractal someone shared with the account: whose, and Join or Decline
+  function fractalInvitationItem(invitation) {
+    const item = el("li", "budgetItem isInvitation");
+    const about = el("div", "budgetOpen");
+    const name = el("span", "budgetName", invitation.name);
+    name.translate = false;
+    about.append(name, BudgetUI.noTranslate(el("span", "budgetDetail", `${invitation.owner}'s calendar fractal${invitation.canEdit ? "" : ", to look at"}, for you to join`)));
+    const buttons = el("div", "budgetInvitationButtons");
+    const answer = async (route) => {
+      const result = await change(route, { fractal: invitation.id });
+      if (!result.ok) return toast(problem(result, "That didn't work. Please try again."), true);
+      if (result.data.error) return toast(result.data.error, true);
+      toast(route === "people/join" ? `${invitation.name} is on your calendar.` : `You declined ${invitation.name}.`);
+    };
+    buttons.append(button("Join", "primary", () => answer("people/join"), `Join ${invitation.name}`), button("Decline", "", () => answer("people/decline"), `Decline ${invitation.name}`));
+    item.append(about, buttons);
     return item;
   }
 
@@ -1195,10 +1314,10 @@ window.Fractals = (() => {
       list.append(...items);
       box.append(list);
     };
-    section("Yours", inOrder([...data.fractals, ...holidayFractals(), ...mealFractals()]).map(fractalItem));
+    section("Yours", inOrder([...data.fractals.filter(fractal => !fractal.sharedBy), ...holidayFractals(), ...mealFractals()]).map(fractalItem));
     section("Linked", inOrder(linkedFractals()).map(fractalItem));
-    section("Shared With You", hasShared() ? [fractalItem({ id: SHARED, name: "Shared With You", color: SHARED_COLOR })] : []);
-    section("Invitations", data.invitations.map(invitationItem));
+    section("Shared With You", [...inOrder(data.fractals.filter(fractal => fractal.sharedBy)), ...(hasShared() ? [{ id: SHARED, name: "Shared With You", color: SHARED_COLOR }] : [])].map(fractalItem));
+    section("Invitations", [...data.fractalInvitations.map(fractalInvitationItem), ...data.invitations.map(invitationItem)]);
   }
 
   // The picker's words: how many fractals show, and a dot while invitations wait
@@ -1207,7 +1326,7 @@ window.Fractals = (() => {
     const linked = otherFractals();
     const all = data ? data.fractals.length + linked.length + (hasShared() ? 1 : 0) : 0;
     const shown = data ? data.fractals.filter(fractal => isShown(fractal.id)).length + linked.filter(fractal => isShown(fractal.id)).length + (hasShared() && isShown(SHARED) ? 1 : 0) : 0;
-    const invitations = data ? data.invitations.length : 0;
+    const invitations = data ? data.invitations.length + data.fractalInvitations.length : 0;
     picker.querySelector(".budgetPickerName").textContent = "Calendar Fractals";
     picker.querySelector(".budgetPickerDot").hidden = invitations === 0;
     picker.setAttribute("aria-label", `Calendar Fractals: ${shown} of ${all} showing.${invitations > 0 ? ` ${invitations} invitation${invitations === 1 ? "" : "s"}.` : ""} Pick which show`);
@@ -1270,34 +1389,9 @@ window.Fractals = (() => {
     if (panelApi.panel.parentNode) watcher.observe(panelApi.panel.parentNode, { childList: true });
   }
 
-  // A color to pick: the site's swatches, and a box for any other (the device's own color picker, where it has one)
+  // A color to pick: the site's swatches, and a box for any other (Budget UI.js, which prisms' cards use too)
   function colorField(value) {
-    let current = value;
-    const row = el("div", "fractalColors");
-    row.setAttribute("role", "radiogroup");
-    row.setAttribute("aria-label", "Color");
-    const custom = el("input", "fractalColorBox");
-    custom.type = "color";
-    custom.value = value;
-    custom.setAttribute("aria-label", "Another color");
-    const choices = COLORS.map(color => {
-      const choice = el("button", "fractalColor");
-      choice.type = "button";
-      choice.style.background = color;
-      choice.setAttribute("role", "radio");
-      choice.setAttribute("aria-label", `Color ${color}`);
-      choice.addEventListener("click", () => set(color));
-      return [color, choice];
-    });
-    function set(color) {
-      current = color.toLowerCase();
-      custom.value = current;
-      for (const [color2, choice] of choices) choice.setAttribute("aria-checked", String(color2 === current));
-    }
-    custom.addEventListener("input", () => set(custom.value));
-    row.append(...choices.map(([, choice]) => choice), custom);
-    set(value);
-    return { el: BudgetUI.field("Color", row, { hint: "Its entries show in this color on the calendar." }), value: () => current };
+    return BudgetUI.colorField(value, { hint: "Its entries show in this color on the calendar." });
   }
 
   // A fractal's window: its name and color (and for one that's there already, Share and Delete). A calendar from somewhere
@@ -1312,13 +1406,13 @@ window.Fractals = (() => {
       stacked: !!(origin && origin.closest(".budgetPanel")),
       title: fractal ? `Edit ${fractal.name}` : "New Calendar Fractal",
       build(form, panel) {
-        const name = BudgetUI.textField({ label: "Name", value: fractal ? fractal.name : "", placeholder: "Like Work or Family", maxLength: 30 });
+        const name = BudgetUI.textField({ label: "Name", value: fractal ? fractal.name : "", placeholder: "Like Work or Family", maxLength: LIMITS.fractalName });
         const color = colorField(fractal ? fractal.color : nextColor());
         // (A new one is the budget's to start, or the account's own: the switch on each in the manager changes it later)
         const perBudget = fractal ? null : perBudgetSwitch(true);
         const buttons = [{ label: fractal ? "Save" : "Make It", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }];
         if (fractal) buttons.splice(1, 0, { label: "Share", onClick: (event) => openShare(event.currentTarget, fractal) });
-        if (fractal && data.fractals.length > 1) {
+        if (fractal && data.fractals.filter(item => !item.sharedBy).length > 1) {
           buttons.push({ label: "Delete", kind: "danger", onClick: async () => {
             const count = data.events.filter(event => event.fractal === fractal.id).length;
             const everyone = fractal.perBudget && typeof budgetInfo !== "undefined" && budgetInfo && budgetInfo.shared ? ", for everyone in this budget" : "";
@@ -1411,7 +1505,7 @@ window.Fractals = (() => {
 
   // Where an entry is, as typed. value(): { text } or null.
   function locationField(location) {
-    const field = BudgetUI.textField({ label: "Location", value: location ? location.text : "", placeholder: "An address or a place", optional: true, maxLength: 200 });
+    const field = BudgetUI.textField({ label: "Location", value: location ? location.text : "", placeholder: "An address or a place", optional: true, maxLength: LIMITS.location });
     field.input.autocomplete = "off";
     return { el: field.el, value: () => (field.value() ? { text: field.value() } : null) };
   }
@@ -1428,7 +1522,7 @@ window.Fractals = (() => {
       const count = el("input", "frequencyCount");
       count.type = "text";
       count.inputMode = "numeric";
-      count.maxLength = 3;
+      count.maxLength = String(LIMITS.frequencyCount).length;
       count.value = String(alert.count);
       count.setAttribute("aria-label", "How long");
       const unit = el("select", "selectInput frequencyUnit");
@@ -1454,6 +1548,7 @@ window.Fractals = (() => {
     const add = button("+ Add Alert", "termAdd", () => {
       if (rows.childElementCount >= MAX_ALERTS) return toast(`An entry can have up to ${MAX_ALERTS} alerts.`, true);
       addRow({ count: 15, unit: "minutes" });
+      Limits.near("alerts", rows.childElementCount);
     });
     const box = el("div", "alertBox");
     box.append(rows, add);
@@ -1463,7 +1558,7 @@ window.Fractals = (() => {
         const list = [];
         for (const row of rows.children) {
           const count = Number(row.querySelector("input").value.trim() || "0");
-          if (!Number.isInteger(count) || count < 0 || count > 999) return null;
+          if (!Number.isInteger(count) || count < 0 || count > LIMITS.frequencyCount) return null;
           const after = row.querySelector(".alertWhen").value === "after" && count > 0;
           const alarm = row.querySelector(".alertAlarmSwitch").checked;
           list.push({ count, unit: row.querySelector(".frequencyUnit").value, ...(after ? { after: true } : {}), ...(alarm ? { alarm: true } : {}) });
@@ -1496,7 +1591,7 @@ window.Fractals = (() => {
     const people = el("ul", "budgetList budgetPeople");
     const typed = el("input", "textInput");
     typed.type = "text";
-    typed.maxLength = 254;
+    typed.maxLength = LIMITS.email;
     typed.placeholder = "Their username or email";
     typed.autocomplete = "off";
     typed.spellcheck = false;
@@ -1573,7 +1668,8 @@ window.Fractals = (() => {
   // was tapped (a repeating one's), or the day a new one starts. read(): { event, fractal } as the API takes them, or
   // { error }. noteEl goes under the form's buttons, like a budget entry's note.
   function eventFields({ event = null, day = null, title = "", repeat = false } = {}) {
-    const fractals = data ? inOrder(data.fractals) : [];
+    // (Only the fractals it can add to: not one shared with it, or a budget's, that it can only look at)
+    const fractals = data ? inOrder(data.fractals.filter(fractal => fractal.canChange !== false)) : [];
     const startDay = day || (event ? event.start : formatToYMD(today));
     const span = event ? daysBetween(event.start, event.end) : 0;
     const now = new Date();
@@ -1607,7 +1703,7 @@ window.Fractals = (() => {
     const count = el("input", "frequencyCount");
     count.type = "text";
     count.inputMode = "numeric";
-    count.maxLength = 3;
+    count.maxLength = String(LIMITS.frequencyCount).length;
     count.value = String(event && event.repeat ? event.repeat.count : 1);
     count.setAttribute("aria-label", "How many days, weeks, or months");
     const unit = el("select", "selectInput frequencyUnit");
@@ -1662,7 +1758,7 @@ window.Fractals = (() => {
         let last = null;
         if (repeats.input.checked) {
           const number = Number(count.value.trim());
-          if (!Number.isInteger(number) || number < 1 || number > 999) return { error: "Pick how often it repeats: every 1 to 999 days, weeks, or months." };
+          if (!Number.isInteger(number) || number < 1 || number > LIMITS.frequencyCount) return { error: `Pick how often it repeats: every 1 to ${LIMITS.frequencyCount} days, weeks, or months.` };
           repeat = { count: number, unit: unit.value };
           const stop = until.value();
           if (stop === undefined) return { error: "End repeat isn't a date. Clear it, or pick a day." };
@@ -1670,14 +1766,15 @@ window.Fractals = (() => {
           last = stop ? formatToYMD(stop) : null;
         }
         const alertList = alerts.value();
-        if (!alertList) return { error: "Each alert is 0 to 999 minutes, days, weeks, or months before or after it starts." };
+        if (!alertList) return { error: `Each alert is 0 to ${LIMITS.frequencyCount} minutes, days, weeks, or months before or after it starts.` };
         const fractal = Number(fractalField.value());
         if (!fractal) return { error: "Pick a calendar fractal for it." };
         return {
           fractal,
           event: {
             title: titleField.value(), allDay: whole, start, startTime: whole ? null : startTime.value.slice(0, 5), end, endTime: whole ? null : endTime.value.slice(0, 5),
-            zone: timeZone(), location: location.value(), travel: whole ? 0 : Number(travel.value()), repeat, until: last,
+            // (One being changed keeps its own time zone, whose times the form shows; a new one is this device's)
+            zone: (event && event.zone) || timeZone(), location: location.value(), travel: whole ? 0 : Number(travel.value()), repeat, until: last,
             skip: repeat && event && event.repeat ? event.skip || [] : [], alerts: alertList, notes: notes.value().trim()
           }
         };
@@ -1821,10 +1918,12 @@ window.Fractals = (() => {
         heading.style.color = textOn(colorOf(event.fractal));
         form.append(heading);
         if (locked) {
-          const lines = [whenWords(event, day), repeatWords(event), event.location ? event.location.text : "", event.meal ? "Meals" : event.linked ? event.linked : event.owned ? (fractal ? fractal.name : "") : `Shared by ${event.owner}`];
+          const lines = [whenWords(event, day), zoneWords(event, day), repeatWords(event), event.location ? event.location.text : "", event.meal ? "Meals" : event.linked ? event.linked : event.owner ? `Shared by ${event.owner}` : (fractal ? fractal.name : "")];
           for (const line of lines.filter(Boolean)) form.append(BudgetUI.noTranslate(el("p", "panelText", line)));
           if (event.notes) form.append(BudgetUI.noTranslate(el("p", "panelText eventNotes", event.notes)));
           if (store.quick) form.append(el("p", "panelHint", "Sign in to Prismal Planning to change it."));
+          // (A calendar it can see but not change: shared with it, or a budget's, without Can Edit)
+          else if (fractal && fractal.canChange === false) form.append(el("p", "panelHint", "You can see this calendar, but not change it. Ask its owner to turn on Can Edit for you."));
           if (event.meal) form.append(el("p", "panelHint", "It's a meal: change it on Home, or on the Recurring Entries page when it repeats."));
           else if (event.holiday) form.append(el("p", "panelHint", "It's one of the Holidays fractal's, so it can't be changed or taken out."));
           else if (event.linked) form.append(el("p", "panelHint", "It comes from a linked calendar, so it can't be changed here. Change it in that calendar, and it changes here the next time that's read (at most 15 minutes later)."));
@@ -1844,6 +1943,9 @@ window.Fractals = (() => {
 
         const fields = eventFields({ event, day });
         fields.titleInput.dataset.skipFocus = "1";
+        // (Its times are in another time zone than this device's: the form shows them as they are there)
+        const zoneNote = zoneWords(event, day);
+        if (zoneNote) form.append(el("p", "panelHint eventZoneNote", zoneNote));
         const repeating = !!event.repeat;
         // Just this day to start, so a change or Delete only reaches the other days when that's picked. Changing how it
         // repeats (Repeat, Frequency, End repeat) is about every time, so that picks Every time by itself.
@@ -1923,6 +2025,93 @@ window.Fractals = (() => {
     });
     document.dispatchEvent(new CustomEvent("entry:opened", { detail: { panel: panelApi, kind: "event", id: event.id, day } }));
     return panelApi;
+  }
+
+  // A calendar entry held down or right-clicked (node: its line or block, see tapped; point: where): Edit (its window), Move,
+  // Copy, and Delete, each the way its window does them, as Undo steps. A repeating one's Move and Delete ask whether it's
+  // just that day or every time. One that can't be changed here (shared with the account, linked, a holiday, a meal, or
+  // on the Quick Calendar page) just opens, as a tap opens it.
+  function quickMenu(node, point = null) {
+    const found = tapped(node);
+    if (!found) return;
+    const { event, day } = found;
+    if (!event.owned || event.linked || event.meal || event.holiday || store.quick) return openEvent(node, event, day);
+    const repeating = !!event.repeat;
+    const span = daysBetween(event.start, event.end);
+    const when = showDay(dayOf(day));
+    BudgetUI.quickMenu(node, [
+      { label: "Edit", onClick: () => openEvent(node, event, day) },
+      { label: "Move", onClick: () => {
+        const scope = repeating ? BudgetUI.segmented([{ key: "one", label: "Just this day" }, { key: "all", label: "Every time" }], "one") : null;
+        BudgetUI.openMoveTo(node, {
+          hint: repeating
+            ? `${event.title} repeats (${repeatWords(event).toLowerCase()}). Just this day moves only ${when}'s to the day you pick, at the same times; Every time moves every one by as many days.`
+            : `${event.title} moves to the day you pick, at the same times.`,
+          scope: scope ? BudgetUI.field("Move", scope.el) : null,
+          move: (target) => {
+            const to = formatToYMD(target);
+            if (to === day) return Promise.resolve({ ok: true });
+            const one = repeating && scope.value() === "one";
+            return undoable(one ? `moved ${event.title} (just ${when}) to ${showDay(target)} on your calendar` : `moved ${event.title} to ${showDay(target)} on your calendar`, async () => {
+              const stored = storedOf(event);
+              if (one) {
+                // (The day comes out of the repeating entry, and goes on by itself on the new day, shared with the same people)
+                const left = await saveEvent(event.id, event.fractal, { ...stored, skip: [...(event.skip || []), day] });
+                return left.ok ? saveEvent(null, event.fractal, { ...stored, start: to, end: plusDays(to, span), repeat: null, until: null, skip: [] }, [], event.id) : left;
+              }
+              const moved = daysBetween(day, to);
+              const first = plusDays(event.start, moved);
+              return saveEvent(event.id, event.fractal, { ...stored, start: first, end: plusDays(first, span),
+                ...(repeating ? { skip: (event.skip || []).map(skipped => plusDays(skipped, moved)), until: event.until ? plusDays(event.until, moved) : null } : {}) });
+            });
+          }
+        });
+      } },
+      { label: "Copy", onClick: () => BudgetUI.openCopyTo(node, {
+        hint: `A copy of ${event.title} goes on the day you pick: at the same times, once (it doesn't repeat), with its alerts. It's a copy: changing one later doesn't change the other.`,
+        copy: (target) => {
+          const start = formatToYMD(target);
+          return undoable(`copied ${event.title} to ${showDay(target)} on your calendar`, () => saveEvent(null, event.fractal, { ...storedOf(event), start, end: plusDays(start, span), repeat: null, until: null, skip: [] }));
+        }
+      }) },
+      { label: "Delete", danger: true, onClick: () => deleteFromMenu(node, event, day) }
+    ], { label: `${event.title} on ${when}`, point });
+  }
+
+  // A calendar entry's Delete from its quick menu: one that happens once after asking, and a repeating one in a small window
+  // with Just This Day and Every Time
+  function deleteFromMenu(node, event, day) {
+    const when = showDate(dayOf(day));
+    const run = async (one) => {
+      const result = await undoable(one ? `deleted ${event.title} (just ${showDay(dayOf(day))}) from your calendar` : `deleted ${event.title} from your calendar`, async () => {
+        if (one) return deleteOneDay(event, day);
+        const removed = await removeEvent(event.id);
+        return removed.ok && removed.data && !removed.data.error ? { ok: true } : { ok: false, message: (removed.data && removed.data.error) || problem(removed, "Couldn't delete it. Please try again.") };
+      });
+      if (!result.ok) return toast(result.message || "Couldn't delete it. Please try again.", true);
+      toast(`Deleted ${event.title}${one ? ` on ${when}` : ""}.`);
+    };
+    if (!event.repeat) {
+      if (window.confirm(`Delete ${event.title}?`)) run(false);
+      return;
+    }
+    BudgetUI.openPanel({
+      origin: node,
+      size: "small",
+      title: `Delete ${event.title}`,
+      build(form, panel) {
+        form.addEventListener("submit", (submitted) => submitted.preventDefault());
+        form.append(BudgetUI.noTranslate(el("p", "panelHint", `It repeats (${repeatWords(event).toLowerCase()}). Delete only ${when}'s, or every time?`)), BudgetUI.buttonRow([
+          { label: "Just This Day", kind: "danger", onClick: () => { panel.close(); run(true); } },
+          { label: "Every Time", kind: "danger", onClick: () => {
+            if (!window.confirm(`Delete ${event.title}, every time it repeats?`)) return;
+            panel.close();
+            run(false);
+          } },
+          { label: "Cancel", onClick: () => panel.close() }
+        ]));
+      }
+    });
   }
 
   //#endregion
@@ -2070,7 +2259,7 @@ window.Fractals = (() => {
   // #region THE FRACTALS, TO MANAGE (the Budgets, Calendars & Spreadsheets page) AND THEIR LINKS (Settings)
   // =====================================================================
 
-  const HOURS_MOST_DAYS = 366; // The most days the hours are added up over
+  const HOURS_MOST_DAYS = LIMITS.hoursDays; // The most days the hours are added up over
 
   // Every fractal with its color, how many entries it has, its hours between the two days over the list (this week to
   // start), and Edit. container: the card's list; it's drawn again whenever the calendar changes.
@@ -2224,9 +2413,11 @@ window.Fractals = (() => {
   }
 
   // The fractals (own, the budget's, linked, Holidays, and Meals, any of them) in the order kept with the budget
-  // (sheetsData.fractalOrder, their ids: Process Budget.js saveFractalOrder), the rest after them as they come
+  // (sheetsData.fractalOrder, their ids: Process Budget.js saveFractalOrder; the icon's answer's on Quick Calendar), the rest
+  // after them as they come
   function inOrder(list) {
-    const order = typeof sheetsData !== "undefined" && sheetsData && Array.isArray(sheetsData.fractalOrder) ? sheetsData.fractalOrder : [];
+    const sheets = budgetSheets();
+    const order = sheets && Array.isArray(sheets.fractalOrder) ? sheets.fractalOrder.map(String) : [];
     if (order.length === 0) return list;
     const place = (fractal) => {
       const at = order.indexOf(String(fractal.id));
@@ -2337,15 +2528,19 @@ window.Fractals = (() => {
   }
 
   // A fractal's Share window (from its Edit window): its calendar link, to add it to a calendar app or send it to someone,
-  // drawn again as the link changes. A linked fractal shares the link it comes from.
+  // drawn again as the link changes, and for one of the account's own, the people it's shared with (peopleBox). A linked
+  // fractal shares the link it comes from.
   function openShare(origin, fractal) {
     let redraw = null;
+    let people = null;
     const panelApi = BudgetUI.openPanel({
       origin,
       size: "small",
       stacked: true,
       title: `Share ${fractal.name}`,
       build(form, panel) {
+        // (Made once, beside the link's part, so a name being typed stays as the list changes)
+        people = !fractal.perBudget && !fractal.linked && !fractal.sharedBy && !fractal.holidays && !fractal.meals ? peopleBox(fractal, panel) : null;
         const box = el("div", "fractalShare");
         const draw = () => {
           const linked = linkedFractal(fractal.id);
@@ -2362,10 +2557,77 @@ window.Fractals = (() => {
         draw();
         redraw = draw;
         document.addEventListener("fractals:changed", draw);
-        form.append(box, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
+        form.append(...(people ? [people.el] : []), box, BudgetUI.buttonRow([{ label: "Close", onClick: () => panel.close() }]));
       }
     });
-    watchClosed(panelApi, () => document.removeEventListener("fractals:changed", redraw));
+    watchClosed(panelApi, () => {
+      document.removeEventListener("fractals:changed", redraw);
+      if (people) people.stop();
+    });
+  }
+
+  // One of the account's own fractals shared with other accounts, as a whole: a box for someone's username or email with
+  // Can Edit (off to start: they see every entry, live, once they join; on, they add, change, and delete its entries too),
+  // and each person it's shared with, with their Can Edit switch and Remove. Only its owner renames, deletes, or shares
+  // it. { el, stop() (when its window closes) }
+  function peopleBox(fractal, panel) {
+    const wrap = el("div", "fractalPeople");
+    const typed = BudgetUI.textField({ label: "Share with someone", placeholder: "Their username or email" });
+    typed.input.maxLength = LIMITS.email;
+    typed.input.autocomplete = "off";
+    typed.input.spellcheck = false;
+    typed.input.setAttribute("autocapitalize", "none");
+    const canEdit = BudgetUI.checkboxField({ label: "Can Edit", checked: false });
+    const list = el("ul", "budgetList budgetPeople");
+    const invite = button("Share", "primary", async () => {
+      panel.setError("");
+      const to = typed.value();
+      if (!to) return panel.setError("Type their username or email.");
+      invite.disabled = true;
+      const result = await change("people/share", { fractal: fractal.id, to, canEdit: canEdit.input.checked });
+      invite.disabled = false;
+      if (!result.ok) return panel.setError(problem(result, "Couldn't share it. Please try again."));
+      if (result.data.error) return panel.setError(result.data.error);
+      typed.input.value = "";
+      toast(result.data.already === "joined" ? "It's already shared with them." : result.data.already === "invited" ? "They're already invited." : `Invited ${result.data.invited}. It shows in their Calendar Fractals for them to join.`);
+    }, `Share ${fractal.name}`);
+    const show = () => {
+      const now = data ? data.fractals.find(item => item.id === fractal.id) : null;
+      list.replaceChildren(...(now && now.people ? now.people : []).map(person => personRow(fractal, person, panel)));
+      list.hidden = list.childElementCount === 0;
+    };
+    const row = el("div", "shareRow");
+    row.append(typed.input, invite);
+    typed.el.append(row);
+    wrap.append(el("p", "panelHint", "Share the whole calendar with someone's Prismal Planning account: once they join, it's on their calendar, and they see every entry as you change it. With Can Edit, they can add, change, and delete its entries too. Only you can rename it, delete it, or share it."), typed.el, canEdit.el, list);
+    show();
+    document.addEventListener("fractals:changed", show);
+    return { el: wrap, stop: () => document.removeEventListener("fractals:changed", show) };
+  }
+
+  // Someone one of the account's own fractals is shared with: their name, whether they joined, their Can Edit switch, and
+  // Remove (or Cancel Invite). panel: the window it's in, which says what went wrong. Settings' Shared Users uses it too.
+  function personRow(fractal, person, panel) {
+    const item = el("li", "budgetItem");
+    const about = el("div", "budgetOpen");
+    about.append(BudgetUI.noTranslate(el("span", "budgetName", person.name)), el("span", "budgetDetail", `${person.joined ? "Joined" : "Invited, hasn't joined yet"}${person.canEdit ? "" : ", can only look"}`));
+    item.append(about);
+    if (window.Budgets && window.Budgets.canEditSwitch) {
+      item.append(window.Budgets.canEditSwitch(person, async (on) => {
+        const result = await change("people/edit", { fractal: fractal.id, person: person.id, canEdit: on });
+        if (!result.ok || result.data.error) {
+          panel.setError(result.ok ? result.data.error : problem(result, "That didn't work. Please try again."));
+          return false;
+        }
+        return true;
+      }));
+    }
+    item.append(button(person.joined ? "Remove" : "Cancel Invite", "danger budgetShare", async () => {
+      if (!window.confirm(person.joined ? `Stop sharing ${fractal.name} with ${person.name}? It goes off their calendar.` : `Take back the invitation to ${person.name}?`)) return;
+      const result = await change("people/remove", { fractal: fractal.id, person: person.id });
+      if (!result.ok) panel.setError(problem(result, "That didn't work. Please try again."));
+    }, `${person.joined ? "Remove" : "Cancel Invite for"} ${person.name}`));
+    return item;
   }
 
   // Settings' calendar links: one for every calendar, and one for each fractal, each turned on (a private link other
@@ -2421,6 +2683,9 @@ window.Fractals = (() => {
     openFractal,
     openNewEvent,
     openEvent,
+    quickMenu,
+    openShare,
+    personRow,
     kindSwitch,
     addSteps,
     whenWords,

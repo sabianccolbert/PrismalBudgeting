@@ -430,6 +430,26 @@ function wireCalendar() {
     if (lineEl.classList.contains("lineInBank")) BudgetUI.openInBankOptions(lineEl, gridDates[Number(td.dataset.row)][Number(td.dataset.col)]);
     else openEntryOptions(lineEl, Number(td.dataset.row), Number(td.dataset.col), Number(lineEl.dataset.line));
   });
+
+  // An entry on a zoomed day held down, or right-clicked: its quick menu (Edit, Move, Copy, Delete). A day the calendar was
+  // moved to (a guest day) is read the way a tap reads it.
+  BudgetUI.wireQuickMenus(calendarTable, ".lineEntry, .fractalEvent", (target, point) => {
+    const td = target.closest("td");
+    if (!td || !td.classList.contains("is-editing") || td.classList.contains("isZoomClosing")) return;
+    if (target.classList.contains("fractalEvent")) return window.Fractals?.quickMenu(target, point);
+    const lineIndex = Number(target.dataset.line);
+    if (td.dataset.row === undefined) {
+      const time = dayTime(td);
+      const day = time === null ? null : budgetDayAt(new Date(time));
+      const line = day ? String(day.text).split("\n")[lineIndex] : "";
+      if (line) BudgetUI.entryQuickMenu(target, line, day.date, { lineIndex, inHistory: day.kind === "history", point });
+      return;
+    }
+    const r = Number(td.dataset.row);
+    const c = Number(td.dataset.col);
+    const line = String(calendarData[r][c]).split("\n")[lineIndex];
+    if (line) BudgetUI.entryQuickMenu(target, line, gridDates[r][c], { lineIndex, point });
+  });
 }
 
 //#endregion
@@ -588,6 +608,15 @@ function wireListMode() {
     const lineIndex = Number(lineEl.dataset.line);
     const line = String(day.text).split("\n")[lineIndex];
     if (line) BudgetUI.openEntryOptions(lineEl, line, day.date, { lineIndex, inHistory: day.kind === "history" });
+  });
+  // (An entry held down or right-clicked: its quick menu)
+  BudgetUI.wireQuickMenus(list, ".lineEntry, .fractalEvent", (target, point) => {
+    if (target.classList.contains("fractalEvent")) return window.Fractals?.quickMenu(target, point);
+    const dayEl = target.closest(".listDay");
+    const day = dayEl ? budgetDayAt(createSafeMidnight(dayEl.dataset.date, true)) : null;
+    const lineIndex = Number(target.dataset.line);
+    const line = day ? String(day.text).split("\n")[lineIndex] : "";
+    if (line) BudgetUI.entryQuickMenu(target, line, day.date, { lineIndex, inHistory: day.kind === "history", point });
   });
 }
 
@@ -1054,6 +1083,7 @@ function showQuickEntrySetup(origin, look) {
         }
         // (This device's own icon: its entries are added as soon as the budget opens here, see holdQuickEntries)
         await rememberQuickIcon(result.data.key);
+        Limits.nearNext("quickIcons", result.data.icons);
         const url = `/quick.html?key=${encodeURIComponent(result.data.key)}&setup=1`;
         if (typeof window.transitionTo === "function") window.transitionTo(url);
         else window.location.href = url;
@@ -1100,6 +1130,7 @@ function showQuickCalendarSetup(origin, look) {
         }
         // (This device's own icon: its entries join the calendar as soon as it loads here)
         await window.Fractals.rememberIcon(result.data.key);
+        Limits.nearNext("calendarIcons", result.data.icons);
         const url = `/quickcal.html?key=${encodeURIComponent(result.data.key)}&setup=1`;
         if (typeof window.transitionTo === "function") window.transitionTo(url);
         else window.location.href = url;

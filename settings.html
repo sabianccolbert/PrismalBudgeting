@@ -2,10 +2,10 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=aceb93a76b">
+    <link rel="stylesheet" href="/stylesheet.css?v=04fe12fe3f">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=17933343a0">
-    <link rel="stylesheet" href="/themes.css?v=33f6b67192">
+    <link rel="stylesheet" href="/budgetStyle.css?v=9b2f95f639">
+    <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
     <meta charset="UTF-8">
@@ -121,6 +121,16 @@
                 <li>Calendar apps check a link on their own schedule (Google Calendar only every several hours), so a change can take a while to show up there.</li>
                 <li>Keep a link private: anyone who has it can see those entries. New Link makes a new one (the old one stops working), and Turn Off ends it.</li>
               </ul>
+            </section>
+
+            <!-- Who the account's own budgets and Calendar Fractals are shared with: the Shared Users window (Settings Page.js
+                 openSharedUsers), with each person's Can Edit, taking someone off, and Share to add someone -->
+            <section id="sharingCard" class="budgetCard settingsCard" aria-labelledby="sharingHeading">
+              <h3 id="sharingHeading">Sharing</h3>
+              <p>Who each of your budgets and Calendar Fractals is shared with, and what they can do: turn each person's Can Edit on or off, take someone off, or share with someone new.</p>
+              <div class="panelButtons">
+                <button id="sharedUsersButton" type="button" class="budgetButton primary">Shared Users</button>
+              </div>
             </section>
 
             <!-- The Recipes tab's settings: this device's switches (each off to start), and the account's two kitchen reminders
@@ -298,7 +308,7 @@
                   <div id="passkeyFields">
                     <label class="settingsField">
                       <span class="fieldLabel">Passkey name</span>
-                      <input id="passkeyName" type="text" maxlength="40" autocomplete="off">
+                      <input id="passkeyName" type="text" autocomplete="off">
                     </label>
                     <label class="settingsField">
                       <span class="fieldLabel">Your password</span>
@@ -380,6 +390,35 @@
               <h3 id="updatesHeading">Updates</h3>
               <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
               <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
+                <section class="updatesRelease" aria-labelledby="update20261124">
+                  <h4 id="update20261124">11.24.2026.A</h4>
+                  <p class="updatesKind">Bigger changes</p>
+                  <ul>
+                    <li>Equity has sections, like Recurring Entries: tap Edit, then + Section, and each section's heading shows its accounts' totals, today and in 6 months.</li>
+                    <li>Each wavelength can have a max: an amount it shouldn't pass, the biggest share of your spending it should be, or both (in Bob's Wavelengths window). Wherever it shows, it says where it stands, like $250.00/$300.00 and 45%/50%, orange once it's 85% of the way there and red past it, and Bob gives you a heads-up.</li>
+                    <li>Snapshot can show single items: one wavelength (with its own days, picked in Edit), one wavelength week by week, one recurring entry, and one Calendar Fractal's next 7 days.</li>
+                    <li>Sharing has Can Edit: share a budget so someone can change it, or only look at it. A whole Calendar Fractal can be shared with someone now too (its Share window), so it's on their calendar, live, to look at or, with Can Edit, to add to and change.</li>
+                    <li>Settings has Shared Users (in the new Sharing card): everyone each of your budgets and Calendar Fractals is shared with, with their Can Edit, a way to take them off, and Share to add someone.</li>
+                    <li>Calendar entries keep the time zone they were made in. When you travel, your calendar shows them at the times they are where you are, and an entry from another time zone says so in its window.</li>
+                    <li>A recurring payment into an Equity account (like a loan's) has Until $0 under its End Date: it finds the day the account gets to $0.00 with everything planned, ends the payments the day before, and puts a last payment of only what's left on that day, so it lands on $0.00 exactly.</li>
+                    <li>Recurring entries can have a reminder too: Remind Me, that many days before each day it lands on.</li>
+                    <li>Hold an entry down on a zoomed day (or right-click it) for a quick menu: Edit, Move, Copy, and Delete. It works on budget and calendar entries, in List Mode, and in an Equity account's entries; a repeating calendar entry asks whether it's just that day or every time.</li>
+                    <li>A heads-up as you near a limit: when a part of your budget is close to full, or your goals, calendar entries, recipes, people a budget is shared with, home screen icons, entries waiting from an icon, test notifications, or calendar and spreadsheet reads come close to the most there can be, a message says how many you have and what happens past it.</li>
+                  </ul>
+                  <p class="updatesKind">Smaller changes</p>
+                  <ul>
+                    <li>Graphs draw their lines in from left to right as they show (Reduced Motion draws them at once).</li>
+                    <li>Two quick taps don't zoom the page in (pinching still zooms).</li>
+                    <li>The Lowest card's Shows list looks like its Look Ahead button.</li>
+                    <li>A day opened on a phone while the page was zoomed in had its buttons too big, crowding its date. They're their usual size now.</li>
+                    <li>Quick Budget's prisms can each have a card color, and a prism can be changed: tap its name in Edit Prisms.</li>
+                    <li>The tracker's From and To are kept on your device, with Last 3 Months to go back, and each Snapshot tracker card has its own, picked in Snapshot's Edit.</li>
+                    <li>End It Then (Equity) could lose a Hidden or Transfer payment's own note and wavelength. They stay with it now.</li>
+                    <li>Paychecks from a Calendar Fractal follow a change to its entries right away, without a refresh.</li>
+                    <li>Quick Calendar icons show the calendars your budget links from elsewhere (like one someone shares with you), and Holidays.</li>
+                    <li>The Privacy Policy and Terms cover Can Edit, sharing a whole Calendar Fractal, each entry's time zone, and what Quick Calendar icons show.</li>
+                  </ul>
+                </section>
                 <section class="updatesRelease" aria-labelledby="update20261123">
                   <h4 id="update20261123">11.23.2026.A</h4>
                   <p class="updatesKind">Bigger changes</p>
@@ -552,6 +591,7 @@
             <li><strong>Email:</strong> change it here (with your password). A new email gets a link to verify it, and until it's verified, spreadsheets and calendars can't be connected or read. Send Verification Email sends a new link.</li>
             <li><strong>Other Emails:</strong> add another email of yours (up to 5), and open the link we send it (it works for 24 hours). Once it's confirmed, you can sign in with it too (and use it for Forgot Password), and spreadsheets its Google account shares with admin@prismalplanning.org can be connected. Remove one to stop both. Adding one needs your own email verified first.</li>
             <li><strong>Quick Budget icons:</strong> turn off Show balances on Quick Budget icons, and they stop showing In Bank, the lowest it gets, and your Equity accounts' balances (just their names), on every icon.</li>
+            <li><strong>Shared Users</strong> (in Sharing) lists everyone each of your budgets and Calendar Fractals is shared with. Turn each person's <strong>Can Edit</strong> on or off (off, they can look but not change anything), take someone off, or Share it with someone new.</li>
             <li><strong>Quick Calendar icons:</strong> Signed-In Devices says how many work. Turning them off stops every one, and deletes the entries still waiting from them.</li>
             <li><strong>Birth Date:</strong> Prismal Planning is for people 18 and older. If you typed the wrong birth date when you signed up, fix it here: type it, or pick it with the calendar button.</li>
             <li>Change your password, add passkeys, turn off Quick Budget icons, sign out everywhere, download your data, or delete your account.</li>

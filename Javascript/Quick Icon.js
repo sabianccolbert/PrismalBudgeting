@@ -18,7 +18,7 @@
   };
   const PRISM_PICTURE = "/Favicon/apple-touch-icon.png";
   const IMAGE_DATA = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
-  const MAX_IMAGE_FILE = 15 * 1024 * 1024; // The biggest image it reads (it's cut down to the icon's size)
+  const MAX_IMAGE_FILE = LIMITS.imageFile; // The biggest image it reads (it's cut down to the icon's size)
 
   // The look a new icon of this kind starts with
   function defaultLook(kind) {
@@ -305,7 +305,7 @@
         }));
 
         // Icon: what's on it
-        const emoji = BudgetUI.textField({ label: "Emoji", value: chosen.emoji, placeholder: "Type one, like 🍕", maxLength: 16 });
+        const emoji = BudgetUI.textField({ label: "Emoji", value: chosen.emoji, placeholder: "Type one, like 🍕", maxLength: LIMITS.emoji });
         emoji.input.addEventListener("input", () => {
           chosen.emoji = firstCharacter(emoji.input.value);
           redraw();

@@ -220,6 +220,9 @@ html {
 
   /* The color at the edges while a page slides */
   background-color: black;
+
+  /* No zooming in with a double tap (two quick taps on a button or a day are two taps). Pinching still zooms. */
+  touch-action: manipulation;
 }
 
 /*---------- Body (content wrapper) ----------*/

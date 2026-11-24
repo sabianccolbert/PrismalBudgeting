@@ -38,6 +38,7 @@ window.LineGraph = (function () {
   ];
   const WIDE_ENOUGH = 460;    // Pixels wide before each line's name fits at its right end
   const LONG_STRETCH = 300 * 86400000; // Past this much time, the days along the bottom say the month and year instead
+  const REVEAL_MS = 850;      // How long the lines take to draw in, left to right, when a graph first shows (and for new days)
   let count = 0;
 
   const svgEl = (name, attrs = {}, parent = null) => {
@@ -165,6 +166,8 @@ window.LineGraph = (function () {
     let dates = [];              // Every day drawn, oldest first
     let layout = null;           // Where things are: { x(index) }
     let pointed = -1;            // The day being read (an index into dates), or -1
+    let revealing = true;        // The lines draw in on the next paint that has them (the first, and after new days)
+    let revealFrom = null;       // When they started drawing in (performance.now()), while they are
 
     const show = (value) => (money ? formatMoney(value) : String(Math.round(value * 100) / 100));
     const slotOf = (name) => {
@@ -254,6 +257,8 @@ window.LineGraph = (function () {
         svgEl("text", { x: x + 4, y: room.top + 9, class: "lineGraphAxis" }, svg).textContent = "Today";
       }
 
+      // (The lines and their names in one group, which draws in from the left: see revealLines)
+      const group = svgEl("g", { class: "lineGraphLines" }, svg);
       for (const line of drawn) {
         const color = line.color;
         const lineClass = line.group ? "lineGraphLine isGroup" : "lineGraphLine";
@@ -262,9 +267,9 @@ window.LineGraph = (function () {
         const ahead = line.points.filter(point => point.date >= today);
         // (With the days thinned out, no point may land on today: the dashes start from the last point before it)
         if (past.length > 0 && ahead.length > 0 && past[past.length - 1].date < ahead[0].date) ahead.unshift(past[past.length - 1]);
-        if (past.length >= 2) svgEl("path", { d: path(past), class: lineClass, stroke: color }, svg);
-        if (ahead.length >= 2) svgEl("path", { d: path(ahead), class: dashAhead ? `${lineClass} isAhead` : lineClass, stroke: color }, svg);
-        if (past.length < 2 && ahead.length < 2 && line.points.length === 1) svgEl("circle", { cx: xOf(line.points[0].date), cy: yOf(line.points[0].value), r: 4, fill: color }, svg);
+        if (past.length >= 2) svgEl("path", { d: path(past), class: lineClass, stroke: color }, group);
+        if (ahead.length >= 2) svgEl("path", { d: path(ahead), class: dashAhead ? `${lineClass} isAhead` : lineClass, stroke: color }, group);
+        if (past.length < 2 && ahead.length < 2 && line.points.length === 1) svgEl("circle", { cx: xOf(line.points[0].date), cy: yOf(line.points[0].value), r: 4, fill: color }, group);
       }
 
       // Each line's name at its right end, moved apart where they'd land on each other
@@ -273,10 +278,36 @@ window.LineGraph = (function () {
         for (let at = 1; at < ends.length; at++) ends[at].y = Math.max(ends[at].y, ends[at - 1].y + 14);
         for (const end of ends) {
           const words = end.line.name.length > 13 ? `${end.line.name.slice(0, 12)}…` : end.line.name;
-          svgEl("text", { x: width - room.right + 6, y: Math.min(end.y + 4, HEIGHT - room.bottom), class: "lineGraphLabel" }, svg).textContent = words;
+          svgEl("text", { x: width - room.right + 6, y: Math.min(end.y + 4, HEIGHT - room.bottom), class: "lineGraphLabel" }, group).textContent = words;
         }
       }
       svgEl("line", { class: "lineGraphCrosshair", y1: room.top, y2: HEIGHT - room.bottom, x1: -9, x2: -9 }, svg);
+      revealLines(group, room.left, width);
+    }
+
+    // The lines draw in from left to right (REVEAL_MS, easing out) the first time they're painted, and after new days are
+    // picked: a clip that widens from where the days start. A paint while they're drawing in (a new width) carries on
+    // from where it was. Reduced Motion draws them whole.
+    function revealLines(group, left, width) {
+      if (revealing) {
+        revealing = false;
+        revealFrom = window.lessMotion && window.lessMotion() ? null : performance.now();
+      }
+      if (revealFrom === null) return;
+      const clipId = `lineGraphReveal${id}`;
+      const clip = svgEl("clipPath", { id: clipId }, svg);
+      const edge = svgEl("rect", { x: 0, y: 0, width: left, height: HEIGHT }, clip);
+      group.setAttribute("clip-path", `url(#${clipId})`);
+      const step = (now) => {
+        if (!edge.isConnected) return; // (Painted again: that paint carries on)
+        const done = Math.min(1, (now - revealFrom) / REVEAL_MS);
+        edge.setAttribute("width", String(left + (width - left) * (1 - Math.pow(1 - done, 3))));
+        if (done < 1) return requestAnimationFrame(step);
+        revealFrom = null;
+        group.removeAttribute("clip-path");
+        clip.remove();
+      };
+      requestAnimationFrame(step);
     }
 
     // Reads the day at an index: the line down it, a dot on each line, and each line's value in the box
@@ -437,6 +468,7 @@ window.LineGraph = (function () {
         until = createSafeMidnight(value);
         if (picked && picked >= until) picked = null;
         startBox.input.value = showDate(firstDay());
+        revealing = true;
         draw();
       });
       startBox.input.addEventListener("change", () => {
@@ -447,6 +479,7 @@ window.LineGraph = (function () {
         showProblem("");
         picked = date;
         startBox.input.value = showDate(firstDay());
+        revealing = true;
         draw();
       });
     }

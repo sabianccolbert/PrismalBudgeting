@@ -68,19 +68,33 @@
     return { ...result, data: { ...answer, events: [...answer.events, ...waiting], waiting: [], waitingHere: waiting.length, saved: null } };
   }
 
+  // A new entry or meal that's waiting: once the entries waiting come near how many can (LIMITS.waitingEntries), a toast says so
+  function nearWaiting(result) {
+    if (result.ok && result.data) Limits.near("waitingEntries", result.data.waitingCount);
+    return result;
+  }
+
   // The calendar is read and added to with the key: a new entry waits, a waiting one can be changed or deleted, and
   // the ones already on the calendar stay as they are
   window.Fractals.useStore({
     quick: true,
     load: () => ask("check"),
     save: (id, fractal, event) => {
-      if (!id) return ask("entry", { fractal, event });
+      if (!id) return ask("entry", { fractal, event }).then(nearWaiting);
       if (id.startsWith(WAITING)) return ask("change", { id: Number(id.slice(WAITING.length)), fractal, event });
       return Promise.resolve({ ok: false, status: 403, data: { error: "Sign in to Prismal Planning to change an entry that's already on your calendar." } });
     },
     remove: (id) => (id.startsWith(WAITING)
       ? ask("unqueue", { id: Number(id.slice(WAITING.length)) })
-      : Promise.resolve({ ok: false, status: 403, data: { error: "Sign in to Prismal Planning to delete an entry that's already on your calendar." } }))
+      : Promise.resolve({ ok: false, status: 403, data: { error: "Sign in to Prismal Planning to delete an entry that's already on your calendar." } })),
+    // A linked Calendar Fractal of the icon's budget (a calendar shared from elsewhere), read by the API with the key: its
+    // calendar file, or a problem to show (one the server named waits, like Home's: Calendars.CalendarReadError)
+    async readLinked(id) {
+      const result = await window.Fractals.call("/api/quickcal/linked", { key, id });
+      if (result.ok && result.data && typeof result.data.text === "string") return result.data.text;
+      const words = window.Fractals.problem(result, "Couldn't read that calendar just now.");
+      throw new window.Calendars.CalendarReadError(words, result.status >= 400 && result.status < 500 && result.status !== 429);
+    }
   });
 
   // Meals: one added here waits (the API's fractal_waiting) like a calendar entry, and can be changed or deleted here until
@@ -96,7 +110,7 @@
       }
       const shown = window.Kitchen.mealView(checked);
       const sent = { title: shown.title, start: checked.start, repeat: checked.repeat || null, until: checked.until || null, foods: shown.foods, notes: shown.notes, recipe: checked.recipe || null };
-      const result = meal ? await ask("mealchange", { id: meal.waiting, meal: sent }) : await ask("meal", { meal: sent });
+      const result = meal ? await ask("mealchange", { id: meal.waiting, meal: sent }) : nearWaiting(await ask("meal", { meal: sent }));
       if (!result.ok || !result.data) return { ok: false, message: window.Fractals.problem(result, "Couldn't save it. Please try again.") };
       if (Array.isArray(result.data.fractals)) window.Fractals.took(result.data);
       if (result.data.error) return { ok: false, message: result.data.error };
@@ -176,9 +190,10 @@
     if (activeEditCell) refitZoomedDay();
   });
 
-  // Coming back to the page shows what changed on the calendar meanwhile (and which waiting entries joined it)
+  // Coming back to the page shows what changed on the calendar meanwhile (and which waiting entries joined it), and reads
+  // the linked calendars again when it's been 15 minutes
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && window.Fractals.data()) window.Fractals.load(true);
+    if (document.visibilityState === "visible" && window.Fractals.data()) window.Fractals.load(true).then(() => window.Fractals.readLinked());
   });
 
   // Start: the key checks out (its calendar shows), or the page says why not
@@ -195,6 +210,8 @@
       return;
     }
     window.Fractals.took(result.data);
+    // (Its budget's linked Calendar Fractals: calendars shared from elsewhere, read through the key)
+    window.Fractals.readLinked();
     status.hidden = true;
     // This icon's own look (a calendar until another is picked), in the links a phone reads when the page is added to its
     // home screen, and its Customize button

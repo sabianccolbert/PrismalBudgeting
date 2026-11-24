@@ -14,11 +14,11 @@ const Spreadsheets = (() => {
   // #region READING A FILE
   // =====================================================================
 
-  const MAX_TABS = 200;
-  const MAX_ROWS = 100000;
+  const MAX_TABS = LIMITS.sheetTabs;
+  const MAX_ROWS = LIMITS.sheetRows;
   const MAX_COLUMNS = 16384; // Column XFD, the last one Excel has
-  const MAX_UNZIPPED = 80000000; // A file inside the spreadsheet that would unzip bigger than this isn't read
-  const MAX_TOTAL_UNZIPPED = 160000000; // ...and the files read from one spreadsheet, all together
+  const MAX_UNZIPPED = LIMITS.sheetUnzipped; // A file inside the spreadsheet that would unzip bigger than this isn't read
+  const MAX_TOTAL_UNZIPPED = LIMITS.sheetUnzippedTotal; // ...and the files read from one spreadsheet, all together
   const TOO_BIG_TO_READ = "That spreadsheet is too big to read. Connect a smaller one, like a new spreadsheet with just the cells for Prismal Planning.";
 
   // A problem reading a spreadsheet. lasting: the server answered (like "not shared", or the account's email
@@ -56,6 +56,8 @@ const Spreadsheets = (() => {
       const lasting = response.status === 400 || response.status === 403 || response.status === 413;
       throw new SheetReadError(message || "Couldn't read that spreadsheet just now. Please try again.", lasting);
     }
+    // (Near the account's spreadsheet reads for now: a toast says so)
+    Limits.fromHeader(response);
     const format = response.headers.get("X-Sheet-Format") || "";
     let name = "";
     try { name = decodeURIComponent(response.headers.get("X-Sheet-Name") || ""); } catch (e) {}
@@ -433,7 +435,7 @@ const Spreadsheets = (() => {
   }
 
   const MAX_ROW_NUMBER = 1048576; // Excel's last row
-  const MAX_RANGE_CELLS = 5000;
+  const MAX_RANGE_CELLS = LIMITS.sheetRangeCells;
 
   // The ➕ window's boxes -> { range: "B2:B50" } (just "B2" for one cell), or { error }. "To" is optional, and
   // its column or row alone means the same as the first one's.
@@ -576,7 +578,7 @@ const Spreadsheets = (() => {
   const LABELS = { date: "Date", title: "Title", amount: "Amount", type: "Refraction Type", account: "Equity Account" };
   const KEEP_DAYS_BEFORE = 100; // Entries kept from before today (Bob's Big Bills card looks for ones like them)
   const KEEP_DAYS_AFTER = 800;
-  const MAX_ENTRIES = 3000;
+  const MAX_ENTRIES = LIMITS.sheetEntries;
   const MAX_DETAILED_PROBLEMS = 6;
 
   const isLinked = (field) => !!field && typeof field === "object" && typeof field.range === "string";

@@ -1421,23 +1421,34 @@ function openEquityWindow(origin) {
 // =====================================================================
 // #region TRACKER (Data's Tracker window; its rows are the tracker table, see Tracker rows in Process Budget.js)
 // =====================================================================
-// The tracker adds up entries by row between two days, From and To (the last 3 months through today to start, kept while
-// the page is open), the way the budget's own tracker counts them (updateTrackerTab): each row counts the entries its
+// The tracker adds up entries by row between two days, From and To (the last 3 months through today to start, kept on this
+// device: see trackerDays), the way the budget's own tracker counts them (updateTrackerTab): each row counts the entries its
 // aliases point to (once each, and transfers only in a row that counts them), Costs and Gains every cost and gain besides
 // transfers, Transfers every transfer, Interest the Equity accounts' interest, and Undefined whatever no row counts. Days
 // after today count what's planned for them, like Wavelength Planning. Data's Tracker row opens its window: the rows, with
 // New Row, Edit (drag, sections, delete), and a search, from Budget Pages.js's tables; and a row opens its own window,
 // with what each of its aliases came to and a line graph of them added up.
 
-const TRACKER_MONTHS = 3; // The tracker's From starts this many months before today
+const TRACKER_MONTHS = 3; // The tracker's From starts this many months before To, until one is picked
+const TRACKER_DAYS_KEY = "prismal_tracker_days"; // Each tracker's picked days on this device (see trackerDays)
 const TRACKER_COLUMNS = ["Type", "Total", { label: "Aliases", className: "aliasHead" }];
-let trackerRange = null;  // { from, to }: the days the tracker adds up (see trackerDays)
 let trackerWindow = null; // { view, search, found, boxes } while its window is open
 
-// The tracker's days: the last 3 months through today, until others are picked
-function trackerDays() {
-  if (!trackerRange) trackerRange = { from: addMonths(today, -TRACKER_MONTHS), to: today };
-  return trackerRange;
+// A tracker's days: Bob's ("bob": Data's Tracker row and window, and Bills And The Tracker) or a Snapshot tracker card's
+// ("snapshot:<its id>"), each its own on this device, like Wavelength Planning's Days (TRACKER_DAYS_KEY's book, through
+// signing out). Kept as { from, to }, each "YYYY-MM-DD", or "" for the usual: To is today, and From 3 months before To.
+// A day past how far Wavelength Planning looks ahead is that far. { from, to, picked (any day picked) }
+function trackerDays(key = "bob") {
+  const kept = cardKept(TRACKER_DAYS_KEY, key);
+  const day = (text) => {
+    const date = typeof text === "string" && /^\d{4}-\d{2}-\d{2}$/.test(text) ? createSafeMidnight(text, true) : null;
+    return date && !isNaN(date.getTime()) ? date : null;
+  };
+  let to = day(kept?.to) || today;
+  let from = day(kept?.from) || addMonths(to, -TRACKER_MONTHS);
+  if (from > to) [from, to] = [to, from];
+  const limit = addDays(today, PURPOSE_AHEAD_DAYS);
+  return { from: from > limit ? limit : from, to: to > limit ? limit : to, picked: !!(kept && (kept.from || kept.to)) };
 }
 
 // Where a row that fills in by itself is in the tracker table ("costs", "gains", "transfers", "interest", "undefined"), or -1
@@ -1585,9 +1596,9 @@ function trackerLines(index, first, until) {
   return [addedUpLine("Total", daily.byDay, first, until), ...lines];
 }
 
-// A row's line graph (Total and each part, added up day by day), on the tracker's days to start
-function trackerGraph(index, name) {
-  const { from, to } = trackerDays();
+// A row's line graph (Total and each part, added up day by day), on a tracker's days to start (key: whose, Bob's to start)
+function trackerGraph(index, name, key = "bob") {
+  const { from, to } = trackerDays(key);
   return LineGraph.create({
     label: `${name}, Added Up`,
     from: (until) => (from < until ? from : addMonths(until, -TRACKER_MONTHS)),
@@ -1674,55 +1685,65 @@ function autoTitleCell(row) {
   return td;
 }
 
-// From and To for the tracker's days (each a date box with its calendar button). Picking a day draws the window and Data's
-// Tracker row again.
-function trackerDateBoxes() {
-  const el = BudgetUI.element("div", "purposeDates");
+// From and To for a tracker's days (each a date box with its calendar button), and Last 3 Months while others are picked.
+// key: whose days (see trackerDays; Bob's to start). Picking a day draws what shows them again.
+function trackerDateBoxes(key = "bob") {
+  const el = BudgetUI.element("div", "purposeDates trackerDates");
   const boxes = {};
-  for (const [key, label] of [["from", "From"], ["to", "To"]]) {
+  for (const [part, label] of [["from", "From"], ["to", "To"]]) {
     const input = BudgetUI.element("input", "dateInput");
     input.type = "text";
     input.inputMode = "numeric";
     input.placeholder = datePattern();
     input.translate = false;
-    input.value = showDate(trackerDays()[key]);
+    input.value = showDate(trackerDays(key)[part]);
     input.setAttribute("aria-label", `Tracker ${label.toLowerCase()} date`);
     input.addEventListener("change", () => {
       const date = parseTypedDate(input.value);
       if (isNaN(date.getTime())) {
         BudgetUI.showToast(`That date isn't a real day. Use ${datePattern()}.`, true);
-        input.value = showDate(trackerDays()[key]);
+        input.value = showDate(trackerDays(key)[part]);
         return;
       }
-      setTrackerRange({ ...trackerDays(), [key]: createSafeMidnight(date) });
+      setTrackerRange({ ...trackerDays(key), [part]: createSafeMidnight(date) }, key);
     });
     const row = BudgetUI.element("div", "dateRow");
     row.append(input, BudgetUI.datePickerButton(input, label, { max: addDays(today, PURPOSE_AHEAD_DAYS) }));
-    const part = BudgetUI.element("div", "purposeDate");
-    part.append(BudgetUI.element("span", "fieldLabel", label), row);
-    el.append(part);
-    boxes[key] = input;
+    const box = BudgetUI.element("div", "purposeDate");
+    box.append(BudgetUI.element("span", "fieldLabel", label), row);
+    el.append(box);
+    boxes[part] = input;
   }
-  return {
-    el,
-    show() {
-      for (const key of ["from", "to"]) if (document.activeElement !== boxes[key]) boxes[key].value = showDate(trackerDays()[key]);
-    }
+  const usual = BudgetUI.element("button", "budgetButton trackerUsualDays", `Last ${TRACKER_MONTHS} Months`);
+  usual.type = "button";
+  usual.addEventListener("click", () => setTrackerRange(null, key));
+  el.append(usual);
+  const show = () => {
+    const days = trackerDays(key);
+    for (const part of ["from", "to"]) if (document.activeElement !== boxes[part]) boxes[part].value = showDate(days[part]);
+    usual.hidden = !days.picked;
   };
+  show();
+  return { el, show };
 }
 
-// New days for the tracker (From after To swaps them, and To goes no further than Wavelength Planning looks ahead)
-function setTrackerRange({ from, to }) {
-  const limit = addDays(today, PURPOSE_AHEAD_DAYS);
-  const [first, last] = from > to ? [to, from] : [from, to];
-  trackerRange = { from: first > limit ? limit : first, to: last > limit ? limit : last };
-  drawTrackerWindow();
-  const card = pageCards.find(item => item.def.id === "data");
-  if (card) {
-    drawCard(card);
-    renderHighlights();
+// New days for a tracker (key: whose, see trackerDays; null days go back to the usual last 3 months). From after To swaps
+// them; To today is kept as today, so it moves on with the days.
+function setTrackerRange(days, key = "bob") {
+  if (!days) keepWaveDays(key, null, TRACKER_DAYS_KEY);
+  else {
+    const [first, last] = days.from > days.to ? [days.to, days.from] : [days.from, days.to];
+    keepWaveDays(key, { from: formatToYMD(first), to: last.getTime() === today.getTime() ? "" : formatToYMD(last) }, TRACKER_DAYS_KEY);
   }
-  document.dispatchEvent(new CustomEvent("tracker:range")); // (The Snapshot page's cards follow too)
+  if (key === "bob") {
+    drawTrackerWindow();
+    const card = pageCards.find(item => item.def.id === "data");
+    if (card) {
+      drawCard(card);
+      renderHighlights();
+    }
+  }
+  document.dispatchEvent(new CustomEvent("tracker:range", { detail: { key } })); // (The Snapshot page's cards follow too)
 }
 
 // Data's Tracker window: From and To, New Row and Edit (Budget Pages.js renderToolbar, in the window), a search, and the rows,
@@ -1817,13 +1838,13 @@ function filterTrackerRows() {
 
 // A row's own window, over the Tracker window: what it came to in the tracker's days, what each of its parts came to (an
 // ordinary row's aliases; Transfers', Undefined's, and Interest's titles and accounts), its line graph, and for an ordinary
-// row, Change Row
-function openTrackerRowWindow(origin, index) {
+// row, Change Row. key: whose days it shows (a Snapshot card's own; Bob's to start).
+function openTrackerRowWindow(origin, index, key = "bob") {
   const row = trackerData[index];
   if (!row || isSeparatorRow(row)) return;
   const type = cleanString(row[0]);
   const isAuto = TRACKER_AUTO_ROWS.includes(type);
-  const { from, to } = trackerDays();
+  const { from, to } = trackerDays(key);
   const figure = trackerTotals(from, to).get(index) || { total: 0, parts: new Map() };
   const name = String(row[0]).trim();
   openWindow({
@@ -1838,7 +1859,7 @@ function openTrackerRowWindow(origin, index) {
       const parts = [...figure.parts.values()];
       if (parts.length > 0) form.append(tableBox([type === "interest" ? "Account" : isAuto ? "Title" : "Alias", "Total"], parts.map(part => [part.name, amountCell(part.total)])));
       else if (!isAuto) form.append(BudgetUI.element("p", "panelHint", "This row has no aliases yet: Change Row adds them."));
-      form.append(trackerGraph(index, name).el);
+      form.append(trackerGraph(index, name, key).el);
       // (Change Row opens over the Tracker window, from the row as it's drawn now)
       const change = () => {
         panel.close();
@@ -2090,6 +2111,14 @@ const wavelengthsGraph = () => LineGraph.create({
   from: (until) => graphStart(until),
   max: addDays(today, PURPOSE_AHEAD_DAYS),
   series: (first, until) => wavelengthWeekLines(first, until)
+});
+
+// What one wavelength (by its id, "none" for Undefined) cost each week
+const wavelengthGraph = (id) => LineGraph.create({
+  label: `${id === "none" ? "Undefined" : wavelengthName(id)}, Week By Week`,
+  from: (until) => graphStart(until),
+  max: addDays(today, PURPOSE_AHEAD_DAYS),
+  series: (first, until) => wavelengthWeekLines(first, until).filter(line => line.id === id)
 });
 
 // What each wavelength cost each week from first through until: a line for each wavelength, in their order ({ id, name, points })
@@ -2756,7 +2785,7 @@ function openGoalPanel(origin, index = null, link = {}) {
           values.payment = steps.each;
           values.frequency = frequency;
         }
-        const gemName = (title.value() || goalTarget({ kind, account: goal.account }) || "Goal").slice(0, 40);
+        const gemName = (title.value() || goalTarget({ kind, account: goal.account }) || "Goal").slice(0, LIMITS.presetName);
         button.disabled = true;
         const result = await saveCalculatorPresets("gems", [...calculatorStore("gems"), { name: gemName, values }]);
         button.disabled = false;
@@ -2882,7 +2911,7 @@ function goalPlanFields({ date, existing, title, amount, target, gemPick, gems, 
     if (left < 0.005) return (note.textContent = "It's already there, so there's nothing to set aside.");
     const has = new Set(typed);
     // One alone: every month to start, and with only how often, a year from today
-    let frequency = has.has("frequency") ? { count: Math.max(1, Math.min(999, Math.round(Number(count.value)) || 1)), unit: unit.value } : null;
+    let frequency = has.has("frequency") ? { count: Math.max(1, Math.min(LIMITS.frequencyCount, Math.round(Number(count.value)) || 1)), unit: unit.value } : null;
     if (has.has("frequency") && !(Number(count.value) >= 1)) return (note.textContent = "How often needs a whole number, like 2 (every 2 weeks).");
     const eachAmount = has.has("each") ? readMoneyInput(each.value) : null;
     if (has.has("each") && !(eachAmount > 0)) return (note.textContent = "Each time needs an amount, like 300.00.");
@@ -3019,16 +3048,19 @@ function renderPurposesCard(card) {
   if (goals.length > 0) parts.push(waveGoalList(goals));
   card.results.replaceChildren(...parts);
   const near = goals.filter(goal => goal.share >= WAVE_GOAL_WARN);
-  if (near.length > 0) {
+  // (And each wavelength near or past its max in these days)
+  const nearMax = sum > 0 ? totals.slices.map(slice => ({ name: slice.name, standing: waveMaxStanding(slice.key, slice.total, sum) })).filter(item => item.standing.level) : [];
+  if (near.length > 0 || nearMax.length > 0) {
     // (A % goal with no Regular gains in its days comes to $0.00, so anything spent is past it)
     const words = near.map(goal => (Number.isFinite(goal.share)
       ? `${goal.name} has used ${Math.round(goal.share * 100)}% of its goal (${formatMoney(goal.used)} of ${formatMoney(goal.limit)} ${goalWindowWords(goal.goal)})`
       : `${goal.name} is past its goal (${formatMoney(goal.used)} ${goalWindowWords(goal.goal)}, with no Regular gains then, so its ${goal.goal.percent}% of them is $0.00)`));
+    for (const item of nearMax) words.push(`${item.name} is ${item.standing.level === "isWaveOver" ? "past" : "near"} its max (${item.standing.amount}, ${item.standing.share} from ${showDate(range.from)} to ${showDate(range.to)})`);
     return { text: `Heads up: ${words.join("; ")}.`, warn: true };
   }
   const days = `from ${showDate(range.from)} to ${showDate(range.to)}`;
   if (sum === 0) return { text: `Nothing spent ${days} yet.`, warn: false };
-  const shares = totals.slices.filter(slice => slice.total > 0).map(slice => `${slice.name} ${sharePercent(slice.total, sum)}%`);
+  const shares = totals.slices.filter(slice => slice.total > 0).map(slice => `${slice.name} ${waveMaxStanding(slice.key, slice.total, sum).share}`);
   return { text: `${shares.join(", ")} ${days}.`, warn: false };
 }
 
@@ -3104,6 +3136,23 @@ function waveGoalList(goals) {
 // A part's share of the whole, as a whole number of percent
 function sharePercent(part, whole) {
   return whole > 0 ? Math.round(part / whole * 100) : 0;
+}
+
+// How a wavelength (by its id, "none" for Undefined) stands against its max in days whose spending on every wavelength came
+// to `sum`: { max (readWaveMax's, or null), amount ("$250.00/$300.00", or "$250.00" with no amount to stay under), share
+// ("45%/50%", or "45%"), level ("isWaveOver" past either, "isWaveNear" from WAVE_GOAL_WARN of either, or ""), words (the
+// two together, for a sentence or a screen reader) }. Everywhere a wavelength's total shows goes through this.
+function waveMaxStanding(id, total, sum) {
+  const max = readWaveMax(waveMaxes()[id]);
+  const share = sharePercent(total, sum);
+  const used = [];
+  if (max?.amount) used.push(total / max.amount);
+  if (max?.percent) used.push((sum > 0 ? total / sum * 100 : 0) / max.percent);
+  const most = used.length > 0 ? Math.max(...used) : 0;
+  const amount = max?.amount ? `${formatMoney(total)}/${formatMoney(max.amount)}` : formatMoney(total);
+  const shareWords = max?.percent ? `${share}%/${max.percent}%` : `${share}%`;
+  const level = !max ? "" : most > 1 + 1e-9 ? "isWaveOver" : most >= WAVE_GOAL_WARN ? "isWaveNear" : "";
+  return { max, amount, share: shareWords, level, words: `${amount}, ${shareWords}${level === "isWaveOver" ? " (past its max)" : level === "isWaveNear" ? ` (at least ${Math.round(WAVE_GOAL_WARN * 100)}% of its max)` : ""}` };
 }
 
 const UNDEFINED_COLOR = "hsl(230, 12%, 62%)"; // Undefined's color, on the spectrum and in the Wavelengths window
@@ -3238,12 +3287,12 @@ function wavelengthSpectrum(totals, sum, card, range) {
     const to = left + width - (left + width < WIDTH - 0.5 ? GAP / 2 : 0);
     left += width;
     if (to <= from) continue;
-    const share = `${sharePercent(slice.total, sum)}%`;
+    const standing = waveMaxStanding(slice.key, slice.total, sum);
     const stretch = document.createElementNS(SVG_NS, "g");
     stretch.setAttribute("class", "spectrumStretch");
     stretch.setAttribute("tabindex", "0");
     stretch.setAttribute("role", "button");
-    stretch.setAttribute("aria-label", `${slice.name}: ${formatMoney(slice.total)}, ${share}. Open its titles.`);
+    stretch.setAttribute("aria-label", `${slice.name}: ${standing.words}. Open its titles.`);
     const hit = document.createElementNS(SVG_NS, "rect");
     hit.setAttribute("class", "spectrumHit");
     hit.setAttribute("x", from.toFixed(2));
@@ -3264,7 +3313,7 @@ function wavelengthSpectrum(totals, sum, card, range) {
     wave.setAttribute("color", slice.color); // (Its glow's color, budgetStyle.css .spectrumWave)
     wave.setAttribute("vector-effect", "non-scaling-stroke");
     stretch.append(hit, wave);
-    const show = () => showCaption(`${slice.name}: ${formatMoney(slice.total)}, ${share}`);
+    const show = () => showCaption(`${slice.name}: ${standing.words}`);
     stretch.addEventListener("pointerenter", show);
     stretch.addEventListener("focus", show);
     stretch.addEventListener("pointerleave", () => showCaption(resting));
@@ -3280,18 +3329,21 @@ function wavelengthSpectrum(totals, sum, card, range) {
 
   const legend = BudgetUI.element("ul", "purposeLegend");
   for (const slice of totals.slices) {
-    const item = BudgetUI.element("li", "purposeLegendItem");
+    const standing = waveMaxStanding(slice.key, slice.total, sum);
+    const item = BudgetUI.element("li", `purposeLegendItem${standing.level ? ` ${standing.level}` : ""}`);
     const button = BudgetUI.element("button", "purposeLegendButton");
     button.type = "button";
-    button.disabled = slice.total === 0;
+    // (A wavelength with a max shows even with nothing spent: $0.00/$300.00)
+    button.disabled = slice.total === 0 && !standing.max;
     const swatch = BudgetUI.element("span", "purposeSwatch");
     swatch.style.background = slice.color;
     button.append(
       swatch,
       BudgetUI.noTranslate(BudgetUI.element("span", "purposeName", slice.name)),
-      BudgetUI.noTranslate(BudgetUI.element("span", "purposeAmount", formatMoney(slice.total))),
-      BudgetUI.element("span", "purposeShare", `${sharePercent(slice.total, sum)}%`)
+      BudgetUI.noTranslate(BudgetUI.element("span", "purposeAmount", standing.amount)),
+      BudgetUI.element("span", "purposeShare", standing.share)
     );
+    if (standing.level) button.setAttribute("aria-label", `${slice.name}: ${standing.words}`);
     button.addEventListener("click", () => openPurposeWindow(button, slice.key, card));
     item.append(button);
     legend.append(item);
@@ -3310,14 +3362,15 @@ function wavelengthSpectrum(totals, sum, card, range) {
 //   { kind: "dates", from, to }: from one day through another ("YYYY-MM-DD")
 const WAVE_DAYS_KEY = "prismal_wave_days";
 const WAVE_DAYS_START = { kind: "past", count: PURPOSE_DAYS, unit: "days" };
-const WAVE_DAYS_MOST = 366;     // Past goes back up to this many days, weeks, or months
+const WAVE_DAYS_MOST = LIMITS.waveCount; // Past goes back up to this many days, weeks, or months
 const WAVE_DAYS_CARDS = 40;     // The most cards one budget keeps days for in a browser
 const PAYCHECK_LOOK_BACK = 366; // How many days back Since Last Paycheck looks for one (a year: its note says so)
 
-// What this browser keeps: { <the budget's id>: { <a card's key>: days } }
-function waveDaysBook() {
+// What this browser keeps under a key (WAVE_DAYS_KEY, or the tracker's TRACKER_DAYS_KEY): { <the budget's id>: { <a
+// card's key>: what it keeps } }
+function cardBook(storageKey = WAVE_DAYS_KEY) {
   try {
-    const book = JSON.parse(localStorage.getItem(WAVE_DAYS_KEY) || "{}");
+    const book = JSON.parse(localStorage.getItem(storageKey) || "{}");
     return book && typeof book === "object" && !Array.isArray(book) ? book : {};
   } catch (e) {
     return {};
@@ -3327,10 +3380,15 @@ function waveDaysBook() {
 // The open budget, as the book keeps it ("" before one has loaded)
 const waveDaysBudget = () => String(budgetInfo?.id ?? "");
 
+// What a card keeps in a book for the open budget, or undefined
+function cardKept(storageKey, key) {
+  const kept = cardBook(storageKey)[waveDaysBudget()];
+  return kept && typeof kept === "object" && Object.prototype.hasOwnProperty.call(kept, key) ? kept[key] : undefined;
+}
+
 // A card's days on this device (the last 30 days, until some are picked)
 function waveDaysOf(key) {
-  const kept = waveDaysBook()[waveDaysBudget()];
-  const days = kept && typeof kept === "object" && Object.prototype.hasOwnProperty.call(kept, key) ? readWaveDays(kept[key]) : null;
+  const days = readWaveDays(cardKept(WAVE_DAYS_KEY, key));
   return days || { ...WAVE_DAYS_START };
 }
 
@@ -3349,17 +3407,18 @@ function readWaveDays(days) {
   return { kind: "dates", from: formatToYMD(from <= to ? from : to), to: formatToYMD(from <= to ? to : from) };
 }
 
-// Keep a card's days in this browser, as its budget's newest (the oldest past WAVE_DAYS_CARDS go)
-function keepWaveDays(key, days) {
-  const book = waveDaysBook();
+// Keep a card's days in this browser, as its budget's newest (the oldest past WAVE_DAYS_CARDS go). storageKey: the
+// tracker's book instead (TRACKER_DAYS_KEY), and days null takes the card's out.
+function keepWaveDays(key, days, storageKey = WAVE_DAYS_KEY) {
+  const book = cardBook(storageKey);
   const id = waveDaysBudget();
   const kept = book[id] && typeof book[id] === "object" && !Array.isArray(book[id]) ? book[id] : {};
   delete kept[key];
-  kept[key] = days;
+  if (days !== null) kept[key] = days;
   const keys = Object.keys(kept);
   for (const old of keys.slice(0, Math.max(0, keys.length - WAVE_DAYS_CARDS))) delete kept[old];
   book[id] = kept;
-  try { localStorage.setItem(WAVE_DAYS_KEY, JSON.stringify(book)); } catch (e) {}
+  try { localStorage.setItem(storageKey, JSON.stringify(book)); } catch (e) {}
 }
 
 // The last payday on or before today: a day with a paycheck (a Regular gain from a recurring entry, or a connected
@@ -3405,7 +3464,7 @@ function purposeDaysControl(card) {
   const count = BudgetUI.element("input", "textInput purposeDaysCount");
   count.type = "text";
   count.inputMode = "numeric";
-  count.maxLength = 3;
+  count.maxLength = String(LIMITS.waveCount).length;
   count.value = String(WAVE_DAYS_START.count);
   count.setAttribute("aria-label", "How many");
   const unit = BudgetUI.element("select", "selectInput purposeDaysUnit");
@@ -3482,7 +3541,8 @@ function purposeDaysControl(card) {
 }
 
 // New days for a card (null: ones that couldn't be read, so it stays as it was), kept for it on this device. The card
-// draws again with them (on Bob's page, its row in Bob's Cards and the highlights too), and its open windows follow.
+// draws again with them (on Bob's page, its row in Bob's Cards and the highlights too; a card with a redraw of its own,
+// like the Snapshot page's single wavelength, with it), and its open windows follow.
 function setPurposeDays(card, days) {
   if (days) {
     card.waveDays = days;
@@ -3492,6 +3552,8 @@ function setPurposeDays(card, days) {
     drawCard(card);
     renderCardRows();
     renderHighlights();
+  } else if (typeof card.redraw === "function") {
+    card.redraw();
   } else {
     renderPurposesCard(card);
   }
@@ -3532,9 +3594,12 @@ function openPurposeWindow(origin, key, card) {
           return;
         }
         const all = totals.slices.reduce((sum, item) => sum + item.total, 0);
+        const standing = waveMaxStanding(key, slice.total, all);
         summary.textContent = slice.total > 0
-          ? `${formatMoney(slice.total)} from ${showDate(range.from)} to ${showDate(range.to)}: ${sharePercent(slice.total, all)}% of everything on a wavelength. Each title's entries are added together.`
-          : `Nothing on ${slice.name} from ${showDate(range.from)} to ${showDate(range.to)}.`;
+          ? `${standing.amount} from ${showDate(range.from)} to ${showDate(range.to)}: ${standing.share} of everything on a wavelength. Each title's entries are added together.`
+          : `Nothing on ${slice.name} from ${showDate(range.from)} to ${showDate(range.to)}${standing.max ? ` (${standing.amount}, ${standing.share})` : ""}.`;
+        summary.classList.remove("isWaveNear", "isWaveOver");
+        if (standing.level) summary.classList.add(standing.level);
         list.replaceChildren(...slice.titles.map(title => {
           const item = BudgetUI.element("li", "purposeTitle");
           const words = BudgetUI.element("span", "purposeTitleText");
@@ -3630,7 +3695,7 @@ function waveGoalFields(goal, name) {
   const count = BudgetUI.element("input", "frequencyCount waveGoalCount");
   count.type = "text";
   count.inputMode = "numeric";
-  count.maxLength = 3;
+  count.maxLength = String(LIMITS.waveCount).length;
   count.value = String(goal ? goal.count : 1);
   count.setAttribute("aria-label", `${name}'s goal: per how many`);
   const unit = BudgetUI.element("select", "selectInput waveGoalUnit");
@@ -3645,8 +3710,47 @@ function waveGoalFields(goal, name) {
       if (!text) return null;
       const number = readMoneyInput(text.replace(/%/g, ""));
       const per = Number(count.value.trim());
-      if (!Number.isFinite(number) || number <= 0 || !Number.isInteger(per) || per < 1 || per > 366) return undefined;
+      if (!Number.isFinite(number) || number <= 0 || !Number.isInteger(per) || per < 1 || per > LIMITS.waveCount) return undefined;
       return text.includes("%") ? (number <= 100 ? { percent: number, count: per, unit: unit.value } : undefined) : { amount: number, count: per, unit: unit.value };
+    }
+  };
+}
+
+// A wavelength's max in the Wavelengths window: the most it should come to (an amount, like 300) and the biggest share
+// of the spending it should be (a percent, like 50%), either, both, or neither. value(): { amount, percent } (readWaveMax),
+// null for none, or undefined when what's typed can't be one.
+function waveMaxFields(max, name) {
+  const box = BudgetUI.element("div", "waveGoalRow waveMaxRow");
+  const maxBox = (className, placeholder, value, label) => {
+    const input = BudgetUI.element("input", `textInput ${className}`);
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.placeholder = placeholder;
+    input.value = value;
+    input.setAttribute("aria-label", label);
+    return input;
+  };
+  const amount = maxBox("waveMaxAmount", "Max: $", max?.amount ? max.amount.toFixed(2) : "", `${name}'s max: an amount it shouldn't pass in the days shown`);
+  const percent = maxBox("waveMaxPercent", "Max: %", max?.percent ? `${max.percent}%` : "", `${name}'s max: the biggest share of the spending it should be, as a percent`);
+  box.append(amount, percent);
+  return {
+    el: box,
+    value() {
+      const typedAmount = amount.value.trim().replace(/\$/g, "");
+      const typedPercent = percent.value.trim().replace(/%/g, "");
+      if (!typedAmount && !typedPercent) return null;
+      const kept = {};
+      if (typedAmount) {
+        const number = readMoneyInput(typedAmount);
+        if (!Number.isFinite(number) || number <= 0 || number > MAX_AMOUNT) return undefined;
+        kept.amount = number;
+      }
+      if (typedPercent) {
+        const number = Number(typedPercent.replace(",", "."));
+        if (!Number.isFinite(number) || number <= 0 || number > 100) return undefined;
+        kept.percent = number;
+      }
+      return kept;
     }
   };
 }
@@ -3676,8 +3780,10 @@ function openWavelengthsWindow(origin) {
     title: "Wavelengths",
     build(form, panel) {
       const goals = waveGoals();
-      const rows = wavelengthList().map(wave => ({ id: wave.id, name: wave.name, goal: goals[wave.id] || null }));
+      const maxes = waveMaxes();
+      const rows = wavelengthList().map(wave => ({ id: wave.id, name: wave.name, goal: goals[wave.id] || null, max: readWaveMax(maxes[wave.id]) }));
       const undefinedGoal = waveGoalFields(goals.none || null, "Undefined");
+      const undefinedMax = waveMaxFields(readWaveMax(maxes.none), "Undefined");
       const onIt = (id) => Object.values(accountsData?.bob?.purposes || {}).filter(purpose => purpose === id).length;
       const list = BudgetUI.element("ol", "wavelengthEditor");
       const add = BudgetUI.element("button", "budgetButton primary wavelengthAdd", "Add A Wavelength");
@@ -3715,19 +3821,22 @@ function openWavelengthsWindow(origin) {
             rows.splice(at, 1);
             draw();
           });
-          // (Its goal, kept as it's typed while the rows move)
+          // (Its goal and its max, kept as they're typed while the rows move)
           const goal = waveGoalFields(row.goal, row.name || `Wavelength ${at + 1}`);
           row.read = goal.value;
           goal.el.addEventListener("input", () => { row.goal = goal.value() || null; });
           goal.el.addEventListener("change", () => { row.goal = goal.value() || null; });
-          item.append(swatch, BudgetUI.noTranslate(input), move(-1, "↑", "Move up"), move(1, "↓", "Move down"), remove, goal.el);
+          const max = waveMaxFields(row.max, row.name || `Wavelength ${at + 1}`);
+          row.readMax = max.value;
+          max.el.addEventListener("input", () => { row.max = max.value() || null; });
+          item.append(swatch, BudgetUI.noTranslate(input), move(-1, "↑", "Move up"), move(1, "↓", "Move down"), remove, goal.el, max.el);
           return item;
         }));
         // Undefined, always last
         const fixed = BudgetUI.element("li", "wavelengthRow isUndefined");
         const swatch = BudgetUI.element("span", "purposeSwatch");
         swatch.style.background = UNDEFINED_COLOR;
-        fixed.append(swatch, BudgetUI.element("span", "wavelengthFixedName", "Undefined"), BudgetUI.element("span", "panelHint wavelengthFixedNote", "Every entry not on another wavelength. It's always here."), undefinedGoal.el);
+        fixed.append(swatch, BudgetUI.element("span", "wavelengthFixedName", "Undefined"), BudgetUI.element("span", "panelHint wavelengthFixedNote", "Every entry not on another wavelength. It's always here."), undefinedGoal.el, undefinedMax.el);
         list.append(fixed);
         add.disabled = rows.length >= MAX_WAVELENGTHS;
         if (focusAt >= 0) list.querySelectorAll("input")[focusAt]?.focus();
@@ -3738,6 +3847,7 @@ function openWavelengthsWindow(origin) {
       });
       form.append(
         BudgetUI.element("p", "panelText", `These are yours to change. Tap Add A Wavelength to make your own, type over a name to rename it, use the arrows to put them in order (the first is the longest wavelength, red, and the last the shortest, violet), or × to take one out. You can have from 1 to ${MAX_WAVELENGTHS}, plus Undefined, and every entry form's buttons follow them. Each can have a goal: an amount (like 300) or a percent of what your Regular gains come to (like 20%), per a number of days, weeks, or months. Bob warns you once one is ${Math.round(WAVE_GOAL_WARN * 100)}% used.`),
+        BudgetUI.element("p", "panelText", `Each can have a max too: an amount it shouldn't pass, the biggest share of your spending it should be (like 50%), or both. It's held up against whatever days the wavelength is shown for, as $250.00/$300.00 and 45%/50%: orange from ${Math.round(WAVE_GOAL_WARN * 100)}% of either, red past either.`),
         goalsTip(),
         add,
         list,
@@ -3749,9 +3859,12 @@ function openWavelengthsWindow(origin) {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const read = rows.map(row => (row.read ? row.read() : row.goal));
+        const readMax = rows.map(row => (row.readMax ? row.readMax() : row.max));
         const noneGoal = undefinedGoal.value();
+        const noneMax = undefinedMax.value();
         if (read.includes(undefined) || noneGoal === undefined) return panel.setError("A goal needs an amount (or a percent up to 100%, like 20%), and how many days, weeks, or months (1 to 366).");
-        BudgetUI.submit(panel, () => saveWavelengths(rows.map((row, at) => ({ id: row.id, name: row.name, goal: read[at] })), noneGoal));
+        if (readMax.includes(undefined) || noneMax === undefined) return panel.setError("A max is an amount above $0.00 (like 300), a percent up to 100 (like 50%), or both.");
+        BudgetUI.submit(panel, () => saveWavelengths(rows.map((row, at) => ({ id: row.id, name: row.name, goal: read[at], max: readMax[at] })), noneGoal, noneMax));
       });
       draw();
     }

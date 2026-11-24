@@ -60,6 +60,8 @@ const Calendars = (() => {
       const lasting = response.status === 400 || response.status === 403 || response.status === 413;
       throw new CalendarReadError(message || "Couldn't read that calendar just now. Please try again.", lasting);
     }
+    // (Near the account's calendar reads for now: a toast says so)
+    if (!fractal) Limits.fromHeader(response);
     return fractal ? (await response.json()).ics : response.text();
   }
 
@@ -74,9 +76,9 @@ const Calendars = (() => {
   // event has a date alone. Repeating events (RRULE, with RDATE and EXDATE) are counted out only across the days being
   // worked out, and a repeat that was changed or canceled for one day (RECURRENCE-ID) takes that day's place.
 
-  const MAX_EVENTS = 20000;
-  const MAX_REPEATS = 3000; // Times one repeating event is counted in the days being worked out, at most
-  const MAX_REPEAT_STEPS = 100000; // Days, weeks, months, or years a repeat is followed, at most
+  const MAX_EVENTS = LIMITS.calendarEvents;
+  const MAX_REPEATS = LIMITS.calendarRepeats; // Times one repeating event is counted in the days being worked out, at most
+  const MAX_REPEAT_STEPS = LIMITS.calendarRepeatSteps; // Days, weeks, months, or years a repeat is followed, at most
   const WEEKDAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
   const DAY_MS = 86400000;
   const HOUR_MS = 3600000;
@@ -468,7 +470,7 @@ const Calendars = (() => {
       }
       const where = stack[stack.length - 1];
       if (where === "VCALENDAR") {
-        if (line.name === "X-WR-CALNAME" && !calendar.name) calendar.name = unescapeText(line.value).slice(0, 80);
+        if (line.name === "X-WR-CALNAME" && !calendar.name) calendar.name = unescapeText(line.value).slice(0, LIMITS.calendarFileName);
         if (line.name === "X-WR-TIMEZONE") calendarZone = line.value.trim();
       } else if (where === "VTIMEZONE" && zone && line.name === "TZID") {
         zone.id = line.value.trim();
@@ -494,10 +496,10 @@ const Calendars = (() => {
       const exceptLines = props.EXDATE || [];
       calendar.events.push({
         uid: props.UID ? props.UID.value.trim() : "",
-        title: props.SUMMARY ? unescapeText(props.SUMMARY.value).slice(0, 200) : "",
+        title: props.SUMMARY ? unescapeText(props.SUMMARY.value).slice(0, LIMITS.calendarFileTitle) : "",
         // (Where it is and its notes, for a linked Calendar Fractal's entries: Fractals.js)
-        location: props.LOCATION ? unescapeText(props.LOCATION.value).slice(0, 500) : "",
-        notes: props.DESCRIPTION ? unescapeText(props.DESCRIPTION.value).slice(0, 4000) : "",
+        location: props.LOCATION ? unescapeText(props.LOCATION.value).slice(0, LIMITS.calendarFileLocation) : "",
+        notes: props.DESCRIPTION ? unescapeText(props.DESCRIPTION.value).slice(0, LIMITS.calendarFileNotes) : "",
         start,
         end,
         rule: props.RRULE ? readRule(props.RRULE.value) : null,
@@ -638,13 +640,13 @@ const Calendars = (() => {
     stateMode: ["percent", "table", "none"], stateFiling: ["single", "married"], otFederal: ["taxed", "extra", "none"], otState: ["taxed", "extra", "none"]
   };
   const RULE_KINDS = ["worked", "paidOff"];
-  const MAX_RULES = 40;
-  const MAX_TIME_RULES = 20;
-  const MAX_VERSIONS = 41; // The first paycheck's pay and 40 pay changes
-  const MAX_WORDS = 300;
-  const MAX_HOURLY = 100000;
-  const MAX_LOOK_AHEAD_DAYS = 366;
-  const MAX_PAYDAYS = 10; // Paydays a month, with payEvery "days"
+  const MAX_RULES = LIMITS.payRules;
+  const MAX_TIME_RULES = LIMITS.payTimeRules;
+  const MAX_VERSIONS = LIMITS.payVersions; // The first paycheck's pay and 40 pay changes
+  const MAX_WORDS = LIMITS.payWords;
+  const MAX_HOURLY = LIMITS.hourlyPay;
+  const MAX_LOOK_AHEAD_DAYS = LIMITS.payLookAheadDays;
+  const MAX_PAYDAYS = LIMITS.paydaysPerMonth; // Paydays a month, with payEvery "days"
 
   // The Paycheck Calculator's boxes a crystal can fill in, and the pay settings each one is (the same names, so a crystal
   // fills in its own; the hours come from the calendar, so those three aren't used)
@@ -679,7 +681,7 @@ const Calendars = (() => {
       return days.length > 0 ? days : undefined;
     }
     if (key === "nightFrom" || key === "nightTo") return isTime(value) ? value : undefined;
-    if (key === "premiumWord") return String(value).replace(/\s+/g, " ").trim().slice(0, 60) || undefined;
+    if (key === "premiumWord") return String(value).replace(/\s+/g, " ").trim().slice(0, LIMITS.premiumWord) || undefined;
     if (key === "stateTable") return Object.prototype.hasOwnProperty.call(STATE_TABLES, value) ? value : undefined;
     if (key === "stateElected") return STATE_TABLES.AZ.elected.choices.includes(value) ? value : undefined;
     if (key === "retirementBeforeState" || key === "fedStep2") return typeof value === "boolean" ? value : undefined;
@@ -739,7 +741,7 @@ const Calendars = (() => {
       const days = Array.isArray(rule.days) ? [...new Set(rule.days.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b) : [];
       if (days.length === 0) return null;
       return {
-        name: String(rule.name ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+        name: String(rule.name ?? "").replace(/\s+/g, " ").trim().slice(0, LIMITS.payRuleName),
         days,
         startTime: isTime(rule.startTime) ? rule.startTime : "",
         endTime: isTime(rule.endTime) ? rule.endTime : "",
@@ -761,7 +763,7 @@ const Calendars = (() => {
       lookAhead: { count, unit },
       only: words(source.only),
       skip: words(source.skip),
-      bonusWord: source.bonusWord === undefined ? "bonus" : words(source.bonusWord).slice(0, 40)
+      bonusWord: source.bonusWord === undefined ? "bonus" : words(source.bonusWord).slice(0, LIMITS.bonusWord)
     };
   }
 
@@ -1647,23 +1649,25 @@ const Calendars = (() => {
     }
   }
 
-  // Read the calendars that are on again (all of them with force, or only those this device hasn't read in 15 minutes),
-  // and update the budget when what they come to changed. Resolves to the budget's result, or null.
+  // Read the calendars that are on again (all of them with force, or only those this device hasn't read in 15 minutes;
+  // only: just these connections' ids, read now), and update the budget when what they come to changed. Resolves to the
+  // budget's result, or null. Asked while a read is under way, it reads once that one's done.
   let refreshing = null;
-  function refresh({ force = false } = {}) {
-    if (refreshing) return refreshing;
-    refreshing = refreshNow(force).finally(() => { refreshing = null; });
+  function refresh({ force = false, only = null } = {}) {
+    if (refreshing) return refreshing.then(() => refresh({ force, only }));
+    refreshing = refreshNow(force, only).finally(() => { refreshing = null; });
     return refreshing;
   }
 
   // The reading itself (see refresh)
-  async function refreshNow(force) {
+  async function refreshNow(force, only = null) {
     if (typeof workspaceLoaded === "undefined" || !workspaceLoaded || !sheetsData) return null;
     const reads = lastReads();
     const now = Date.now();
     // (A Calendar Fractal only its own account can read: in a shared budget, only the pages of whoever connected it read it)
     const readable = (connection) => !fractalOf(connection.link) || !budgetIsShared() || connectedHere(connection);
-    const due = sheetsData.list.filter(connection => connection.kind === "calendar" && connection.on && readable(connection) && (force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
+    const due = sheetsData.list.filter(connection => connection.kind === "calendar" && connection.on && readable(connection) &&
+      (only ? only.includes(connection.id) : force || !(now - (reads[connection.id] || 0) < READ_GAP_MS)));
     if (due.length === 0) return null;
     const results = await Promise.all(due.map(readConnection));
     // (A read that dropped isn't counted, so the next visit tries it again)
@@ -1706,6 +1710,27 @@ const Calendars = (() => {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") refresh();
     });
+    document.addEventListener("fractals:changed", followFractals);
+  }
+
+  // A Calendar Fractal a calendar here is connected to changed (an entry added, changed, or deleted: by a form, Undo, or
+  // another device, once the calendar comes in again): the calendars that read it are read again right away, so their
+  // paychecks follow it without a refresh. Each one's entries are kept as they were last seen (the first look only
+  // keeps them).
+  const fractalPrints = new Map(); // A fractal's id -> its entries, as last seen (JSON)
+  function followFractals() {
+    if (!window.Fractals || !window.Fractals.data() || typeof workspaceLoaded === "undefined" || !workspaceLoaded || !sheetsData) return;
+    const events = window.Fractals.data().events;
+    const changed = [];
+    for (const connection of sheetsData.list) {
+      const id = fractalOf(connection.link);
+      if (!id || connection.kind !== "calendar" || !connection.on) continue;
+      const print = JSON.stringify(events.filter(event => Number(event.fractal) === id));
+      const before = fractalPrints.get(id);
+      fractalPrints.set(id, print);
+      if (before !== undefined && before !== print) changed.push(connection.id);
+    }
+    if (changed.length > 0) refresh({ only: changed });
   }
 
   //#endregion
