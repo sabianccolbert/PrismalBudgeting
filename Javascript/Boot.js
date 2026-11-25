@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.24.2026.B";
+  const SITE_VERSION = "11.25.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -29,7 +29,7 @@
     "/Javascript/Bob Page.js": "8f1801c202",
     "/Javascript/Budget Pages.js": "749ecdeeb1",
     "/Javascript/Budget Search.js": "7fd273fe6b",
-    "/Javascript/Budget UI.js": "a509f1e96a",
+    "/Javascript/Budget UI.js": "1d4be7f0d0",
     "/Javascript/Budgets.js": "2f58afe81b",
     "/Javascript/Calendar Page.js": "27508453a5",
     "/Javascript/Calendars Page.js": "df9d932a85",
@@ -47,7 +47,7 @@
     "/Javascript/Login.js": "7c20578b0c",
     "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "39f261c4e1",
+    "/Javascript/Process Budget.js": "bb693a0c65",
     "/Javascript/Quick Calendar.js": "2c03bb5ad3",
     "/Javascript/Quick Entry.js": "17a87ca937",
     "/Javascript/Quick Icon.js": "bd8ba88f58",

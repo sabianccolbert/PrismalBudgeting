@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=1fc865239e">
+    <link rel="stylesheet" href="/stylesheet.css?v=38ec0a5555">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=39d9f5aaaf">
+    <link rel="stylesheet" href="/budgetStyle.css?v=8f217141fd">
     <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -64,9 +64,35 @@
       <main>
         <p id="dataStatus" class="dataStatus">Loading...</p>
 
-        <!-- This device's cards, then the account's and Updates: side by side on a wide screen (.wideColumns) -->
+        <!-- Every card, in the page's order, to jump straight to (each link goes to its card's title). A new card gets a
+             link here too, and goes under one of the three groups' headings. -->
+        <nav class="settingsJump" aria-label="Go to a card">
+          <span class="settingsJumpLabel" aria-hidden="true">Go to</span>
+          <ul>
+            <li><a href="#reminderHeading">Reminders</a></li>
+            <li><a href="#fractalLinksHeading">Calendar Fractals' Links</a></li>
+            <li><a href="#sharingHeading">Sharing</a></li>
+            <li><a href="#recipesSettingsHeading">Recipes</a></li>
+            <li><a href="#themeHeading">Theme</a></li>
+            <li><a href="#languageHeading">Language And Dates</a></li>
+            <li><a href="#soundHeading">Sounds</a></li>
+            <li><a href="#motionHeading">Reduced Motion</a></li>
+            <li><a href="#emailHeading">Email</a></li>
+            <li><a href="#ageHeading">Birth Date</a></li>
+            <li><a href="#passwordHeading">Password</a></li>
+            <li><a href="#passkeyHeading">Passkeys</a></li>
+            <li><a href="#devicesHeading">Signed-In Devices</a></li>
+            <li><a href="#privacyHeading">Your Data And Privacy</a></li>
+            <li><a href="#deleteHeading">Delete Account</a></li>
+            <li><a href="#updatesHeading">Updates</a></li>
+          </ul>
+        </nav>
+
+        <!-- The budget's and calendar's cards and this device's, then the account's and Updates: side by side on a wide
+             screen (.wideColumns), each group under its own heading -->
         <div class="wideColumns">
           <div class="wideColumn">
+            <h2 class="settingsGroup">Budget And Calendar</h2>
             <div id="settingsView" hidden>
               <!-- Reminders, in one card: how they come (push notifications on this device, and the calendar link), then which
                    kinds this account gets (a switch for each), when, and with more than one budget, which budget they're
@@ -149,6 +175,7 @@
             </section>
 
             <!-- This device's own choices: they don't need the server, so they show right away (Settings Page.js) -->
+            <h2 class="settingsGroup">This Device</h2>
             <!-- This device's theme (Boot.js keeps it, themes.css draws it; Settings Page.js fills in a button for each, and
                  Custom's window) -->
             <section id="themeView" class="budgetCard settingsCard" aria-labelledby="themeHeading">
@@ -221,6 +248,7 @@
           </div>
           <div class="wideColumn">
             <div id="accountView" hidden>
+              <h2 class="settingsGroup">Your Account</h2>
               <!-- An account without a password: what needs one takes a sign-in from the last few minutes instead (Settings Page.js) -->
               <section id="confirmYou" class="budgetCard settingsCard" aria-labelledby="confirmYouHeading" hidden>
                 <h3 id="confirmYouHeading">Confirm It's You</h3>
@@ -330,6 +358,7 @@
 
               <section class="budgetCard settingsCard" aria-labelledby="devicesHeading">
                 <h3 id="devicesHeading">Signed-In Devices</h3>
+                <h4 class="settingsSubheading">Home Screen Icons</h4>
                 <p id="quickIconStatus"></p>
                 <div id="quickIconButtons" class="panelButtons"></div>
                 <!-- Quick Calendar icons (Home's Quick Calendar button makes them): how many work, and Turn Off (Settings Page.js) -->
@@ -390,6 +419,24 @@
               <h3 id="updatesHeading">Updates</h3>
               <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
               <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
+                <section class="updatesRelease" aria-labelledby="update20261125">
+                  <h4 id="update20261125">11.25.2026.A</h4>
+                  <p class="updatesKind">Bigger changes</p>
+                  <ul>
+                    <li>A window closes as soon as your change shows on the page. Before, it stayed dimmed while the change saved, which on a slow connection could take a while, or never finish.</li>
+                    <li>A tidier look across the site: Settings has a Go To row for every card and puts its cards in three groups (Budget And Calendar, This Device, and Your Account), and the Privacy Policy and Terms are much easier to read on a computer.</li>
+                  </ul>
+                  <p class="updatesKind">Smaller changes</p>
+                  <ul>
+                    <li>Cards line up with the ones under them, and Recurring Entries' and the Recipes tab's cards are titled like the rest, with their buttons at the left.</li>
+                    <li>On a phone, Home's List Mode switch sits beside In Bank above the calendar, and the Paycheck Calculator shows Taxes and Gross side by side under Take Home.</li>
+                    <li>One of Bob's cards that's off says what it's for when you open it, beside its switch.</li>
+                    <li>A save that gets no answer from the server gives up after about 30 seconds, says the change isn't saved yet, and tries again, instead of holding up your next changes.</li>
+                    <li>Search's × for a title shows once there's a second title, so it isn't mistaken for closing Search.</li>
+                    <li>A few words that showed far too big are a normal size: Snapshot's note about its cards, Search's From time and To time, and Skip to the page.</li>
+                    <li>Links inside a sentence wrap with it, and the 404 page says what happened.</li>
+                  </ul>
+                </section>
                 <section class="updatesRelease" aria-labelledby="update20261124b">
                   <h4 id="update20261124b">11.24.2026.B</h4>
                   <p class="updatesKind">Bigger changes</p>
@@ -591,6 +638,7 @@
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Settings Help</h3>
+          <p><strong>Go to</strong>, at the top, has a button for every card: tap one to jump straight to it. The cards are in three groups: <strong>Budget And Calendar</strong> (reminders, calendar links, sharing, and Recipes), <strong>This Device</strong> (its theme, dates, sounds, and motion, which each device keeps for itself), and <strong>Your Account</strong> (your email, password, sign-in, devices, and data), then Updates.</p>
 
           <h4>Reminders And Your Calendar</h4>
           <ul>

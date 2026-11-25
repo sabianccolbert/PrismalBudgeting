@@ -1701,14 +1701,16 @@ function historyHasDay(date) {
 // accounts' balances; see UNDO + REDO)
 function runBudgetAction(logType, change, undo = null) {
   const requestedAt = performance.now(); // The change log's start: when the change was asked for
-  const run = budgetQueue.then(() => processBudgetAction(logType, change, undo, requestedAt));
+  // (A window's Save that asked for it: the window closes once it's made, BudgetUI.changeMade)
+  const asker = typeof BudgetUI !== "undefined" && BudgetUI.windowAsking ? BudgetUI.windowAsking() : null;
+  const run = budgetQueue.then(() => processBudgetAction(logType, change, undo, requestedAt, asker));
   budgetQueue = run.catch(() => {});
   return run;
 }
 
 // The page shows a change right away (it's saved right after), and its change log row says how long that
 // took: from when it was asked for to when the page had drawn it.
-async function processBudgetAction(logType, change, undo = null, requestedAt = performance.now()) {
+async function processBudgetAction(logType, change, undo = null, requestedAt = performance.now(), asker = null) {
   if (!workspaceLoaded) return { ok: false, message: "Your budget hasn't finished loading yet." };
   if (SNAPSHOT_KEY) return { ok: false, message: "This icon only shows your Snapshot. Open Prismal Planning to change anything." };
   if (budgetViewOnly()) return { ok: false, message: VIEW_ONLY_WORDS };
@@ -1768,6 +1770,8 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
   const searched = logType === "🔎 Search" && [...changedTables].every(name => name === "search" || name === "logs");
   notifyBudgetChanged(changedTables, searched);
   await afterNextPaint();
+  // (The window that asked for it closes now, without waiting for the server to have it: BudgetUI.submit)
+  if (asker) BudgetUI.changeMade(asker, !!notFound || result.ok === false);
   finishChangeLog(record); // (Saved with the rest, just below)
   const saved = await saveChanges();
   if (!searched) queueReminderPlanSync();
@@ -8096,6 +8100,9 @@ async function saveChangedTables() {
 
   // Becomes false if any section fails to save (returned to the caller)
   let allSaved = true;
+  // Once one table got no answer (offline, or a save the server didn't answer in time), the rest wait for the next try
+  // instead of each waiting out its own time
+  let unreachable = false;
 
   // Send one table. Change Logs aren't critical: a failed log save doesn't count against allSaved.
   async function sendUpdate(endpoint, payload, critical = true) {
@@ -8106,15 +8113,17 @@ async function saveChangedTables() {
       if (critical) allSaved = false;
       return false;
     }
-    // Nothing more is sent once a save was refused (a newer copy elsewhere) or the session ended
-    const ok = !budgetConflict && !signingOut && await postUpdate(endpoint, payload);
+    // Nothing more is sent once a save was refused (a newer copy elsewhere), the session ended, or the server couldn't be
+    // reached
+    const ok = !budgetConflict && !signingOut && !unreachable && await postUpdate(endpoint, payload);
     if (!ok && critical) allSaved = false;
     return ok;
   }
 
   // (A 401 signs the page out: see budgetApi)
   async function postUpdate(endpoint, payload) {
-    const result = await budgetApi(endpoint, dataRevision === null ? payload : { ...payload, revision: dataRevision });
+    const result = await budgetApi(endpoint, dataRevision === null ? payload : { ...payload, revision: dataRevision }, true);
+    if (result.status === 0) unreachable = true;
     if (result.status === 409 && result.data && result.data.conflict) budgetConflict = true;
     if (result.ok && result.data && Number.isInteger(result.data.revision)) dataRevision = result.data.revision;
     return result.ok;
@@ -8135,13 +8144,22 @@ async function saveChangedTables() {
   return allSaved;
 }
 
+// How long a save of the budget waits for the server's answer, and a millisecond more for every 10 characters it sends
+// (a big part of a budget takes its time on a slow connection): one that never gets an answer, like a phone's between two
+// networks, then ends as not saved instead of holding up every change after it until the browser gives up. Its changes
+// stay unsaved, and go again with the next try (retryUnsavedChanges).
+const SAVE_WAIT_MS = 30000;
+
 // One request to the API with the login token: a POST of JSON when there's a payload, a GET otherwise. One about the
 // budget (BUDGET_ROUTES) names the one this page has open. Resolves to { ok, status, data } and never throws (status 0 =
-// the server couldn't be reached). A 401 means the session ended on the server, so the page signs out (see
-// signedOutElsewhere); a budget that's gone opens the account's own (see budgetIsGone).
-async function budgetApi(endpoint, payload) {
+// the server couldn't be reached, or a save got no answer in time: SAVE). A 401 means the session ended on the server,
+// so the page signs out (see signedOutElsewhere); a budget that's gone opens the account's own (see budgetIsGone).
+async function budgetApi(endpoint, payload, save = false) {
   const token = localStorage.getItem('prismal_jwt');
   if (!token) return { ok: false, status: 401, data: null };
+  const body = payload === undefined ? undefined : JSON.stringify(payload);
+  const stop = save && body !== undefined && typeof AbortController === "function" ? new AbortController() : null;
+  const timer = stop ? setTimeout(() => stop.abort(), SAVE_WAIT_MS + Math.round(body.length / 10)) : null;
   try {
     const address = `${window.API_BASE_URL}${endpoint}`;
     const res = await fetch(BUDGET_ROUTES.test(endpoint) ? withBudget(address) : address, {
@@ -8150,7 +8168,8 @@ async function budgetApi(endpoint, payload) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: payload === undefined ? undefined : JSON.stringify(payload)
+      body,
+      signal: stop ? stop.signal : undefined
     });
     let data = null;
     try { data = await res.json(); } catch (e) {}
@@ -8165,6 +8184,8 @@ async function budgetApi(endpoint, payload) {
   } catch (err) {
     console.error(`Failed to reach ${endpoint}:`, err);
     return { ok: false, status: 0, data: null };
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

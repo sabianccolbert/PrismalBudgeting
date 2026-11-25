@@ -2,9 +2,9 @@
 <html lang="en" class="noJs">
   <head>
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=1fc865239e">
+    <link rel="stylesheet" href="/stylesheet.css?v=38ec0a5555">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=39d9f5aaaf">
+    <link rel="stylesheet" href="/budgetStyle.css?v=8f217141fd">
     <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Snapshot</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -120,10 +120,12 @@
         <h2 class="srOnly">Your Cards</h2>
         <div id="snapshotView" class="snapshotGrid" aria-label="Your Snapshot cards"></div>
 
-        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Snapshot Page.js checks the key) -->
-        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
-        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <!-- Help: opens this page's help, floating over the page (Layout.js). First, so it's the one that moves under the
+             footer's line, as on every page. -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Snapshot Page.js checks the
+             key); the page's last button, over the footer's line -->
+        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Snapshot Help</h3>
           <p>Snapshot is one page of the numbers and graphs you want to see, picked from across your budget. It starts with In Bank today, the lowest it gets, Upcoming, and the In Bank graph. Your cards are kept with your budget, so every device you use (and anyone you share it with) sees the same page.</p>
