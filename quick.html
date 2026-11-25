@@ -5,9 +5,9 @@
     <!-- First, before anything loads: no request from this page says its address, which carries the key -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=1fc865239e">
+    <link rel="stylesheet" href="/stylesheet.css?v=38ec0a5555">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=39d9f5aaaf">
+    <link rel="stylesheet" href="/budgetStyle.css?v=8f217141fd">
     <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Quick Budget</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
@@ -133,10 +133,12 @@
           <ul id="prismList" class="prismList"></ul>
         </section>
 
-        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Quick Entry.js checks the key) -->
-        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
-        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <!-- Help: opens this page's help, floating over the page (Layout.js). First, so it's the one that moves under the
+             footer's line, as on every page. -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Quick Entry.js checks the key);
+             the page's last button, over the footer's line -->
+        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Quick Budget Help</h3>
           <p>This page adds entries to your budget with no login (to the budget that was open when the icon was made; with more than one, the top of the page says which): the next time Prismal Planning opens on the device that made this icon, they're added, and opened on another device first (like by someone you share it with), they wait on its Home, where whoever has it open adds them or deletes them. Until then, Undo here can take one back, and <strong>Waiting</strong> (next to Undo) lists the ones you added here, to change or delete. At the top, <strong>In Bank today</strong> and the <strong>lowest</strong> it gets (and on what day) count the entries added here too; the lowest looks as far as this device's Look Ahead (on Home's Lowest card). <strong>Placeholder</strong> (for a day from today on) adds one as a placeholder: a stand-in for an entry you expect, like an estimate, shown in yellow. It counts like any entry until its day passes, then your budget deletes it (or, with a day picked under <strong>Delete it after</strong>, once that day passes). A Transfer with an account picked can come <strong>From</strong> another of your Equity accounts instead of In Bank. With Hidden or Transfer and an Equity account picked, the $ / % switch makes the amount a percent of that account's balance, which your budget works out for its day. Once Wavelength Planning is on (on Bob's page), the form asks for its Wavelength at the bottom, with a button for each of your wavelengths; this page can't see which one a title has, so nothing's picked to start, which keeps the title's as it is. <strong>Add A Note</strong>, under the buttons, gives the entry a note (up to 20,000 characters) that joins your budget with it (in Waiting, an entry with one is underlined). The login page keeps this page's theme when Home goes there. <strong>Customize</strong> (at the bottom) changes this icon's picture and colors; it's kept with this icon, and an icon already on your home screen shows the new look once it's added again. Opened from your home screen, <strong>Home</strong> goes to Prismal Planning in the icon's own app (signing in there first when it isn't signed in), and the app stays on whatever page you leave it on for 15 minutes; after that, it comes back here by itself, and then <strong>Back</strong> (next to Home) goes to that page. Settings (Signed-In Devices) can turn those, and the Equity accounts' balances, off for every icon. This page can't see the rest of your budget. If your password changes, or icons are turned off in Settings, it stops working.</p>

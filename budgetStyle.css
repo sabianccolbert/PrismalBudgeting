@@ -858,16 +858,24 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   white-space: normal;
 }
 
-/* With room to spare, the column titles, dates, and frequencies stay on one line (only the title column gives way) */
+/* With room to spare, the column titles, dates, and frequencies stay on one line (only the title column gives way): in
+   Recurring Entries' tables and the Recipes tab's alike */
 @media (min-width: 700px) {
   .recurringTable th,
   .recurringTable td.dateCell,
-  .recurringTable td.frequencyCell {
+  .recurringTable td.frequencyCell,
+  .dataTable.repeatsTable th,
+  .dataTable.repeatsTable td.dateCell,
+  .dataTable.repeatsTable td.frequencyCell,
+  .dataTable.pantryTable th,
+  .dataTable.pantryTable td.dateCell,
+  .dataTable.foodsTable th {
     white-space: nowrap;
   }
 
   /* (Some browsers break at a date's <wbr> even then) */
-  .recurringTable td.dateCell wbr {
+  .recurringTable td.dateCell wbr,
+  .pantryTable td.dateCell wbr {
     display: none;
   }
 }
@@ -1896,6 +1904,12 @@ button.dropdownBox:focus-visible {
   margin-left: 0;
 }
 
+/* With only one title there's nothing to remove (its × would only empty it), and it sat right under Search's own ×,
+   looking like a second way to close it: it shows once there's a second title. Its room stays, so nothing moves. */
+.searchTerms .termRow:only-child .termRemove {
+  visibility: hidden;
+}
+
 /* The ? before the first title's All, and what it shows under the titles (Budget UI.js termList) */
 .termControls .termHelpButton {
   flex: 0 0 auto;
@@ -2041,8 +2055,10 @@ button.dropdownBox:focus-visible {
   border-top: 1px solid var(--PANEL_LINE);
 }
 
+/* (The − and + belong to the bank's box before them, so they keep close to it and apart from Savings after them) */
 .startForm .startSign {
   flex: 0 0 auto;
+  margin: 0 0.9em 0 -0.15em;
 }
 
 /* Search's results: what's after today is tinted, and a line under its own heading sets it apart from today and
@@ -2124,6 +2140,8 @@ button.dropdownBox:focus-visible {
   flex-direction: column;
   gap: 0.2em;
   min-width: 0;
+  margin: 0;
+  font-size: 1em; /* The global label is much bigger */
 }
 
 .searchTime .timeInput {
@@ -3595,6 +3613,38 @@ button.fractalPicker[aria-expanded="true"] {
   white-space: nowrap;
 }
 
+/* Home on a phone: the header's buttons are one set that wraps, so List Mode sits with what the calendar shows (after In
+   Bank and the ?) instead of on a row of its own under the month, and Today, the month, and the year keep their row.
+   Up to 540px: wider, the first row is full and List Mode would be on its own row either way. (Quick Calendar's header,
+   with no List Mode, keeps its two groups.) */
+@media (max-width: 540px) {
+  .calendarHeader:has(#listModeSwitch) {
+    justify-content: flex-start;
+    gap: 0.45em 0.4em;
+  }
+
+  .calendarHeader:has(#listModeSwitch) > .calendarShows,
+  .calendarHeader:has(#listModeSwitch) > .calendarNav {
+    display: contents;
+  }
+
+  .calendarHeader:has(#listModeSwitch) > .calendarNav > * {
+    order: 2;
+  }
+
+  .calendarHeader:has(#listModeSwitch) > .calendarNav > .listModeSwitch {
+    order: 1;
+  }
+
+  /* (A line break before Today, so it never joins List Mode's row apart from the month) */
+  .calendarHeader:has(#listModeSwitch)::after {
+    content: "";
+    flex-basis: 100%;
+    height: 0;
+    order: 1;
+  }
+}
+
 /* List Mode (Calendar Page.js LIST MODE): the days as one list that scrolls, as tall as the table it stands in for, each
    day's name staying at the top while its entries scroll under it */
 .calendarList {
@@ -3735,10 +3785,12 @@ button.listDayAdd:focus-visible {
 }
 
 /* The Quick Calendar page's New Calendar Entry, with how many entries are waiting beside it */
+/* (As wide as the calendar's card under it, with gaps in vmin: in em they were the body's big size) */
 .controlsCard.quickCalendarControls {
   flex-wrap: wrap;
-  gap: 0.6em 1em;
-  margin-bottom: clamp(8px, 2vmin, 18px);
+  gap: 1.2vmin 2vmin;
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(8px, 2vmin, 18px);
 }
 
 .quickCalendarControls .panelHint {
@@ -4148,6 +4200,11 @@ button.fractalColor.noColor {
 
 .alertRows:empty {
   display: none;
+}
+
+/* (+ Add Alert as wide as its words, like + Add Title and the other add buttons, not across the window) */
+.alertBox > .termAdd {
+  align-self: flex-start;
 }
 
 /* An alert: how long, before or after it starts, and ×, then its Alarm switch under them (Fractals.js alertsField). Each
@@ -4827,6 +4884,126 @@ a.budgetButton:hover {
   font-size: 1.05em;
   font-weight: normal;
   border-top: 1px solid var(--PANEL_LINE);
+}
+
+/* (A card's first part, right under its title, needs no line between them) */
+.budgetCard h3 + .settingsSubheading {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Settings: a row of every card to jump to at the top, and each group of cards (the budget and calendar's, this
+   device's, the account's) under a small heading. A card's title jumped to keeps a little room above it. */
+.settingsJump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4em 0.6em;
+  box-sizing: border-box;
+  width: min(94vw, 760px);
+  margin: 0 auto 2.5vmin;
+  font-size: clamp(13px, 2.4vmin, 15px);
+  text-align: left;
+}
+
+.settingsJumpLabel {
+  color: var(--BASE_COLOR);
+}
+
+.settingsJump ul {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* (A pill of its own, not a link inside a sentence: stylesheet.css's LINKS) */
+nav.settingsJump li > a {
+  display: inline-block;
+  padding: 0.4em 0.85em;
+  color: var(--TEXT_BRIGHT);
+  text-decoration: none;
+  background: var(--GLASS_BUTTON);
+  border: 1px solid var(--GLASS_LINE_BRIGHT);
+  border-radius: 9999px;
+}
+
+nav.settingsJump li > a:hover,
+nav.settingsJump li > a:focus-visible {
+  color: var(--TEXT_HOT);
+  border-color: var(--GLOW_EDGE);
+  box-shadow: var(--HOVER_SHADOW);
+}
+
+.settingsGroup {
+  box-sizing: border-box;
+  width: min(94vw, 760px);
+  margin: 1.5vmin auto 1.2vmin;
+  padding: 0 0.3em;
+  font-size: clamp(12px, 2.2vmin, 15px);
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+  /* (The page's own color: on the background, the dim one measured 4.4 to 1 in Winter) */
+  color: var(--BASE_COLOR);
+}
+
+.settingsCard > h3 {
+  scroll-margin-top: 1.4em;
+}
+
+/* On a phone, Go To is one row that scrolls sideways (sixteen buttons wrapped took a quarter of the screen), fading at
+   its right edge where there's more, with the wide tables' thin scroll bar. Only sideways: a box that scrolls up and
+   down too takes an iPhone's swipe from the page. */
+@media (max-width: 600px) {
+  .settingsJump {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .settingsJump ul {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    padding: 0.15em 0 0.45em;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--GLOW_LIGHT_RGB), 0.45) transparent;
+    -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
+    mask-image: linear-gradient(to right, #000 82%, transparent);
+  }
+
+  /* (Room after the last one, so it can scroll out of the fade) */
+  .settingsJump ul::after {
+    content: "";
+    flex: 0 0 3em;
+  }
+
+  .settingsJump li {
+    flex: 0 0 auto;
+  }
+
+  nav.settingsJump li > a {
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+  .settingsJump {
+    width: min(100%, 1560px);
+  }
+
+  .wideColumn .settingsGroup {
+    width: auto;
+    margin-left: 0;
+    margin-right: 0;
+  }
 }
 
 /* Passkeys and Other Emails (Settings): each one's name and details, with its buttons beside it */
@@ -5919,9 +6096,14 @@ footer.hasHelp > hr {
   pointer-events: none;
 }
 
+/* On a phone: Take Home across the top, and Taxes and Gross side by side under it */
 @media (max-width: 700px) {
   .paycheckResults {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .paycheckResults:not(.calendarTotals) .takeHome {
+    grid-column: 1 / -1;
   }
 }
 
@@ -6297,6 +6479,23 @@ button.bobDataRow:focus-visible {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* A card that's off says what it's for in its window (the words its ? shows), over its On switch: Bob's Cards says "Off.
+   Open it to see what it's for", and the window showed only a ? and the switch. Once it's on, its ? is back. */
+.budgetPanel .bobSection.inWindow.isOff {
+  display: flex;
+  flex-direction: column;
+}
+
+.budgetPanel .bobSection.inWindow.isOff > .sectionHelp {
+  display: block !important;
+  order: -1;
+  margin: 0 0 0.8em;
+}
+
+.budgetPanel .bobSection.inWindow.isOff .sectionHelpButton {
+  display: none;
 }
 
 /* The cards that fold open and shut (the Spectrum Graph and Data's groups): the title is the button, with a figure from
@@ -7758,20 +7957,27 @@ html:not(.frontPage) .frontSignIn,
   text-decoration: none;
 }
 
+/* Two columns that each run down the page (one on a phone), so a short feature doesn't leave a gap beside a long one */
 .frontFeatures {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 0.8em;
+  columns: 2 18em;
+  column-gap: 0.8em;
   padding: 0;
   list-style: none;
 }
 
 .frontFeatures li {
-  margin: 0;
+  break-inside: avoid;
+  margin: 0 0 0.8em;
   padding: 0.8em 1em;
   background: var(--PANEL_DARK);
   border: 1px solid var(--GLASS_LINE);
   border-radius: 12px;
+}
+
+/* The note pointing answer engines to How It Works: a quiet aside, not one of the steps */
+.frontView .frontAiNote {
+  font-size: 0.85em;
+  color: var(--TEXT_DIM);
 }
 
 .frontFeatures strong {
@@ -7835,10 +8041,11 @@ html:not(.frontPage) .frontSignIn,
   margin: 0 auto clamp(10px, 2.2vmin, 22px);
 }
 
+/* (The gap in vmin, like the other pages' toolbars: in em it was the body's big size, wide apart) */
 .snapshotButtons {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6em;
+  gap: 1.2vmin;
 }
 
 .snapshotButtons .budgetButton {
@@ -7857,9 +8064,11 @@ html.snapshotKey .navButtons {
   display: none;
 }
 
-.budgetCard p.snapshotStartNote {
+/* (It's straight in the page, not in a card, so it sets its own size: the page's p is a phone's big one) */
+p.snapshotStartNote {
   width: var(--PAGE_WIDTH);
   margin: 0 auto 1em;
+  font-size: var(--UI_TEXT);
   text-align: center;
 }
 
@@ -8259,10 +8468,12 @@ button.snapshotChoice:focus-visible {
   box-shadow: inset 3px 0 0 var(--NEGATIVE_DAY_EDGE), inset 6px 0 0 var(--MEAL_DAY_EDGE);
 }
 
-/* The Recipes page's cards: each heading is a button that opens and closes it, with how many it has and an arrow */
+/* The Recipes page's cards: each heading is a button that opens and closes it, with how many it has and an arrow. The
+   title looks like every card's (and Bob's cards that fold open), and the buttons under it sit at the left. */
 .kitchenCardHead {
   margin: 0;
-  font-size: 1.15em;
+  font-size: 1.3em;
+  font-weight: normal;
 }
 
 button.kitchenToggle {
@@ -8271,16 +8482,27 @@ button.kitchenToggle {
   gap: 0.6em;
   width: 100%;
   margin: 0;
-  padding: 0.4em 0.5em;
+  padding: 0.3em 0.4em;
   font: inherit;
-  font-weight: bold;
   text-align: left;
   color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
   background: none;
   border: none;
   border-radius: 10px;
   box-shadow: none;
   cursor: pointer;
+}
+
+.kitchenCount,
+.kitchenArrow {
+  text-shadow: none;
+}
+
+.kitchenBody .tableToolbar {
+  justify-content: flex-start;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 button.kitchenToggle:hover,
@@ -8616,10 +8838,26 @@ button.foodRemove {
   font-size: 0.95em;
 }
 
-/* The Recurring page's calendar and meal cards */
+/* The Recurring page: its first card (the budget's recurring entries' title and buttons) as wide as the cards under it,
+   with the same space between them; and the calendar and meal cards titled and laid out the same way as the rest of
+   the site's cards (a card's title, then its buttons at the left) */
+.controlsCard.recurringControls {
+  width: var(--PAGE_WIDTH);
+  margin: 0 auto clamp(10px, 2.2vmin, 22px);
+}
+
 .repeatsHeading {
   margin: 0 0 0.3em;
-  font-size: 1.15em;
+  font-size: 1.3em;
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
+}
+
+.repeatsCard .tableToolbar {
+  justify-content: flex-start;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .repeatsTable .fractalCell {

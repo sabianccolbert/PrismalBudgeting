@@ -336,6 +336,23 @@ footer p, footer a{
   color: var(--TEXT_DIM);
 }
 
+/* The footer every page shares (Layout.js) has its own text size, so the line its two links sit on is as tall as they
+   are (the body's big size made it tall), and its lines sit closer together */
+footer[data-global-footer] {
+  font-size: clamp(12px, 2.4vmin, 16px);
+  padding-bottom: 2vmin;
+}
+
+footer[data-global-footer] > p {
+  padding: 1vmin 2vmin;
+}
+
+/* (The address inside "Contact:" is part of its line, not a box of its own) */
+footer[data-global-footer] p a {
+  display: inline;
+  padding: 0;
+}
+
 /* Dividers: a thin neon line that fades out at both ends */
 hr {
   width: min(75vw, 900px);
@@ -374,6 +391,68 @@ article {
   display: none !important;
 }
 
+/* The Privacy Policy and Terms (privacy and terms.html): one readable column on glass, like How It Works, instead of the
+   page's big centered words (p and h3 here are sized for a phone's width, and grew huge on a computer) */
+main.policyText {
+  box-sizing: border-box;
+  width: min(94vw, 920px);
+  margin: 0 auto 4vmin;
+  padding: 1em 1.4em;
+  font-size: clamp(15px, 2.6vmin, 18px);
+  line-height: 1.55;
+  text-align: left;
+  color: var(--BASE_COLOR);
+  background: var(--GLASS);
+  border: 1px solid var(--GLASS_LINE);
+  border-radius: var(--GLASS_RADIUS);
+  box-shadow: var(--GLASS_SHADOW);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.policyText h3 {
+  margin: 0.3em 0 0.6em;
+  font-size: 1.6em;
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+  text-shadow: var(--TITLE_GLOW);
+}
+
+.policyText h4 {
+  margin: 0.4em 0 0.5em;
+  font-size: 1.2em;
+  font-weight: normal;
+  color: var(--TEXT_BRIGHT);
+}
+
+.policyText p {
+  margin: 0 0 0.75em;
+  font-size: 1em;
+}
+
+.policyText code {
+  padding: 0.05em 0.3em;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.92em;
+  background: rgba(var(--INSET_RGB), 0.4);
+  border-radius: 4px;
+}
+
+.policyText hr {
+  width: 100%;
+  margin: 1.4em 0;
+}
+
+/* The 404 page's one line under its name */
+.notFoundNote {
+  max-width: 34em;
+  margin: 2vmin auto 4vmin;
+  padding: 0 1em;
+  font-size: clamp(15px, 2.6vmin, 19px);
+  line-height: 1.5;
+  color: var(--TEXT_DIM);
+}
+
 /* #endregion 5) CONTENT CONTAINERS */
 
 
@@ -401,6 +480,13 @@ a:hover {
   transform: scale(1.05);
   text-shadow: var(--SHADOW);
   color: var(--LINK_LIGHT);
+}
+
+/* A link inside a sentence is part of its line: it wraps with the words around it and doesn't make its line taller
+   (a box of its own couldn't break, and its padding pushed the next line down). It still glows and turns red. */
+:is(p, li) a:not([class]) {
+  display: inline;
+  padding-bottom: 0;
 }
 
 /* #endregion 6) LINKS */
@@ -1154,6 +1240,8 @@ input[type="password"] {
   left: 0.6em;
   z-index: 10000;
   padding: 0.5em 1em;
+  /* (Its own size: the body's would make it huge) */
+  font-size: clamp(14px, 2.4vmin, 17px);
   color: var(--TEXT_BRIGHT);
   background: var(--LIST_FILL);
   border: 1px solid var(--GLASS_LINE_BRIGHT);

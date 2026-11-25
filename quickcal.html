@@ -5,9 +5,9 @@
     <!-- First, before anything loads: no request from this page says its address, which carries the key -->
     <meta name="referrer" content="no-referrer">
     <script src="/Javascript/Boot.js"></script>
-    <link rel="stylesheet" href="/stylesheet.css?v=1fc865239e">
+    <link rel="stylesheet" href="/stylesheet.css?v=38ec0a5555">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=39d9f5aaaf">
+    <link rel="stylesheet" href="/budgetStyle.css?v=8f217141fd">
     <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Quick Calendar</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
@@ -160,10 +160,12 @@
           </table>
         </section>
 
-        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Quick Calendar.js checks the key) -->
-        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
-        <!-- Help: opens this page's help, floating over the page (Layout.js) -->
+        <!-- Help: opens this page's help, floating over the page (Layout.js). First, so it's the one that moves under the
+             footer's line, as on every page. -->
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
+        <!-- Customize: this icon's own look, kept with its key (Quick Icon.js wirePage, once Quick Calendar.js checks the
+             key); the page's last button, over the footer's line -->
+        <button id="customizeIcon" class="helpButton customizeIcon" type="button" hidden>Customize</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Quick Calendar Help</h3>
           <p>This page shows your calendar with no login, and adds entries and meals to it. It never shows your budget's money or its Pantry.</p>

@@ -205,12 +205,32 @@ const BudgetUI = (() => {
     if (currentPanel && currentPanel.panel.classList.contains("small") && currentPanel.origin) positionNear(currentPanel.panel, currentPanel.origin);
   });
 
-  // Run a budget change from a panel: busy while it runs, the error stays in the panel,
-  // success closes it. Resolves to the change's result.
+  // Run a change from a window's Save (or whatever sends its form): the window waits, busy, while its change is made,
+  // and an error stays in it; success closes it. Resolves to the change's result. A change to the budget closes its
+  // window as soon as it's made on the page (changeMade, from Process Budget.js), not once the server has it: waiting for
+  // that kept the window dimmed for seconds on a slow connection, and for good when a request never got an answer. What
+  // the save comes to then shows as a note (warnIfUnsaved). Anything else (Settings, sharing) waits for the server's
+  // answer, which it needs.
   async function submit(panel, change) {
     panel.setError("");
     panel.setBusy(true);
-    const result = await change();
+    const ask = { panel, closed: false };
+    asking = ask;
+    let result;
+    try {
+      result = await change();
+    } catch (error) {
+      // (A change that broke partway leaves its window usable, saying so, instead of busy for good)
+      console.error("A window's change didn't finish:", error);
+      result = { ok: false, message: "Something went wrong. Please try again." };
+    } finally {
+      if (asking === ask) asking = null;
+    }
+    if (ask.closed) {
+      if (!result.ok) showToast(result.message || "That didn't work. Please try again.", true);
+      else warnIfUnsaved(result);
+      return result;
+    }
     panel.setBusy(false);
     if (!result.ok) {
       panel.setError(result.message || "That didn't work. Please try again.");
@@ -221,6 +241,21 @@ const BudgetUI = (() => {
       warnIfUnsaved(result);
     }
     return result;
+  }
+
+  let asking = null; // The window whose change is being made (submit)
+  // The window asking for the change about to be made (null for none), so Process Budget.js's runBudgetAction can say
+  // whose the change is
+  function windowAsking() {
+    return asking;
+  }
+
+  // A change a window asked for (ASK, from windowAsking) is made on the page: the window closes now, while it's still the
+  // one open, unless the change found nothing to change or turned out not to work (KEEP), which the window says itself
+  function changeMade(ask, keep = false) {
+    if (!ask || ask.closed || keep || currentPanel !== ask.panel) return;
+    ask.closed = true;
+    closePanel();
   }
 
   // A change that worked but couldn't reach the server yet (offline) says it'll be sent when it can
@@ -2496,6 +2531,8 @@ const BudgetUI = (() => {
     closePanel,
     closeAllPanels,
     submit,
+    windowAsking,
+    changeMade,
     warnIfUnsaved,
     element,
     field,
