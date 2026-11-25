@@ -1,7 +1,7 @@
 // Kitchen UI: the kitchen's windows and fields (Kitchen.js has the data and the changes): a recipe's window, a meal's (New
-// Entry's Meal, a Meals entry tapped on the calendar, and a recipe's + on the Recipes page), the rows of foods a recipe or a
+// Entry's Meal, a Meals entry tapped on the calendar, and a recipe's + on the Kitchen tab), the rows of foods a recipe or a
 // meal has (amount, unit, and name: the name offers the foods list's names, and a known one fills in the unit it was used
-// with last), and the list of recipes with a search box as its first line. Home, the Recipes page, Recurring, and the
+// with last), and the list of recipes with a search box as its first line. Home, the Kitchen tab, Recurring, and the
 // Quick Calendar page use it.
 
 window.KitchenUI = (() => {
@@ -413,7 +413,7 @@ window.KitchenUI = (() => {
     return openMeal(origin, { date, title, kinds: !!window.Fractals });
   }
 
-  // A recipe's + on the Recipes page: once, or repeating (also on the Recurring page's Recurring Meal Entries), then the
+  // A recipe's + on the Kitchen tab: once, or repeating (also on the Recurring page's Recurring Meal Entries), then the
   // meal's window filled in from it
   function addRecipeAsMeal(origin, recipe) {
     BudgetUI.openPanel({

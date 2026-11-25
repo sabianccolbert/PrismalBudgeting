@@ -841,3 +841,44 @@ const DatePicker = (() => {
 window.DatePicker = DatePicker;
 
 //#endregion
+
+// =====================================================================
+// #region SEPARATORS AS A DATE IS TYPED
+// =====================================================================
+// A phone's number pad (a date box is inputmode numeric) often has no / or -, so a date box (input.dateInput) puts this
+// device's separator in as the digits are typed: after a full month, day, or year, or after a first digit that can't
+// start a two-digit one (a month's 2 to 9, a day's 4 to 9). Only while typing at the end of the box, and only digits and
+// separators: deleting takes one out like any other character, a separator typed by hand stays (one typed right after
+// another is dropped), and a month's name is left alone.
+const DATE_GROUPS = { mdy: ["month", "day", "year"], dmy: ["day", "month", "year"], ymd: ["year", "month", "day"] };
+const DATE_GROUP_SIZES = { month: 2, day: 2, year: 4 };
+const DATE_GROUP_MOST_FIRST = { month: 1, day: 3 }; // (The highest first digit of a two-digit one)
+document.addEventListener("input", (event) => {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || !input.matches("input.dateInput:not(.timeInput)")) return;
+  if (event.isComposing || event.inputType !== "insertText" || !/^[\d/.\-]$/.test(event.data || "")) return;
+  const text = input.value;
+  if (input.selectionStart !== text.length || !/^[\d/.\-]*$/.test(text)) return;
+  const separator = dateFormat() === "ymd" ? "-" : "/";
+  if (/[/.\-]{2}$/.test(text)) {
+    input.value = text.slice(0, -1);
+    return;
+  }
+  if (!/\d/.test(event.data)) return;
+  const groups = DATE_GROUPS[dateFormat()];
+  const parts = text.split(/[/.\-]/);
+  const at = parts.length - 1;
+  if (at >= groups.length - 1) return; // (The last part: nothing comes after it)
+  const kind = groups[at];
+  const part = parts[at];
+  // (A digit past a full part starts the next one)
+  if (part.length > DATE_GROUP_SIZES[kind]) {
+    parts.splice(at, 1, part.slice(0, DATE_GROUP_SIZES[kind]), part.slice(DATE_GROUP_SIZES[kind]));
+    input.value = parts.join(separator);
+    return;
+  }
+  const full = part.length === DATE_GROUP_SIZES[kind] || (part.length === 1 && kind in DATE_GROUP_MOST_FIRST && Number(part) > DATE_GROUP_MOST_FIRST[kind]);
+  if (full) input.value = parts.join(separator) + separator;
+});
+
+//#endregion

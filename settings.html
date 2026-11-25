@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=38ec0a5555">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=8f217141fd">
+    <link rel="stylesheet" href="/budgetStyle.css?v=58f0ceb3e8">
     <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Settings</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -72,7 +72,7 @@
             <li><a href="#reminderHeading">Reminders</a></li>
             <li><a href="#fractalLinksHeading">Calendar Fractals' Links</a></li>
             <li><a href="#sharingHeading">Sharing</a></li>
-            <li><a href="#recipesSettingsHeading">Recipes</a></li>
+            <li><a href="#recipesSettingsHeading">Kitchen</a></li>
             <li><a href="#themeHeading">Theme</a></li>
             <li><a href="#languageHeading">Language And Dates</a></li>
             <li><a href="#soundHeading">Sounds</a></li>
@@ -159,17 +159,17 @@
               </div>
             </section>
 
-            <!-- The Recipes tab's settings: this device's switches (each off to start), and the account's two kitchen reminders
+            <!-- The Kitchen tab's settings: this device's switches (each off to start), and the account's two kitchen reminders
                  (the Reminders card's own switches for them, shown here too: Settings Page.js renderRecipesCard) -->
             <section id="recipesCard" class="budgetCard settingsCard" aria-labelledby="recipesSettingsHeading">
-              <h3 id="recipesSettingsHeading">Recipes</h3>
-              <p>For the Recipes tab, the Pantry, and the calendar's Meals fractal. These switches are this device's own, and each is off to start.</p>
+              <h3 id="recipesSettingsHeading">Kitchen</h3>
+              <p>For the Kitchen tab, the Pantry, and the calendar's Meals fractal. These switches are this device's own, and each is off to start.</p>
               <div id="recipesSwitches" class="reminderKinds" role="group" aria-labelledby="recipesSettingsHeading"></div>
               <h4 id="recipesRemindersHeading" class="settingsSubheading">Reminders</h4>
               <div id="recipesReminders" class="reminderKinds" role="group" aria-labelledby="recipesRemindersHeading" hidden></div>
               <p id="recipesRemindersNote" class="panelHint"></p>
               <ul class="settingsList settingsNotes">
-                <li><strong>Orange:</strong> the meals from today on use the Pantry up in order, the soonest first, so once a food runs out, only the later days that need it glow. The Recipes tab's Help says how foods and units count.</li>
+                <li><strong>Orange:</strong> the meals from today on use the Pantry up in order, the soonest first, so once a food runs out, only the later days that need it glow. The Kitchen tab's Help says how foods and units count.</li>
                 <li><strong>Expiration days</strong> are only for their reminder: nothing else goes by them.</li>
               </ul>
             </section>
@@ -419,6 +419,31 @@
               <h3 id="updatesHeading">Updates</h3>
               <p>You're on version <strong id="updatesVersion" translate="no">--</strong>.</p>
               <div class="updatesList" tabindex="0" role="region" aria-label="Updates, newest first">
+                <section class="updatesRelease" aria-labelledby="update20261125b">
+                  <h4 id="update20261125b">11.25.2026.B</h4>
+                  <p class="updatesKind">Bigger changes</p>
+                  <ul>
+                    <li>Recipes is now the Kitchen tab.</li>
+                    <li>A recurring entry's amount can be a % of another recurring entry (like 10% of a paycheck) or of any Equity account's balance: tap % to pick which.</li>
+                    <li>Home's Lowest card follows the five weeks the calendar shows ("Lowest between 11/25 and 12/27"), and the lines beside it look past them.</li>
+                    <li>Quick Budget, Quick Calendar, and Snapshot icons show what they had last right away, greyed with "Loading..." or "No Internet" until they hear back. Nothing on them can be changed until then.</li>
+                    <li>The Paycheck Calculator asks how often you're paid, for its graph and a new Over A Year card.</li>
+                    <li>A password found in data breaches gets a warning you can go past, instead of being refused.</li>
+                  </ul>
+                  <p class="updatesKind">Smaller changes</p>
+                  <ul>
+                    <li>Recurring Entries shows Monthly and Yearly both without transfers and with every entry, and its three sections start shut (tap a heading to open one).</li>
+                    <li>The tracker has two new rows, Positives and Negatives: every entry above and below $0, transfers too.</li>
+                    <li>A recurring entry's placeholders can only go days ahead of the current day, not behind.</li>
+                    <li>Typing a date puts the slashes in for you, for phones whose number pad has none.</li>
+                    <li>Graphs draw in once they're on the screen: scrolled to, or their card opened.</li>
+                    <li>A smaller pinch closes a zoomed day, and a day tapped while the page is zoomed in opens right away as the page zooms back out.</li>
+                    <li>A page that's slow to load doesn't slide back in, and leaving a page right after a change (like turning off an automated calendar) waits for it to save.</li>
+                    <li>A paycheck you moved to another day no longer doubles when its automated calendar's payday changes to that day.</li>
+                    <li>The Add This Page To Your Home Screen card has a Done button and stays away in the icon's own app.</li>
+                    <li>Snapshot's Lowest cards say which days they look at, and a Snapshot icon's page has a Home button.</li>
+                  </ul>
+                </section>
                 <section class="updatesRelease" aria-labelledby="update20261125">
                   <h4 id="update20261125">11.25.2026.A</h4>
                   <p class="updatesKind">Bigger changes</p>
@@ -638,14 +663,14 @@
         <button class="helpButton" type="button" data-toggle="helpView" aria-controls="helpView" aria-expanded="false">Help</button>
         <section id="helpView" class="budgetCard helpView" aria-labelledby="helpTitle" hidden>
           <h3 id="helpTitle">Settings Help</h3>
-          <p><strong>Go to</strong>, at the top, has a button for every card: tap one to jump straight to it. The cards are in three groups: <strong>Budget And Calendar</strong> (reminders, calendar links, sharing, and Recipes), <strong>This Device</strong> (its theme, dates, sounds, and motion, which each device keeps for itself), and <strong>Your Account</strong> (your email, password, sign-in, devices, and data), then Updates.</p>
+          <p><strong>Go to</strong>, at the top, has a button for every card: tap one to jump straight to it. The cards are in three groups: <strong>Budget And Calendar</strong> (reminders, calendar links, sharing, and Kitchen), <strong>This Device</strong> (its theme, dates, sounds, and motion, which each device keeps for itself), and <strong>Your Account</strong> (your email, password, sign-in, devices, and data), then Updates.</p>
 
           <h4>Reminders And Your Calendar</h4>
           <ul>
             <li><strong>Your budgets</strong> are on their own page now: open the menu, then Budgets, Calendars &amp; Spreadsheets. The name above the buttons at the top of every page switches between them too.</li>
             <li><strong>Calendar Fractals' Links:</strong> a private link to your calendar's entries (every Calendar Fractal together, or one of them) that Apple Calendar, Google Calendar, Outlook, and spreadsheets can subscribe to. Make A Link shows it, with Copy, Share, and buttons that add it to Apple or Google Calendar (each fractal's Edit window on Home has it too, under Share); New Link makes a new one (the old one stops working), and Turn Off ends it. The other calendar shows your entries, and changes made there don't come back.</li>
             <li><strong>Reminders</strong> is one card. First, how they reach you: <strong>Notifications On This Device</strong> (turned on one device at a time, from that device; right after a sign-in, each device gets one alert about them, and Not Now stops it there), and the <strong>Calendar Link</strong> (a private link your calendar app subscribes to, where each reminder is a 30-minute event). Once either is on, <strong>What Gets A Reminder</strong> shows: a switch for each kind, 🔔 entry reminders (an entry you set Remind me on, that many days before it; on to start), and ⛔️ In Bank below $0, ✔️ uncommon recurring payments, ❗️ days with a cost, 🍽️ days the Pantry doesn't have enough for their meals, and 🥫 the Pantry's foods that expire (off to start), then the reminder time, and with more than one budget, which one they're about. On a device with neither on, that part stays hidden there.</li>
-            <li><strong>Recipes</strong> is for the Recipes tab and the calendar's Meals fractal. Its four switches are this device's own, each off to start: days on Home the Pantry is short glow orange (while Meals shows; red at the top and orange at the bottom when the day is below $0 too), recipes the Pantry can't make glow orange, the Pantry's foods the meals on your calendar's five weeks run short of glow orange, and Use Meals From The Pantry takes each meal's foods out of the Pantry on its day (from the day it's turned on; Change Logs can undo it). Its two reminders are the Reminders card's 🍽️ and 🥫 switches, shown here too: turning one on or off in either card changes both.</li>
+            <li><strong>Kitchen</strong> is for the Kitchen tab and the calendar's Meals fractal. Its four switches are this device's own, each off to start: days on Home the Pantry is short glow orange (while Meals shows; red at the top and orange at the bottom when the day is below $0 too), recipes the Pantry can't make glow orange, the Pantry's foods the meals on your calendar's five weeks run short of glow orange, and Use Meals From The Pantry takes each meal's foods out of the Pantry on its day (from the day it's turned on; Change Logs can undo it). Its two reminders are the Reminders card's 🍽️ and 🥫 switches, shown here too: turning one on or off in either card changes both.</li>
           </ul>
 
           <h4>Your Account</h4>

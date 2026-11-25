@@ -132,6 +132,18 @@
   // shows how to add it to the home screen, and setup=1 comes off the address, so the icon's link is only the page, its
   // key, and this device's theme (a phone's home screen app can keep its own storage, and starts from this link).
   function startKeyed() {
+    // Home goes on when this browser is signed in, and to the login page when it isn't (keeping this page's theme), worked
+    // out as it's tapped, since this page can stay open for days (like Quick Budget's: Quick Entry.js)
+    const home = document.querySelector(".navButtons .snapshotHome");
+    const homeAddress = () => {
+      if (signedInNow()) return "/";
+      const look = window.Themes ? Themes.lookQuery() : "";
+      return look ? `/login.html?${look}` : "/login.html";
+    };
+    if (home) {
+      home.setAttribute("href", homeAddress());
+      home.addEventListener("click", () => home.setAttribute("href", homeAddress()));
+    }
     document.getElementById("snapshotEdit").hidden = true;
     document.getElementById("snapshotHomeScreen").hidden = true;
     document.getElementById("snapshotKeyNote").hidden = false;
@@ -154,7 +166,7 @@
     if (new URLSearchParams(location.search).has("setup")) {
       document.getElementById("homeScreenLogin").hidden = true;
       document.getElementById("homeScreenKeyed").hidden = false;
-      showHomeScreenSteps();
+      if (!RUNNING_AS_APP) showHomeScreenSteps(); // (Opened from the icon, it's on the home screen already)
       const look = window.Themes ? Themes.lookQuery() : "";
       history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(window.SNAPSHOT_KEY)}${look ? `&${look}` : ""}`);
     }
@@ -163,6 +175,11 @@
   document.addEventListener("budget:updated", () => {
     if (workspaceLoaded) draw();
   });
+  // (A Snapshot icon's page showing what it had last, while the server's answer is on its way or can't come: its top card
+  // says so, see WHAT AN ICON'S PAGE SHOWED LAST in Process Budget.js)
+  const topCard = document.querySelector(".snapshotControls");
+  document.addEventListener("iconpage:freshness", (event) => showIconFreshness(topCard, event.detail.state));
+  showIconFreshness(topCard, snapshotFreshness);
   // (Only the calendar's own cards show it, so only they're drawn again)
   document.addEventListener("fractals:changed", () => {
     if (!workspaceLoaded) return;
@@ -356,12 +373,13 @@
       }
     },
     "home.lowest": {
-      title: () => "Lowest In Bank After Today",
+      // (Its title names the days it looks at, so cards with different ones can be told apart)
+      title: (ref) => `Lowest In Bank, Today To ${showDay(lookAheadEnd(snapshotUntil(ref) || lookAhead()))}`,
       // (Its own until, picked in Edit, kept as its ref: or as far as this device's Lowest looks)
       render(body, ref) {
         const ahead = snapshotUntil(ref);
         const lowest = ahead ? lowestThrough(lookAheadEnd(ahead)) : shared.lowest();
-        numberBody(body, formatMoney(lowest.amount), `On ${showWeekdayDate(lowest.date)}${ahead ? `, looking ${lookAheadWords(ahead)} past the calendar` : ""}`, { amount: lowest.amount });
+        numberBody(body, formatMoney(lowest.amount), `On ${showWeekdayDate(lowest.date)}: the lowest from today through ${showDate(lookAheadEnd(ahead || lookAhead()))} (${lookAheadWords(ahead || lookAhead())} past the calendar)`, { amount: lowest.amount });
       }
     },
     "home.lastDay": {

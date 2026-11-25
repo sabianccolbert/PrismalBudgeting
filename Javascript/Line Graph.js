@@ -39,6 +39,7 @@ window.LineGraph = (function () {
   const WIDE_ENOUGH = 460;    // Pixels wide before each line's name fits at its right end
   const LONG_STRETCH = 300 * 86400000; // Past this much time, the days along the bottom say the month and year instead
   const REVEAL_MS = 850;      // How long the lines take to draw in, left to right, when a graph first shows (and for new days)
+  const REVEAL_SEEN = 0.35;   // How much of a graph is on the screen before its lines start drawing in
   let count = 0;
 
   const svgEl = (name, attrs = {}, parent = null) => {
@@ -168,6 +169,7 @@ window.LineGraph = (function () {
     let pointed = -1;            // The day being read (an index into dates), or -1
     let revealing = true;        // The lines draw in on the next paint that has them (the first, and after new days)
     let revealFrom = null;       // When they started drawing in (performance.now()), while they are
+    let inSight = false;         // Is enough of the graph on the screen for its lines to draw in (see REVEAL_SEEN)?
 
     const show = (value) => (money ? formatMoney(value) : String(Math.round(value * 100) / 100));
     const slotOf = (name) => {
@@ -285,19 +287,22 @@ window.LineGraph = (function () {
       revealLines(group, room.left, width);
     }
 
-    // The lines draw in from left to right (REVEAL_MS, easing out) the first time they're painted, and after new days are
-    // picked: a clip that widens from where the days start. A paint while they're drawing in (a new width) carries on
-    // from where it was. Reduced Motion draws them whole.
+    // The lines draw in from left to right (REVEAL_MS, easing out) once the graph is on the screen (scrolled to, or its card
+    // opened where it shows: until then they wait, out of sight), and again after new days are picked or its card is shut
+    // and opened again: a clip that widens from where the days start. A paint while they're drawing in (a new width)
+    // carries on from where it was. Reduced Motion draws them whole.
     function revealLines(group, left, width) {
-      if (revealing) {
+      const waiting = revealing && inSight === false && !(window.lessMotion && window.lessMotion());
+      if (revealing && !waiting) {
         revealing = false;
         revealFrom = window.lessMotion && window.lessMotion() ? null : performance.now();
       }
-      if (revealFrom === null) return;
+      if (revealFrom === null && !waiting) return;
       const clipId = `lineGraphReveal${id}`;
       const clip = svgEl("clipPath", { id: clipId }, svg);
       const edge = svgEl("rect", { x: 0, y: 0, width: left, height: HEIGHT }, clip);
       group.setAttribute("clip-path", `url(#${clipId})`);
+      if (waiting) return; // (Held back until it's in sight: see the IntersectionObserver below)
       const step = (now) => {
         if (!edge.isConnected) return; // (Painted again: that paint carries on)
         const done = Math.min(1, (now - revealFrom) / REVEAL_MS);
@@ -484,15 +489,28 @@ window.LineGraph = (function () {
       });
     }
 
-    // Drawn again when it gets a width, or a new one
+    // Drawn again when it gets a width, or a new one. Hidden (its card shut), its lines draw in again the next time it shows.
     let lastWidth = 0;
     if (typeof ResizeObserver === "function") {
       // (Next frame: drawing changes its height, and Safari reports a change made right here as an error)
       new ResizeObserver(() => requestAnimationFrame(() => {
         if (plot.clientWidth === lastWidth) return;
+        if (plot.clientWidth === 0) revealing = true;
         lastWidth = plot.clientWidth;
         paint();
       })).observe(el);
+    }
+    // In sight or not: lines waiting to draw in start once enough of it is on the screen (a browser that can't tell draws
+    // them in right away)
+    if (typeof IntersectionObserver === "function") {
+      new IntersectionObserver((seen) => {
+        const now = seen.some(entry => entry.isIntersecting && entry.intersectionRatio >= REVEAL_SEEN);
+        const was = inSight;
+        inSight = now;
+        if (now && !was && revealing) paint();
+      }, { threshold: [0, REVEAL_SEEN, 1] }).observe(plot);
+    } else {
+      inSight = null;
     }
     draw();
     return { el, draw, until: () => until, lines: () => lines };

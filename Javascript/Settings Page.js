@@ -327,10 +327,10 @@ const REMINDER_KINDS = [
   { key: "negative", label: "⛔️ In Bank below $0", detail: "A day In Bank goes below $0" },
   { key: "uncommon", label: "✔️ Uncommon recurring payments", detail: "An uncommon recurring payment (every 3 months or less often) in the calendar's five weeks" },
   { key: "cost", label: "❗️ Days with a cost", detail: "A day you have a cost" },
-  { key: "meals", label: "🍽️ Days the Pantry is short", detail: "A day whose meals the Pantry doesn't have enough for (Recipes)" },
-  { key: "expired", label: "🥫 Foods that expire", detail: "A day a food in the Pantry expires (Recipes)" }
+  { key: "meals", label: "🍽️ Days the Pantry is short", detail: "A day whose meals the Pantry doesn't have enough for (Kitchen)" },
+  { key: "expired", label: "🥫 Foods that expire", detail: "A day a food in the Pantry expires (Kitchen)" }
 ];
-// The kitchen's two, which Settings' Recipes card shows too (the same switches: either one changes both)
+// The kitchen's two, which Settings' Kitchen card shows too (the same switches: either one changes both)
 const KITCHEN_KINDS = ["meals", "expired"];
 function renderReminderCard() {
   showReminderChoices();
@@ -362,7 +362,7 @@ function showReminderChoices() {
   renderRecipesCard();
 }
 
-// Turn one kind of reminder on or off, from the Reminders card or the Recipes card (the account's: both cards show it as
+// Turn one kind of reminder on or off, from the Reminders card or the Kitchen card (the account's: both cards show it as
 // it's saved, and go back when it couldn't save)
 async function setReminderKind(key, on) {
   const picked = new Set(reminderSettings.kinds || []);
@@ -382,7 +382,7 @@ async function setReminderKind(key, on) {
   renderReminderCard();
 }
 
-// Settings' Recipes card: this device's own switches (Kitchen.js settings, each off to start), and the account's two
+// Settings' Kitchen card: this device's own switches (Kitchen.js settings, each off to start), and the account's two
 // kitchen reminders (the Reminders card's own switches for them, shown here too, once they're in)
 const RECIPE_SWITCHES = [
   { key: "glowDays", label: "Glow days the Pantry is short", detail: "On Home, while the calendar shows Meals: a day whose meals the Pantry doesn't have enough for glows orange (red at its top and orange at its bottom when it's below $0 too)",
@@ -392,7 +392,7 @@ const RECIPE_SWITCHES = [
       ["Units: ", "weights count together (g, kg, oz, lbs), and so do volumes (tsp, tbsp, cups, ml, liters, quarts, gallons) and counts (blank, each, a dozen). Any other unit only counts with the same unit."],
       ["Without an amount: ", "a meal's food only has to be in the Pantry, and a Pantry food never runs out."]
     ] },
-  { key: "glowRecipes", label: "Glow recipes the Pantry can't make", detail: "On the Recipes tab: a recipe the Pantry doesn't have enough for now glows orange",
+  { key: "glowRecipes", label: "Glow recipes the Pantry can't make", detail: "On the Kitchen tab: a recipe the Pantry doesn't have enough for now glows orange",
     help: [["Now: ", "a recipe glows when the Pantry, as it is now, doesn't have enough for all of its foods together. Its window says which ones."]] },
   { key: "glowPantry", label: "Glow foods the meals run short of", detail: "In the Pantry: a food the meals on your calendar's five weeks need more of glows orange",
     help: [
@@ -409,7 +409,7 @@ const RECIPE_SWITCHES = [
     ] }
 ];
 
-// Settings' Recipes card: its switches (this device's own, drawn once and then kept matching the Kitchen's settings)
+// Settings' Kitchen card: its switches (this device's own, drawn once and then kept matching the Kitchen's settings)
 // and its two reminders (the account's, the same switches as the Reminders card's)
 function renderRecipesCard() {
   const switches = document.getElementById("recipesSwitches");
@@ -1014,7 +1014,17 @@ async function changePassword(event) {
     return;
   }
   setFormBusy(form, true);
-  const result = await budgetApi("/api/account/password", { password: document.getElementById("currentPassword").value, newPassword });
+  const send = (leakedOk) => budgetApi("/api/account/password", { password: document.getElementById("currentPassword").value, newPassword, ...(leakedOk ? { leakedOk: true } : {}) });
+  let result = await send(false);
+  // (Known from data breaches: a warning, not a refusal, and used anyway once the person says so)
+  if (!result.ok && result.data && result.data.leaked) {
+    if (!window.confirm("That password has shown up in data breaches, so it's one of the first that attackers try. A different one is safer.\n\nUse it anyway?")) {
+      setFormBusy(form, false);
+      document.getElementById("newPassword").focus();
+      return;
+    }
+    result = await send(true);
+  }
   setFormBusy(form, false);
   if (!result.ok || !result.data || !result.data.token) {
     BudgetUI.showToast(accountError(result, "Couldn't change your password. Please try again."), true);
@@ -1954,7 +1964,7 @@ function settingsLink(label, href, newTab) {
 
 //#endregion
 
-// This device's Recipes switches show right away, like its other choices (down here, once what they use is declared),
-// and the Recipes tab's link to them goes to them
+// This device's Kitchen switches show right away, like its other choices (down here, once what they use is declared),
+// and the Kitchen tab's link to them goes to them
 renderRecipesCard();
 if (location.hash === "#recipesCard") document.getElementById("recipesCard")?.scrollIntoView();
