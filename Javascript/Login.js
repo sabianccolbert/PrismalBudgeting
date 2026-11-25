@@ -207,6 +207,9 @@ const MODES = {
 };
 
 let mode = 'login';
+// A new password known from data breaches that the person said to use anyway (the API only warns about one: it's sent
+// again with leakedOk), or null
+let leakedOkFor = null;
 
 // Switch the page to a mode: its title, hint, fields, and buttons. holdAssist: the device's last passkey is about to be
 // tried by itself (tryLastPasskey), so passkey autofill waits for it
@@ -346,11 +349,13 @@ authForm.addEventListener('submit', async (e) => {
     setStatus('');
   }
 
+  // (A password known from data breaches, used anyway once the person said so: see leakedOkFor)
+  const leakedOk = leakedOkFor !== null && leakedOkFor === password ? { leakedOk: true } : {};
   const requests = {
     login: ['/api/login', { username, password }],
-    create: ['/api/register', { username, email, birthdate: mode === 'create' ? formatToYMD(typedBirthdate()) : '', password, agreedToTerms: true, turnstileToken }],
+    create: ['/api/register', { username, email, birthdate: mode === 'create' ? formatToYMD(typedBirthdate()) : '', password, agreedToTerms: true, turnstileToken, ...leakedOk }],
     forgot: ['/api/password/forgot', { email }],
-    reset: ['/api/password/reset', { token: resetToken, password }]
+    reset: ['/api/password/reset', { token: resetToken, password, ...leakedOk }]
   };
   const [endpoint, body] = requests[mode];
   primaryBtn.disabled = true;
@@ -379,6 +384,16 @@ authForm.addEventListener('submit', async (e) => {
       setStatus(data.passkeysTurnedOff
         ? "Password changed! Log in with your new password. Passkey sign-in was turned off to be safe, and you can turn it back on in Settings."
         : "Password changed! Log in with your new password.", true);
+    }
+  } else if ((mode === 'create' || mode === 'reset') && data.leaked) {
+    // Known from data breaches: a warning, not a refusal. Used anyway, the form goes again with it (a new account's
+    // check that it's a person runs again: each answer is used once).
+    if (window.confirm("That password has shown up in data breaches, so it's one of the first that attackers try. A different one is safer.\n\nUse it anyway?")) {
+      leakedOkFor = password;
+      authForm.requestSubmit();
+    } else {
+      setStatus("Pick a different password, then try again.");
+      passwordInput.focus();
     }
   } else if (mode === 'reset' && data.expired) {
     forgetResetToken();

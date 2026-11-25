@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.25.2026.A";
+  const SITE_VERSION = "11.25.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,35 +26,35 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "8f1801c202",
-    "/Javascript/Budget Pages.js": "749ecdeeb1",
+    "/Javascript/Bob Page.js": "c628c4240d",
+    "/Javascript/Budget Pages.js": "a7012804a7",
     "/Javascript/Budget Search.js": "7fd273fe6b",
-    "/Javascript/Budget UI.js": "1d4be7f0d0",
+    "/Javascript/Budget UI.js": "984671a693",
     "/Javascript/Budgets.js": "2f58afe81b",
-    "/Javascript/Calendar Page.js": "27508453a5",
+    "/Javascript/Calendar Page.js": "b871b908d8",
     "/Javascript/Calendars Page.js": "df9d932a85",
     "/Javascript/Calendars.js": "15b458fed5",
-    "/Javascript/Dates.js": "29a8cec2c9",
+    "/Javascript/Dates.js": "6be723d2f9",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "7a46095bba",
+    "/Javascript/Fractals.js": "7576fe35ef",
     "/Javascript/Holidays.js": "eba1fab331",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
-    "/Javascript/Kitchen UI.js": "c51485d80f",
-    "/Javascript/Kitchen.js": "955f9bce26",
-    "/Javascript/Layout.js": "f9f3fa842f",
-    "/Javascript/Limits.js": "3ba2190ee5",
-    "/Javascript/Line Graph.js": "724e4fbb43",
-    "/Javascript/Login.js": "7c20578b0c",
+    "/Javascript/Kitchen UI.js": "f08891ea62",
+    "/Javascript/Kitchen.js": "ad77ef4b75",
+    "/Javascript/Layout.js": "f0a5bbd8b0",
+    "/Javascript/Limits.js": "d6293bab91",
+    "/Javascript/Line Graph.js": "a6cb081e64",
+    "/Javascript/Login.js": "bea4a518b9",
     "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "bb693a0c65",
-    "/Javascript/Quick Calendar.js": "2c03bb5ad3",
-    "/Javascript/Quick Entry.js": "17a87ca937",
+    "/Javascript/Process Budget.js": "dfe43c322e",
+    "/Javascript/Quick Calendar.js": "6d829bf857",
+    "/Javascript/Quick Entry.js": "d06157c13c",
     "/Javascript/Quick Icon.js": "bd8ba88f58",
-    "/Javascript/Recipes Page.js": "ddf190ecc9",
+    "/Javascript/Recipes Page.js": "6d0367e9c1",
     "/Javascript/Session.js": "2ba7a04b3e",
-    "/Javascript/Settings Page.js": "adb46821d2",
-    "/Javascript/Snapshot Page.js": "f7a0bc379c",
+    "/Javascript/Settings Page.js": "3616c6ca52",
+    "/Javascript/Snapshot Page.js": "dd3c45a6d8",
     "/Javascript/Sounds.js": "21207f2cfd",
     "/Javascript/Spreadsheets Page.js": "5e1b61db41",
     "/Javascript/Spreadsheets.js": "f7b459357f",
@@ -776,7 +776,7 @@
       if (page === "home" || page === "spreadsheets" || page === "quickcal") scripts.push("/Javascript/Holidays.js");
       // The calendar (Calendar Fractals and their entries): Home shows it, the Budgets, Calendars & Spreadsheets page
       // manages it, Settings has its links, the Quick Calendar page is it, Snapshot can show its entries, Recurring
-      // lists its repeating ones, and the Recipes page's Undo takes back changes to them, like Home's
+      // lists its repeating ones, and the Kitchen tab's Undo takes back changes to them, like Home's
       if (page === "home" || page === "spreadsheets" || page === "settings" || page === "quickcal" || page === "snapshot" || page === "recurring" || page === "recipes") scripts.push("/Javascript/Fractals.js");
       // The kitchen's windows (a recipe, a meal, New Entry's Meal): where recipes and meals are added and changed
       if (page === "home" || page === "recipes" || page === "recurring" || page === "quickcal") scripts.push("/Javascript/Kitchen UI.js");
@@ -787,7 +787,7 @@
       // Push notifications on this device: Settings turns them on and off, and Home asks once after a sign-in
       if (page === "home" || page === "settings") scripts.push("/Javascript/Notifications.js");
       // Bob's page works out his warnings for Home too (Calendar Page.js renderBobWarnings), and his page borrows the menu data
-      // pages' tables, New Row, and Edit for the tracker in his Data card (the Recipes page, for the Pantry and its foods).
+      // pages' tables, New Row, and Edit for the tracker in his Data card (the Kitchen tab, for the Pantry and its foods).
       // Snapshot draws its cards with both.
       if (page === "home" || page === "snapshot") scripts.push("/Javascript/Bob Page.js");
       if (page === "bob" || page === "snapshot" || page === "recipes") scripts.push("/Javascript/Budget Pages.js");

@@ -63,7 +63,7 @@ document.addEventListener("fractals:changed", () => {
   }
 });
 
-// Settings' Recipes switches (on this device, or in another tab) change which days glow orange
+// Settings' Kitchen switches (on this device, or in another tab) change which days glow orange
 document.addEventListener("kitchen:settings", () => {
   if (!workspaceLoaded) return;
   renderCalendar();
@@ -334,6 +334,7 @@ function moveCalendar(date) {
   if (activeEditCell) closeZoomedDay(true);
   listScrollTo = "today";
   renderCalendar();
+  renderLowestCard(); // (It follows the five weeks showing)
 }
 
 // The last day's two lines about the days after the calendar through Lowest's last day (writeBudgetMath in Process
@@ -398,7 +399,7 @@ function renderCalendar() {
     td.dataset.col = c;
     td.classList.toggle("isToday", date.getTime() === today.getTime());
     td.classList.toggle("isPast", date < today);
-    // (The days after the calendar going below $0 turn the Lowest card red instead, see renderAfterCalendar. A day
+    // (The days after the calendar going below $0 turn the Lowest card red instead, see renderLowestCard. A day
     // isn't red while the calendar shows only its own entries: the day's In Bank is hidden then.)
     td.classList.toggle("isNegative", dayBelowZero(calendarData[r][c], date) && mode !== "calendar");
     // (Orange: a day whose meals the Pantry doesn't have enough for, with Settings' switch on and Meals showing)
@@ -839,63 +840,54 @@ document.addEventListener("entry:opened", (event) => {
 // =====================================================================
 
 function renderInfoRow() {
-  const lowest = document.getElementById("lowestAmount");
-  // (With an Equity account picked for In Bank, its lowest: see SHOWN ACCOUNT in Process Budget.js)
-  const shownLow = shownLowest();
-  const lowestAmount = shownLow ? shownLow.amount : lowestInBank;
-  if (lowest) {
-    lowest.textContent = formatMoney(lowestAmount);
-    lowest.classList.toggle("negative", lowestAmount < 0);
-  }
-  const label = document.getElementById("lowestLabel");
-  if (label) label.textContent = shownLow ? `Lowest in ${shownAccountName()} after today` : "Lowest in bank after today";
   fillShownAccountPickers();
-  renderAfterCalendar();
+  renderLowestCard();
 
   const bob = document.getElementById("bobMessage");
   if (bob) bob.textContent = bobMessage;
   queueBobWarnings();
 }
 
-// The Lowest card's look past the calendar, from the budget's last day's two lines (see afterCalendarLine): the day In
-// Bank is lowest from the day after the calendar through Lowest's last day (LOWEST'S LOOK AHEAD in Process Budget.js),
-// how low, and In Bank on that last day, named by their dates ("From 12/20 to 02/20"). Red below $0, and the whole
-// card turns red when any of its amounts is below $0. Its Look Ahead button picks how far past the calendar it goes.
-function renderAfterCalendar() {
+// The Lowest card follows the five weeks showing: the lowest In Bank on the days showing ("Lowest between 11/23 and
+// 12/27", from today on while today is one of them, since the days before it already happened), and under it the days
+// after them through Look Ahead's stretch past them (LOWEST'S LOOK AHEAD in Process Budget.js): the day In Bank is lowest
+// in them, how low, and In Bank on their last day, named by their dates ("From 12/28 to 02/28"). With an Equity account
+// picked for In Bank, that account's (SHOWN ACCOUNT). Red below $0, and the whole card turns red when any of its amounts
+// is below $0. Moving the calendar draws it again (moveCalendar).
+function renderLowestCard() {
+  const lowest = document.getElementById("lowestAmount");
+  const label = document.getElementById("lowestLabel");
   const box = document.getElementById("afterCalendar");
-  if (!box || !calendarData[CALENDAR_ROWS - 1]) return;
-  const lastDay = lookAheadEnd();
-  document.getElementById("afterSpan").textContent = `From ${showDay(afterCalendarStart)} to ${showDay(lastDay)}`;
-  document.getElementById("afterLastDay").textContent = `On ${showDay(lastDay)}`;
+  if (!lowest || !label || !box) return;
+  const first = dayAt(0);
+  const last = lastDayShown();
+  const from = first < today && last >= today ? today : first;
+  const name = shownAccountName();
+  const shown = lowestBetween(from, last);
+  const lowestAmount = shown.lowest ? shown.lowest.amount : 0;
+  lowest.textContent = shown.lowest ? formatMoney(lowestAmount) : "--";
+  lowest.classList.toggle("negative", lowestAmount < 0);
+  label.textContent = `Lowest${name ? ` in ${name}` : ""} between ${showDay(from)} and ${showDay(last)}`;
+
+  // The days after the five weeks showing, through as far past them as Look Ahead goes
+  const ahead = lookAhead();
+  const afterStart = addDays(last, 1);
+  const afterEnd = ahead.unit === "months" ? addMonths(last, ahead.count) : addDays(last, ahead.count * (ahead.unit === "weeks" ? 7 : 1));
+  const after = lowestBetween(afterStart, afterEnd);
+  document.getElementById("afterSpan").textContent = `From ${showDay(afterStart)} to ${showDay(afterEnd)}`;
+  document.getElementById("afterLastDay").textContent = `On ${showDay(afterEnd)}`;
   document.getElementById("lookAheadWords").textContent = lookAheadWords();
-  const found = {};
-  for (const line of String(calendarData[CALENDAR_ROWS - 1][6] ?? "").split("\n")) {
-    const after = afterCalendarLine(line);
-    if (after) found[after.kind] = after;
-  }
-  // (An Equity account picked for In Bank: its own lowest after the calendar, and its balance on the last day)
-  const shownAfter = shownLowest(afterCalendarStart, lastDay);
-  if (shownAfter) {
-    found.lowest = { kind: "lowest", amount: shownAfter.amount, date: formatToMMDD(shownAfter.date), day: shownAfter.date };
-    found.last = { kind: "last", amount: shownBalanceOn(lastDay) };
-  }
-  const shownLow = shownLowest();
-  const belowZero = (shownLow ? shownLow.amount : lowestInBank) < 0 || [found.lowest, found.last].some(after => after && after.amount < 0);
-  box.closest(".lowestCard")?.classList.toggle("isNegative", belowZero);
-  box.hidden = !found.lowest && !found.last;
-  const show = (id, after) => {
+  document.getElementById("afterLowestDay").textContent = after.lowest ? `Lowest is on ${showDay(after.lowest.date)}` : "Lowest is on --";
+  const show = (id, amount) => {
     const el = document.getElementById(id);
-    el.textContent = after ? formatMoney(after.amount) : "--";
-    el.classList.toggle("negative", !!after && after.amount < 0);
+    el.textContent = amount === null || amount === undefined ? "--" : formatMoney(amount);
+    el.classList.toggle("negative", typeof amount === "number" && amount < 0);
   };
-  // (Its day from the worked-out days, since a look ahead of months can reach the same day of next year: the first one
-  // with its date and amount, the way the lowest is picked)
-  const lowDay = found.lowest?.day ? [found.lowest.day] : found.lowest
-    ? predictedInBank.find(([day, amount]) => formatToMMDD(day) === found.lowest.date && Math.abs(amount - found.lowest.amount) < 0.005)
-    : null;
-  document.getElementById("afterLowestDay").textContent = found.lowest ? `Lowest is on ${lowDay ? showDay(lowDay[0]) : showStoredDate(found.lowest.date)}` : "Lowest is on --";
-  show("afterLowest", found.lowest);
-  show("afterLastAmount", found.last);
+  show("afterLowest", after.lowest ? after.lowest.amount : null);
+  show("afterLastAmount", after.last);
+  box.hidden = !after.lowest && (after.last === null || after.last === undefined);
+  const belowZero = lowestAmount < 0 || (after.lowest && after.lowest.amount < 0) || (typeof after.last === "number" && after.last < 0);
+  box.closest(".lowestCard")?.classList.toggle("isNegative", !!belowZero);
 }
 
 // What In Bank shows (SHOWN ACCOUNT in Process Budget.js): Default, or one of the Equity accounts, picked over the calendar
@@ -942,7 +934,7 @@ function openLookAheadPanel(origin) {
       unit.setAttribute("aria-label", "Days, weeks, or months");
       const row = BudgetUI.element("div", "frequencyRow");
       row.append(count, unit);
-      const field = BudgetUI.field("Past the calendar", row, { hint: "Lowest counts In Bank from today through this far past the calendar's five weeks: 2 months to start, about three months from today. Up to 12 months, 52 weeks, or 366 days. It's this device's own, and Quick Budget here follows it." });
+      const field = BudgetUI.field("Past the calendar", row, { hint: "How far past the calendar's five weeks Lowest looks: 2 months to start. Here, the Lowest card looks that far past the five weeks showing; Bob and Quick Budget look that far past this week's five. Up to 12 months, 52 weeks, or 366 days. It's this device's own." });
       form.append(field, BudgetUI.buttonRow([
         { label: "Save", kind: "primary", type: "submit" },
         { label: "Cancel", onClick: () => panel.close() }

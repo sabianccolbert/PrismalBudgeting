@@ -28,7 +28,7 @@
   // is only the page, its key, and this device's theme: a phone's home screen app can keep its own storage, and starts
   // from this link)
   if (key && params.has("setup")) {
-    document.getElementById("setupCard").hidden = false;
+    document.getElementById("setupCard").hidden = RUNNING_AS_APP; // (Opened from the icon, it's on the home screen already)
     const look = window.Themes ? Themes.lookQuery() : "";
     history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(key)}${look ? `&${look}` : ""}`);
   }
@@ -53,7 +53,12 @@
   async function ask(route, body = {}) {
     const result = await window.Fractals.call(`/api/quickcal/${route}`, { key, ...body });
     if (!result.ok || !result.data || !Array.isArray(result.data.fractals)) return result;
-    const answer = result.data;
+    keepIconCopy("quickcal", key, result.data); // (What it shows now, for the next time it opens: see WHAT AN ICON'S PAGE SHOWED LAST)
+    return { ...result, data: fromAnswer(result.data) };
+  }
+
+  // The API's answer as the page takes it (above): its meals to Kitchen.js, and its waiting entries with the rest
+  function fromAnswer(answer) {
     const queued = Array.isArray(answer.meals) ? answer.meals : [];
     window.Kitchen.useData(answer.kitchen, queued.map(item => ({ ...item.meal, id: `${WAITING_MEAL}${item.id}`, waiting: item.id })));
     const fallback = answer.fractals[0] ? answer.fractals[0].id : null;
@@ -65,7 +70,18 @@
       waiting: true,
       people: []
     }));
-    return { ...result, data: { ...answer, events: [...answer.events, ...waiting], waiting: [], waitingHere: waiting.length, saved: null } };
+    return { ...answer, events: [...answer.events, ...waiting], waiting: [], waitingHere: waiting.length, saved: null };
+  }
+
+  // While the page shows what it had last (the server's answer is on its way, or can't come), nothing on it can be changed:
+  // New Entry is held back, and a change asked for anyway says why
+  let showingCopy = false;
+  const COPY_WORDS = "This shows your calendar as it was the last time it opened. Changes wait until it's back in touch with Prismal Planning.";
+  const copyRefusal = () => Promise.resolve({ ok: false, status: 0, data: { error: COPY_WORDS } });
+  function showCopy(state) {
+    showingCopy = state !== "fresh";
+    showIconFreshness(document.getElementById("calendarCard"), state);
+    document.getElementById("quickCalendarControls").inert = showingCopy;
   }
 
   // A new entry or meal that's waiting: once the entries waiting come near how many can (LIMITS.waitingEntries), a toast says so
@@ -80,11 +96,12 @@
     quick: true,
     load: () => ask("check"),
     save: (id, fractal, event) => {
+      if (showingCopy) return copyRefusal();
       if (!id) return ask("entry", { fractal, event }).then(nearWaiting);
       if (id.startsWith(WAITING)) return ask("change", { id: Number(id.slice(WAITING.length)), fractal, event });
       return Promise.resolve({ ok: false, status: 403, data: { error: "Sign in to Prismal Planning to change an entry that's already on your calendar." } });
     },
-    remove: (id) => (id.startsWith(WAITING)
+    remove: (id) => (showingCopy ? copyRefusal() : id.startsWith(WAITING)
       ? ask("unqueue", { id: Number(id.slice(WAITING.length)) })
       : Promise.resolve({ ok: false, status: 403, data: { error: "Sign in to Prismal Planning to delete an entry that's already on your calendar." } })),
     // A linked Calendar Fractal of the icon's budget (a calendar shared from elsewhere), read by the API with the key: its
@@ -102,6 +119,7 @@
   window.KitchenUI.useStore({
     locked: (meal) => !window.Kitchen.isWaiting(meal),
     async save(fields, options, meal) {
+      if (showingCopy) return { ok: false, message: COPY_WORDS };
       let checked;
       try {
         checked = window.Kitchen.checkMeal(fields);
@@ -117,6 +135,7 @@
       return { ok: true, toast: `${meal ? "Saved" : "Added"} ${shown.title}. It joins your calendar the next time Prismal Planning opens.` };
     },
     async remove(meal) {
+      if (showingCopy) return { ok: false, message: COPY_WORDS };
       const result = await ask("unqueue", { id: meal.waiting });
       if (!result.ok || !result.data) return { ok: false, message: window.Fractals.problem(result, "Couldn't delete it. Please try again.") };
       if (Array.isArray(result.data.fractals)) window.Fractals.took(result.data);
@@ -202,25 +221,80 @@
       status.textContent = "This page opens from a Quick Calendar icon. Sign in, then use the Quick Calendar button on Home to make one.";
       return;
     }
-    const result = await ask("check");
+    // (What it showed last, while a slow answer is on its way or none can come: see WHAT AN ICON'S PAGE SHOWED LAST in
+    // Process Budget.js)
+    const copy = readIconCopy("quickcal", key);
+    const asked = ask("check");
+    const result = copy ? await Promise.race([asked, new Promise(done => setTimeout(() => done(null), ICON_COPY_WAIT_MS))]) : await asked;
+    if (copy && (!result || result.status === 0)) {
+      startShowing(fromAnswer(copy), copy.look);
+      showCopy(result ? "offline" : "loading");
+      followAnswer(result ? null : asked);
+      return;
+    }
     if (!result.ok || !result.data || !Array.isArray(result.data.fractals)) {
+      if (result.status === 401) forgetIconCopy("quickcal", key);
       status.textContent = result.status === 401 || result.status === 429
         ? `${window.Fractals.problem(result, "This Quick Calendar link doesn't work anymore.")} Sign in, then use the Quick Calendar button on Home to make a new icon.`
         : "Couldn't reach the server. Check your connection, then open this page again.";
       return;
     }
-    window.Fractals.took(result.data);
+    startShowing(result.data, result.data.look);
+  })();
+
+  // The server's answer after the page showed what it had last (asked: on its way, or null to ask again): the calendar as
+  // it is now, or "No Internet" until the device is back online, the page is looked at again, or ICON_COPY_RETRY_MS has
+  // passed. A key that stopped working says so, as it would have at the start.
+  function followAnswer(asked) {
+    const again = () => {
+      window.removeEventListener("online", again);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearTimeout(timer);
+      showCopy("loading");
+      followAnswer(ask("check"));
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") again(); };
+    let timer = 0;
+    const wait = () => {
+      showCopy("offline");
+      window.addEventListener("online", again);
+      document.addEventListener("visibilitychange", onVisible);
+      timer = setTimeout(again, ICON_COPY_RETRY_MS);
+    };
+    if (!asked) return wait();
+    asked.then((result) => {
+      if (result.ok && result.data && Array.isArray(result.data.fractals)) {
+        window.Fractals.took(result.data);
+        window.Fractals.readLinked();
+        showCopy("fresh");
+        return;
+      }
+      if (result.status === 401) {
+        forgetIconCopy("quickcal", key);
+        document.getElementById("calendarCard").hidden = true;
+        document.getElementById("quickCalendarControls").hidden = true;
+        status.hidden = false;
+        status.textContent = `${window.Fractals.problem(result, "This Quick Calendar link doesn't work anymore.")} Sign in, then use the Quick Calendar button on Home to make a new icon.`;
+        return;
+      }
+      wait();
+    });
+  }
+
+  // The calendar shows (data: the answer as fromAnswer takes it; look: this icon's own)
+  function startShowing(data, look) {
+    window.Fractals.took(data);
     // (Its budget's linked Calendar Fractals: calendars shared from elsewhere, read through the key)
     window.Fractals.readLinked();
     status.hidden = true;
     // This icon's own look (a calendar until another is picked), in the links a phone reads when the page is added to its
     // home screen, and its Customize button
-    window.QuickIcon?.wirePage({ kind: "calendar", look: result.data.look, send: (look) => window.Fractals.call("/api/quickcal/look", { key, look }) });
+    window.QuickIcon?.wirePage({ kind: "calendar", look, send: (picked) => window.Fractals.call("/api/quickcal/look", { key, look: picked }) });
     document.getElementById("quickCalendarControls").hidden = false;
     document.getElementById("calendarCard").hidden = false;
     // (This device used the icon: on Home here, what it adds joins the calendar by itself)
     window.Fractals.rememberIcon(key);
     wireHeader();
     renderCalendar();
-  })();
+  }
 })();

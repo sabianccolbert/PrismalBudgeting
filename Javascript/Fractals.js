@@ -1147,7 +1147,7 @@ window.Fractals = (() => {
   //#endregion
 
   // =====================================================================
-  // #region MEALS (the budget's meals, from the Recipes tab and New Entry's Meal: Kitchen.js)
+  // #region MEALS (the budget's meals, from the Kitchen tab and New Entry's Meal: Kitchen.js)
   // =====================================================================
   // Meals is on every budget's calendar where Kitchen.js is (and on the Quick Calendar page, from its icon's answer). Its
   // entries are the budget's meals, all day, each on the days it lands on, and tapping one opens it (Kitchen UI.js). It
@@ -1192,7 +1192,7 @@ window.Fractals = (() => {
       build(form, panel) {
         const color = colorField(fractal.color);
         form.append(
-          el("p", "panelText", "Your budget's meal entries, from the Recipes tab and New Entry's Meal."),
+          el("p", "panelText", "Your budget's meal entries, from the Kitchen tab and New Entry's Meal."),
           color.el,
           el("p", "panelHint", "It can't be deleted. To hide its meals on this device, uncheck Meals in Home's Calendar Fractals. Its color is kept with the budget."),
           BudgetUI.buttonRow([{ label: "Save", kind: "primary", type: "submit" }, { label: "Cancel", onClick: () => panel.close() }])
@@ -2131,7 +2131,7 @@ window.Fractals = (() => {
   //#endregion
 
   // =====================================================================
-  // #region UNDO (changes to calendar entries, as steps of Home's and the Recipes page's Undo)
+  // #region UNDO (changes to calendar entries, as steps of Home's and the Kitchen tab's Undo)
   // =====================================================================
   // An entry added, changed, or deleted (a repeating entry's day changed or deleted by itself is two such changes, and a
   // Copy is one) is noted while the action is made, and becomes one step in the same list as the budget's (Process
@@ -2373,7 +2373,7 @@ window.Fractals = (() => {
         const name = el("span", "budgetName");
         name.append(swatch(fractal.color), fractal.name);
         const count = window.Kitchen.data().meals.length;
-        about.append(name, el("span", "budgetDetail", `${count} meal ${count === 1 ? "entry" : "entries"} (from the Recipes tab and New Entry's Meal)`));
+        about.append(name, el("span", "budgetDetail", `${count} meal ${count === 1 ? "entry" : "entries"} (from the Kitchen tab and New Entry's Meal)`));
         const buttons = el("div", "budgetInvitationButtons");
         buttons.append(button("Edit", "", (event) => openMealsFractal(event.currentTarget, fractal), "Edit Meals"));
         item.append(about, buttons);

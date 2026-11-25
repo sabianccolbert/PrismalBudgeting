@@ -377,10 +377,14 @@ const BudgetUI = (() => {
   // switch shows while the account field allows it (setPercentAllowed; never with allowPercent false, like for a day
   // that passed), and percent starts it on % (signed). isPercent(): % is picked. percent(): the signed percent typed,
   // null when blank, NaN when unreadable.
+  // A recurring entry's % can be of what it picks (percentBase: { base (what it's of to start, or null), pick(origin,
+  // base) (opens the window to pick it, resolving with the pick, or undefined for none), words(base) (what the button
+  // under the % box says) }): its $ / % switch always shows, and picking %, or tapping it again, opens the window.
+  // percentBase() is what's picked (null for none), setPercentBase(base) picks one.
   const ENTRY_SIGNS = ["− Cost", "+ Gain"];
   const BALANCE_SIGNS = ["− Negative", "+ Positive"];
 
-  function amountField({ label = "Amount", amount = null, percent = null, allowPercent = true, optional = false, hint = "", signs = ENTRY_SIGNS, startSign = signs === ENTRY_SIGNS ? -1 : 1 } = {}) {
+  function amountField({ label = "Amount", amount = null, percent = null, allowPercent = true, optional = false, hint = "", signs = ENTRY_SIGNS, startSign = signs === ENTRY_SIGNS ? -1 : 1, percentBase = null } = {}) {
     const input = element("input", "amountInput");
     input.type = "text";
     input.placeholder = "0.00";
@@ -419,14 +423,37 @@ const BudgetUI = (() => {
     });
     // $ or % (picked), shown as % only while the switch is allowed
     let unit = percent ? "%" : "$";
-    const unitToggle = segmented([{ key: "$", label: "$" }, { key: "%", label: "%" }], unit, (key) => setUnit(key));
+    // (% picked, or tapped again while it's picked: what it's a percent of, for one that picks that)
+    const unitToggle = segmented([{ key: "$", label: "$" }, { key: "%", label: "%" }], unit, (key) => {
+      setUnit(key);
+      if (key === "%") pickBase();
+    });
     unitToggle.el.classList.add("unitToggle");
-    unitToggle.el.setAttribute("aria-label", "Dollars or a percent of the Equity account");
-    unitToggle.el.hidden = true;
+    unitToggle.el.setAttribute("aria-label", percentBase ? "Dollars or a percent" : "Dollars or a percent of the Equity account");
+    unitToggle.el.hidden = !percentBase;
+    // (What a recurring entry's % is of: a button under the boxes, which opens the window to pick it too)
+    let base = percentBase ? percentBase.base : null;
+    const baseButton = percentBase ? element("button", "percentBaseButton") : null;
+    if (baseButton) {
+      baseButton.type = "button";
+      baseButton.addEventListener("click", () => pickBase());
+    }
+    function showBase() {
+      if (!baseButton) return;
+      baseButton.textContent = percentBase.words(base);
+      baseButton.hidden = !isPercent();
+    }
+    async function pickBase() {
+      if (!percentBase) return;
+      const picked = await percentBase.pick(baseButton && !baseButton.hidden ? baseButton : unitToggle.el, base);
+      if (picked !== undefined) base = picked;
+      showBase();
+    }
     const isPercent = () => unit === "%" && !unitToggle.el.hidden;
     function showUnit() {
       input.hidden = isPercent();
       percentInput.hidden = !isPercent();
+      showBase();
     }
     function setUnit(key) {
       unit = key;
@@ -437,8 +464,15 @@ const BudgetUI = (() => {
 
     const row = element("div", "amountRow");
     row.append(unitToggle.el, input, percentInput, toggle.el);
+    const fieldEl = field(label, row, { optional, hint });
+    if (baseButton) row.after(baseButton);
     return {
-      el: field(label, row, { optional, hint }),
+      el: fieldEl,
+      percentBase: () => base,
+      setPercentBase(value) {
+        base = value || null;
+        showBase();
+      },
       input,
       setSign,
       // Which sign is picked (-1 or 1), and listener(sign) runs whenever it changes
@@ -463,12 +497,75 @@ const BudgetUI = (() => {
         setSign(value > 0 ? 1 : -1);
         setUnit("%");
       },
-      // The $ / % switch shows (allowed) or not (the amount is in $ then)
+      // The $ / % switch shows (allowed) or not (the amount is in $ then). One that picks what its % is of always has it.
       setPercentAllowed(allowed) {
-        unitToggle.el.hidden = !allowed || !allowPercent;
+        unitToggle.el.hidden = percentBase ? !allowPercent : !allowed || !allowPercent;
         showUnit();
       }
     };
+  }
+
+  // The window for what a recurring entry's % is of (amountField's percentBase): two cards that drop open, Recurring
+  // Entries (each one's amount: this entry is that percent of it each time it lands) and Equity Accounts (each one's
+  // balance on the day it lands). recurring: [{ title, type, amount }] (ones with an amount of their own); accounts:
+  // [{ name, balance }]; picked: what's picked now (null for none). Resolves with the one tapped, or undefined when it's
+  // closed without one.
+  function openPercentBase({ origin, recurring = [], accounts = [], picked = null }) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        resolve(value);
+      };
+      const isPicked = (base) => !!picked && picked.of === base.of && (base.of === "recurring"
+        ? cleanString(picked.title) === cleanString(base.title) && picked.type === base.type
+        : cleanString(picked.name) === cleanString(base.name));
+      const panel = openPanel({
+        origin,
+        size: "small",
+        stacked: true,
+        title: "A Percent Of",
+        build(form, api) {
+          form.addEventListener("submit", (event) => event.preventDefault());
+          form.append(element("p", "panelHint", "Pick what this entry is a percent of. A recurring entry: each time this one lands, it's that percent of the one picked. An Equity account: that percent of its balance on the day it lands."));
+          const card = (title, items, empty) => {
+            const box = element("details", "percentBaseCard");
+            box.open = items.some(item => isPicked(item.base)) || (!picked && items.length > 0 && title === "Recurring Entries");
+            const summary = element("summary", "percentBaseTitle", title);
+            box.append(summary);
+            if (items.length === 0) box.append(element("p", "panelHint", empty));
+            const list = element("div", "percentBaseList");
+            for (const item of items) {
+              const button = element("button", "budgetButton percentBaseItem");
+              button.type = "button";
+              button.setAttribute("aria-pressed", String(isPicked(item.base)));
+              button.append(noTranslate(element("span", "percentBaseName", item.name)), noTranslate(element("span", "percentBaseAmount", item.amount)));
+              button.addEventListener("click", () => {
+                finish(item.base);
+                api.close();
+              });
+              list.append(button);
+            }
+            box.append(list);
+            return box;
+          };
+          form.append(
+            card("Recurring Entries", recurring.map(row => ({ name: `${row.type} ${row.title}`, amount: formatMoney(row.amount), base: { of: "recurring", title: row.title, type: row.type } })), "No other recurring entries with an amount of their own yet."),
+            card("Equity Accounts", accounts.map(account => ({ name: account.name, amount: formatMoney(account.balance), base: { of: "account", name: account.name } })), "No Equity accounts yet. Add one on the Equity page.")
+          );
+          form.append(buttonRow([{ label: "Cancel", onClick: () => api.close() }]));
+        }
+      });
+      // (Closed any other way: nothing picked)
+      const watch = new MutationObserver(() => {
+        if (!panel.panel.isConnected) {
+          watch.disconnect();
+          finish(undefined);
+        }
+      });
+      watch.observe(panel.panel.parentNode || document.body, { childList: true });
+    });
   }
 
   // An amount field's % for a change, checked: { percent } (null when it's on $), or { error }
@@ -1015,8 +1112,8 @@ const BudgetUI = (() => {
   // The Placeholder switch: a placeholder stands in for an entry that's expected (like an estimate). It counts like any
   // entry and shows in yellow, and the budget deletes it once its last day has passed (see PLACEHOLDER_MARK in Process
   // Budget.js): its own day, or while the switch is on, a day picked under it (Delete it after: any day, before or after
-  // its own), or for a recurring entry (days: true), how many days behind or ahead of the current day each one goes
-  // (behind: kept until the current day is that many days past it; ahead: deleted that many days early). It's offered for
+  // its own), or for a recurring entry (days: true), how many days ahead of the current day each one goes (deleted that
+  // many days early; one kept days behind it, from before, still is until it's saved again). It's offered for
   // a day from today on (and for an entry that's a placeholder already: keepShown): setDate(date) hides it for a day
   // before today (date: a Date, or null for today). until: the last day to start with (a Date, or with days, a number,
   // below 0 for days before; null for its own day). value(): on and shown. until(): the last day picked (a Date, or null
@@ -1028,35 +1125,35 @@ const BudgetUI = (() => {
     const el = element("div", "panelField placeholderField");
     let untilBox;
     if (days) {
-      // Delete each one [3] [days behind the current day / days ahead of the current day], laid out like Frequency: the
-      // days count from the current day (behind: each one stays until the current day is that many days past it; ahead:
-      // the current day and the days after it, that many in all, don't have it)
+      // Delete each one [3] days ahead of the current day, laid out like Frequency: the current day and the days after it,
+      // that many in all, don't have it (stored as below 0). An older recurring entry kept days behind the current day
+      // instead shows blank, with a note that saving it keeps each one until its own day passes.
       const count = element("input", "frequencyCount placeholderDays");
       count.type = "text";
       count.inputMode = "numeric";
       count.placeholder = "0";
       count.maxLength = String(LIMITS.placeholderDays).length;
-      count.setAttribute("aria-label", "How many days");
-      const side = element("select", "selectInput frequencyUnit");
-      side.append(new Option("days behind the current day", "after"), new Option("days ahead of the current day", "before"));
-      side.setAttribute("aria-label", "Behind or ahead of the current day");
+      count.setAttribute("aria-label", "How many days ahead of the current day");
+      const behindNote = element("p", "panelHint placeholderBehind");
       const show = (value) => {
-        count.value = typeof value === "number" && value !== 0 ? String(Math.abs(value)) : "";
-        side.value = typeof value === "number" && value < 0 ? "before" : "after";
+        count.value = typeof value === "number" && value < 0 ? String(-value) : "";
+        behindNote.textContent = typeof value === "number" && value > 0 ? `Each one was kept ${value} ${value === 1 ? "day" : "days"} behind the current day, which isn't offered anymore. Saved as it is, each one goes once its own day passes.` : "";
+        behindNote.hidden = !behindNote.textContent;
       };
       show(until);
       const row = element("div", "frequencyRow");
-      row.append(count, side);
+      row.append(count, element("span", "rangeWord", "days ahead of the current day"));
       untilBox = {
-        el: field("Delete each one", row, { optional: true, hint: "Counted from the current day. Blank or 0: once its own day passes. Behind: each one stays until the current day is that many days past it (in History too). Ahead: the current day and the days after it, that many in all, don't have it." }),
+        el: field("Delete each one", row, { optional: true, hint: "Counted from the current day. Blank or 0: once its own day passes. Otherwise the current day and the days after it, that many in all, don't have it." }),
         set: show,
         value() {
           const text = count.value.trim();
           const number = text === "" ? 0 : Number(text);
           if (!Number.isInteger(number) || number < 0) return NaN;
-          return side.value === "before" ? -number : number;
+          return number === 0 ? 0 : -number;
         }
       };
+      untilBox.el.append(behindNote);
     } else {
       const box = dateField({ label: "Delete it after", date: until instanceof Date ? until : null, optional: true, hint: "Blank: once its own day passes. Or pick any day, before or after its own: it's deleted once that day passes." });
       untilBox = {
@@ -2451,9 +2548,9 @@ const BudgetUI = (() => {
   //#endregion
 
   // =====================================================================
-  // #region UNDO + REDO (Home's and the Recipes page's: the same steps, kept in Process Budget.js)
+  // #region UNDO + REDO (Home's and the Kitchen tab's: the same steps, kept in Process Budget.js)
   // =====================================================================
-  // A change on Home (calendar entries and quick entries) or on the Recipes page (recipes, the Pantry, meals, and foods)
+  // A change on Home (calendar entries and quick entries) or on the Kitchen tab (recipes, the Pantry, meals, and foods)
   // is one step: either page's Undo takes back the newest, whichever it was.
 
   let historyBusy = false;
@@ -2542,6 +2639,7 @@ const BudgetUI = (() => {
     colorField,
     colorTint,
     amountField,
+    openPercentBase,
     readPercentField,
     BALANCE_SIGNS,
     cashRegister,

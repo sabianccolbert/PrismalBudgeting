@@ -7,7 +7,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=38ec0a5555">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=8f217141fd">
+    <link rel="stylesheet" href="/budgetStyle.css?v=58f0ceb3e8">
     <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Quick Calendar</title>
     <!-- Not linked anywhere on the site, and kept out of search engines: its link carries a key -->
@@ -50,7 +50,7 @@
       </header>
       <main>
         <p id="dataStatus" class="dataStatus">Loading...</p>
-        <section id="setupCard" class="budgetCard settingsCard" aria-labelledby="setupHeading" hidden>
+        <section id="setupCard" class="budgetCard settingsCard setupCard" aria-labelledby="setupHeading" hidden>
           <h3 id="setupHeading">Add This Page To Your Home Screen</h3>
           <div class="deviceGuide">
             <div data-device="iphone">
@@ -80,6 +80,7 @@
           </div>
           <p class="panelHint">Use the browser itself, not this page opened inside another app like Gmail, Instagram, or Facebook. If it's open inside one, use that app's menu (like ⋯) to open it in your browser first.</p>
           <p class="panelHint">Then tap the new icon whenever you want to see your calendar or add to it. No login needed.</p>
+          <div class="panelButtons"><button class="budgetButton setupDone" type="button">Done</button></div>
         </section>
 
         <!-- New Entry (a calendar entry or a meal), and how many entries this icon added that are still waiting to join the calendar (Quick

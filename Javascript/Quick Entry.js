@@ -41,7 +41,7 @@ document.documentElement.classList.toggle("watchView", onWatch);
 // Just set up from the calendar page: show how to add it to the home screen, and drop setup=1 from the
 // link so the saved icon opens straight to the form
 if (quickKey && quickParams.has("setup")) {
-  document.getElementById("setupCard").hidden = false;
+  document.getElementById("setupCard").hidden = RUNNING_AS_APP; // (Opened from the icon, it's on the home screen already)
   // (With this device's theme in it: a phone's home screen app can keep its own storage, and starts from this link)
   const look = window.Themes ? Themes.lookQuery() : "";
   history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(quickKey)}${look ? `&${look}` : ""}`);
@@ -91,26 +91,94 @@ async function checkQuickKey() {
     transitionTo("/login.html", true);
     return;
   }
-  const result = await quickApi("/api/quick/check", { key: quickKey, today: quickToday() });
+  // (What it showed last, while a slow answer is on its way or none can come: see WHAT AN ICON'S PAGE SHOWED LAST in
+  // Process Budget.js)
+  const copy = readIconCopy("quick", quickKey);
+  const asked = quickApi("/api/quick/check", { key: quickKey, today: quickToday() });
+  const result = copy ? await Promise.race([asked, new Promise(done => setTimeout(() => done(null), ICON_COPY_WAIT_MS))]) : await asked;
+  if (copy && (!result || result.status === 0)) {
+    useCheck(copy);
+    openQuickEntryForm();
+    showQuickCopy(result ? "offline" : "loading");
+    followCheck(result ? null : asked);
+    return;
+  }
   if (result.status === 401) return keyStopped();
-  // Offline, or the server is down: the form still shows, and adding an entry says what went wrong
+  // Offline, or the server is down (with nothing kept from before): the form still shows, and adding an entry says what
+  // went wrong
   if (result.ok && result.data) {
-    // This device's own icon (where the page shares the budget's storage): the budget adds its entries when it opens here
-    rememberQuickIcon(quickKey);
-    quickUsername = result.data.username;
-    quickBudget = typeof result.data.budget === "string" && result.data.budget ? result.data.budget : null;
-    quickWavelengths = Array.isArray(result.data.wavelengths) && result.data.wavelengths.length > 0 ? result.data.wavelengths : null;
-    showQuickAnswer(result.data);
-    // This icon's own look, in the links a phone reads when the page is added to its home screen, and its Customize button
-    window.QuickIcon?.wirePage({ kind: "quick", look: result.data.look, send: (look) => quickApi("/api/quick/look", { key: quickKey, look }) });
-    // Prisms need the server, so they show once the key is known to work
-    quickPrisms = Array.isArray(result.data.prisms) ? result.data.prisms : [];
-    document.getElementById("prismSection").hidden = false;
-    renderPrisms();
+    keepIconCopy("quick", quickKey, result.data);
+    useCheck(result.data);
   } else {
     showQuickStatus("");
   }
   openQuickEntryForm();
+}
+
+// What the icon's check found (the API's answer, or what it found last time: see checkQuickKey): the balances, accounts,
+// prisms, and waiting entries
+function useCheck(data) {
+  // This device's own icon (where the page shares the budget's storage): the budget adds its entries when it opens here
+  rememberQuickIcon(quickKey);
+  quickUsername = data.username;
+  quickBudget = typeof data.budget === "string" && data.budget ? data.budget : null;
+  quickWavelengths = Array.isArray(data.wavelengths) && data.wavelengths.length > 0 ? data.wavelengths : null;
+  showQuickAnswer(data);
+  // This icon's own look, in the links a phone reads when the page is added to its home screen, and its Customize button
+  if (!quickLookWired) window.QuickIcon?.wirePage({ kind: "quick", look: data.look, send: (look) => quickApi("/api/quick/look", { key: quickKey, look }) });
+  quickLookWired = true;
+  // Prisms need the server, so they show once the key is known to work
+  quickPrisms = Array.isArray(data.prisms) ? data.prisms : [];
+  document.getElementById("prismSection").hidden = false;
+  renderPrisms();
+}
+let quickLookWired = false;
+
+// While the page shows what it found last (the server's answer is on its way, or can't come), nothing on it can be
+// changed: the form, the prisms, Undo and Redo, and Waiting are held back, and the top card (the balances, or the form
+// when they don't show) says why
+let quickShowingCopy = false;
+function showQuickCopy(state) {
+  quickShowingCopy = state !== "fresh";
+  const balances = document.getElementById("quickBalances");
+  const top = balances && !balances.hidden ? balances : quickForm?.panel.panel;
+  document.querySelectorAll(".quickBalances, #panelSlot .budgetPanel").forEach(card => { if (card !== top) showIconFreshness(card, "fresh"); });
+  showIconFreshness(top, state);
+  for (const id of ["panelSlot", "prismSection", "quickUndo", "waitingSection"]) {
+    const part = document.getElementById(id);
+    if (part) part.inert = quickShowingCopy;
+  }
+}
+
+// The server's answer after the page showed what it found last (asked: on its way, or null to ask again): the page as it
+// is now, or "No Internet" until the device is back online, the page is looked at again, or ICON_COPY_RETRY_MS has passed
+function followCheck(asked) {
+  const again = () => {
+    window.removeEventListener("online", again);
+    document.removeEventListener("visibilitychange", onVisible);
+    clearTimeout(timer);
+    showQuickCopy("loading");
+    followCheck(quickApi("/api/quick/check", { key: quickKey, today: quickToday() }));
+  };
+  const onVisible = () => { if (document.visibilityState === "visible") again(); };
+  let timer = 0;
+  const wait = () => {
+    showQuickCopy("offline");
+    window.addEventListener("online", again);
+    document.addEventListener("visibilitychange", onVisible);
+    timer = setTimeout(again, ICON_COPY_RETRY_MS);
+  };
+  if (!asked) return wait();
+  asked.then((result) => {
+    if (result.status === 401) {
+      forgetIconCopy("quick", quickKey);
+      return keyStopped();
+    }
+    if (!result.ok || !result.data) return wait();
+    keepIconCopy("quick", quickKey, result.data);
+    useCheck(result.data);
+    showQuickCopy("fresh");
+  });
 }
 
 // The form: New Entry; New Prism (mode "prism", from Add Prism), which glows and keeps only what's filled in or picked
@@ -219,6 +287,7 @@ window.addEventListener("focus", moveFormToNewDay);
 // The password changed or the icon was replaced, so this icon can't add entries anymore: on to the sign-in
 // page, which says why (Login.js SIGNED_OUT_REASONS). Signed in already, that goes straight on to Home.
 function keyStopped() {
+  forgetIconCopy("quick", quickKey); // (What it showed goes from the device too)
   try {
     if (!localStorage.getItem("prismal_jwt")) sessionStorage.setItem("prismal_signed_out", "quickKey");
   } catch (e) {}

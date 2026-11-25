@@ -1451,7 +1451,7 @@ function trackerDays(key = "bob") {
   return { from: from > limit ? limit : from, to: to > limit ? limit : to, picked: !!(kept && (kept.from || kept.to)) };
 }
 
-// Where a row that fills in by itself is in the tracker table ("costs", "gains", "transfers", "interest", "undefined"), or -1
+// Where a row that fills in by itself is in the tracker table (one of TRACKER_AUTO_ROWS, like "costs"), or -1
 function trackerRowIndex(type) {
   return trackerData.findIndex((row, index) => index > 0 && !isSeparatorRow(row) && cleanString(row[0]) === type);
 }
@@ -1501,6 +1501,7 @@ function trackerWalk(from, to, visit) {
     const isTransfer = isTransferEntry(line.sprite);
     if (isTransfer) toAuto("transfers", entryPart(line), date, line.amount);
     else toAuto(line.amount > 0 ? "gains" : "costs", null, date, line.amount);
+    toAuto(line.amount > 0 ? "positives" : "negatives", null, date, line.amount);
     const counted = new Set();
     for (const match of byTitle.get(line.titleClean) || []) {
       if (counted.has(match.index) || !aliasCounts(match.count, line.amount) || (isTransfer && !match.countsTransfers)) continue;
@@ -1619,6 +1620,14 @@ const AUTO_ROW_HELP = {
     "Gains adds up every gain on your calendar and in History (✖️ Hidden ones too) between the tracker's From and To days, like paychecks and refunds. ⭕️ Transfers aren't counted, since moving money between your own accounts isn't income.",
     "It fills in by itself, so it can't be changed or deleted. Next to Costs, it shows whether you're spending less than comes in."
   ],
+  positives: [
+    "Positives adds up every entry above $0 on your calendar and in History between the tracker's From and To days: gains, ✖️ Hidden ones, and ⭕️ Transfers too (like money coming back from Savings).",
+    "It fills in by itself, so it can't be changed or deleted. Gains is the same without transfers."
+  ],
+  negatives: [
+    "Negatives adds up every entry below $0 on your calendar and in History between the tracker's From and To days: costs, ✖️ Hidden ones, and ⭕️ Transfers too (like money into Savings or onto a credit card).",
+    "It fills in by itself, so it can't be changed or deleted. Costs is the same without transfers."
+  ],
   transfers: [
     "Transfers adds up every ⭕️ Transfer (money moving between your own accounts, like into Savings or onto a credit card) and lists their titles, so they never land in Undefined.",
     "Other rows leave transfers out, unless their \"Count ⭕️ Transfers in this row\" switch is on. It fills in by itself, so it can't be changed or deleted."
@@ -1640,6 +1649,8 @@ function trackerAliasText(row, figure = null) {
   const found = figure ? [...figure.parts.values()].map(part => part.name).join(", ") : "";
   if (type === "costs") return "Every cost";
   if (type === "gains") return "Every gain";
+  if (type === "positives") return "Every entry above $0, transfers too";
+  if (type === "negatives") return "Every entry below $0, transfers too";
   if (type === "transfers") return found ? `Every transfer: ${found}` : "Every transfer";
   if (type === "interest") return found ? `Equity accounts' interest: ${found}` : "Equity accounts' interest";
   if (type === "undefined") return found;
@@ -1655,8 +1666,9 @@ function trackerCells(tr, row, figure) {
   tr.appendChild(noTranslate(cell(formatMoney(figure ? figure.total : 0), "amountCell")));
   const aliases = cell("", "aliasCell");
   aliases.appendChild(aliasBox(trackerAliasText(row, figure)));
-  // (Costs and Gains say what they count in the budget's own words, which translate; the rest are the person's)
-  tr.appendChild(isAuto && (type === "costs" || type === "gains") ? aliases : noTranslate(aliases));
+  // (Costs, Gains, Positives, and Negatives say what they count in the budget's own words, which translate; the rest are
+  // the person's)
+  tr.appendChild(isAuto && ["costs", "gains", "positives", "negatives"].includes(type) ? aliases : noTranslate(aliases));
 }
 
 // A row that fills in by itself: its title, with a "?" after it that says what the row does (AUTO_ROW_HELP), over the window.

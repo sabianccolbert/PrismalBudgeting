@@ -58,6 +58,8 @@ var S = window.STARFIELD; // Local pointer to global STARFIELD (may be null on s
 let SAVE_BEFORE_LEAVE_TIMEOUT_ID = null;     // setTimeout handle: freeze/save shortly before navigation
 let NAVIGATE_AFTER_SLIDE_TIMEOUT_ID = null;  // setTimeout handle: fallback navigation if transitionend fails
 let STILL_HERE = null;                       // { timer, onVisibility } while a page that slid out waits to be gone
+let LEAVE_AFTER_SAVE = null;                 // { ADDRESS, useReplace, WAY } while leaving waits for a change's save
+const LEAVE_SAVE_WAIT_MS = 8000;             // The longest leaving waits for it
 
 /* GROUP: Timer hygiene */
 // Cancel any pending transition timers and reset handles.
@@ -449,6 +451,23 @@ if (RUNNING_AS_APP) {
     onDOMReady(backToQuickEntry);
   }
 }
+
+/* GROUP: The "Add This Page To Your Home Screen" card closes */
+// (Quick Budget's, Quick Calendar's, and Snapshot's, each a .setupCard.) Its Done button closes it, the page an icon opens
+// never shows it (see each page's script: it's on the home screen already), and a page brought back by Back or Forward
+// whose address doesn't ask for it anymore (setup=1 comes off as it's shown) closes it.
+function closeSetupCard(CARD) {
+  if (!CARD) return;
+  CARD.hidden = true;
+  document.querySelectorAll(`[aria-controls="${CARD.id}"]`).forEach(BUTTON => BUTTON.setAttribute("aria-expanded", "false"));
+}
+document.addEventListener("click", (EVENT) => {
+  const DONE = EVENT.target.closest?.(".setupDone");
+  if (DONE) closeSetupCard(DONE.closest(".setupCard"));
+});
+window.addEventListener("pageshow", (EVENT) => {
+  if (EVENT.persisted && !new URLSearchParams(location.search).has("setup")) document.querySelectorAll(".setupCard").forEach(closeSetupCard);
+});
 
 /* GROUP: DOM helpers */
 // Get the transition wrapper element.
@@ -842,6 +861,22 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
   if (IS_TRANSITION_ACTIVE) return;
   if (!ADDRESS) return;
 
+  /* GROUP: A change still being saved goes first */
+  // (Like a switch turned off a moment before a link is tapped: left then, it could be left half done. The page waits up
+  // to LEAVE_SAVE_WAIT_MS, then goes on to the last place asked for.)
+  if (typeof window.whenChangesSaved === "function" && typeof window.changesInFlight === "function" && window.changesInFlight()) {
+    const WAITING = !!LEAVE_AFTER_SAVE;
+    LEAVE_AFTER_SAVE = { ADDRESS, useReplace, WAY };
+    if (WAITING) return;
+    window.BudgetUI?.showToast("Saving your change first...");
+    window.whenChangesSaved(LEAVE_SAVE_WAIT_MS).then(() => {
+      const NEXT = LEAVE_AFTER_SAVE;
+      LEAVE_AFTER_SAVE = null;
+      if (NEXT) transitionTo(NEXT.ADDRESS, NEXT.useReplace, NEXT.WAY);
+    });
+    return;
+  }
+
   /* GROUP: "back" keyword support */
   if (ADDRESS === "back") {
     ADDRESS = readStored("homepageBackUrl") || "/";
@@ -948,29 +983,38 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
   );
 }
 
-// How long a page that was left can stay on the screen before it shows again (longer than a next page takes to open,
-// even on a slow connection)
+// How long a page that was left can stay on the screen before it shows again: STILL_HERE_MS once the next page has come
+// (its prefetch, below, loaded), since it opens right after that, and STILL_HERE_MOST_MS while it's still coming (a slow
+// connection) or where the browser can't say (one that doesn't prefetch)
 const STILL_HERE_MS = 5000;
+const STILL_HERE_MOST_MS = 45000;
+const STILL_HERE_LOOK_MS = 1000;
+let NEXT_PAGE_CAME = null; // The next page's prefetch: false while it's coming, true once it came (or failed), null unknown
 
 // A page that slid out and was left, but is still here: the link opened outside this page (a phone's app can open the
 // site's other pages in a window of their own, which comes back here once it's closed) or was held back. It comes back
 // into view instead of leaving just the starfield: when it's back on the screen after being hidden, or if it's still on
-// the screen STILL_HERE_MS after it was left.
+// the screen that long after it was left (see STILL_HERE_MS). A next page that's only slow to come leaves it out of sight.
 function waitToBeGone() {
   stopWaitingToBeGone();
   let WAS_HIDDEN = document.visibilityState === "hidden";
+  const LEFT_AT = Date.now();
   const onVisibility = () => {
     if (document.visibilityState === "hidden") WAS_HIDDEN = true;
     else if (WAS_HIDDEN) bringPageBack();
   };
   document.addEventListener("visibilitychange", onVisibility);
-  STILL_HERE = {
-    onVisibility,
-    timer: setTimeout(() => {
-      if (document.visibilityState === "visible") bringPageBack();
-      else WAS_HIDDEN = true;
-    }, STILL_HERE_MS)
+  const look = () => {
+    if (!STILL_HERE) return;
+    if (document.visibilityState !== "visible") {
+      WAS_HIDDEN = true;
+      return;
+    }
+    const WAITED = Date.now() - LEFT_AT;
+    if ((NEXT_PAGE_CAME === true && WAITED >= STILL_HERE_MS) || WAITED >= STILL_HERE_MOST_MS) bringPageBack();
+    else STILL_HERE.timer = setTimeout(look, STILL_HERE_LOOK_MS);
   };
+  STILL_HERE = { onVisibility, timer: setTimeout(look, STILL_HERE_MS) };
 }
 
 // The page is gone (or back): nothing more to wait for
@@ -1009,10 +1053,17 @@ function hasChangesToSave() {
 // in sooner. (A browser that doesn't prefetch loads them when the page opens, as always.)
 function prefetchPage(ADDRESS, TO) {
   const ADDRESSES = [ADDRESS, "/Javascript/Boot.js", ...(typeof window.pageScripts === "function" ? window.pageScripts(TO) : [])];
-  ADDRESSES.forEach((HREF) => {
+  ADDRESSES.forEach((HREF, AT) => {
     const LINK = document.createElement("link");
     LINK.rel = "prefetch";
     LINK.href = HREF;
+    // (Whether the next page itself has come: see waitToBeGone)
+    if (AT === 0) {
+      NEXT_PAGE_CAME = LINK.relList && LINK.relList.supports && LINK.relList.supports("prefetch") ? false : null;
+      const CAME = () => { if (NEXT_PAGE_CAME === false) NEXT_PAGE_CAME = true; };
+      LINK.addEventListener("load", CAME);
+      LINK.addEventListener("error", CAME);
+    }
     document.head.appendChild(LINK);
   });
 }

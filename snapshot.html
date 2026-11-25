@@ -4,7 +4,7 @@
     <script src="/Javascript/Boot.js"></script>
     <link rel="stylesheet" href="/stylesheet.css?v=38ec0a5555">
     <link rel="preload" href="/Fonts/MainFont-Latin.woff2?v=854a3379ad" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/budgetStyle.css?v=8f217141fd">
+    <link rel="stylesheet" href="/budgetStyle.css?v=58f0ceb3e8">
     <link rel="stylesheet" href="/themes.css?v=99a757e39a">
     <title>Prismal Planning - Snapshot</title>
     <meta name="description" content="Prismal Planning is a modern budget that offers the features no other budget does.">
@@ -46,7 +46,7 @@
           </div>
         </div>
         <nav class="navButtons" aria-label="Pages">
-          <a class="navButton" href="/">
+          <a class="navButton snapshotHome" href="/">
             <img class="navIcon" src="/Resources/Icons/HomeNav.webp?v=8adf7194df" alt="">
             <span>Home</span>
           </a>
@@ -80,7 +80,7 @@
         <div id="panelSlot"></div>
 
         <!-- How to put this page on a phone's home screen (Add To Home Screen opens and closes it) -->
-        <section id="homeScreenCard" class="budgetCard settingsCard" aria-labelledby="homeScreenHeading" hidden>
+        <section id="homeScreenCard" class="budgetCard settingsCard setupCard" aria-labelledby="homeScreenHeading" hidden>
           <h3 id="homeScreenHeading">Add This Page To Your Home Screen</h3>
           <div class="deviceGuide">
             <div data-device="iphone">
@@ -111,6 +111,7 @@
           <p class="panelHint">Use the browser itself, not this page opened inside another app like Gmail, Instagram, or Facebook. If it's open inside one, use that app's menu (like ⋯) to open it in your browser first.</p>
           <p id="homeScreenLogin" class="panelHint">Then tap the new icon to open your Snapshot. It's your budget, so it asks you to log in the first time (an iPhone's home screen icon keeps its own login, apart from Safari's), and after 15 minutes without a tap, then opens your Snapshot again. To add an entry from your home screen with no login, use Quick Budget (the button at the right of Home).</p>
           <p id="homeScreenKeyed" class="panelHint" hidden>Then tap the new icon to see your Snapshot, with no login. Keep this page's address to yourself: anyone with it sees your budget's numbers. Settings (Signed-In Devices) turns Snapshot icons off.</p>
+          <div class="panelButtons"><button class="budgetButton setupDone" type="button">Done</button></div>
         </section>
 
         <p id="dataStatus" class="dataStatus">Loading...</p>

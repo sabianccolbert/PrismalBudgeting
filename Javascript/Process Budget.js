@@ -166,10 +166,105 @@ function fetchBudget() {
   return fetch(budgetLoadAddress(), { headers: { Authorization: `Bearer ${localStorage.getItem("prismal_jwt")}`, "Content-Type": "application/json" } });
 }
 
-// A Snapshot icon whose key stopped working (turned off in Settings, a new password, or its budget gone): its page says so
+// A Snapshot icon whose key stopped working (turned off in Settings, a new password, or its budget gone): its page says so,
+// and what it showed last goes from the device
 function snapshotKeyGone(response) {
   workspaceLoaded = false;
+  forgetIconCopy("snapshot", SNAPSHOT_KEY);
   document.dispatchEvent(new CustomEvent("snapshot:gone", { detail: { gone: response.status === 404 } }));
+}
+
+/* ---------- What an icon's page showed last ---------- */
+// Quick Budget's, Quick Calendar's, and a Snapshot icon's pages keep what they last got from the server on this device
+// (each icon's own, by a hash of its key, up to LIMITS.iconCopyChars), so the next time one opens it shows that right
+// away: its top card greyed, saying "Loading..." until the server answers, or "No Internet" while it can't be reached
+// (showIconFreshness), and nothing on it can be changed until then (each page's script holds its forms and buttons
+// back). One that waits ICON_COPY_WAIT_MS for the server shows the copy; a quicker answer shows as always. A key that
+// stops working takes its copy with it. A page's own copy is all it is: nothing is sent anywhere.
+const ICON_COPY_KEY = "prismal_icon_copy";
+const ICON_COPY_WAIT_MS = 400;
+const iconCopyName = (kind, key) => `${ICON_COPY_KEY}:${kind}:${shortHash(String(key))}`;
+function readIconCopy(kind, key) {
+  try {
+    const text = localStorage.getItem(iconCopyName(kind, key));
+    return text ? JSON.parse(text) : null;
+  } catch (e) {
+    return null;
+  }
+}
+function keepIconCopy(kind, key, data) {
+  try {
+    const text = JSON.stringify(data);
+    if (text.length > LIMITS.iconCopyChars) localStorage.removeItem(iconCopyName(kind, key));
+    else localStorage.setItem(iconCopyName(kind, key), text);
+  } catch (e) {}
+}
+function forgetIconCopy(kind, key) {
+  try { localStorage.removeItem(iconCopyName(kind, key)); } catch (e) {}
+}
+
+// An icon page's top card while it shows what it had last: state "loading" or "offline" greys it with a note saying so,
+// and "fresh" (the server's answer is in) takes both off
+function showIconFreshness(card, state) {
+  if (!card) return;
+  card.classList.toggle("isStale", state !== "fresh");
+  let note = card.querySelector(":scope > .staleNote");
+  if (state === "fresh") {
+    note?.remove();
+    card.removeAttribute("aria-busy");
+    return;
+  }
+  if (!note) {
+    note = document.createElement("p");
+    note.className = "staleNote";
+    note.setAttribute("role", "status");
+    card.prepend(note);
+  }
+  note.textContent = state === "offline" ? "No Internet" : "Loading...";
+  card.setAttribute("aria-busy", "true");
+}
+
+// A Snapshot icon's page: "loading", "offline", or "fresh" (see above), and Snapshot Page.js hears when it changes
+let snapshotFreshness = "fresh";
+function setSnapshotFreshness(state) {
+  snapshotFreshness = state;
+  document.dispatchEvent(new CustomEvent("iconpage:freshness", { detail: { state } }));
+}
+
+// The server's answer after a Snapshot icon's page showed what it had last: the budget worked out again from it, and the
+// page drawn again (budget:updated). One that doesn't come says "No Internet", and the page asks again once the device is
+// back online, it's looked at again, or ICON_COPY_RETRY_MS has passed.
+const ICON_COPY_RETRY_MS = 30000;
+function followSnapshotLoad(asked) {
+  asked.then(async (response) => {
+    if (response.status === 401 || response.status === 404) return snapshotKeyGone(response);
+    if (!response.ok) throw new Error(`Server responded with status: ${response.status}`);
+    const data = await response.json();
+    keepIconCopy("snapshot", SNAPSHOT_KEY, data);
+    const run = budgetQueue.then(async () => {
+      await useLoadedBudget(data, performance.now());
+      notifyBudgetChanged();
+    });
+    budgetQueue = run.catch(() => {});
+    await run;
+    setSnapshotFreshness("fresh");
+  }).catch(() => {
+    setSnapshotFreshness("offline");
+    let tried = false;
+    const again = () => {
+      if (tried) return;
+      tried = true;
+      window.removeEventListener("online", again);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearTimeout(timer);
+      setSnapshotFreshness("loading");
+      followSnapshotLoad(fetchBudget());
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") again(); };
+    window.addEventListener("online", again);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setTimeout(again, ICON_COPY_RETRY_MS);
+  });
 }
 
 async function loadWorkspace() {
@@ -189,7 +284,23 @@ async function loadWorkspace() {
   try {
     const requestedAt = performance.now(); // The daily update's change log starts when the budget is asked for
 
-    const response = await fetchBudget();
+    // (A Snapshot icon's page that has what it showed last shows that while a slow answer is on its way, or while there's
+    // none: see WHAT AN ICON'S PAGE SHOWED LAST)
+    const copy = SNAPSHOT_KEY ? readIconCopy("snapshot", SNAPSHOT_KEY) : null;
+    const asked = fetchBudget();
+    let response;
+    if (copy) {
+      const first = await Promise.race([asked.catch(() => null), new Promise(done => setTimeout(() => done(undefined), ICON_COPY_WAIT_MS))]);
+      if (!first) {
+        setSnapshotFreshness(first === null ? "offline" : "loading");
+        const shown = await useLoadedBudget(copy, requestedAt);
+        if (shown) followSnapshotLoad(asked);
+        return shown;
+      }
+      response = first;
+    } else {
+      response = await asked;
+    }
 
     if (SNAPSHOT_KEY && (response.status === 401 || response.status === 404)) {
       snapshotKeyGone(response);
@@ -208,63 +319,71 @@ async function loadWorkspace() {
     }
 
     const data = await response.json();
-    if (SNAPSHOT_KEY) window.snapshotLook = data.look || null; // (The icon's own look, for its page: Quick Icon.js)
-    const storedAccounts = readLoadedTables(data);
-    openedBudget(data.budget);
-    workspaceLoaded = true;
-    // Accounts that were just set up (like Savings in a new budget) are saved right away, so the
-    // Quick Budget page can list them too
-    if (!unsavableTables.has("accounts") && JSON.stringify(accountsData) !== JSON.stringify(storedAccounts)) accountsEdited = true;
-
-    // Use the date from the database (yesterday if it's missing). A brand-new account (never
-    // processed, empty calendar) starts today instead: there are no missed days to catch up.
-    const calendarIsEmpty = calendarData.every(row => row.every(cell => String(cell).trim() === ""));
-    const isNewAccount = !data.last_processed_date && calendarIsEmpty;
-    lastDailyUpdate = isNewAccount ? today : createSafeMidnight(data.last_processed_date || yesterday);
-    // The budget's day never goes back. After flying west across a Sunday, or with the clock set back, this
-    // device's date can be before the day the budget was last brought up to date (on this device or another
-    // one); the calendar would then be laid out on the week before, and every day's entries would land on
-    // the wrong day. So the budget keeps that later day until this device's date catches up.
-    if (lastDailyUpdate.getTime() > today.getTime()) setBudgetDay(lastDailyUpdate);
-    if (isNewAccount) {
-      pendingProcessedDate = formatToMMDDYYYY(today);
-      try { localStorage.setItem(GETTING_STARTED_KEY, String(budgetInfo ? budgetInfo.id : "1")); } catch (e) {}
-    }
-    const isNewDay = lastDailyUpdate.getTime() < today.getTime();
-    lastActiveDay = latestActiveDay(lastDailyUpdate, data.quick_entries);
-
-    // Catch up any missed days, then rebuild everything computed from the entries
-    // (recurring entries, math, Bob's message, tracker). Only tables that changed get saved.
-    const loadSnapshot = snapshotTables();
-    try {
-      beginChangeLog("🕛 Daily Update", requestedAt);
-      await performDailyUpdate();
-      stripRecurringEntries();
-      refreshBudgetData();
-      if (isNewDay) finishChangeLog(); // Logged once per day, like the spreadsheet's nightly run
-    } catch (err) {
-      workspaceLoaded = false; // Half-updated data must never be saved
-      throw err;
-    }
-    markChangedTables(loadSnapshot);
-    isDailyUpdate = false;
-
-    const allSaved = await saveChanges();
-
-    // Only mark the days as processed once the processed data is stored. If a save failed,
-    // the database still has the old calendar AND the old date, so the next load redoes them.
-    if (allSaved && pendingProcessedDate && !SNAPSHOT_KEY) {
-      if (await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
-    }
-    if (SNAPSHOT_KEY) return true;
-    await holdQuickEntries(data.quick_entries); // Made with Quick Budget icons: this device's are added, the rest wait on Home
-    queueReminderPlanSync();
-    return true;
+    if (SNAPSHOT_KEY) keepIconCopy("snapshot", SNAPSHOT_KEY, data);
+    return await useLoadedBudget(data, requestedAt);
 
   } catch (err) {
     console.error("Failed to load workspace:", err);
     return false;
   }
+}
+
+// The budget the server sent (data: what /api/data/load answers, or a Snapshot icon's copy of it), read in and brought up
+// to date: the daily update, everything worked out again, and what changed saved. true once it's in.
+async function useLoadedBudget(data, requestedAt) {
+  isDailyUpdate = true;
+  if (SNAPSHOT_KEY) window.snapshotLook = data.look || null; // (The icon's own look, for its page: Quick Icon.js)
+  const storedAccounts = readLoadedTables(data);
+  openedBudget(data.budget);
+  workspaceLoaded = true;
+  // Accounts that were just set up (like Savings in a new budget) are saved right away, so the
+  // Quick Budget page can list them too
+  if (!unsavableTables.has("accounts") && JSON.stringify(accountsData) !== JSON.stringify(storedAccounts)) accountsEdited = true;
+
+  // Use the date from the database (yesterday if it's missing). A brand-new account (never
+  // processed, empty calendar) starts today instead: there are no missed days to catch up.
+  const calendarIsEmpty = calendarData.every(row => row.every(cell => String(cell).trim() === ""));
+  const isNewAccount = !data.last_processed_date && calendarIsEmpty;
+  lastDailyUpdate = isNewAccount ? today : createSafeMidnight(data.last_processed_date || yesterday);
+  // The budget's day never goes back. After flying west across a Sunday, or with the clock set back, this
+  // device's date can be before the day the budget was last brought up to date (on this device or another
+  // one); the calendar would then be laid out on the week before, and every day's entries would land on
+  // the wrong day. So the budget keeps that later day until this device's date catches up.
+  if (lastDailyUpdate.getTime() > today.getTime()) setBudgetDay(lastDailyUpdate);
+  if (isNewAccount) {
+    pendingProcessedDate = formatToMMDDYYYY(today);
+    try { localStorage.setItem(GETTING_STARTED_KEY, String(budgetInfo ? budgetInfo.id : "1")); } catch (e) {}
+  }
+  const isNewDay = lastDailyUpdate.getTime() < today.getTime();
+  lastActiveDay = latestActiveDay(lastDailyUpdate, data.quick_entries);
+
+  // Catch up any missed days, then rebuild everything computed from the entries
+  // (recurring entries, math, Bob's message, tracker). Only tables that changed get saved.
+  const loadSnapshot = snapshotTables();
+  try {
+    beginChangeLog("🕛 Daily Update", requestedAt);
+    await performDailyUpdate();
+    stripRecurringEntries();
+    refreshBudgetData();
+    if (isNewDay) finishChangeLog(); // Logged once per day, like the spreadsheet's nightly run
+  } catch (err) {
+    workspaceLoaded = false; // Half-updated data must never be saved
+    throw err;
+  }
+  markChangedTables(loadSnapshot);
+  isDailyUpdate = false;
+
+  const allSaved = await saveChanges();
+
+  // Only mark the days as processed once the processed data is stored. If a save failed,
+  // the database still has the old calendar AND the old date, so the next load redoes them.
+  if (allSaved && pendingProcessedDate && !SNAPSHOT_KEY) {
+    if (await saveProcessedDate(pendingProcessedDate)) pendingProcessedDate = null;
+  }
+  if (SNAPSHOT_KEY) return true;
+  await holdQuickEntries(data.quick_entries); // Made with Quick Budget icons: this device's are added, the rest wait on Home
+  queueReminderPlanSync();
+  return true;
 }
 
 // Where the budget loads from: /api/data/load, naming the budget (see budgetQuery) and the Quick Budget icons this device
@@ -693,7 +812,7 @@ function groupFutureRowsByDate() {
 
 let parsedRecurringKept = { key: null, rows: null }; // (The last list getParsedRecurringRows made, by the rows' text and the day)
 
-// Every Recurring Entries row, parsed: [{ title, amt, sprite, percent, parsed }]. Parsed once for as long as the rows and
+// Every Recurring Entries row, parsed: [{ title, amt, sprite, percent, base, parsed }]. Parsed once for as long as the rows and
 // the day stay the same (any change to the rows makes a new list): a change asks a dozen times, and the same list lets
 // rowsLandingOn find each one's days a year at a time once, not again for each new list. A list handed out is only read.
 function getParsedRecurringRows() {
@@ -708,6 +827,7 @@ function getParsedRecurringRows() {
       amt: parseAmount(String(recurringData[i][1])),
       sprite: recurringData[i][5],
       percent: percentOf(recurringData[i][5]),
+      base: readPercentBase(recurringData[i][PERCENT_OF_COLUMN]), // (What its % is of, when it picked: see PERCENT_OF_COLUMN)
       parsed: parsed
     });
   }
@@ -848,10 +968,13 @@ const MAX_LOG_ROWS = LIMITS.logRows;
 const MAX_TABLE_BYTES = LIMITS.tableBytes;
 
 // Tracker rows that updateTrackerTab fills in itself (their titles and aliases aren't user-edited, and they
-// can't be deleted)
-const TRACKER_AUTO_ROWS = ["gains", "costs", "transfers", "interest", "undefined"];
-// The Interest row is marked in its [5] (a row someone titled Interest before it came is renamed, see updateTrackerTab)
+// can't be deleted). Positives and Negatives are every entry above and below $0, transfers too (Gains and Costs leave
+// transfers out).
+const TRACKER_AUTO_ROWS = ["gains", "costs", "positives", "negatives", "transfers", "interest", "undefined"];
+// The rows that came after the first ones (Interest, Positives, Negatives) are marked in their [5], so a row someone gave
+// one of their titles before it came is renamed instead of taken over (see updateTrackerTab)
 const INTEREST_ROW_MARK = "auto";
+const MARKED_TRACKER_ROWS = ["interest", "positives", "negatives"];
 // A new budget's tracker starts with these ordinary rows too: [title, aliases (each counting all of its amounts)]
 const NEW_TRACKER_ROWS = [["Unknown", ["Misc", "Catchup", "Other"]]];
 
@@ -861,7 +984,7 @@ const ROW_TABLES = {
   tracker:   { name: "Tracker",   headerRows: 1, get: () => trackerData,   set: (rows) => { trackerData = rows; },   categoryRow: (title) => ["-", title, "", "", "-"] },
   // (Equity's sections are rows like Recurring's, ["-", title, ...]: accountRows and the API's readAccounts skip them)
   accounts:  { name: "Accounts",  headerRows: 1, get: () => accountsData.list, set: (rows) => { accountsData.list = rows; }, categoryRow: (title) => ["-", title, ...new Array(TABLE_SHAPES.accounts.cols - 2).fill("")] },
-  // The Recipes page's Pantry (sections like Recurring's) and its list of foods (see THE KITCHEN)
+  // The Kitchen tab's Pantry (sections like Recurring's) and its list of foods (see THE KITCHEN)
   pantry:    { name: "Pantry",    headerRows: 0, get: () => kitchenData.pantry, set: (rows) => { kitchenData.pantry = rows; }, categoryRow: (title) => ["-", title, null, "", ""] },
   foods:     { name: "Foods",     headerRows: 0, get: () => kitchenData.foods, set: (rows) => { kitchenData.foods = rows; } }
 };
@@ -1463,7 +1586,7 @@ function deleteBudgetRows(tableName, indexes) {
   return runBudgetAction(`🔧 Delete ${ROW_TABLES[tableName].name} Rows`, () => deleteTableRows(tableName, indexes), kitchenUndo(tableName, `deleted ${count} ${count === 1 ? "row" : "rows"} from`));
 }
 
-// The Pantry's and the foods list's edit mode changes are Undo steps (Home's Undo and the Recipes page's take them back);
+// The Pantry's and the foods list's edit mode changes are Undo steps (Home's Undo and the Kitchen tab's take them back);
 // the other tables' aren't
 function kitchenUndo(tableName, what) {
   const names = { pantry: "the Pantry", foods: "your foods" };
@@ -1703,9 +1826,30 @@ function runBudgetAction(logType, change, undo = null) {
   const requestedAt = performance.now(); // The change log's start: when the change was asked for
   // (A window's Save that asked for it: the window closes once it's made, BudgetUI.changeMade)
   const asker = typeof BudgetUI !== "undefined" && BudgetUI.windowAsking ? BudgetUI.windowAsking() : null;
+  changesRunning++;
   const run = budgetQueue.then(() => processBudgetAction(logType, change, undo, requestedAt, asker));
-  budgetQueue = run.catch(() => {});
+  budgetQueue = run.catch(() => {}).finally(() => { changesRunning--; });
   return run;
+}
+
+// A page that's left while a change is still being made or saved (like a switch turned off a moment before a link is
+// tapped) waits for it first, so it isn't left half done (Layout.js transitionTo): changesInFlight says whether one is,
+// and whenChangesSaved(maxMs) resolves once none is (true), or after maxMs (false). A change the server couldn't get
+// (offline) isn't waited for: the browser asks before the page is left, as always.
+let changesRunning = 0;
+function changesInFlight() {
+  return changesRunning > 0 || savingNow;
+}
+function whenChangesSaved(maxMs) {
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const look = () => {
+      if (!changesInFlight()) return resolve(true);
+      if (Date.now() - started >= maxMs) return resolve(false);
+      setTimeout(look, 100);
+    };
+    look();
+  });
 }
 
 // The page shows a change right away (it's saved right after), and its change log row says how long that
@@ -2269,8 +2413,9 @@ function unique(entry) {
           moveSprite = targetIncomingSpecial + virginMark;
         }
       }
-      // (A % entry needs its Equity account, and stays what it came to on a day that passed)
-      if (finalPercent !== null && (dateMove < today || !linkedAccount(moveSprite || "❗️", title))) finalPercent = null;
+      // (A % entry needs its Equity account, or what its recurring entry's % is of, and stays what it came to on a day that
+      // passed)
+      if (finalPercent !== null && (dateMove < today || (!linkedAccount(moveSprite || "❗️", title) && !percentBaseFor(moveSprite || "❗️", title)))) finalPercent = null;
       if (finalPercent !== null || percentOf(moveSprite) !== null) moveSprite = percentSprite(moveSprite, finalPercent);
       // 7. Inject combined result back into target date
       injectOrDefer("set", dateMove, moveAmt, title, moveSprite, {}, placeholder);
@@ -2595,25 +2740,76 @@ function recurring(fields) {
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(today);
   let endDate = resolveEndDate(fields.endDate, "None");
   let percent = readPercent(fields.percent);
+  const base = percent !== null ? checkedPercentBase(fields.percentOf, title, getSpecialType(sprite)) : null;
   if (percent !== null) sprite = percentSprite(sprite, percent);
-  let amount = formatMoney(recurringAmount(percent, hasAmount ? fields.amount : 0, startDate, sprite, title));
-  recurringData.push([title, amount, formatToMMDDYYYY(startDate), frequency, endDate, sprite]);
+  let amount = formatMoney(recurringAmount(percent, hasAmount ? fields.amount : 0, startDate, sprite, title, base));
+  recurringData.push([title, amount, formatToMMDDYYYY(startDate), frequency, endDate, sprite, ...(base ? [percentBaseText(base)] : [])]);
 
   formEntryRow[2] = "✔️ Create Recurring";
   formEntryRow[3] = baseSprite(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
   formEntryRow[4] = frequency + ": " + showDate(startDate);
   formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
-  formEntryRow[6] = "Amount: " + (percent !== null ? `${showPercent(percent)} (${amount})` : amount);
+  formEntryRow[6] = "Amount: " + (percent !== null ? `${percentWords(percent, base)} (${amount})` : amount);
   return {};
 }
 
 // A recurring entry's stored amount: its own, or for a % entry (percent, checked here), about what it comes to the first
-// time it lands from today on (each day works its own out)
-function recurringAmount(percent, amount, startDate, sprite, title) {
+// time it lands from today on (each day works its own out). base: what the % is of (see PERCENT_OF_COLUMN), or null for
+// its own Equity account.
+const PERCENT_NEEDS_BASE = "A % amount needs something to be a percent of. Tap % to pick a recurring entry or an Equity account.";
+function recurringAmount(percent, amount, startDate, sprite, title, base = null) {
   if (percent === null) return amount;
-  const amountOn = percentAmount(percent, startDate > today ? startDate : today, sprite, title);
-  if (amountOn === null) throw new BudgetInputError(PERCENT_NEEDS_ACCOUNT);
+  const amountOn = percentAmount(percent, startDate > today ? startDate : today, sprite, title, base);
+  if (amountOn === null) throw new BudgetInputError(PERCENT_NEEDS_BASE);
   return amountOn;
+}
+
+// "10%", or "10% of Paycheck" for one with a base (a Change Logs row's words, and the Recurring page's)
+function percentWords(percent, base) {
+  return base ? `${showPercent(percent)} of ${base.of === "recurring" ? base.title : base.name}` : showPercent(percent);
+}
+
+// What a recurring entry's % is of, as the form picked it, checked (null for its own Equity account): an Equity account
+// that's there, or another recurring entry (not itself, with an amount of its own: one that's a % can't be what another is
+// a percent of). title and special: the entry's own; selfIndex: its row, when it's being changed.
+function checkedPercentBase(base, title, special, selfIndex = -1) {
+  if (!base || typeof base !== "object") return null;
+  if (base.of === "account") {
+    const account = accountTitleMap().get(cleanString(base.name));
+    if (!account) throw new BudgetInputError(`${String(base.name || "That account")} isn't one of your Equity accounts anymore. Tap % to pick another.`);
+    return { of: "account", name: account.name };
+  }
+  if (base.of !== "recurring") return null;
+  if (cleanString(base.title) === cleanString(title) && base.type === special) throw new BudgetInputError("A recurring entry can't be a percent of itself. Tap % to pick another.");
+  const at = recurringTwin(base.title, base.type);
+  if (at !== -1 && at === selfIndex) throw new BudgetInputError("A recurring entry can't be a percent of itself. Tap % to pick another.");
+  if (at === -1) throw new BudgetInputError(`${String(base.title || "That entry")} isn't one of your recurring entries anymore. Tap % to pick another.`);
+  const row = recurringData[at];
+  if (percentOf(row[5]) !== null) throw new BudgetInputError(`${String(row[0]).trim()} is a % itself, so it can't be what this one is a percent of. Pick one with an amount.`);
+  return { of: "recurring", title: String(row[0]).trim(), type: base.type };
+}
+
+// The recurring entries (other than exceptIndex) whose % is of the one with this title and type: their titles
+function percentDependents(title, special, exceptIndex = -1) {
+  const clean = cleanString(title);
+  const found = [];
+  for (let i = 2; i < recurringData.length; i++) {
+    if (i === exceptIndex || String(recurringData[i][0]).trim() === "-" || percentOf(recurringData[i][5]) === null) continue;
+    const base = readPercentBase(recurringData[i][PERCENT_OF_COLUMN]);
+    if (base && base.of === "recurring" && cleanString(base.title) === clean && base.type === special) found.push(String(recurringData[i][0]).trim());
+  }
+  return found;
+}
+
+// A recurring entry with a new title or type: the ones whose % is of it follow it
+function followPercentBases(oldTitle, oldSpecial, newTitle, newSpecial) {
+  const clean = cleanString(oldTitle);
+  for (let i = 2; i < recurringData.length; i++) {
+    const base = readPercentBase(recurringData[i][PERCENT_OF_COLUMN]);
+    if (base && base.of === "recurring" && cleanString(base.title) === clean && base.type === oldSpecial) {
+      recurringData[i][PERCENT_OF_COLUMN] = percentBaseText({ of: "recurring", title: newTitle, type: newSpecial });
+    }
+  }
 }
 
 // Change the recurring entry that was clicked (every field comes from the edit panel). Its title, Equity account, and
@@ -2640,6 +2836,10 @@ function editRecurringRow(index, fields) {
   let newSpecial = getSpecialType(sprite);
   let renamed = cleanString(oldTitle) !== cleanString(title) || oldSpecial !== newSpecial;
   refuseRecurringTwin(title, sprite, index, !renamed);
+  // (What its % is of: as the form picked it, or as it was. One that others are a percent of keeps an amount.)
+  const base = percent === null ? null : fields.percentOf !== undefined ? checkedPercentBase(fields.percentOf, title, newSpecial, index) : readPercentBase(row[PERCENT_OF_COLUMN]);
+  const dependent = percent !== null ? percentDependents(oldTitle, oldSpecial, index)[0] : null;
+  if (dependent) throw new BudgetInputError(`${dependent} is a percent of this one, so this one needs an amount (not a %).`);
   let startDate = fields.startDate ? createSafeMidnight(fields.startDate) : createSafeMidnight(row[2]);
   let endDate = resolveEndDate(fields.endDate ?? "None", row[4]);
   let frequency = readFrequency(String(fields.frequency || "").trim() || row[3]);
@@ -2649,20 +2849,23 @@ function editRecurringRow(index, fields) {
   if (renamed && recurringTwin(oldTitle, oldSpecial, index) === -1) {
     moveRecurringTemps(cleanString(oldTitle), oldSpecial, title, newSpecial);
     moveDayNotes(oldTitle, oldSpecial, title, newSpecial, today);
+    followPercentBases(oldTitle, oldSpecial, title, newSpecial);
   }
 
-  row[1] = formatMoney(recurringAmount(percent, hasAmount ? fields.amount : parseAmount(row[1]), startDate, sprite, title));
+  row[1] = formatMoney(recurringAmount(percent, hasAmount ? fields.amount : parseAmount(row[1]), startDate, sprite, title, base));
   row[0] = title;
   row[2] = formatToMMDDYYYY(startDate);
   row[3] = frequency;
   row[4] = endDate;
   row[5] = sprite;
+  if (base) row[PERCENT_OF_COLUMN] = percentBaseText(base);
+  else if (row.length > PERCENT_OF_COLUMN) row.length = PERCENT_OF_COLUMN;
 
   formEntryRow[2] = "✔️ Change Recurring";
   formEntryRow[3] = baseSprite(sprite) + " " + title + (isPlaceholder(sprite) ? " (Placeholder)" : "");
   formEntryRow[4] = frequency + ": " + showStoredDate(row[2]);
   formEntryRow[5] = "Expiration: " + showStoredDate(endDate);
-  formEntryRow[6] = "New Amount: " + (percent !== null ? `${showPercent(percent)} (${row[1]})` : row[1]);
+  formEntryRow[6] = "New Amount: " + (percent !== null ? `${percentWords(percent, base)} (${row[1]})` : row[1]);
   return {};
 }
 
@@ -3953,6 +4156,11 @@ function renameAccountEntries(oldClean, newName) {
     let row = recurringData[i];
     const newTitle = String(row[0]).trim() !== "-" ? renamedTitle(row[5], row[0]) : null;
     if (newTitle !== null) row[0] = newTitle;
+    // (What its % is of: the account, or a recurring entry for it, by its new name)
+    const base = readPercentBase(row[PERCENT_OF_COLUMN]);
+    if (base && base.of === "account" && cleanString(base.name) === oldClean) row[PERCENT_OF_COLUMN] = percentBaseText({ of: "account", name: newName });
+    const baseTitle = base && base.of === "recurring" ? renamedTitle(base.type, base.title) : null;
+    if (baseTitle !== null) row[PERCENT_OF_COLUMN] = percentBaseText({ ...base, title: baseTitle });
   }
 
   for (let i = 1; i < trackerData.length; i++) {
@@ -5602,7 +5810,7 @@ function backupPlans(backup) {
     });
   }
 
-  // The kitchen (the Recipes page and the Meals fractal), a list at a time: recipes and meals by their ids, the Pantry's
+  // The kitchen (the Kitchen tab and the Meals fractal), a list at a time: recipes and meals by their ids, the Pantry's
   // rows by food, unit, and expiration (a section by its title), and the foods by name. A meal of the backup's that follows
   // a recipe the budget won't have keeps the recipe's title, foods, and notes as its own. Which days' meals already came
   // out of the Pantry stays the budget's (or the backup's, when it's later), so none come out twice.
@@ -5869,7 +6077,7 @@ function saveHolidays(fields) {
   });
 }
 
-/* ---------- The kitchen (the Recipes page, and the Meals fractal) ---------- */
+/* ---------- The kitchen (the Kitchen tab, and the Meals fractal) ---------- */
 // The budget's recipes, Pantry, meals, and foods are its kitchen table (saved like the rest of the budget, so everyone it's
 // shared with sees them), worked with by Kitchen.js:
 //   pantry:  rows of [name, amount (a number, or null for none), unit, expires (MM/DD/YYYY or ""), shop ("1" while it's
@@ -6398,6 +6606,10 @@ function writeSheetsToCell(cellText, day, date) {
 function releaseSheetTemps() {
   const known = new Set();
   for (const connection of sheetsData?.list || []) {
+    // (A connection whose last read couldn't work its entries out, like a calendar while its pay settings are being
+    // changed, has none for now: the temps wait for a read that has them. Let go, a day moved to another one would be a
+    // plain entry there, and the paycheck its next read lands on that day would be added into it.)
+    if (connection.entries.length === 0 && connection.problems.length > 0) return;
     for (const entry of parsedSheetEntries(connection)) known.add(entry.clean + "|" + entry.special);
   }
   // (A placeholder stays one, and a % entry stays one)
@@ -6764,6 +6976,11 @@ function searchTargets(terms) {
     described.push(`the ${String(row[0]).trim()} tracker row`);
     if (rowType === "costs" || rowType === "gains") {
       targets.push({ clean: null, count: rowType, withTransfers: false });
+      continue;
+    }
+    // (Positives and Negatives: every gain or cost, transfers checked too)
+    if (rowType === "positives" || rowType === "negatives") {
+      targets.push({ clean: null, count: rowType === "positives" ? "gains" : "costs", withTransfers: true });
       continue;
     }
     if (rowType === "transfers") {
@@ -7225,6 +7442,46 @@ function lowestThrough(until) {
   return found;
 }
 
+// The lowest In Bank (or, with an Equity account picked for In Bank, that account's) from one day through another, and
+// what it is on the last of them: { lowest: { amount, date } (null when no day has one), last }. Days before today are
+// what History and the calendar have; from today on, the budget's projection, kept until the next change and reaching
+// past what was asked (LOWEST_BETWEEN_EXTRA), so moving the calendar along doesn't work it out again each time. For
+// Home's Lowest card, which follows the five weeks showing (Calendar Page.js).
+const LOWEST_BETWEEN_EXTRA = 6; // Months
+let lowestProjection = null; // { until, name, today, projection, index }
+const lowestBetweenKept = new Map();
+document.addEventListener("budget:updated", () => {
+  lowestProjection = null;
+  lowestBetweenKept.clear();
+});
+function lowestBetween(from, to) {
+  const name = shownAccountName();
+  const key = `${from.getTime()}|${to.getTime()}|${today.getTime()}|${name}`;
+  if (lowestBetweenKept.has(key)) return lowestBetweenKept.get(key);
+  const needs = to < today ? today : to;
+  if (!lowestProjection || lowestProjection.name !== name || lowestProjection.today !== today.getTime() || lowestProjection.until < needs) {
+    const summaries = accountSummaries();
+    const until = addMonths(needs, LOWEST_BETWEEN_EXTRA);
+    const index = name ? summaries.find(summary => summary.name === name)?.index : undefined;
+    lowestProjection = { until, name, today: today.getTime(), projection: projectBudget(until, summaries), index };
+  }
+  const { projection, index } = lowestProjection;
+  const balanceOn = (day) => {
+    if (index !== undefined) return projection.accountOn(index, day);
+    if (day >= today) return projection.inBankOn(day);
+    const shown = budgetDayAt(day);
+    return shown ? readInBank(shown.text) : null;
+  };
+  let lowest = null;
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    const amount = balanceOn(day);
+    if (amount !== null && (!lowest || amount < lowest.amount)) lowest = { amount, date: day };
+  }
+  const found = { lowest, last: balanceOn(to) };
+  lowestBetweenKept.set(key, found);
+  return found;
+}
+
 // A day's text as it's shown: with an account picked, its In Bank line is that account's balance ("✅ $310.00 Card 2"),
 // so a tap on it isn't In Bank's
 function shownDayText(text, date) {
@@ -7464,14 +7721,17 @@ function affirmationIndex(date) {
 function updateTrackerTab() {
   let yearly = 0;
   let monthly = 0;
+  let yearlyAll = 0; // (The same two with transfers too: see recurringAllTotals)
+  let monthlyAll = 0;
 
   // Each row keeps the stored row it came from (stored: null for a row added here), so rows can be added
   // anywhere in the list. A row someone titled Interest before the Interest row came is renamed, so the Interest row
   // doesn't take its aliases over.
   let trackerRows = [];
   for (let stored of trackerData.slice(1)) {
-    if (cleanString(stored[0]) === "interest" && stored[5] !== INTEREST_ROW_MARK) {
-      const kept = String(stored[0]).trim().startsWith("⭕️") ? "⭕️Interest Entries" : "Interest Entries";
+    const storedTitle = cleanString(stored[0]);
+    if (MARKED_TRACKER_ROWS.includes(storedTitle) && stored[5] !== INTEREST_ROW_MARK) {
+      const kept = `${String(stored[0]).trim().startsWith("⭕️") ? "⭕️" : ""}${capitalize(storedTitle)} Entries`;
       stored = [kept, ...stored.slice(1)];
     }
     let title = String(stored[0]).trim().toLowerCase();
@@ -7505,8 +7765,13 @@ function updateTrackerTab() {
   // (Interest goes just under Transfers)
   if (findRow("interest") === -1) trackerRows.splice(findRow("transfers") + 1, 0, autoRow("Interest"));
   if (findRow("undefined") === -1) trackerRows.push(autoRow("Undefined"));
+  // (Positives and Negatives go just under Costs and Gains)
+  if (findRow("positives") === -1) trackerRows.splice(Math.max(findRow("costs"), findRow("gains")) + 1, 0, autoRow("Positives", ["Leave Empty"]));
+  if (findRow("negatives") === -1) trackerRows.splice(findRow("positives") + 1, 0, autoRow("Negatives", ["Leave Empty"]));
   const costIndex = findRow("costs");
   const gainIndex = findRow("gains");
+  const positiveIndex = findRow("positives");
+  const negativeIndex = findRow("negatives");
   const transferIndex = findRow("transfers");
   const interestIndex = findRow("interest");
   const undefIndex = findRow("undefined");
@@ -7538,7 +7803,7 @@ function updateTrackerTab() {
   // (A Map, so titles like "constructor" can't collide with an object's built-in properties.)
   let aliasDictionary = new Map();
   for (let tr = 0; tr < trackerRows.length; tr++) {
-    if ([undefIndex, costIndex, gainIndex, transferIndex, interestIndex].includes(tr) || trackerRows[tr].isSeparator) continue;
+    if ([undefIndex, costIndex, gainIndex, positiveIndex, negativeIndex, transferIndex, interestIndex].includes(tr) || trackerRows[tr].isSeparator) continue;
     for (let alias of trackerRows[tr].aliases) {
       let { clean, count } = parseAlias(alias);
       if (!clean) continue;
@@ -7570,6 +7835,7 @@ function updateTrackerTab() {
       const isTransfer = isTransferEntry(line.sprite);
       if (lineAmt > 0 && !isTransfer) addToRow(trackerRows[gainIndex], lineAmt);
       if (lineAmt < 0 && !isTransfer) addToRow(trackerRows[costIndex], lineAmt);
+      addToRow(trackerRows[lineAmt > 0 ? positiveIndex : negativeIndex], lineAmt);
       if (isTransfer) {
         if (!trackerRows[transferIndex].aliases.includes(lineTitle)) trackerRows[transferIndex].aliases.push(lineTitle);
         addToRow(trackerRows[transferIndex], lineAmt);
@@ -7592,6 +7858,7 @@ function updateTrackerTab() {
       }
 
       if (lineAmt < 0 && counter <= pastDays && !isTransfer) yearly += lineAmt;
+      if (lineAmt < 0 && counter <= pastDays) yearlyAll += lineAmt;
     }
   }
 
@@ -7627,6 +7894,10 @@ function updateTrackerTab() {
   newRows[interestIndex][5] = INTEREST_ROW_MARK;
   newRows[gainIndex][4] = trackerRows[gainIndex].aliases.join(", ");
   newRows[costIndex][4] = trackerRows[costIndex].aliases.join(", ");
+  for (const index of [positiveIndex, negativeIndex]) {
+    newRows[index][4] = trackerRows[index].aliases.join(", ");
+    newRows[index][5] = INTEREST_ROW_MARK;
+  }
   trackerData = [trackerData[0], ...newRows];
 
   // Recurring summary: about how much the recurring costs add up to each month, and Yearly: this year's
@@ -7636,13 +7907,23 @@ function updateTrackerTab() {
   const tomorrow = addDays(today, 1);
   const endOfThisYear = new Date(today.getFullYear(), 11, 31);
   for (let row of getParsedRecurringRows()) {
-    if (row.amt >= 0 || isTransferEntry(row.sprite)) continue;
-    monthly += row.amt * timesPerMonth(row.parsed.frequency);
-    yearly += row.amt * countRecurringHits(row.parsed, tomorrow, endOfThisYear);
+    if (row.amt >= 0) continue;
+    const perMonth = row.amt * timesPerMonth(row.parsed.frequency);
+    const thisYear = row.amt * countRecurringHits(row.parsed, tomorrow, endOfThisYear);
+    monthlyAll += perMonth;
+    yearlyAll += thisYear;
+    if (isTransferEntry(row.sprite)) continue;
+    monthly += perMonth;
+    yearly += thisYear;
   }
   recurringData[0][5] = formatMoney(Math.round(yearly * 100) / 100);
   recurringData[0][2] = formatMoney(Math.round(monthly * 100) / 100);
+  recurringAllTotals = { monthly: formatMoney(Math.round(monthlyAll * 100) / 100), yearly: formatMoney(Math.round(yearlyAll * 100) / 100) };
 }
+
+// Recurring Entries' Monthly and Yearly with transfers counted too ({ monthly, yearly }, as shown), worked out with the
+// tracker (recurringData[0] keeps the two without them)
+let recurringAllTotals = { monthly: "", yearly: "" };
 
 /* ---------- Paycheck Calculator ---------- */
 // Calculator tab: [row][0] label, [row][1] value. Rows 0-2 are the results, rows 4-20 the inputs
@@ -7760,8 +8041,9 @@ function calculator(values) {
 // crystals (row 21) and the Accrual Calculator's gems (row 23), presets of their boxes like Quick Budget's prisms (each { id,
 // name ("" for none), values: { box: what it keeps } }, only the boxes that were filled in), and the Accrual Calculator's
 // boxes as they were last left (row 22: { box: value }), which start it the next time. A preset's id stays with it through
-// changes, so a goal can follow a gem (see Gems and goals).
-const CALCULATOR_STORES = { crystals: [21, "Crystals"], debt: [22, "Accrual Calculator"], gems: [23, "Gems"] };
+// changes, so a goal can follow a gem (see Gems and goals). Row 24 keeps how often the Paycheck Calculator's pay comes
+// ({ every }: see PAY_FREQUENCIES), for its graph and its figures.
+const CALCULATOR_STORES = { crystals: [21, "Crystals"], debt: [22, "Accrual Calculator"], gems: [23, "Gems"], paycheck: [24, "Pay Frequency"] };
 const MAX_PRESETS = LIMITS.presets;
 const MAX_PRESET_NAME = LIMITS.presetName;
 const PRESET_ID = /^[a-z0-9]{4,16}$/;
@@ -7774,6 +8056,7 @@ function calculatorStore(name) {
   let stored = null;
   try { stored = JSON.parse(String(calculatorData[row]?.[1] ?? "") || "null"); } catch (e) {}
   if (name === "debt") return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : null;
+  if (name === "paycheck") return { every: PAY_FREQUENCIES.some(choice => choice.key === stored?.every) ? stored.every : "once" };
   if (!Array.isArray(stored)) return [];
   return stored.filter(preset => preset && typeof preset === "object" && preset.values && typeof preset.values === "object")
     .map((preset, at) => ({ ...preset, id: PRESET_ID.test(String(preset.id ?? "")) ? preset.id : `k${shortHash(JSON.stringify([at, preset.name, preset.values]))}` }));
@@ -7841,6 +8124,55 @@ function saveCalculatorPresets(name, list) {
         : changed ? `Changed: ${changed.name || "One without a name"}` : "New order";
     return {};
   });
+}
+
+// How often the Paycheck Calculator's pay comes: once (one paycheck), or its paydays' frequency. count: paychecks a year
+// (twice a month's are the 1st and 15th, see payFrequencyDays).
+const PAY_FREQUENCIES = [
+  { key: "once", label: "Just this one", count: 1 },
+  { key: "weekly", label: "Every week", count: 52 },
+  { key: "biweekly", label: "Every 2 weeks", count: 26 },
+  { key: "semimonthly", label: "Twice a month", count: 24 },
+  { key: "monthly", label: "Every month", count: 12 }
+];
+
+// The Paycheck Calculator's pay frequency (a PAY_FREQUENCIES key), saved with the budget so every device has it
+function savePayFrequency(every) {
+  return runBudgetAction("🧮 Calculator", () => {
+    const choice = PAY_FREQUENCIES.find(item => item.key === every);
+    if (!choice) throw new BudgetInputError("Pick how often you're paid.");
+    writeCalculatorStore("paycheck", { every: choice.key });
+    formEntryRow[3] = "Pay Frequency: " + choice.label;
+    return {};
+  });
+}
+
+// The paydays from first through until at a pay frequency (a PAY_FREQUENCIES key): first itself, then each one after it.
+// Twice a month is the 1st and the 15th (from first on), and every month the same day as first (a shorter month's last).
+function payFrequencyDays(every, first, until) {
+  const days = [];
+  if (every === "once") return first <= until ? [first] : [];
+  if (every === "semimonthly") {
+    days.push(first);
+    for (let month = new Date(first.getFullYear(), first.getMonth(), 1); month <= until; month = addMonths(month, 1)) {
+      for (const day of [1, 15]) {
+        const date = new Date(month.getFullYear(), month.getMonth(), day);
+        if (date > first && date <= until) days.push(date);
+      }
+    }
+    return days;
+  }
+  if (every === "monthly") {
+    for (let step = 0; ; step++) {
+      const date = addMonths(first, step);
+      if (date > until) break;
+      days.push(date);
+    }
+    return days;
+  }
+  const gap = every === "weekly" ? 7 : 14;
+  for (let date = first; date <= until; date = addDays(date, gap)) days.push(date);
+  return days;
 }
 
 // The Accrual Calculator's boxes as they were left (they start it the next time), only when they changed
@@ -8154,6 +8486,7 @@ const SAVE_WAIT_MS = 30000;
 // budget (BUDGET_ROUTES) names the one this page has open. Resolves to { ok, status, data } and never throws (status 0 =
 // the server couldn't be reached, or a save got no answer in time: SAVE). A 401 means the session ended on the server,
 // so the page signs out (see signedOutElsewhere); a budget that's gone opens the account's own (see budgetIsGone).
+const KEEPALIVE_BYTES = 60000; // (Bytes: browsers keep at most 64 KB of these going at once)
 async function budgetApi(endpoint, payload, save = false) {
   const token = localStorage.getItem('prismal_jwt');
   if (!token) return { ok: false, status: 401, data: null };
@@ -8169,7 +8502,9 @@ async function budgetApi(endpoint, payload, save = false) {
         'Authorization': `Bearer ${token}`
       },
       body,
-      signal: stop ? stop.signal : undefined
+      signal: stop ? stop.signal : undefined,
+      // (A small save goes on even if the page is closed or left right then; browsers hold only a little this way)
+      keepalive: save && body !== undefined && new TextEncoder().encode(body).length < KEEPALIVE_BYTES
     });
     let data = null;
     try { data = await res.json(); } catch (e) {}
@@ -8703,16 +9038,78 @@ function readPercent(value) {
 // (Map: each balance after it) }. null while there are no % entries.
 let percentBases = null;
 
-// A % entry's amount on date: percent of its Equity account's balance at the start of that day, or null when it isn't
-// for an account (sprite and title: the entry's)
-function percentAmount(percent, date, sprite, title) {
-  const account = linkedAccount(sprite, title);
-  if (!account) return null;
+// A recurring entry's % can be of what it picks, kept in its row's [6] as JSON (PERCENT_OF_COLUMN): another recurring
+// entry's amount ({ of: "recurring", title, type }: each time this one lands, it's that percent of that one's amount) or an
+// Equity account's balance at the start of the day it lands ({ of: "account", name }, for any type). Without one ("") it's
+// a percent of its own Equity account's balance, as a % always was. A recurring entry another is a percent of keeps an
+// amount of its own (not a %), and its new title or an account's new name goes on the rows that name it.
+const PERCENT_OF_COLUMN = 6;
+const REFRACTION_TYPES_STORED = ["❗️", "✖️", "⭕️"];
+
+// A row's [6] as it's read: { of: "recurring", title, type }, { of: "account", name }, or null for none
+function readPercentBase(text) {
+  if (!text) return null;
+  let base = null;
+  try { base = JSON.parse(String(text)); } catch (e) { return null; }
+  if (!base || typeof base !== "object") return null;
+  if (base.of === "recurring" && typeof base.title === "string" && base.title.trim() && REFRACTION_TYPES_STORED.includes(base.type)) {
+    return { of: "recurring", title: base.title.trim(), type: base.type };
+  }
+  if (base.of === "account" && typeof base.name === "string" && base.name.trim()) return { of: "account", name: base.name.trim() };
+  return null;
+}
+
+// What a row's [6] keeps for a base ("" for none)
+function percentBaseText(base) {
+  if (!base) return "";
+  return JSON.stringify(base.of === "recurring" ? { of: "recurring", title: base.title, type: base.type } : { of: "account", name: base.name });
+}
+
+// The base a recurring entry's % picked (by the entry's sprite and title, as a day's line has them), or null: one that
+// didn't pick one, or a line that isn't a recurring entry's. Kept with the parsed rows (see getParsedRecurringRows).
+const percentBasesKept = new WeakMap();
+function percentBaseFor(sprite, title) {
+  if (entryMark(sprite) !== RECURRING_MARK) return null;
+  const rows = getParsedRecurringRows();
+  let bases = percentBasesKept.get(rows);
+  if (!bases) {
+    bases = new Map();
+    for (const row of rows) {
+      const key = `${row.parsed.cleanTitle}|${row.parsed.special}`;
+      if (!bases.has(key)) bases.set(key, row.base);
+    }
+    percentBasesKept.set(rows, bases);
+  }
+  return bases.get(`${cleanString(title)}|${getSpecialType(sprite)}`) || null;
+}
+
+// The amount of the recurring entry a % is of (its own amount), or null when it's gone or is a % itself
+function recurringBaseAmount(base) {
+  const clean = cleanString(base.title);
+  const row = getParsedRecurringRows().find(item => item.parsed.cleanTitle === clean && item.parsed.special === base.type);
+  return row && row.percent === null ? row.amt : null;
+}
+
+// An Equity account's balance at the start of date, as % entries work from it
+function percentBalanceOn(account, date) {
   const day = percentBases?.byDay.get(date.getTime());
-  let base = day?.get(account.index);
-  if (base === undefined) base = percentBases && date > percentBases.until ? percentBases.last.get(account.index) : undefined;
-  if (base === undefined) base = parseAmount(account.row[1]); // (Today's, before any % entries were worked out)
-  return percentValue(percent, base);
+  let balance = day?.get(account.index);
+  if (balance === undefined) balance = percentBases && date > percentBases.until ? percentBases.last.get(account.index) : undefined;
+  if (balance === undefined) balance = parseAmount(account.row[1]); // (Today's, before any % entries were worked out)
+  return balance;
+}
+
+// A % entry's amount on date: percent of what it's of (base: a recurring entry's pick, see PERCENT_OF_COLUMN; left out,
+// it's looked up from the entry's sprite and title), or of its own Equity account's balance at the start of that day.
+// null when it has nothing to be a percent of (sprite and title: the entry's).
+function percentAmount(percent, date, sprite, title, base = percentBaseFor(sprite, title)) {
+  if (base && base.of === "recurring") {
+    const amount = recurringBaseAmount(base);
+    return amount === null ? null : percentValue(percent, amount);
+  }
+  const account = base ? accountTitleMap().get(cleanString(base.name)) || null : linkedAccount(sprite, title);
+  if (!account) return null;
+  return percentValue(percent, percentBalanceOn(account, date));
 }
 
 // What an entry that lands by itself (a recurring row or a spreadsheet's entry: { amount, percent, sprite, title })
@@ -8756,22 +9153,25 @@ function percentRunner(balances, firstDay, summaries = accountSummaries()) {
         if (!line.title || line.system) continue;
         const percent = percentOf(line.sprite);
         const account = linkedAccount(line.sprite, line.title, accounts);
-        if (!account) {
-          // (A % entry that isn't for an account anymore keeps what it came to last)
-          if (percent !== null) {
-            lines[l] = `${percentSprite(line.sprite, null)} ${formatMoney(line.amount)} ${line.title}`;
-            changed = true;
-          }
-          continue;
-        }
         let amount = line.amount;
         if (percent !== null) {
-          amount = percentValue(percent, morning.get(account.index) ?? 0);
-          if (amount !== line.amount) {
+          // (Of what its recurring entry picked, or of its own account's balance that morning)
+          const base = percentBaseFor(line.sprite, line.title);
+          const of = base ? (base.of === "account" ? accounts.get(cleanString(base.name)) || null : null) : account;
+          const worked = base && base.of === "recurring"
+            ? (recurringBaseAmount(base) === null ? null : percentValue(percent, recurringBaseAmount(base)))
+            : of ? percentValue(percent, morning.get(of.index) ?? 0) : null;
+          if (worked === null) {
+            // (A % entry with nothing to be a percent of anymore keeps what it came to last)
+            lines[l] = `${percentSprite(line.sprite, null)} ${formatMoney(line.amount)} ${line.title}`;
+            changed = true;
+          } else if (worked !== line.amount) {
+            amount = worked;
             lines[l] = `${line.sprite} ${formatMoney(amount)} ${line.title}`;
             changed = true;
           }
         }
+        if (!account) continue;
         put(account.index, accountChange(line.sprite, amount), date);
         const from = line.fromOther ? fromAccount(line.sprite, line.title, accounts) : null;
         if (from) put(from.index, amount, date);
@@ -9167,11 +9567,11 @@ let daySwipe = null; // { cell, x, y, atLeft, atRight, dragging, base, offset } 
 
 // PINCHING THE ZOOMED DAY: two fingers on a phone's zoomed day (or beside it: its layout covers the screen) that start
 // by coming together shrink it with them, moving and turning it too, the way a day that isn't zoomed follows them, and
-// the page behind brightens as it shrinks. Let go while it's still at least DAY_PINCH_CLOSE of its size (a little
-// pinch, to see more of it and of the calendar behind it) and it grows back. Smaller than that, the page brightens
-// more, and letting go closes the day (it shrinks on back into its spot). Fingers that start by moving apart zoom the
-// page instead (the browser's own zoom), and so does any pinch on a page that's zoomed in.
-const DAY_PINCH_CLOSE = 0.6;
+// the page behind brightens as it shrinks. Let go while it's still at least DAY_PINCH_CLOSE of its size (a pinch so small
+// it could be fingers resting on it) and it grows back. Smaller than that, the page brightens more, and letting go
+// closes the day (it shrinks on back into its spot). Fingers that start by moving apart zoom the page instead (the
+// browser's own zoom), and so does any pinch on a page that's zoomed in.
+const DAY_PINCH_CLOSE = 0.85;
 const DAY_PINCH_STRETCH = 0.3; // Moving apart again after coming together, the day grows only this share as much
 const DAY_PINCH_SETTLE_MS = 260;
 let dayPinch = null; // { cell, ids, dist, angle, x, y, cx, cy, base, shrinking (null until the fingers first move), scale }
@@ -10086,9 +10486,8 @@ document.addEventListener('budget:updated', () => {
 });
 
 // A tap on a table: its day zooms in, a zoomed day's v closes it, and its + opens New Entry on that day (Budget UI.js).
-// On a page that's pinch-zoomed in, the page zooms back out first, where the browser lets a page do that (unzoomPage);
-// where it doesn't, the zoomed day is laid out on the part of the page on the screen instead (fitZoomedDay), so it never
-// lands off the screen.
+// On a page that's pinch-zoomed in, the day is laid out on the part of the page on the screen (fitZoomedDay), so it never
+// lands off the screen, and the page zooms back out behind it where the browser lets a page do that (followPageUnzoom).
 function zoomTappedDay(e) {
   const action = e.target.closest('.cell-action-btn');
   if (action) {
@@ -10105,14 +10504,31 @@ function zoomTappedDay(e) {
   // (Calendar Page.js listens on the same table)
   e.stopImmediatePropagation();
   if (pageUnzooming) return;
-  if (!pageZoomedIn()) {
-    zoomDay(cell);
-    return;
-  }
+  zoomDay(cell);
+  if (pageZoomedIn()) followPageUnzoom(cell);
+}
+
+// A day zoomed in on a page that's pinch-zoomed in opens at once, fitting the screen, and the page zooms back out to its
+// normal size behind it (where the browser lets it, see unzoomPage). As the page's zoom changes, the day is laid out again
+// for the screen it's on, so it stays the same size on the screen the whole time, and ends up laid out for a page at its
+// normal size.
+function followPageUnzoom(cell) {
+  const view = window.visualViewport;
+  if (!view) return;
   pageUnzooming = true;
+  const fitAgain = () => {
+    if (activeEditCell !== cell) return;
+    zoomAnchor = null;
+    for (const animation of cell.getAnimations ? cell.getAnimations() : []) {
+      if (!animation.animationName && !animation.transitionProperty) animation.finish();
+    }
+    fitZoomedDay(false);
+  };
+  view.addEventListener('resize', fitAgain);
   unzoomPage().then(() => {
+    view.removeEventListener('resize', fitAgain);
     pageUnzooming = false;
-    if (cell.isConnected && activeEditCell !== cell) zoomDay(cell);
+    if (activeEditCell === cell && Math.abs((zoomAnchor?.pinch || 1) - (view.scale || 1)) > 0.01) fitAgain();
   });
 }
 
@@ -10302,7 +10718,7 @@ function stepThroughHistory(direction) {
   const history = readUndoHistory();
   const step = (direction === "undo" ? history.undo : history.redo).at(-1);
   if (!step) throw new BudgetInputError(direction === "undo" ? "There's nothing to undo." : "There's nothing to redo.");
-  if (step.calendar) throw new BudgetInputError("That's a change to your calendar: Undo on Home or the Recipes page takes it back.");
+  if (step.calendar) throw new BudgetInputError("That's a change to your calendar: Undo on Home or the Kitchen tab takes it back.");
   const from = direction === "undo" ? "after" : "before";
   const to = direction === "undo" ? "before" : "after";
   const changed = step.days.find(day => JSON.stringify(dayEntries(createSafeMidnight(day.date))) !== JSON.stringify(day[from]));

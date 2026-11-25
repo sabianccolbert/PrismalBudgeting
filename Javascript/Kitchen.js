@@ -6,9 +6,9 @@
 //     count (blank, each, dozen); any other unit only with itself (unitOf)
 //   - The Pantry against the meals: the meals from today on (after the last day that already came out of it) use it up in
 //     order, and a day whose meals it doesn't have enough for is short (walk), which glows orange on Home while this
-//     device's switch is on (Settings' Recipes card)
+//     device's switch is on (Settings' Kitchen card)
 //   - A meal's day: with Use Meals From The Pantry on (this device), its foods come out of the Pantry (useMeals)
-//   - Every change runs like any change to the budget (runBudgetAction), and Home's Undo (and the Recipes page's, the same
+//   - Every change runs like any change to the budget (runBudgetAction), and Home's Undo (and the Kitchen tab's, the same
 //     steps) can take it back
 // Kitchen UI.js has the windows, and Recipes Page.js the page.
 
@@ -16,7 +16,7 @@ window.Kitchen = (() => {
   "use strict";
 
   const MEALS_ID = "meals";          // The Meals fractal's id on the calendar (Fractals.js)
-  const SETTINGS_KEY = "prismal_kitchen"; // This device's Recipes settings (kept through a sign-out: Layout.js DEVICE_SETTINGS)
+  const SETTINGS_KEY = "prismal_kitchen"; // This device's Kitchen settings (kept through a sign-out: Layout.js DEVICE_SETTINGS)
   const SETTING_NAMES = ["glowDays", "glowRecipes", "glowPantry", "useMeals"];
   const WALK_AHEAD_DAYS = 120;       // The fewest days the Pantry is walked ahead (more when a later day is asked about)
   const KITCHEN_FULL = "Your recipes, Pantry, and meals are full (about 1.9 MB together). Delete some, or make some notes shorter, first.";
@@ -316,8 +316,8 @@ window.Kitchen = (() => {
   // =====================================================================
   // #region THIS DEVICE'S SETTINGS
   // =====================================================================
-  // Settings' Recipes card (each off to start): glowDays (Home's days the Pantry is short on glow orange, while Meals
-  // shows), glowRecipes (recipes the Pantry can't make glow on the Recipes page), glowPantry (the Pantry's foods the
+  // Settings' Kitchen card (each off to start): glowDays (Home's days the Pantry is short on glow orange, while Meals
+  // shows), glowRecipes (recipes the Pantry can't make glow on the Kitchen tab), glowPantry (the Pantry's foods the
   // calendar's meals run short of glow), and useMeals (a meal's foods come out of the Pantry on its day, from useSince: the
   // day it was turned on). Its two reminders are the account's (Settings Page.js), like the Reminders card's.
 
@@ -369,7 +369,7 @@ window.Kitchen = (() => {
   // #region CHANGES
   // =====================================================================
   // Each runs like any change to the budget (logged, saved, and drawn again), and can be undone with Home's Undo and the
-  // Recipes page's (the same steps). Each resolves to { ok, message, ... }.
+  // Kitchen tab's (the same steps). Each resolves to { ok, message, ... }.
 
   const run = (logType, label, work) => runBudgetAction(logType, work, { label, dates: [] });
 

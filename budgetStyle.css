@@ -801,9 +801,18 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
   white-space: normal;
 }
 
-/* Recurring's Monthly and Yearly under the card's title: each on one line */
+/* Recurring's Monthly and Yearly under the card's title: each on one line, without transfers and then with every entry,
+   each named */
 .keepTogether {
   white-space: nowrap;
+}
+
+.cardSubtitle .summaryLine {
+  display: block;
+}
+
+.cardSubtitle .summaryLabel {
+  color: var(--TEXT_BRIGHT);
 }
 
 .dataTable .clipText {
@@ -859,7 +868,7 @@ html.lessMotion .elastic-table td.is-magnified .cell-content {
 }
 
 /* With room to spare, the column titles, dates, and frequencies stay on one line (only the title column gives way): in
-   Recurring Entries' tables and the Recipes tab's alike */
+   Recurring Entries' tables and the Kitchen tab's alike */
 @media (min-width: 700px) {
   .recurringTable th,
   .recurringTable td.dateCell,
@@ -8060,7 +8069,8 @@ html:not(.frontPage) .frontSignIn,
   line-height: 1.4;
 }
 
-html.snapshotKey .navButtons {
+/* (A Snapshot icon's page keeps only Home, which signs in first when this browser isn't: Snapshot Page.js startKeyed) */
+html.snapshotKey .navButtons .navButton:not(.snapshotHome) {
   display: none;
 }
 
@@ -8401,7 +8411,7 @@ button.snapshotChoice:focus-visible {
 }
 
 /*========================================*
- *  RECIPES, THE PANTRY, AND MEALS (Recipes Page.js, Kitchen UI.js, Kitchen.js)
+ *  THE KITCHEN: RECIPES, THE PANTRY, AND MEALS (Recipes Page.js, Kitchen UI.js, Kitchen.js)
  *========================================*/
 
 /* The orange of what the Pantry is short of, the red of the shopping list, and both on one day (red at its top, orange
@@ -8468,7 +8478,7 @@ button.snapshotChoice:focus-visible {
   box-shadow: inset 3px 0 0 var(--NEGATIVE_DAY_EDGE), inset 6px 0 0 var(--MEAL_DAY_EDGE);
 }
 
-/* The Recipes page's cards: each heading is a button that opens and closes it, with how many it has and an arrow. The
+/* The Kitchen tab's cards: each heading is a button that opens and closes it, with how many it has and an arrow. The
    title looks like every card's (and Bob's cards that fold open), and the buttons under it sit at the left. */
 .kitchenCardHead {
   margin: 0;
@@ -8846,6 +8856,88 @@ button.foodRemove {
   margin: 0 auto clamp(10px, 2.2vmin, 22px);
 }
 
+/* A recurring entry's % (Budget UI.js amountField's percentBase): what it's a percent of, a button under the boxes that
+   opens the window to pick it (openPercentBase), whose two cards drop open */
+.percentBaseButton {
+  display: block;
+  margin: 0.35em 0 0;
+  padding: 0.2em 0;
+  font: inherit;
+  font-size: 0.85em;
+  text-align: left;
+  color: var(--TEXT_BRIGHT);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  background: none;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.percentBaseButton:hover,
+.percentBaseButton:focus-visible {
+  transform: none;
+  color: var(--TEXT_BRIGHT);
+  outline: 2px solid var(--GLOW_EDGE);
+  outline-offset: 2px;
+}
+
+.percentBaseCard {
+  margin: 0.6em 0 0;
+  border: 1px solid var(--PANEL_BORDER);
+  border-radius: 10px;
+  background: rgba(var(--GLOW_RGB), 0.06);
+}
+
+.percentBaseTitle {
+  padding: 0.55em 0.8em;
+  color: var(--TEXT_BRIGHT);
+  cursor: pointer;
+}
+
+.percentBaseList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding: 0 0.6em 0.6em;
+}
+
+.budgetButton.percentBaseItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8em;
+  width: 100%;
+  text-align: left;
+}
+
+.percentBaseItem[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--TEXT_BRIGHT);
+}
+
+.percentBaseName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.percentBaseAmount {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recurring's sections shut (Budget Pages.js foldRecurringSections): only their headings show, and the budget's
+   Monthly and Yearly */
+.recurringControls.isFolded .tableToolbar,
+#recurringBudgetCard.isFolded,
+.repeatsCard.isFolded > :not(.repeatsHeading) {
+  display: none;
+}
+
+.foldToggle[aria-expanded="true"] .foldChevron {
+  transform: rotate(90deg);
+}
+
 .repeatsHeading {
   margin: 0 0 0.3em;
   font-size: 1.3em;
@@ -8887,4 +8979,26 @@ html.lightCards {
   --SHORT_ROW_EDGE: rgba(234, 88, 12, 0.75);
   --SHORT_GLOW: rgba(234, 88, 12, 0.3);
   --SHORT_TEXT: #9a3412;
+}
+
+/* An icon's page (Quick Budget, Quick Calendar, a Snapshot icon) showing what it had last, while the server's answer is on
+   its way or can't come (Process Budget.js showIconFreshness): its top card greyed, with "Loading..." or "No Internet"
+   over it */
+.isStale {
+  flex-wrap: wrap;
+}
+
+.isStale > :not(.staleNote) {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.staleNote {
+  flex-basis: 100%;
+  grid-column: 1 / -1;
+  margin: 0 0 0.4em;
+  font-size: 0.9em;
+  font-weight: bold;
+  text-align: center;
+  color: var(--TEXT_BRIGHT);
 }

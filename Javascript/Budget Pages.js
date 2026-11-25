@@ -62,19 +62,28 @@ function renderRecurringPage(view) {
   view.replaceChildren();
   renderRecurringRepeats();
 
-  // Monthly and Yearly, under the card's title (each stays on one line, so a minus sign isn't left behind)
+  // Monthly and Yearly, under the card's title: without transfers (like one to savings, which isn't spending), and with
+  // every entry (each stays on one line, so a minus sign isn't left behind)
   const summary = recurringData[0] || [];
   const monthly = String(summary[2] || "").trim();
   const yearly = String(summary[5] || "").trim();
   const subtitle = document.getElementById("pageSubtitle");
   if (subtitle) {
-    const parts = [monthly ? "Monthly: " + monthly : "", yearly ? "Yearly: " + yearly : ""].filter(Boolean).map((text) => {
-      const part = document.createElement("span");
-      part.className = "keepTogether";
-      part.textContent = text;
-      return part;
-    });
-    subtitle.replaceChildren(...parts.flatMap((part, i) => (i ? [" • ", part] : [part])));
+    const line = (label, month, year) => {
+      const parts = [month ? "Monthly: " + month : "", year ? "Yearly: " + year : ""].filter(Boolean).map((text) => {
+        const part = document.createElement("span");
+        part.className = "keepTogether";
+        part.textContent = text;
+        return part;
+      });
+      const row = BudgetUI.element("span", "summaryLine");
+      row.append(BudgetUI.element("span", "summaryLabel", label), ...parts.flatMap((part, i) => (i ? [" • ", part] : [part])));
+      return row;
+    };
+    subtitle.replaceChildren(
+      line("Without transfers: ", monthly, yearly),
+      line("All entries: ", recurringAllTotals.monthly, recurringAllTotals.yearly)
+    );
     subtitle.hidden = !monthly && !yearly;
   }
 
@@ -171,7 +180,7 @@ function renderRecurringRepeats() {
   const meals = window.Kitchen.data().meals.filter(meal => meal.repeat).map(meal => ({ meal, view: window.Kitchen.mealView(meal) })).sort((a, b) => a.view.title.localeCompare(b.view.title));
   const mealsView = document.getElementById("mealsView");
   if (meals.length === 0) {
-    mealsView.replaceChildren(emptyMessage("No meals repeat yet. Tap New Meal Entry, or a recipe's + on the Recipes tab."));
+    mealsView.replaceChildren(emptyMessage("No meals repeat yet. Tap New Meal Entry, or a recipe's + on the Kitchen tab."));
     return;
   }
   const rows = meals.map(({ meal, view }) => {
@@ -183,7 +192,46 @@ function renderRecurringRepeats() {
   mealsView.replaceChildren(wrapScroll(tableEl));
   markClipped(tableEl);
 }
+// Recurring's three sections start shut: a tap on a heading opens its section, and another shuts it (the budget's
+// entries keep their Monthly and Yearly showing). Which are open is kept for this tab, so coming back keeps them. Its
+// tables are measured again as a section opens (a shut one's can't be).
+const RECURRING_OPEN_KEY = "prismal_recurring_open";
+function foldRecurringSections() {
+  let open = [];
+  try { open = JSON.parse(sessionStorage.getItem(RECURRING_OPEN_KEY) || "[]"); } catch (e) {}
+  if (!Array.isArray(open)) open = [];
+  const sections = [
+    { key: "budget", heading: document.getElementById("pageTitle"), boxes: [document.querySelector(".recurringControls"), document.getElementById("recurringBudgetCard")], controls: "pageToolbar recurringBudgetCard" },
+    { key: "calendar", heading: document.getElementById("calendarRepeatsHeading"), boxes: [document.getElementById("calendarRepeatsCard")], controls: "calendarRepeatsView" },
+    { key: "meals", heading: document.getElementById("mealsHeading"), boxes: [document.getElementById("mealsCard")], controls: "mealsView" }
+  ];
+  for (const { key, heading, boxes, controls } of sections) {
+    if (!heading) continue;
+    const toggle = BudgetUI.element("button", "foldToggle");
+    toggle.type = "button";
+    toggle.setAttribute("aria-controls", controls);
+    const chevron = BudgetUI.element("span", "foldChevron", "›");
+    chevron.setAttribute("aria-hidden", "true");
+    toggle.append(BudgetUI.element("span", "foldTitle", heading.textContent), chevron);
+    heading.replaceChildren(toggle);
+    const show = (shown) => {
+      toggle.setAttribute("aria-expanded", String(shown));
+      boxes.forEach(box => box?.classList.toggle("isFolded", !shown));
+      if (shown) boxes.forEach(box => box?.querySelectorAll("table").forEach(markClipped));
+    };
+    show(open.includes(key));
+    toggle.addEventListener("click", () => {
+      const shown = toggle.getAttribute("aria-expanded") !== "true";
+      show(shown);
+      open = open.filter(other => other !== key);
+      if (shown) open.push(key);
+      try { sessionStorage.setItem(RECURRING_OPEN_KEY, JSON.stringify(open)); } catch (e) {}
+    });
+  }
+}
+
 if (window.PAGE === "recurring") {
+  foldRecurringSections();
   // (The calendar loads by itself, before or after the budget: either way the cards are drawn once both are in)
   window.workspaceReady.then((loaded) => {
     if (!loaded || !window.Fractals) return;
@@ -549,9 +597,9 @@ const LOG_PLACES = {
   business: ["Go To Business", "/menu/business.html"],
   pantry: ["Go To The Pantry", "/menu/recipes.html#pantryCard"],
   foods: ["Go To Your Foods", "/menu/recipes.html#foodsCard"],
-  recipes: ["Go To Recipes", "/menu/recipes.html#recipesCard"],
+  recipes: ["Go To Kitchen", "/menu/recipes.html#recipesCard"],
   meals: ["Go To Recurring Meal Entries", "/menu/recurring.html#mealsCard"],
-  mealsColor: ["Go To Recipes", "/menu/recipes.html"]
+  mealsColor: ["Go To Kitchen", "/menu/recipes.html"]
 };
 const LOG_PART_NAMES = {
   recurring: "Recurring Entries", tracker: "The Tracker", accounts: "Equity Accounts", goals: "Goals", bob: "Bob's cards and settings",
@@ -715,6 +763,7 @@ function renderCalculatorPage(view) {
   const shown = BudgetUI.element("div", "wideColumn");
   const typed = BudgetUI.element("div", "wideColumn");
   shown.append(results, saved ? paycheckBreakdown(computePaycheck(inputs), inputs) : emptyMessage("Fill in your pay, then tap Calculate."));
+  if (saved) shown.append(paycheckYearCard(computePaycheck(inputs)));
   if (saved) shown.append(paycheckGraphCard(saved.takeHome));
   const form = typing || calculatorForm(inputs);
   typed.append(crystalShelf(form), form);
@@ -722,18 +771,20 @@ function renderCalculatorPage(view) {
   view.append(columns);
 }
 
-// The Paycheck Calculator's In Bank graph: In Bank as it is, and with the take home pay landing on a payday picked, in
-// place of a paycheck already in the budget, picked from a list with a search box over it (its amount comes off on its own
-// day; None takes off $0.00). The list is the budget's gains that change In Bank (Regular entries above $0) from today
-// through PAYCHECK_LOOK_DAYS ahead, and picking one makes its day the payday. What's picked stays while the page is open.
+// The Paycheck Calculator's In Bank graph: In Bank as it is, and with the take home pay landing on a payday picked (and,
+// with a pay frequency, on each payday after it: see PAY_FREQUENCIES in Process Budget.js), in place of a paycheck already
+// in the budget, picked from a list with a search box over it (its amount comes off on its own day, and with a pay
+// frequency, so does every one with its title after it; None takes off $0.00). The list is the budget's gains that change
+// In Bank (Regular entries above $0) from today through PAYCHECK_LOOK_DAYS ahead, and picking one makes its day the payday.
+// What's picked stays while the page is open; the pay frequency is saved with the budget.
 const PAYCHECK_LOOK_DAYS = 62;
 const PAYCHECK_GRAPH_DAYS = 62;
 let paycheckPick = { payday: null, entry: "" }; // entry: the picked paycheck's key (see paycheckGains), or "" for None
 
-// The budget's paychecks to pick from: [{ key, date, title, amount }], soonest first
-function paycheckGains() {
+// The budget's paychecks to pick from: [{ key, date, title, amount }], soonest first, from today through days ahead
+function paycheckGains(days = PAYCHECK_LOOK_DAYS) {
   const gains = [];
-  for (let at = 0; at <= PAYCHECK_LOOK_DAYS; at++) {
+  for (let at = 0; at <= days; at++) {
     const date = addDays(today, at);
     const day = budgetDayAt(date);
     if (!day) continue;
@@ -777,7 +828,18 @@ function paycheckGraphCard(takeHome) {
   listBox.append(search, list);
   const instead = BudgetUI.field("In place of", listBox, { hint: gains.length ? `The gains in your budget from today through ${showDay(addDays(today, PAYCHECK_LOOK_DAYS))}. Its amount comes off on its day.` : "No gains in your budget in the next two months, so it's added on top of what's there." });
 
-  const payday = BudgetUI.dateField({ label: "Payday", date: paycheckPick.payday || picked()?.date || today, min: today, hint: "The day this paycheck would land." });
+  const payday = BudgetUI.dateField({ label: "Payday", date: paycheckPick.payday || picked()?.date || today, min: today, hint: "The day this paycheck would land (the first one, with a pay frequency)." });
+  const every = BudgetUI.selectField({
+    label: "How often",
+    options: PAY_FREQUENCIES.map(choice => ({ value: choice.key, label: choice.label })),
+    value: calculatorStore("paycheck").every,
+    hint: "How often you're paid: the graph lands a paycheck on each payday, and Over A Year works it out the same way."
+  });
+  every.input.addEventListener("change", async () => {
+    const result = await savePayFrequency(every.value());
+    if (!result.ok) return BudgetUI.showToast(result.message || "That didn't work. Please try again.", true);
+    BudgetUI.warnIfUnsaved(result);
+  });
   list.addEventListener("change", () => {
     paycheckPick.entry = list.value;
     const gain = picked();
@@ -808,19 +870,56 @@ function paycheckGraphCard(takeHome) {
       if (!projected || projected.until.getTime() !== until.getTime()) projected = projectBudget(until);
       const day = paycheckPick.payday || picked()?.date || today;
       const gain = picked();
+      const often = calculatorStore("paycheck").every;
+      const paydays = payFrequencyDays(often, day, until);
+      // (What it takes the place of: the paycheck picked, and with a pay frequency, every one with its title after it)
+      const replaced = !gain ? [] : often === "once" ? [gain] : paycheckGains(getDayDifference(until, today)).filter(other => other.date >= gain.date && cleanString(other.title) === cleanString(gain.title));
       const asIs = [];
       const withIt = [];
+      let added = 0;
+      let taken = 0;
       for (let date = first < today ? today : first; date <= until; date = addDays(date, 1)) {
         const inBank = projected.inBankOn(date);
-        const change = (date >= day ? takeHome : 0) - (gain && date >= gain.date ? gain.amount : 0);
+        added = paydays.filter(payday => payday <= date).length * takeHome;
+        taken = replaced.filter(other => other.date <= date).reduce((total, other) => total + other.amount, 0);
         asIs.push({ date, value: inBank });
-        withIt.push({ date, value: Math.round((inBank + change) * 100) / 100 });
+        withIt.push({ date, value: Math.round((inBank + added - taken) * 100) / 100 });
       }
       return [{ name: "As it is", points: asIs }, { name: "With this paycheck", points: withIt }];
     },
     emptyNote: "Nothing to draw yet."
   });
-  card.append(instead, payday.el, graph.el);
+  card.append(instead, payday.el, every.el, graph.el);
+  return card;
+}
+
+// Over A Year: the paycheck at the pay frequency picked (see PAY_FREQUENCIES in Process Budget.js): its gross, taxes, and
+// take home pay in a year, and about a month's (a year's over 12). Just this one has none to add up.
+function paycheckYearCard(paycheck) {
+  const choice = PAY_FREQUENCIES.find(item => item.key === calculatorStore("paycheck").every) || PAY_FREQUENCIES[0];
+  const card = BudgetUI.element("section", "budgetCard paycheckBreakdown paycheckYear");
+  card.appendChild(BudgetUI.element("h3", "", "Over A Year"));
+  if (choice.key === "once") {
+    card.appendChild(BudgetUI.element("p", "panelHint", "Pick how often you're paid under How often (on the graph's card below), and this adds up a year of paychecks like this one."));
+    return card;
+  }
+  card.appendChild(BudgetUI.element("p", "panelHint", `${choice.label}: ${choice.count} paychecks a year like this one.`));
+  const list = BudgetUI.element("dl", "breakdownList");
+  const round = (amount) => Math.round(amount * 100) / 100;
+  for (const [label, amount, isTotal] of [
+    ["Gross a year", round(paycheck.grossPay * choice.count)],
+    ["Taxes a year", -round(paycheck.totalTaxes * choice.count)],
+    ["Take Home a year", round(paycheck.netPay * choice.count), true],
+    ["Take Home a month (about)", round(paycheck.netPay * choice.count / 12), true]
+  ]) {
+    const row = BudgetUI.element("div", `breakdownRow${isTotal ? " total" : ""}`);
+    row.appendChild(BudgetUI.element("dt", "", label));
+    const value = BudgetUI.noTranslate(BudgetUI.element("dd", "", formatMoney(amount)));
+    if (amount < 0) value.classList.add("negative");
+    row.appendChild(value);
+    list.appendChild(row);
+  }
+  card.appendChild(list);
   return card;
 }
 
@@ -2346,7 +2445,7 @@ function followCheckedRows(moved) {
 // Rows for a table: entries and sections, with a move bar + delete checkbox in edit mode,
 // and "+ Section" buttons between rows (sections: false leaves those out). canSelect(row) false
 // locks a row out of deleting; lockedNote(row) says why when it's tapped in edit mode. editing: whether this table is
-// in edit mode (the page's, to start; the Recipes page has two tables, and only one is in it at a time). renderSection(tr,
+// in edit mode (the page's, to start; the Kitchen tab has two tables, and only one is in it at a time). renderSection(tr,
 // row, index): a section's heading row's cells (Equity's have its totals), or its title across the row without one.
 function buildRowTable({ tableName, columns, rows, renderEntry, onEntryClick, extraClass, sections = true, canSelect = () => true, lockedNote = null, editing = editMode, renderSection = null }) {
   // (Edit's two columns, the ≡ bar and the checkbox, have names a screen reader says, and nothing to see)
@@ -2661,7 +2760,17 @@ function openRecurringPanel(origin, index, fill = null) {
       // Its title and its Equity account ("Payday → Savings") are separate boxes
       const existingTitle = fill ? { title: fill.title, account: fill.account, from: "" } : splitAccount(existing ? String(existing[0]).trim() : "");
       const title = BudgetUI.textField({ label: "Title", value: existingTitle.title, placeholder: "Rent, paycheck, phone...", maxLength: MAX_TITLE });
-      const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : fill?.amount ?? null, percent: existing ? percentOf(existing[5]) : null });
+      // (Its amount can be a % of what it picks: another recurring entry's amount, or an Equity account's balance, see
+      // PERCENT_OF_COLUMN in Process Budget.js; without a pick, its own account's, for Hidden and Transfer)
+      let ownAccount = () => "";
+      const percentBase = {
+        base: existing ? readPercentBase(existing[PERCENT_OF_COLUMN]) : null,
+        words: (base) => base
+          ? `A percent of ${base.of === "recurring" ? base.title : `${base.name}'s balance`} (tap to change)`
+          : ownAccount() ? `A percent of ${ownAccount()}'s balance (tap to change)` : "Tap to pick what it's a percent of",
+        pick: (origin, base) => BudgetUI.openPercentBase({ origin, picked: base, recurring: percentChoices(index), accounts: otherAccounts() })
+      };
+      const amount = BudgetUI.amountField({ amount: existing ? parseAmount(existing[1]) : fill?.amount ?? null, percent: existing ? percentOf(existing[5]) : null, percentBase });
       const frequency = BudgetUI.frequencyField({ value: existing ? existing[3] : fill?.frequency ?? "Every Month" });
       const start = BudgetUI.dateField({ label: "Start Date", date: existing ? (isNaN(existingStart) ? null : existingStart) : fill?.start ?? today });
       const end = BudgetUI.dateField({ label: "End Date", date: existingEnd && !isNaN(existingEnd) ? existingEnd : fill?.end ?? null, optional: true });
@@ -2674,14 +2783,19 @@ function openRecurringPanel(origin, index, fill = null) {
         onChange: (key) => account.setVisible(BudgetUI.isAccountType(key))
       });
       account.setVisible(BudgetUI.isAccountType(refraction.value()));
+      ownAccount = () => (BudgetUI.isAccountType(refraction.value()) ? account.value() : "");
+      const showBase = () => amount.setPercentBase(amount.percentBase());
+      refraction.el.addEventListener("click", () => requestAnimationFrame(showBase));
+      account.el.addEventListener("pick", showBase);
+      showBase();
       // Every day it lands on gets a placeholder (offered while it can still land: no End Date, or one from today on), each
-      // deleted once its day passes, or with days picked, that many days behind or ahead of the current day
+      // deleted once its day passes, or with days picked, that many days ahead of the current day
       const keeps = existing ? placeholderKeeps(existing[5]) : null;
       const placeholder = BudgetUI.placeholderField({
         checked: !!existing && isPlaceholder(existing[5]),
         until: typeof keeps === "number" ? keeps : null,
         days: true,
-        hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes (or, with days picked under it, that many days behind or ahead of the current day)."
+        hint: "Every day it lands on gets a placeholder: a stand-in for an entry you expect, like an estimate. It counts like any entry and shows in yellow, and it's deleted once its day passes (or, with days picked under it, that many days ahead of the current day)."
       });
       // A reminder before each day it lands on (offered while it can still land, like Placeholder)
       const reminder = BudgetUI.reminderField({ days: existing ? recurringReminder(existing[0], existing[5]) : null });
@@ -2730,7 +2844,7 @@ function openRecurringPanel(origin, index, fill = null) {
         // (A blank amount is $0.00)
         const { percent, error: percentError } = BudgetUI.readPercentField(amount);
         if (percentError) return fail(percentError);
-        const fields = { title: withAccount(title.value(), account.value(), account.from()), amount: percent !== null ? undefined : amount.value() ?? 0, percent, startDate: start.value(), endDate: end.value() };
+        const fields = { title: withAccount(title.value(), account.value(), account.from()), amount: percent !== null ? undefined : amount.value() ?? 0, percent, percentOf: percent !== null ? amount.percentBase() : null, startDate: start.value(), endDate: end.value() };
         if (!fields.title) return fail("Give the recurring entry a title.");
         if (account.from() && cleanString(account.from()) === cleanString(account.value())) return fail(SAME_ACCOUNT);
         if (percent === null && Number.isNaN(fields.amount)) return fail("Enter an amount, like 12.50.");
@@ -2744,7 +2858,7 @@ function openRecurringPanel(origin, index, fill = null) {
         if (!placeholder.el.hidden) fields.placeholder = placeholder.value();
         if (fields.placeholder) {
           fields.until = placeholder.until();
-          if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return fail(`Enter how many days behind or ahead of the current day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
+          if (Number.isNaN(fields.until) || Math.abs(fields.until) > MAX_PLACEHOLDER_DAYS) return fail(`Enter how many days ahead of the current day each placeholder is deleted: a whole number from 0 to ${MAX_PLACEHOLDER_DAYS}.`);
         }
         // (Its reminder: days, or null for none; hidden for one that's ended, which keeps none)
         fields.reminder = reminder.value();
@@ -2816,6 +2930,18 @@ function openRecurringPanel(origin, index, fill = null) {
       }
     }
   });
+}
+
+// The recurring entries a recurring entry's % can be of (see PERCENT_OF_COLUMN in Process Budget.js): every other one with an
+// amount of its own (not a %), by title: [{ title, type, amount }]
+function percentChoices(exceptIndex) {
+  const rows = [];
+  for (let i = 2; i < recurringData.length; i++) {
+    const row = recurringData[i];
+    if (i === exceptIndex || String(row[0]).trim() === "-" || !cleanString(row[0]) || percentOf(row[5]) !== null) continue;
+    rows.push({ title: String(row[0]).trim(), type: getSpecialType(String(row[5] || "")), amount: parseAmount(row[1]) });
+  }
+  return rows.sort((a, b) => a.title.localeCompare(b.title));
 }
 
 // What each kind of account changes in its window: tips (what it is, and how to fill it in), its words, which boxes show

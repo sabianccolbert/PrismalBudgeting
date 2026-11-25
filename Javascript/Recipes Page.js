@@ -1,4 +1,4 @@
-// Recipes Page: the Recipes tab (menu/recipes.html). Three cards that open and close by their headings (each stays as it
+// Recipes Page: the Kitchen tab (menu/recipes.html). Three cards that open and close by their headings (each stays as it
 // was left, on this device):
 //   - Pantry: each food's name, amount, unit, and expiration, with a checkbox at its left that puts it on the shopping
 //     list (red); Edit adds sections, moves foods, and deletes, like Recurring Entries'
