@@ -691,8 +691,14 @@ function groupFutureRowsByDate() {
   return byDate;
 }
 
-// Parse every Recurring Entries row once for the whole catch-up
+let parsedRecurringKept = { key: null, rows: null }; // (The last list getParsedRecurringRows made, by the rows' text and the day)
+
+// Every Recurring Entries row, parsed: [{ title, amt, sprite, percent, parsed }]. Parsed once for as long as the rows and
+// the day stay the same (any change to the rows makes a new list): a change asks a dozen times, and the same list lets
+// rowsLandingOn find each one's days a year at a time once, not again for each new list. A list handed out is only read.
 function getParsedRecurringRows() {
+  const key = `${today ? today.getTime() : ""}|${JSON.stringify(recurringData)}`;
+  if (parsedRecurringKept.key === key) return parsedRecurringKept.rows;
   let rows = [];
   for (let i = 2; i < recurringData.length; i++) {
     let parsed = parseRecurringRow(recurringData[i]);
@@ -705,6 +711,7 @@ function getParsedRecurringRows() {
       parsed: parsed
     });
   }
+  parsedRecurringKept = { key, rows };
   return rows;
 }
 
@@ -1756,17 +1763,23 @@ async function processBudgetAction(logType, change, undo = null, requestedAt = p
     BUDGET_TABLES[result.quickEntry.table].markEdited();
     quickEntryAcks[result.quickEntry.table].push(result.quickEntry.id);
   }
-  notifyBudgetChanged();
+  // (A search that changed nothing but its own table: Home's days, Lowest, and the reminders' plan don't read it, so
+  // they aren't drawn or worked out again for one)
+  const searched = logType === "🔎 Search" && [...changedTables].every(name => name === "search" || name === "logs");
+  notifyBudgetChanged(changedTables, searched);
   await afterNextPaint();
   finishChangeLog(record); // (Saved with the rest, just below)
   const saved = await saveChanges();
-  queueReminderPlanSync();
+  if (!searched) queueReminderPlanSync();
   return { ok: true, saved, notFound, ...result };
 }
 
-// Tell the page that budget data changed (pages re-render on this)
-function notifyBudgetChanged() {
-  document.dispatchEvent(new CustomEvent("budget:updated"));
+// Tell the page that budget data changed (pages re-render on this). tables: the names of the tables a change changed (a
+// Set, as markChangedTables gives them), for what's kept until one of its own tables changes (Kitchen.js); null when
+// anything may have (a load, another device's change). search: it was a search that changed nothing else, which
+// Home's days don't show (Calendar Page.js).
+function notifyBudgetChanged(tables = null, search = false) {
+  document.dispatchEvent(new CustomEvent("budget:updated", { detail: { tables, search } }));
 }
 
 // Resolves once the page has drawn what just changed (right away for a page in the background, which isn't
@@ -7124,12 +7137,20 @@ const SHOWN_ACCOUNT_KEY = "prismal_shown_account";
 let shownProjection = null;
 document.addEventListener("budget:updated", () => { shownProjection = null; });
 
-// The Equity account In Bank shows, by name, or "" for Default
+let shownAccountKept = null; // (What shownAccountName read, for the work at hand)
+document.addEventListener("budget:updated", () => { shownAccountKept = null; });
+window.addEventListener("storage", (event) => { if (event.key === SHOWN_ACCOUNT_KEY || event.key === null) shownAccountKept = null; });
+
+// The Equity account In Bank shows, by name, or "" for Default. Every day drawn asks, so it's read once and kept until
+// the page's work at hand is done (a microtask), the budget changes, or a pick here or in another tab changes it.
 function shownAccountName() {
+  if (shownAccountKept !== null) return shownAccountKept;
   let book = {};
   try { book = JSON.parse(localStorage.getItem(SHOWN_ACCOUNT_KEY) || "{}") || {}; } catch (e) {}
   const name = budgetInfo && typeof book[String(budgetInfo.id)] === "string" ? book[String(budgetInfo.id)] : "";
-  return name && accountRows().some(account => account.name === name) ? name : "";
+  shownAccountKept = name && accountRows().some(account => account.name === name) ? name : "";
+  queueMicrotask(() => { shownAccountKept = null; });
+  return shownAccountKept;
 }
 
 // Pick what In Bank shows (an account's name, or "" for Default), and everything showing it draws again
@@ -7141,6 +7162,7 @@ function setShownAccount(name) {
   else delete book[String(budgetInfo.id)];
   try { localStorage.setItem(SHOWN_ACCOUNT_KEY, JSON.stringify(book)); } catch (e) {}
   shownProjection = null;
+  shownAccountKept = null;
   document.dispatchEvent(new CustomEvent("shownaccount:changed"));
 }
 
