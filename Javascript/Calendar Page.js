@@ -40,8 +40,15 @@ window.workspaceReady.then((loaded) => {
   window.PushNotifications?.askAfterSignIn(document.getElementById("gettingStarted")).catch(error => console.warn("Couldn't check notifications on this device:", error));
 });
 
-document.addEventListener("budget:updated", () => {
-  if (workspaceLoaded) renderHome();
+document.addEventListener("budget:updated", (event) => {
+  if (!workspaceLoaded) return;
+  // (A search that changed nothing else: Home's days don't show it, so they aren't drawn again)
+  if (event.detail && event.detail.search) {
+    BudgetUI.renderUndoButtons();
+    renderOtherEdits();
+    return;
+  }
+  renderHome();
 });
 
 // The calendar's entries, the fractals checked, or what the calendar shows changed: the days draw again (a zoomed one

@@ -44,8 +44,12 @@ window.Kitchen = (() => {
   // Is this a meal a Quick Calendar icon queued that hasn't joined the budget yet (on the Quick Calendar page)?
   const isWaiting = (meal) => !!given && String(meal.id).startsWith("waiting");
 
-  // Something in the kitchen (or the day) changed: work it out again the next time it's asked
-  function changed() {
+  // Something in the kitchen (or the day) changed: work it out again the next time it's asked. A budget change that says
+  // which of its tables changed (processBudgetAction's) counts only when the kitchen is one of them, so the Pantry's walk
+  // isn't done again for a change elsewhere in the budget.
+  function changed(event) {
+    const tables = event && event.detail && event.detail.tables;
+    if (tables && !tables.has("kitchen")) return;
     version++;
   }
   document.addEventListener("budget:updated", changed);
@@ -73,9 +77,13 @@ window.Kitchen = (() => {
 
   const recipeById = (id) => data().recipes.find(recipe => recipe.id === id) || null;
 
+  // (One collator for every comparison: localeCompare with options makes one each time it's called, which held up each
+  // key typed in the recipes' search)
+  const TITLE_ORDER = new Intl.Collator(undefined, { sensitivity: "base" });
+
   // Recipes in order by title
   function recipesInOrder() {
-    return [...data().recipes].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+    return [...data().recipes].sort((a, b) => TITLE_ORDER.compare(a.title, b.title));
   }
 
   // What a meal shows: its own title, foods, and notes, or (while it follows one) its recipe's as the recipe is now.
@@ -242,8 +250,9 @@ window.Kitchen = (() => {
   }
 
   // The Pantry against the meals from walkStart through a day (at least WALK_AHEAD_DAYS): { start, through, short (a Set
-  // of the days without enough), foods (Map: a food's key -> { day: the first day it runs short, name }) }. Worked out
-  // once per change, and further when a later day is asked about.
+  // of the days without enough), foods (Map: a food's key -> { day: the first day it runs short, name }), stock (what it
+  // left in the Pantry) }. Worked out once per change of the kitchen. A later day asked about goes on from where the walk
+  // stopped, with what it left (the meals are walked in their days' order, so that's the same as walking it all again).
   function walk(through = formatToYMD(today)) {
     const known = index();
     if (known.walk && known.walk.through >= through) return known.walk;
@@ -251,18 +260,23 @@ window.Kitchen = (() => {
     const least = Repeats.plusDays(start, WALK_AHEAD_DAYS);
     // (Past that, as far again as the least, so the days drawn after it don't each walk it again)
     const end = through > least ? Repeats.plusDays(through, WALK_AHEAD_DAYS) : least;
-    const stock = stockToUse();
-    const short = new Set();
-    const foods = new Map();
-    for (const { meal, day } of mealsBetween(start, end)) {
-      for (const food of mealView(meal).foods) {
+    const kept = known.walk && known.walk.start === start ? known.walk : null;
+    const stock = kept ? kept.stock : stockToUse();
+    const short = new Set(kept ? kept.short : []);
+    const foods = new Map(kept ? kept.foods : []);
+    // (Each recipe found by its id once, not by looking through the recipes for every meal's day)
+    const recipes = new Map();
+    for (const recipe of data().recipes) if (!recipes.has(recipe.id)) recipes.set(recipe.id, recipe);
+    const foodsOf = (meal) => ((meal.recipe && recipes.get(meal.recipe)) || meal).foods || [];
+    for (const { meal, day } of mealsBetween(kept ? Repeats.plusDays(kept.through, 1) : start, end)) {
+      for (const food of foodsOf(meal)) {
         if (take(stock, food)) continue;
         short.add(day);
         const key = foodKey(food[0]);
         if (!foods.has(key)) foods.set(key, { day, name: food[0] });
       }
     }
-    known.walk = { start, through: end, short, foods };
+    known.walk = { start, through: end, short, foods, stock };
     return known.walk;
   }
 

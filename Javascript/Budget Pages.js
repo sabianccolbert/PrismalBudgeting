@@ -2189,11 +2189,17 @@ function makePageSearch() {
   return pageSearch;
 }
 
-// The rows with every typed word (in any order, any column, upper or lower case)
+const PAGE_SEARCH_AT_ONCE = 100; // A page's Search results drawn at a time (renderPageSearch)
+let pageSearchWatch = null; // (What brings more results in as Show More Results comes into view)
+
+// The rows with every typed word (in any order, any column, upper or lower case), PAGE_SEARCH_AT_ONCE at a time: the next
+// ones come in as the end of the results is scrolled into view (or Show More Results is tapped). A full Change Logs'
+// first letter typed matches nearly every row, and drawing them all held each key up for a second on a phone.
 function renderPageSearch() {
   const config = PAGE_SEARCHES[window.PAGE];
   const { input, results } = pageSearch;
   const words = input.value.normalize("NFKC").toLowerCase().split(/\s+/).filter(Boolean);
+  pageSearchWatch?.disconnect();
   results.replaceChildren();
   results.hidden = words.length === 0;
   if (words.length === 0) return;
@@ -2210,22 +2216,41 @@ function renderPageSearch() {
   // (Laid out like the page's own table, so it fits the same way)
   const tableEl = createDataTable(config.columns);
   tableEl.classList.add(config.tableClass, "pageSearchTable");
-  for (const { index, row } of found) {
-    const tr = config.render(row);
-    if (config.open && !editMode) {
-      tr.classList.add("clickable");
-      BudgetUI.makePressable(tr);
-      tr.addEventListener("click", () => {
-        setPageSearchOpen(false, true);
-        config.open(index);
-      });
-    }
-    tableEl.tBodies[0].appendChild(tr);
-  }
+  const body = tableEl.tBodies[0];
   const scroll = BudgetUI.element("div", "dataScroll searchScroll");
-  scroll.appendChild(tableEl);
+  const moreRow = BudgetUI.buttonRow([{ label: "", onClick: () => showMore() }]);
+  moreRow.classList.add("searchMore");
+  const more = moreRow.firstElementChild;
+  const showMore = () => {
+    const hadFocus = document.activeElement === more;
+    const fragment = document.createDocumentFragment();
+    for (const { index, row } of found.slice(body.rows.length, body.rows.length + PAGE_SEARCH_AT_ONCE)) {
+      const tr = config.render(row);
+      if (config.open && !editMode) {
+        tr.classList.add("clickable");
+        BudgetUI.makePressable(tr);
+        tr.addEventListener("click", () => {
+          setPageSearchOpen(false, true);
+          config.open(index);
+        });
+      }
+      fragment.appendChild(tr);
+    }
+    body.appendChild(fragment);
+    const left = found.length - body.rows.length;
+    moreRow.hidden = left <= 0;
+    more.textContent = `Show More Results (${left} more)`;
+    // (With the last ones in, the button goes, and the keyboard's place goes to the last result)
+    if (hadFocus && moreRow.hidden) body.rows[body.rows.length - 1]?.focus();
+    markClipped(tableEl);
+  };
+  showMore();
+  scroll.append(tableEl, moreRow);
   results.appendChild(scroll);
-  markClipped(tableEl);
+  pageSearchWatch = "IntersectionObserver" in window ? new IntersectionObserver((seen) => {
+    if (seen.some(entry => entry.isIntersecting) && !moreRow.hidden && more.isConnected) more.click();
+  }, { root: scroll }) : null;
+  pageSearchWatch?.observe(more);
 }
 
 //#endregion

@@ -128,10 +128,28 @@ function deviceDateFormat() {
   return deviceFormatCache;
 }
 
+let formatPicks = null; // (What readFormatPicks read, for the work at hand)
+
+// This device's picks for dates and times ({ date, time }, as kept), read once for the work at hand and again after it (a
+// microtask): every date and time drawn asks, hundreds of times a calendar. Settings forgets them as it changes one.
+function readFormatPicks() {
+  if (!formatPicks) {
+    formatPicks = { date: null, time: null };
+    try { formatPicks.date = localStorage.getItem(DATE_FORMAT_KEY); } catch (e) {}
+    try { formatPicks.time = localStorage.getItem(TIME_FORMAT_KEY); } catch (e) {}
+    Promise.resolve().then(() => { formatPicks = null; });
+  }
+  return formatPicks;
+}
+
+// Forget the picks read for the work at hand (Settings, as it changes one, so what it shows next uses the new one)
+function formatPicksChanged() {
+  formatPicks = null;
+}
+
 // "mdy", "dmy", or "ymd": picked in Settings on this device, or the device's own
 function dateFormat() {
-  let picked = null;
-  try { picked = localStorage.getItem(DATE_FORMAT_KEY); } catch (e) {}
+  const picked = readFormatPicks().date;
   return Object.prototype.hasOwnProperty.call(DATE_FORMATS, picked) ? picked : deviceDateFormat();
 }
 
@@ -155,8 +173,7 @@ function deviceTwelveHour() {
 
 // Are times shown as 1:00 PM here (the pick, or the device's own)?
 function twelveHourClock() {
-  let picked = null;
-  try { picked = localStorage.getItem(TIME_FORMAT_KEY); } catch (e) {}
+  const picked = readFormatPicks().time;
   return picked === "12" ? true : picked === "24" ? false : deviceTwelveHour();
 }
 
@@ -310,9 +327,16 @@ function showInList(list, item) {
 // clock is read with one formatter, made once.
 const Zones = (() => {
   const formatters = new Map();
-  // This device's zone ("America/Chicago"), or UTC when the browser won't say
+  // This device's zone ("America/Chicago"), or UTC when the browser won't say. Each entry drawn asks, and the formatter
+  // that says it was made each time (most of a calendar's drawing), so it's read once for the work at hand and again
+  // after it (a microtask), where a device that moved to another zone (a trip) is seen.
+  let deviceZone = null;
   const device = () => {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; }
+    if (deviceZone === null) {
+      try { deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { deviceZone = "UTC"; }
+      Promise.resolve().then(() => { deviceZone = null; });
+    }
+    return deviceZone;
   };
   // What reads a zone's wall clock (one for each zone, made once)
   function formatter(zone) {

@@ -200,7 +200,10 @@ function fitPageToWindows() {
 }
 
 new MutationObserver((RECORDS) => {
-  pinScreenLayer();
+  // Whether a window is open changes only with a window itself (one coming or going, or its hidden or class changing):
+  // asking after every change inside one (a search's results drawn, a list typed into) made the browser lay the whole
+  // page out right then, in the middle of whatever was drawing it
+  if (RECORDS.some(RECORD => (RECORD.type === "childList" ? RECORD.target === SCREEN_LAYER : RECORD.target.parentNode === SCREEN_LAYER))) pinScreenLayer();
   // (A window that's gone isn't measured anymore)
   RECORDS.forEach(RECORD => RECORD.removedNodes.forEach((NODE) => {
     if (WINDOW_SIZES && SIZED_WINDOWS.has(NODE)) {
@@ -1102,7 +1105,8 @@ document.addEventListener("click", (EVENT) => {
   }
   if (HREF === "logout") {
     EVENT.preventDefault();
-    signOut();
+    // (Not while the page is already leaving for another: it would sign out, and the next page open signed out)
+    if (!IS_TRANSITION_ACTIVE) signOut();
     return;
   }
 

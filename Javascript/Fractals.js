@@ -176,35 +176,49 @@ window.Fractals = (() => {
   // #region WHAT THIS DEVICE SHOWS
   // =====================================================================
 
+  let shownKept = null; // (What shownSettings read, for the work at hand)
+
+  // What this device keeps about what the calendar shows ({ view, off }), read once for the work at hand and again after
+  // it (a microtask, so another tab's change is seen): every day and entry drawn asks
+  function shownSettings() {
+    if (!shownKept) {
+      let off = [];
+      try {
+        const list = JSON.parse(read(OFF_KEY) || "[]");
+        if (Array.isArray(list)) off = list.map(String);
+      } catch {}
+      shownKept = { view: read(VIEW_KEY), off };
+      Promise.resolve().then(() => { shownKept = null; });
+    }
+    return shownKept;
+  }
+
   // What Home's calendar shows: the budget, the calendar, or both (the Quick Calendar page only has the calendar)
   function view() {
     if (store.quick) return "calendar";
-    const stored = read(VIEW_KEY);
+    const stored = shownSettings().view;
     return VIEWS.includes(stored) ? stored : "both";
   }
 
   // Show the budget, the calendar, or both (kept on this device), and draw again
   function setView(mode) {
     write(VIEW_KEY, VIEWS.includes(mode) ? mode : "both");
+    shownKept = null;
     document.dispatchEvent(new CustomEvent("fractals:changed"));
   }
 
   // The fractals unchecked on this device
   function hidden() {
-    try {
-      const list = JSON.parse(read(OFF_KEY) || "[]");
-      return Array.isArray(list) ? list.map(String) : [];
-    } catch {
-      return [];
-    }
+    return [...shownSettings().off];
   }
 
-  const isShown = (fractalId) => !hidden().includes(String(fractalId));
+  const isShown = (fractalId) => !shownSettings().off.includes(String(fractalId));
 
   // Check or uncheck a fractal on this device (its entries show while it's checked)
   function setShown(fractalId, on) {
     const rest = hidden().filter(id => id !== String(fractalId));
     write(OFF_KEY, JSON.stringify(on ? rest : [...rest, String(fractalId)]));
+    shownKept = null;
     dayCache = new Map();
     document.dispatchEvent(new CustomEvent("fractals:changed"));
   }

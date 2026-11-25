@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.24.2026.A";
+  const SITE_VERSION = "11.24.2026.B";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -27,33 +27,33 @@
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
     "/Javascript/Bob Page.js": "8f1801c202",
-    "/Javascript/Budget Pages.js": "a6d8b74915",
+    "/Javascript/Budget Pages.js": "749ecdeeb1",
     "/Javascript/Budget Search.js": "7fd273fe6b",
     "/Javascript/Budget UI.js": "a509f1e96a",
     "/Javascript/Budgets.js": "2f58afe81b",
-    "/Javascript/Calendar Page.js": "4967ff6aab",
+    "/Javascript/Calendar Page.js": "27508453a5",
     "/Javascript/Calendars Page.js": "df9d932a85",
     "/Javascript/Calendars.js": "15b458fed5",
-    "/Javascript/Dates.js": "e86fe94792",
+    "/Javascript/Dates.js": "29a8cec2c9",
     "/Javascript/Debug.js": "8ebdd719db",
-    "/Javascript/Fractals.js": "0552e74a47",
+    "/Javascript/Fractals.js": "7a46095bba",
     "/Javascript/Holidays.js": "eba1fab331",
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
     "/Javascript/Kitchen UI.js": "c51485d80f",
-    "/Javascript/Kitchen.js": "b8b56b9435",
-    "/Javascript/Layout.js": "80dece308e",
+    "/Javascript/Kitchen.js": "955f9bce26",
+    "/Javascript/Layout.js": "f9f3fa842f",
     "/Javascript/Limits.js": "3ba2190ee5",
     "/Javascript/Line Graph.js": "724e4fbb43",
     "/Javascript/Login.js": "7c20578b0c",
     "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "fc4fad2af4",
+    "/Javascript/Process Budget.js": "39f261c4e1",
     "/Javascript/Quick Calendar.js": "2c03bb5ad3",
     "/Javascript/Quick Entry.js": "17a87ca937",
     "/Javascript/Quick Icon.js": "bd8ba88f58",
     "/Javascript/Recipes Page.js": "ddf190ecc9",
     "/Javascript/Session.js": "2ba7a04b3e",
-    "/Javascript/Settings Page.js": "4b08667602",
+    "/Javascript/Settings Page.js": "adb46821d2",
     "/Javascript/Snapshot Page.js": "f7a0bc379c",
     "/Javascript/Sounds.js": "21207f2cfd",
     "/Javascript/Spreadsheets Page.js": "5e1b61db41",

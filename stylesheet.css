@@ -214,7 +214,8 @@ html {
   padding: 0;
   inset: 0;
 
-  width: 100vw;
+  /* The screen's width without a scrollbar that takes room (a computer's, where 100vw ran under it) */
+  width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
 
@@ -235,7 +236,7 @@ body {
 
   /* The body doesn't scroll by itself (Boot.js and Layout.js decide who does) */
   height: auto;
-  width: 100vw;
+  width: 100%;
   overflow-x: hidden;
   overflow-y: visible;
 
@@ -260,7 +261,8 @@ body {
   flex: 1;
   min-height: 96vh;
   height: auto;
-  width: 96vw;
+  /* (As wide as the body, its padding inside: 96vw where no scrollbar takes room) */
+  width: auto;
   padding:2vh 2vw;
   inset: 0;
 
@@ -818,6 +820,13 @@ html.fromTop #transitionContainer {
 .homeJs #transitionContainer.slide-out.toRight,
 .otherJs #transitionContainer.slide-out.toRight {
   transform: translateX(var(--SLIDE_DISTANCE));
+}
+
+/* A page that's leaving takes no taps: one on its moving header or cards would act on a page that's already going (a
+   Logout tapped as the page slid away signed out, and the next page opened signed out) */
+#transitionContainer.slide-out,
+#transitionContainer.tab-slide-out {
+  pointer-events: none;
 }
 
 /* A tab followed: everything but the header and the tabs slides down and out */

@@ -486,6 +486,7 @@ function wireDateFormat() {
     } catch (e) {
       BudgetUI.showToast("This browser isn't keeping site data, so the date format can't be saved.", true);
     }
+    formatPicksChanged();
     renderDateFormatNote();
     BudgetUI.showToast(`Dates show like ${showDate(sampleDate())} now.`);
   });
@@ -525,6 +526,7 @@ function wireTimeFormat() {
     } catch (e) {
       BudgetUI.showToast("This browser isn't keeping site data, so the time format can't be saved.", true);
     }
+    formatPicksChanged();
     renderTimeFormatNote();
     BudgetUI.showToast(`Times show like ${showClockTime(sampleTime())} now.`);
   });
