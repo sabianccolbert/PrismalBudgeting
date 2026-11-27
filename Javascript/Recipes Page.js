@@ -204,7 +204,7 @@
         const unit = KitchenUI.unitBox(row ? row[2] : "");
         const name = KitchenUI.foodNameBox(row ? row[0] : "", unit, "Food");
         const amount = KitchenUI.amountBox(row ? row[1] : null);
-        const expires = BudgetUI.dateField({ label: "Expires", date: row && row[3] ? createSafeMidnight(row[3], true) : null, optional: true, hint: "Only for its reminder (Settings' Recipes card). Nothing else goes by it." });
+        const expires = BudgetUI.dateField({ label: "Expires", date: row && row[3] ? createSafeMidnight(row[3], true) : null, optional: true, hint: "Only for its reminder (Settings' Kitchen card). Nothing else goes by it." });
         const buttons = [{ label: row ? "Save" : "Add Food", kind: "primary", type: "submit" }];
         if (row) {
           buttons.push({ label: "Delete", kind: "danger", onClick: () => {

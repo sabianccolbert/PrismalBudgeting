@@ -863,6 +863,11 @@ function renderLowestCard() {
   const last = lastDayShown();
   const from = first < today && last >= today ? today : first;
   const name = shownAccountName();
+  // (The days after the five weeks are asked for first: they reach further, so one projection has both)
+  const ahead = lookAhead();
+  const afterStart = addDays(last, 1);
+  const afterEnd = ahead.unit === "months" ? addMonths(last, ahead.count) : addDays(last, ahead.count * (ahead.unit === "weeks" ? 7 : 1));
+  const after = lowestBetween(afterStart, afterEnd);
   const shown = lowestBetween(from, last);
   const lowestAmount = shown.lowest ? shown.lowest.amount : 0;
   lowest.textContent = shown.lowest ? formatMoney(lowestAmount) : "--";
@@ -870,10 +875,6 @@ function renderLowestCard() {
   label.textContent = `Lowest${name ? ` in ${name}` : ""} between ${showDay(from)} and ${showDay(last)}`;
 
   // The days after the five weeks showing, through as far past them as Look Ahead goes
-  const ahead = lookAhead();
-  const afterStart = addDays(last, 1);
-  const afterEnd = ahead.unit === "months" ? addMonths(last, ahead.count) : addDays(last, ahead.count * (ahead.unit === "weeks" ? 7 : 1));
-  const after = lowestBetween(afterStart, afterEnd);
   document.getElementById("afterSpan").textContent = `From ${showDay(afterStart)} to ${showDay(afterEnd)}`;
   document.getElementById("afterLastDay").textContent = `On ${showDay(afterEnd)}`;
   document.getElementById("lookAheadWords").textContent = lookAheadWords();

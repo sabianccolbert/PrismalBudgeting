@@ -110,7 +110,7 @@
       const result = await window.Fractals.call("/api/quickcal/linked", { key, id });
       if (result.ok && result.data && typeof result.data.text === "string") return result.data.text;
       const words = window.Fractals.problem(result, "Couldn't read that calendar just now.");
-      throw new window.Calendars.CalendarReadError(words, result.status >= 400 && result.status < 500 && result.status !== 429);
+      throw new Calendars.CalendarReadError(words, result.status >= 400 && result.status < 500 && result.status !== 429);
     }
   });
 
