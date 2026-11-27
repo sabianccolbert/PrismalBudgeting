@@ -122,7 +122,7 @@ const LIMITS = Object.freeze({
   sessions: 20,
   imageFile: 15728640,      // The biggest image an icon reads (15 MB: it's cut down to the icon's size)
   emoji: 16,                // An icon's emoji, as typed (one emoji can take several characters)
-  iconCopyChars: 1500000,   // What an icon's page keeps of what it last showed, on the device (past this, it keeps none)
+  iconCopyChars: 1500000,   // What icons' pages keep of what they last showed, all together, on the device (one past it keeps none)
 
   // Accounts (the API keeps the same)
   usernameMin: 5,

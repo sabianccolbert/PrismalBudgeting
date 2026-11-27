@@ -420,10 +420,20 @@ async function api(endpoint, body, signedIn = false) {
 
 // The token stands in for the password on every other page (Session.js signs out after 15 idle minutes). Home asks once,
 // after each sign-in, whether to turn notifications on (Notifications.js).
+// (A browser whose storage is full gets room first: what icons' pages kept of what they showed last only saves them a
+// moment the next time they open, see WHAT AN ICON'S PAGE SHOWED LAST in Process Budget.js.)
 function saveSession(data) {
-  localStorage.setItem('prismal_jwt', data.token);
-  localStorage.setItem('prismal_username', data.username);
-  localStorage.setItem('prismal_last_activity', Date.now().toString());
+  const keep = () => {
+    localStorage.setItem('prismal_jwt', data.token);
+    localStorage.setItem('prismal_username', data.username);
+    localStorage.setItem('prismal_last_activity', Date.now().toString());
+  };
+  try {
+    keep();
+  } catch (err) {
+    Object.keys(localStorage).filter(key => key.startsWith('prismal_icon_copy:')).forEach(key => localStorage.removeItem(key));
+    keep();
+  }
   try { localStorage.setItem('prismal_ask_push', '1'); } catch (err) {}
 }
 

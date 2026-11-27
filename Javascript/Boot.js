@@ -12,7 +12,7 @@
    * 0) VERSIONS
    * =============================== */
   // The release's name, shown in the corner (and in How It Works). Change it with each release.
-  const SITE_VERSION = "11.25.2026.B";
+  const SITE_VERSION = "11.27.2026.A";
   window.SITE_VERSION = SITE_VERSION;
 
   // How updates reach browsers without making them download everything again:
@@ -26,12 +26,12 @@
   const FILE_VERSIONS = {
     "/Javascript/Active Starfield.js": "1eb314a462",
     "/Javascript/Analytics.js": "2e26ee1f3d",
-    "/Javascript/Bob Page.js": "c628c4240d",
+    "/Javascript/Bob Page.js": "37081f14db",
     "/Javascript/Budget Pages.js": "a7012804a7",
     "/Javascript/Budget Search.js": "7fd273fe6b",
     "/Javascript/Budget UI.js": "984671a693",
     "/Javascript/Budgets.js": "2f58afe81b",
-    "/Javascript/Calendar Page.js": "b871b908d8",
+    "/Javascript/Calendar Page.js": "762ef71651",
     "/Javascript/Calendars Page.js": "df9d932a85",
     "/Javascript/Calendars.js": "15b458fed5",
     "/Javascript/Dates.js": "6be723d2f9",
@@ -41,17 +41,17 @@
     "/Javascript/Keyboard Starfield.js": "7dea1b413a",
     "/Javascript/Kitchen UI.js": "f08891ea62",
     "/Javascript/Kitchen.js": "ad77ef4b75",
-    "/Javascript/Layout.js": "f0a5bbd8b0",
-    "/Javascript/Limits.js": "d6293bab91",
+    "/Javascript/Layout.js": "b411939af9",
+    "/Javascript/Limits.js": "e6efaffa8d",
     "/Javascript/Line Graph.js": "a6cb081e64",
-    "/Javascript/Login.js": "bea4a518b9",
+    "/Javascript/Login.js": "2a8e29d511",
     "/Javascript/Notifications.js": "7db56889db",
     "/Javascript/Passkeys.js": "5bb712fb48",
-    "/Javascript/Process Budget.js": "dfe43c322e",
-    "/Javascript/Quick Calendar.js": "6d829bf857",
+    "/Javascript/Process Budget.js": "df8224c1a7",
+    "/Javascript/Quick Calendar.js": "97fedeab11",
     "/Javascript/Quick Entry.js": "d06157c13c",
     "/Javascript/Quick Icon.js": "bd8ba88f58",
-    "/Javascript/Recipes Page.js": "6d0367e9c1",
+    "/Javascript/Recipes Page.js": "a138ed99ad",
     "/Javascript/Session.js": "2ba7a04b3e",
     "/Javascript/Settings Page.js": "3616c6ca52",
     "/Javascript/Snapshot Page.js": "dd3c45a6d8",

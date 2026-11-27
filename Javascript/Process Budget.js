@@ -176,10 +176,10 @@ function snapshotKeyGone(response) {
 
 /* ---------- What an icon's page showed last ---------- */
 // Quick Budget's, Quick Calendar's, and a Snapshot icon's pages keep what they last got from the server on this device
-// (each icon's own, by a hash of its key, up to LIMITS.iconCopyChars), so the next time one opens it shows that right
-// away: its top card greyed, saying "Loading..." until the server answers, or "No Internet" while it can't be reached
-// (showIconFreshness), and nothing on it can be changed until then (each page's script holds its forms and buttons
-// back). One that waits ICON_COPY_WAIT_MS for the server shows the copy; a quicker answer shows as always. A key that
+// (each icon's own, by a hash of its key, and all of them together up to LIMITS.iconCopyChars), so the next time one
+// opens it shows that right away: its top card greyed, saying "Loading..." until the server answers, or "No Internet"
+// while it can't be reached (showIconFreshness), and nothing on it can be changed until then (each page's script holds
+// its forms and buttons back). One that waits ICON_COPY_WAIT_MS for the server shows the copy; a quicker answer shows as always. A key that
 // stops working takes its copy with it. A page's own copy is all it is: nothing is sent anywhere.
 const ICON_COPY_KEY = "prismal_icon_copy";
 const ICON_COPY_WAIT_MS = 400;
@@ -192,11 +192,25 @@ function readIconCopy(kind, key) {
     return null;
   }
 }
+// (Every icon's copy together stays within LIMITS.iconCopyChars, so the copies never crowd out what the site needs this
+// browser's storage for, like its sign-in: a phone's browser keeps one for each icon set up from it. Keeping one makes
+// room by taking out the others, biggest first.)
 function keepIconCopy(kind, key, data) {
   try {
+    const name = iconCopyName(kind, key);
     const text = JSON.stringify(data);
-    if (text.length > LIMITS.iconCopyChars) localStorage.removeItem(iconCopyName(kind, key));
-    else localStorage.setItem(iconCopyName(kind, key), text);
+    localStorage.removeItem(name);
+    if (text.length > LIMITS.iconCopyChars) return;
+    const others = Object.keys(localStorage).filter(other => other.startsWith(`${ICON_COPY_KEY}:`))
+      .map(other => ({ other, size: (localStorage.getItem(other) || "").length }))
+      .sort((a, b) => b.size - a.size);
+    let total = text.length + others.reduce((sum, item) => sum + item.size, 0);
+    for (const { other, size } of others) {
+      if (total <= LIMITS.iconCopyChars) break;
+      localStorage.removeItem(other);
+      total -= size;
+    }
+    localStorage.setItem(name, text);
   } catch (e) {}
 }
 function forgetIconCopy(kind, key) {
@@ -7352,8 +7366,8 @@ function normalizeLookAhead(value) {
 // Home's calendar (each day's In Bank line, and whether the day is red), its Lowest card, and Bob's page can show one of
 // the Equity accounts, like another debit card, in In Bank's place. Default is In Bank itself. It's picked on this device
 // for each budget (SHOWN_ACCOUNT_KEY: { <the budget's id>: the account's name }), and one that's gone (or renamed) is
-// Default again. Its balance on each day, and its lowest from today through Lowest's last day, come from projectBudget,
-// worked out once per change while one is picked (shownProjection, forgotten with each change).
+// Default again. Its balance on each day, and its lowest from today through Lowest's last day, come from the change's
+// projection while one is picked (projectionReaching; shownProjection, forgotten with each change).
 const SHOWN_ACCOUNT_KEY = "prismal_shown_account";
 let shownProjection = null;
 document.addEventListener("budget:updated", () => { shownProjection = null; });
@@ -7393,10 +7407,11 @@ function shownProjected() {
   if (!name) return null;
   const until = lookAheadEnd();
   if (!shownProjection || shownProjection.name !== name || shownProjection.until.getTime() !== until.getTime()) {
-    const summaries = accountSummaries();
-    const summary = summaries.find(item => item.name === name);
+    // (The change's own projection, shared with the Lowest card and Bob's cards: see keptProjection)
+    const projected = projectionReaching(until, 0);
+    const summary = projected.summaries.find(item => item.name === name);
     if (!summary) return null;
-    shownProjection = { name, index: summary.index, until, projected: projectBudget(until, summaries) };
+    shownProjection = { name, index: summary.index, until, projected };
   }
   return shownProjection;
 }
@@ -7444,28 +7459,18 @@ function lowestThrough(until) {
 
 // The lowest In Bank (or, with an Equity account picked for In Bank, that account's) from one day through another, and
 // what it is on the last of them: { lowest: { amount, date } (null when no day has one), last }. Days before today are
-// what History and the calendar have; from today on, the budget's projection, kept until the next change and reaching
-// past what was asked (LOWEST_BETWEEN_EXTRA), so moving the calendar along doesn't work it out again each time. For
-// Home's Lowest card, which follows the five weeks showing (Calendar Page.js).
+// what History and the calendar have; from today on, the budget's projection (projectionReaching: kept until the next
+// change, and reaching past what was asked, LOWEST_BETWEEN_EXTRA, so moving the calendar along doesn't work it out again
+// each time). For Home's Lowest card, which follows the five weeks showing (Calendar Page.js).
 const LOWEST_BETWEEN_EXTRA = 6; // Months
-let lowestProjection = null; // { until, name, today, projection, index }
 const lowestBetweenKept = new Map();
-document.addEventListener("budget:updated", () => {
-  lowestProjection = null;
-  lowestBetweenKept.clear();
-});
+document.addEventListener("budget:updated", () => lowestBetweenKept.clear());
 function lowestBetween(from, to) {
   const name = shownAccountName();
   const key = `${from.getTime()}|${to.getTime()}|${today.getTime()}|${name}`;
   if (lowestBetweenKept.has(key)) return lowestBetweenKept.get(key);
-  const needs = to < today ? today : to;
-  if (!lowestProjection || lowestProjection.name !== name || lowestProjection.today !== today.getTime() || lowestProjection.until < needs) {
-    const summaries = accountSummaries();
-    const until = addMonths(needs, LOWEST_BETWEEN_EXTRA);
-    const index = name ? summaries.find(summary => summary.name === name)?.index : undefined;
-    lowestProjection = { until, name, today: today.getTime(), projection: projectBudget(until, summaries), index };
-  }
-  const { projection, index } = lowestProjection;
+  const projection = projectionReaching(to < today ? today : to, LOWEST_BETWEEN_EXTRA);
+  const index = name ? projection.summaries.find(summary => summary.name === name)?.index : undefined;
   const balanceOn = (day) => {
     if (index !== undefined) return projection.accountOn(index, day);
     if (day >= today) return projection.inBankOn(day);
@@ -7480,6 +7485,29 @@ function lowestBetween(from, to) {
   const found = { lowest, last: balanceOn(to) };
   lowestBetweenKept.set(key, found);
   return found;
+}
+
+// The budget's projection for the change showing, kept until the next change, so what Home draws with every change that
+// needs one (Bob's cards, the Lowest card, and an Equity account picked for In Bank) doesn't each work it out (on a big
+// budget, at a slow phone's speed, about 150 ms for Bob's ten years and 75 ms for the Lowest card's). keptProjection(until, summaries) is one through
+// exactly that day (Bob's goals read every day of theirs); projectionReaching(needs, months) is any that reaches at least
+// that day (the Lowest card reads only its own days): one worked out for it goes months past it, or as far as the last
+// one asked through exactly, so that one is the same.
+let projectionKept = null; // { until, today, projection }
+let projectionAsked = null; // (The day keptProjection was last asked through)
+document.addEventListener("budget:updated", () => { projectionKept = null; });
+function keptProjection(until, summaries) {
+  projectionAsked = until;
+  if (projectionKept && projectionKept.today === today.getTime() && projectionKept.until.getTime() === until.getTime()) return projectionKept.projection;
+  projectionKept = { until, today: today.getTime(), projection: projectBudget(until, summaries) };
+  return projectionKept.projection;
+}
+function projectionReaching(needs, months) {
+  if (projectionKept && projectionKept.today === today.getTime() && projectionKept.until >= needs) return projectionKept.projection;
+  const ahead = addMonths(needs, months);
+  const until = projectionAsked && projectionAsked > ahead ? projectionAsked : ahead;
+  projectionKept = { until, today: today.getTime(), projection: projectBudget(until) };
+  return projectionKept.projection;
 }
 
 // A day's text as it's shown: with an account picked, its In Bank line is that account's balance ("✅ $310.00 Card 2"),

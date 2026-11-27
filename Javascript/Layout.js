@@ -60,6 +60,7 @@ let NAVIGATE_AFTER_SLIDE_TIMEOUT_ID = null;  // setTimeout handle: fallback navi
 let STILL_HERE = null;                       // { timer, onVisibility } while a page that slid out waits to be gone
 let LEAVE_AFTER_SAVE = null;                 // { ADDRESS, useReplace, WAY } while leaving waits for a change's save
 const LEAVE_SAVE_WAIT_MS = 8000;             // The longest leaving waits for it
+let LEAVE_SAVE_WAITED = false;               // true only during the transitionTo that goes on once that wait is over
 
 /* GROUP: Timer hygiene */
 // Cancel any pending transition timers and reset handles.
@@ -863,16 +864,24 @@ function transitionTo(ADDRESS, useReplace = false, WAY) {
 
   /* GROUP: A change still being saved goes first */
   // (Like a switch turned off a moment before a link is tapped: left then, it could be left half done. The page waits up
-  // to LEAVE_SAVE_WAIT_MS, then goes on to the last place asked for.)
-  if (typeof window.whenChangesSaved === "function" && typeof window.changesInFlight === "function" && window.changesInFlight()) {
+  // to LEAVE_SAVE_WAIT_MS, then goes on to the last place asked for, whether or not the save is done: a save still on its
+  // way then has the browser ask before the page is left, as always.)
+  if (!LEAVE_SAVE_WAITED && typeof window.whenChangesSaved === "function" && typeof window.changesInFlight === "function" && window.changesInFlight()) {
     const WAITING = !!LEAVE_AFTER_SAVE;
     LEAVE_AFTER_SAVE = { ADDRESS, useReplace, WAY };
     if (WAITING) return;
-    window.BudgetUI?.showToast("Saving your change first...");
+    // (BudgetUI is a top-level const of Budget UI.js, so it isn't on window)
+    if (typeof BudgetUI !== "undefined") BudgetUI.showToast("Saving your change first...");
     window.whenChangesSaved(LEAVE_SAVE_WAIT_MS).then(() => {
       const NEXT = LEAVE_AFTER_SAVE;
       LEAVE_AFTER_SAVE = null;
-      if (NEXT) transitionTo(NEXT.ADDRESS, NEXT.useReplace, NEXT.WAY);
+      if (!NEXT) return;
+      LEAVE_SAVE_WAITED = true;
+      try {
+        transitionTo(NEXT.ADDRESS, NEXT.useReplace, NEXT.WAY);
+      } finally {
+        LEAVE_SAVE_WAITED = false;
+      }
     });
     return;
   }

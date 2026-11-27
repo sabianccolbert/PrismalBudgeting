@@ -576,7 +576,8 @@ function sharedFigures() {
     bills: once("bills", bigBills),
     catchup: once("catchup", catchupEntries),
     summaries: once("summaries", () => accountSummaries()),
-    projection: once("projection", () => projectBudget(furthestDay(), shared.summaries()))
+    // (Home's Lowest card shares it: see keptProjection in Process Budget.js)
+    projection: once("projection", () => keptProjection(furthestDay(), shared.summaries()))
   };
   return shared;
 }
